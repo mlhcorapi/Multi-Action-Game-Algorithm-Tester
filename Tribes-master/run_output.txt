@@ -1,3 +1,0 @@
-Game seed: 1779467152256
-Agents random seed: 1777475571296
-Level seed: 1779896728585
