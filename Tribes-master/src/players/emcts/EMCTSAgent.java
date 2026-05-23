@@ -40,36 +40,42 @@ public class EMCTSAgent extends Agent {
     @Override
     public Action act(GameState gs, ElapsedCpuTimer ect) {
 
-        double avgTimeTaken;
-        double acumTimeTaken = 0;
-        long remaining;
-        int numIters = 0;
-
         this.fmCallsCount = 0;
-
-        int remainingLimit = 5;
-        boolean stop = false;
-
-
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
         old_gs = gs.copy();
 
+        // Initialize root with 1-ply greedy initialization
         root = randomActions(gs.copy());
         eval(gs.copy(), root);
 
         bestNode = root;
         fmCallsRun = 0;
-        while (!stop) {
-            numIters++;
-            ElapsedCpuTimer elapsedTimerIteration = new ElapsedCpuTimer();
-            fmCallsRun = 0;
 
-            EMCTSTreeNode toMutate = nodeToExpand();
+        // Phase-based bridge burning approach
+        long totalTimeMs = ect.remainingTimeMillis();
+        long phaseTimeMs = Math.max(1, totalTimeMs / Math.max(1, params.depth));
+        int currentPhase = 0;
+        int remainingLimit = 5;
 
-            //mutate to a cirtian depth
-            int depth = 0;
-            while (depth < params.depth) {
+        boolean stop = false;
+        int numIters = 0;
+        double avgTimeTaken = 0;
+        double acumTimeTaken = 0;
+
+        while (!stop && currentPhase < params.depth) {
+            ElapsedCpuTimer phaseTimer = new ElapsedCpuTimer();
+            long phaseStartFmCalls = fmCallsCount;
+            boolean phaseComplete = false;
+
+            // Execute MCTS iterations within this phase
+            while (!phaseComplete && !stop) {
+                numIters++;
+                ElapsedCpuTimer elapsedTimerIteration = new ElapsedCpuTimer();
+                fmCallsRun = 0;
+
+                // Standard MCTS iteration: select, mutate once, evaluate, backpropagate
+                EMCTSTreeNode toMutate = nodeToExpand();
                 EMCTSTreeNode child = mutate(toMutate, gs.copy());
                 eval(gs.copy(), child);
 
@@ -78,33 +84,64 @@ public class EMCTSAgent extends Agent {
                 }
 
                 child.visited();
-                //extend(child, gs.copy());
-                toMutate = child;
-                depth++;
-            }
 
-            //update node values
-            for (int i = 0; i < params.depth; i++) {
-                toMutate.refreshScore(params.bias);
-                toMutate = toMutate.getParent();
-            }
+                // Backpropagate score up the tree (standard UCB update)
+                EMCTSTreeNode current = child;
+                while (current != null) {
+                    current.refreshScore(params.bias);
+                    current = current.getParent();
+                }
 
-            //System.out.println(numIters);
-            if (params.stop_type == params.STOP_TIME) {
-                acumTimeTaken += (elapsedTimerIteration.elapsedMillis());
+                // Check iteration stopping criteria
+                long iterationTime = elapsedTimerIteration.elapsedMillis();
+                acumTimeTaken += iterationTime;
                 avgTimeTaken = acumTimeTaken / numIters;
-                remaining = ect.remainingTimeMillis();
-                stop = remaining <= 2 * avgTimeTaken || remaining <= remainingLimit;
-            } else if (params.stop_type == params.STOP_ITERATIONS) {
-                stop = numIters >= params.num_iterations;
-            } else if (params.stop_type == params.STOP_FMCALLS) {
-                stop = (fmCallsCount > params.num_fmcalls) || (fmCallsRun > (params.num_fmcalls - fmCallsCount));
+
+                if (params.stop_type == params.STOP_TIME) {
+                    long remaining = ect.remainingTimeMillis();
+                    stop = remaining <= 2 * avgTimeTaken || remaining <= remainingLimit;
+                } else if (params.stop_type == params.STOP_ITERATIONS) {
+                    stop = numIters >= params.num_iterations;
+                } else if (params.stop_type == params.STOP_FMCALLS) {
+                    stop = (fmCallsCount > params.num_fmcalls) || 
+                           (fmCallsRun > (params.num_fmcalls - fmCallsCount));
+                }
+
+                // Check if phase time is exhausted
+                if (phaseTimer.elapsedMillis() >= phaseTimeMs) {
+                    phaseComplete = true;
+                }
+            }
+
+            // Bridge Burning: promote best child to new root if phase complete and not at end
+            if (!stop && currentPhase < params.depth - 1 && root.getChildren().size() > 0) {
+                EMCTSTreeNode bestChild = findBestChild(root);
+                
+                if (bestChild != null && bestChild != root) {
+                    // Unlink old root branches except best path
+                    for (EMCTSTreeNode child : root.getChildren()) {
+                        if (child != bestChild) {
+                            unlinkTree(child);
+                        }
+                    }
+                    
+                    // Update root and clear old parent reference
+                    bestChild.unlink();  // Clears parent link
+                    root = bestChild;
+                    
+                    // Continue search from new root
+                    currentPhase++;
+                } else {
+                    // No improvement, exit phase loop
+                    break;
+                }
+            } else {
+                // Reached end of phase budget or stop condition
+                break;
             }
         }
-        //if(fmCallsCount>2000){System.out.println(fmCallsCount);}
 
         return bestNode.returnNext();
-
     }
 
     @Override
@@ -127,63 +164,106 @@ public class EMCTSAgent extends Agent {
     private EMCTSTreeNode nodeToExpand() {
         ArrayList<EMCTSTreeNode> children = root.getChildren();
 
-        EMCTSTreeNode toMutate = null;
-
+        // If root has no children, return root for first mutation
         if (children.size() == 0) {
-            toMutate = root;
-        } else {
-            boolean found = false;
-            double nodeScore = 0;
-            EMCTSTreeNode nodeOn = root;
-            nodeScore = nodeOn.getScore();
-            while (!found) {
-                if (nodeOn.getChildren().size() == 0) {
-                    found = true;
-                    toMutate = nodeOn;
-                } else {
-                    boolean bigger = false;
-                    for (EMCTSTreeNode node : nodeOn.getChildren()) {
-                        if (node.getScore() > nodeScore) {
-                            bigger = true;
-                            nodeOn = node;
-                            nodeScore = node.getScore();
-                        }
-                        if (!bigger) {
-                            found = true;
-                            toMutate = nodeOn;
-                        }
-                    }
+            return root;
+        }
+
+        // Pure exploitation traversal: traverse down the tree by always selecting
+        // the child with the highest score (value-based only, no exploration term)
+        EMCTSTreeNode current = root;
+
+        while (true) {
+            ArrayList<EMCTSTreeNode> currentChildren = current.getChildren();
+
+            // If no children, this is a leaf node - return it for mutation
+            if (currentChildren.size() == 0) {
+                return current;
+            }
+
+            // Select child with highest score (pure exploitation)
+            EMCTSTreeNode bestChild = null;
+            double bestScore = Double.NEGATIVE_INFINITY;
+
+            for (EMCTSTreeNode child : currentChildren) {
+                if (child.getScore() > bestScore) {
+                    bestScore = child.getScore();
+                    bestChild = child;
                 }
             }
+
+            // Move down the tree to the best child
+            current = bestChild;
         }
-        return toMutate;
     }
 
-    //this version of random Actions will return a list of random actions and tries to make the length as long as possible
+    /**
+     * 1-ply greedy initialization: for each action in the sequence,
+     * evaluate all available actions and select the one with the highest heuristic score.
+     */
     private EMCTSTreeNode randomActions(GameState gs) {
         ArrayList<Action> individual = new ArrayList<>();
-        while ((!gs.isGameOver() && (gs.getActiveTribeID() == getPlayerID())) && (individual.size() < (params.NODE_SIZE-1))){
+        
+        while ((!gs.isGameOver() && (gs.getActiveTribeID() == getPlayerID())) && 
+               (individual.size() < (params.NODE_SIZE - 1))) {
+            
             ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-            Action a = allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
-            if (!(a.getActionType() == Types.ACTION.END_TURN)) {
-                advance(gs, a);
-                individual.add(a);
-            }else if(allAvailableActions.size() == 1){
-                advance(gs,a);
-                individual.add(a);
+            if (allAvailableActions.isEmpty()) {
+                break;
+            }
+
+            Action bestAction = null;
+            double bestScore = Double.NEGATIVE_INFINITY;
+            GameState bestState = null;
+
+            // Greedy evaluation: try each action and pick the highest-scoring one
+            for (Action candidateAction : allAvailableActions) {
+                // Skip END_TURN unless it's the only option
+                if (candidateAction.getActionType() == Types.ACTION.END_TURN && 
+                    allAvailableActions.size() > 1) {
+                    continue;
+                }
+
+                GameState testGs = gs.copy();
+                advance(testGs, candidateAction);
+                double score = heuristic.evaluateState(old_gs.copy(), testGs.copy());
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestAction = candidateAction;
+                    bestState = testGs;
+                }
+            }
+
+            if (bestAction != null) {
+                advance(gs, bestAction);
+                individual.add(bestAction);
+
+                // If we added END_TURN, we're done
+                if (bestAction.getActionType() == Types.ACTION.END_TURN) {
+                    break;
+                }
+            } else {
+                break;
             }
         }
-        if(individual.size() == (params.NODE_SIZE-1) && (individual.get((params.NODE_SIZE-2)).getActionType() != Types.ACTION.END_TURN)){
+
+        // Ensure sequence ends with END_TURN if not already present
+        if (!individual.isEmpty() && 
+            individual.get(individual.size() - 1).getActionType() != Types.ACTION.END_TURN) {
             ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-            Action end = null; ;
-            for(Action a : allAvailableActions){
-                if(a.getActionType() == Types.ACTION.END_TURN){
-                    end = a;
+            Action endAction = null;
+            for (Action a : allAvailableActions) {
+                if (a.getActionType() == Types.ACTION.END_TURN) {
+                    endAction = a;
                     break;
                 }
             }
-            individual.add(end);
+            if (endAction != null) {
+                individual.add(endAction);
+            }
         }
+
         EMCTSTreeNode node = new EMCTSTreeNode(individual, null);
         node.setGs(gs.copy());
         return node;
@@ -220,7 +300,11 @@ public class EMCTSAgent extends Agent {
         return newNode;
     }
 
-    //repair the node and make sure that it is valid
+    /**
+     * Repair a sequence of actions, ensuring feasibility and validity.
+     * Uses 1-ply greedy repair: if an action fails, replace it by selecting
+     * the available action with the highest heuristic score.
+     */
     private ArrayList<Action> repair(ArrayList<Action> child, GameState gs) {
         ArrayList<Action> repairedChild = new ArrayList<>();
 
@@ -233,31 +317,70 @@ public class EMCTSAgent extends Agent {
                 boolean done = checkActionFeasibility(child.get(a), gs.copy());
 
                 if (!done) {
+                    // Action is infeasible - use greedy selection for replacement
                     ArrayList<Action> allAvailableActions = this.allGoodActions(gs.copy(), m_rnd);
-                    Action ac = allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
-                    advance(gs, ac);
-                    repairedChild.add(ac);
+                    
+                    Action bestAction = null;
+                    double bestScore = Double.NEGATIVE_INFINITY;
+
+                    for (Action candidateAction : allAvailableActions) {
+                        GameState testGs = gs.copy();
+                        advance(testGs, candidateAction);
+                        double score = heuristic.evaluateState(old_gs.copy(), testGs.copy());
+
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestAction = candidateAction;
+                        }
+                    }
+
+                    if (bestAction != null) {
+                        advance(gs, bestAction);
+                        repairedChild.add(bestAction);
+                    }
                 } else {
                     repairedChild.add(child.get(a));
                     advance(gs, child.get(a));
                 }
             } catch (Exception e) {
+                // Action threw exception - use greedy selection for replacement
                 ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-                Action ac = allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
-                advance(gs, ac);
-                repairedChild.add(ac);
+
+                Action bestAction = null;
+                double bestScore = Double.NEGATIVE_INFINITY;
+
+                for (Action candidateAction : allAvailableActions) {
+                    GameState testGs = gs.copy();
+                    advance(testGs, candidateAction);
+                    double score = heuristic.evaluateState(old_gs.copy(), testGs.copy());
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestAction = candidateAction;
+                    }
+                }
+
+                if (bestAction != null) {
+                    advance(gs, bestAction);
+                    repairedChild.add(bestAction);
+                }
             }
         }
-        if (!(repairedChild.get(repairedChild.size() - 1).getActionType() == Types.ACTION.END_TURN)) {
+
+        // Ensure repaired sequence ends with END_TURN
+        if (!repairedChild.isEmpty() && 
+            repairedChild.get(repairedChild.size() - 1).getActionType() != Types.ACTION.END_TURN) {
             ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-            Action end = null; ;
-            for(Action a : allAvailableActions){
-                if(a.getActionType() == Types.ACTION.END_TURN){
+            Action end = null;
+            for (Action a : allAvailableActions) {
+                if (a.getActionType() == Types.ACTION.END_TURN) {
                     end = a;
                     break;
                 }
             }
-            repairedChild.add(end);
+            if (end != null) {
+                repairedChild.add(end);
+            }
         }
 
         return repairedChild;
@@ -325,5 +448,47 @@ public class EMCTSAgent extends Agent {
         }
         //clear links so that JVM can clear it
         newNode.unlink();
+    }
+
+    /**
+     * Find the best child of a node based on highest value.
+     * Used during bridge burning phase transitions.
+     */
+    private EMCTSTreeNode findBestChild(EMCTSTreeNode node) {
+        ArrayList<EMCTSTreeNode> children = node.getChildren();
+        if (children.isEmpty()) {
+            return null;
+        }
+
+        EMCTSTreeNode bestChild = children.get(0);
+        double bestValue = bestChild.getValue();
+
+        for (EMCTSTreeNode child : children) {
+            if (child.getValue() > bestValue) {
+                bestValue = child.getValue();
+                bestChild = child;
+            }
+        }
+
+        return bestChild;
+    }
+
+    /**
+     * Recursively unlink a tree node and all its descendants to allow garbage collection.
+     * Called during bridge burning to free memory from abandoned branches.
+     */
+    private void unlinkTree(EMCTSTreeNode node) {
+        if (node == null) {
+            return;
+        }
+
+        ArrayList<EMCTSTreeNode> children = node.getChildren();
+        if (children != null) {
+            for (EMCTSTreeNode child : children) {
+                unlinkTree(child);
+            }
+        }
+
+        node.unlink();
     }
 }
