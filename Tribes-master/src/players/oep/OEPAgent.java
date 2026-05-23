@@ -130,30 +130,45 @@ public class OEPAgent extends Agent {
         return null;
     }
 
+    private Action getRandomAction(GameState gs){
+        ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
+        if(allAvailableActions.isEmpty()) {
+            for(Action a : gs.getTribeActions()){
+                if(a.getActionType() == Types.ACTION.END_TURN) return a;
+            }
+            return null;
+        }
+        return allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+    }
+
+    private Action getEndTurnAction(GameState gs){
+        for(Action a : gs.getTribeActions()){
+            if(a.getActionType() == Types.ACTION.END_TURN) return a;
+        }
+        return null;
+    }
+
     private Individual randomActions(GameState gs){
         ArrayList<Action> individual = new ArrayList<>();
         while ((!gs.isGameOver() && (gs.getActiveTribeID() == getPlayerID())) && (individual.size() < (params.NODE_SIZE-1))){
-            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-            Action a = allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+            Action a = getRandomAction(gs);
+            if(a == null) break;
             if(!(a.getActionType() == Types.ACTION.END_TURN)){
                 advance(gs, a);
                 individual.add(a);
-            }else if(allAvailableActions.size() == 1){
+            }else if(gs.getAllAvailableActions().size() == 1){
                 advance(gs, a);
                 individual.add(a);
+            } else {
+                break;
             }
         }
         //if one less then max node size
         if(individual.size() == (params.NODE_SIZE-1) && (individual.get((params.NODE_SIZE-2)).getActionType() != Types.ACTION.END_TURN)){
-            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-            Action end = null; ;
-            for(Action a : allAvailableActions){
-                if(a.getActionType() == Types.ACTION.END_TURN){
-                    end = a;
-                    break;
-                }
+            Action end = getEndTurnAction(gs);
+            if(end != null){
+                individual.add(end);
             }
-            individual.add(end);
         }
 
         Individual in = new Individual(individual);
@@ -317,8 +332,7 @@ public class OEPAgent extends Agent {
 
     //give a random possible move as a mutation
     private Action mutation(GameState gs){
-        ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-        return  allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+        return getRandomAction(gs);
     }
 
     private ArrayList<Individual> shiftPop(GameState gs, ArrayList<Individual> population){
@@ -359,8 +373,8 @@ public class OEPAgent extends Agent {
         int i = j;
         while((!gs.isGameOver() && (gs.getActiveTribeID() == getPlayerID())) && i < params.NODE_SIZE)
         {
-            ArrayList<Action> allAvailableActions = this.allGoodActions(gs.copy(), m_rnd);
-            Action ac = allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+            Action ac = getRandomAction(gs.copy());
+            if(ac == null) break;
             individual.getActions().add(ac);
             advance(gs, ac);
             i++;
@@ -384,6 +398,7 @@ public class OEPAgent extends Agent {
             int chance = m_rnd.nextInt((int) (params.MUTATION_RATE * 100));
             if ((m_rnd.nextInt(100) < chance) ) {
                 Action ac = mutation(gs.copy());
+                if(ac == null) break;
                 advance(gs, ac);
                 child.add(ac);
             }else{
@@ -392,8 +407,8 @@ public class OEPAgent extends Agent {
                     child.add(individual.getActions().get(a));
                 }
                 else{
-                    ArrayList<Action> allAvailableActions = this.allGoodActions(gs.copy(), m_rnd);
-                    Action ac = allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+                    Action ac = getRandomAction(gs.copy());
+                    if(ac == null) break;
                     advance(gs,ac);
                     child.add(ac);
                 }

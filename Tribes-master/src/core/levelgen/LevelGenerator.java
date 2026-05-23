@@ -37,6 +37,8 @@ public class LevelGenerator {
 
     private boolean LEVELGEN_VERBOSE = false;
 
+    private boolean generateWater = false;  // Controls whether to generate water
+    
     /**
      * Constructor of the generator
      */
@@ -56,66 +58,79 @@ public class LevelGenerator {
         }
     }
 
-    /**
-     * Initializes the map generation parameters.
-     */
+    // Backwards-compatible overload: includeWater defaults to false
     public void init(int mapSize, int smoothing, int relief, double initialLand, Types.TRIBE[] tribes) {
-        this.mapSize = mapSize;
-        this.smoothing = smoothing;
-        this.relief = relief;
-        this.initialLand = initialLand;
-        this.level = new String[mapSize*mapSize];
-        this.tribes = tribes;
-        this.landCoefficient = (0.5 + relief) / 9;
-
-        //Initialize the level with deep water.
-        for(int i = 0; i < mapSize*mapSize; i++){ level[i] = "d: "; };
+        init(mapSize, smoothing, relief, initialLand, tribes, false);
     }
+
+    public void init(int mapSize, int smoothing, int relief, double initialLand, Types.TRIBE[] tribes, boolean includeWater) {
+    this.mapSize = mapSize;
+    this.smoothing = smoothing;
+    this.relief = relief;
+    this.initialLand = initialLand;
+    this.generateWater = includeWater;  // NEW: Store the parameter
+    this.level = new String[mapSize*mapSize];
+    this.tribes = tribes;
+    this.landCoefficient = (0.5 + relief) / 9;
+    
+    //Initialize the level with deep water (or land if no water).
+    for(int i = 0; i < mapSize*mapSize; i++) {
+        if (generateWater) {
+            level[i] = "" + DEEP_WATER.getMapChar() + ": ";
+        } else {
+            level[i] = "" + PLAIN.getMapChar() + ": ";
+        }
+    }
+}
 
     /**
      * Generates the level.
      */
     public void generate() {
 
-        if (LEVELGEN_VERBOSE) System.out.println("Generating level with seed: " + this.seed);
+        int i; // loop index used across multiple loops in this method
 
-        //Randomly replace half of the tiles with ground.
-        if (LEVELGEN_VERBOSE) System.out.println("Randomly replace half of the tiles with ground.");
-        int i = 0;
-        while(i < mapSize*mapSize*initialLand) {
-            int index = randomInt(0, mapSize*mapSize);
-            if(getTerrain(index) == DEEP_WATER.getMapChar()) {
-                i++;
-                writeTile(index, ""+PLAIN.getMapChar(), null);
+        //Randomly replace half of the tiles with ground (only if water is enabled).
+        if (generateWater) {
+            if (LEVELGEN_VERBOSE) System.out.println("Randomly replace half of the tiles with ground.");
+            i = 0;
+            while(i < mapSize*mapSize*initialLand) {
+                int index = randomInt(0, mapSize*mapSize);
+                if(getTerrain(index) == DEEP_WATER.getMapChar()) {
+                    i++;
+                    writeTile(index, ""+PLAIN.getMapChar(), null);
+                }
             }
         }
 
-        //Turning random water/ground grid into something smooth.
-        if (LEVELGEN_VERBOSE) System.out.println("Turning random water/ground grid into something smooth.");
-        ArrayList<Integer> toBeGround = new ArrayList<>();
+        //Turning random water/ground grid into something smooth (only if water is enabled).
+        if (generateWater) {
+            if (LEVELGEN_VERBOSE) System.out.println("Turning random water/ground grid into something smooth.");
+            ArrayList<Integer> toBeGround = new ArrayList<>();
 
-        for (i = 0; i < smoothing; i++) {
-            for (int cell = 0; cell < mapSize * mapSize; cell++) {
+            for (i = 0; i < smoothing; i++) {
+                for (int cell = 0; cell < mapSize * mapSize; cell++) {
 
-                int water_count = 0;
-                int tile_count = 0;
-                for (int n : disk(cell, 1)) {
-                    if (getTerrain(n) == DEEP_WATER.getMapChar()) {
-                        water_count++;
+                    int water_count = 0;
+                    int tile_count = 0;
+                    for (int n : disk(cell, 1)) {
+                        if (getTerrain(n) == DEEP_WATER.getMapChar()) {
+                            water_count++;
+                        }
+                        tile_count++;
                     }
-                    tile_count++;
+
+                    if (water_count / (double) tile_count <= landCoefficient)
+                        toBeGround.add(cell);
                 }
 
-                if (water_count / (double) tile_count <= landCoefficient)
-                    toBeGround.add(cell);
-            }
-
-            for (int cell = 0; cell < mapSize * mapSize; cell++) {
-                if(toBeGround.contains(cell))
-                {
-                    writeTile(cell, ""+PLAIN.getMapChar(), null);
-                }else {
-                    writeTile(cell, "" + DEEP_WATER.getMapChar(), null);
+                for (int cell = 0; cell < mapSize * mapSize; cell++) {
+                    if(toBeGround.contains(cell))
+                    {
+                        writeTile(cell, ""+PLAIN.getMapChar(), null);
+                    }else {
+                        writeTile(cell, "" + DEEP_WATER.getMapChar(), null);
+                    }
                 }
             }
         }
@@ -170,6 +185,26 @@ public class LevelGenerator {
                 }
             }
         }
+        // If capital selection failed for some tribes, add fallback capitals
+        for (int t = capitalCells.size(); t < tribes.length; t++) {
+            int fallbackCell = -1;
+            int attempts = 0;
+            while (attempts < 1000) {
+                int candidate = randomInt(0, mapSize * mapSize);
+                if (!capitalCells.contains(candidate) && getTerrain(candidate) != DEEP_WATER.getMapChar()) {
+                    fallbackCell = candidate;
+                    break;
+                }
+                attempts++;
+            }
+            if (fallbackCell == -1) {
+                for (int idx = 0; idx < mapSize * mapSize; idx++) {
+                    if (!capitalCells.contains(idx)) { fallbackCell = idx; break; }
+                }
+            }
+            if (fallbackCell != -1) capitalCells.add(fallbackCell);
+        }
+
         for (i = 0; i < capitalCells.size(); i++) {
             writeTile((capitalCells.get(i) / mapSize) * mapSize + (capitalCells.get(i) % mapSize), ""+CITY.getMapChar(), String.valueOf(tribes[i].getKey()));
         }
@@ -259,15 +294,17 @@ public class LevelGenerator {
             }
         }
 
-        // Replace some ocean with shallow water
-        if (LEVELGEN_VERBOSE) System.out.println("Replace some ocean with shallow water");
-        for (int cell = 0; cell < mapSize*mapSize; cell++) {
-            if (getTerrain(cell) == DEEP_WATER.getMapChar()) {
-                for (int neighbour : crossNeighbors(cell)) {
-                    char terrainN = getTerrain(neighbour);
-                    if(terrainN == PLAIN.getMapChar() || terrainN == FOREST.getMapChar() || terrainN == MOUNTAIN.getMapChar()){
-                        writeTile(neighbour, ""+SHALLOW_WATER.getMapChar(), null);
-                        break;
+            // Replace some ocean with shallow water (only if water is enabled)
+        if (generateWater) {
+            if (LEVELGEN_VERBOSE) System.out.println("Replace some ocean with shallow water");
+            for (int cell = 0; cell < mapSize*mapSize; cell++) {
+                if (getTerrain(cell) == DEEP_WATER.getMapChar()) {
+                    for (int neighbour : crossNeighbors(cell)) {
+                        char terrainN = getTerrain(neighbour);
+                        if(terrainN == PLAIN.getMapChar() || terrainN == FOREST.getMapChar() || terrainN == MOUNTAIN.getMapChar()){
+                            writeTile(neighbour, ""+SHALLOW_WATER.getMapChar(), null);
+                            break;
+                        }
                     }
                 }
             }
@@ -412,8 +449,9 @@ public class LevelGenerator {
     public void postGenerate(char resource, char terrain, int quantity, int capital) {
         int resources = checkResources(resource, capital);
         while (resources < quantity) {
-            int pos = randomInt(0, 8);
             ArrayList<Integer> territory = circle(capital, 1);
+            if (territory.size() == 0) break;
+            int pos = randomInt(0, territory.size());
             writeTile(territory.get(pos), ""+terrain, ""+resource);
             for (int neighbour : crossNeighbors(territory.get(pos))) {
                 if (getTerrain(neighbour) == DEEP_WATER.getMapChar()) {
