@@ -83,7 +83,32 @@ public class ExperimentalEMCTSAgent extends Agent {
 
                 // Standard MCTS iteration: select, mutate once, evaluate, backpropagate
                 ExperimentalEMCTSTreeNode toMutate = nodeToExpand();
-                ExperimentalEMCTSTreeNode child = mutate(toMutate, gs.copy());
+                ExperimentalEMCTSTreeNode child = null;
+
+                if (params.useCrossoverExpansion && topNodesQueue.size() >= 2) {
+                    int totalRatio = params.crossoverExpansionRatio + params.mutationExpansionRatio;
+                    if (m_rnd.nextInt(totalRatio) < params.crossoverExpansionRatio) {
+                        ArrayList<ExperimentalEMCTSTreeNode> topNodesList = new ArrayList<>(topNodesQueue);
+                        ExperimentalEMCTSTreeNode p1 = topNodesList.get(m_rnd.nextInt(topNodesList.size()));
+                        ExperimentalEMCTSTreeNode p2 = topNodesList.get(m_rnd.nextInt(topNodesList.size()));
+
+                        // Ensure parents are different if possible
+                        int attempts = 0;
+                        while (p1 == p2 && attempts < 5) {
+                            p2 = topNodesList.get(m_rnd.nextInt(topNodesList.size()));
+                            attempts++;
+                        }
+
+                        ArrayList<Action> crossoverSeq = crossover(p1, p2, gs.copy());
+                        child = new ExperimentalEMCTSTreeNode(crossoverSeq, toMutate);
+                        toMutate.addChild(child);
+                    } else {
+                        child = mutate(toMutate, gs.copy());
+                    }
+                } else {
+                    child = mutate(toMutate, gs.copy());
+                }
+
                 eval(gs.copy(), child);
 
                 if (child.getValue() > bestNode.getValue()) {
@@ -147,7 +172,7 @@ public class ExperimentalEMCTSAgent extends Agent {
                     }
                     
                     // Update root and clear old parent reference
-                    newRoot.unlink();  // Clears parent link
+                    newRoot.disconnectParent();  // Clears parent link
                     root = newRoot;
                     
                     // Clear and reset queue for next phase
@@ -207,10 +232,11 @@ public class ExperimentalEMCTSAgent extends Agent {
             }
 
             // Select child with highest score (pure exploitation)
-            ExperimentalEMCTSTreeNode bestChild = null;
-            double bestScore = Double.NEGATIVE_INFINITY;
+            ExperimentalEMCTSTreeNode bestChild = currentChildren.get(0);
+            double bestScore = bestChild.getScore();
 
-            for (ExperimentalEMCTSTreeNode child : currentChildren) {
+            for (int i = 1; i < currentChildren.size(); i++) {
+                ExperimentalEMCTSTreeNode child = currentChildren.get(i);
                 if (child.getScore() > bestScore) {
                     bestScore = child.getScore();
                     bestChild = child;

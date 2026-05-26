@@ -12,5 +12,10 @@ public class CrossoverBBAgent extends ExperimentalEMCTSAgent {
         params.useCrossoverExpansion = false;
         return params;
     }
+
+    @Override
+    public CrossoverBBAgent copy() {
+        return new CrossoverBBAgent(getSeed());
+    }
 }
 

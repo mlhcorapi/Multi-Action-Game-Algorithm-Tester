@@ -14,5 +14,10 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
         params.mutationExpansionRatio = 5;
         return params;
     }
+
+    @Override
+    public CrossoverExpansionAgent copy() {
+        return new CrossoverExpansionAgent(getSeed());
+    }
 }
 
