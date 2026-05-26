@@ -8,6 +8,8 @@ public class CrossoverBBAgent extends ExperimentalEMCTSAgent {
 
     private static ExperimentalEMCTSParams createParams() {
         ExperimentalEMCTSParams params = new ExperimentalEMCTSParams();
+        params.stop_type = params.STOP_FMCALLS;
+        params.heuristic_method = params.DIFF_HEURISTIC;
         params.useCrossoverBridgeBurning = true;
         params.useCrossoverExpansion = false;
         return params;

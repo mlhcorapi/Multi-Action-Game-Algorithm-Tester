@@ -8,6 +8,8 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
 
     private static ExperimentalEMCTSParams createParams() {
         ExperimentalEMCTSParams params = new ExperimentalEMCTSParams();
+        params.stop_type = params.STOP_FMCALLS;
+        params.heuristic_method = params.DIFF_HEURISTIC;
         params.useCrossoverBridgeBurning = false;
         params.useCrossoverExpansion = true;
         params.crossoverExpansionRatio = 1;
