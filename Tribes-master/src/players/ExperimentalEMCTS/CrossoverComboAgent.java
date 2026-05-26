@@ -12,5 +12,10 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
         params.useCrossoverExpansion = true;
         return params;
     }
+
+    @Override
+    public CrossoverComboAgent copy() {
+        return new CrossoverComboAgent(getSeed());
+    }
 }
 

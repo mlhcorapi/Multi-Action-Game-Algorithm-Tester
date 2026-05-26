@@ -97,4 +97,8 @@ public class ExperimentalEMCTSTreeNode {
         this.gs = null;
         this.sequence=null;
     }
+
+    public void disconnectParent() {
+        this.parent = null;
+    }
 }
