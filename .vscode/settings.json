@@ -1,0 +1,9 @@
+{
+  "java.project.sourcePaths": [
+    "Tribes-master/src"
+  ],
+  "java.project.referencedLibraries": [
+    "Tribes-master/lib/**/*.jar"
+  ],
+  "java.project.outputPath": "Tribes-master/bin"
+}
