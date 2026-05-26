@@ -130,6 +130,12 @@ C:\Users\mlcor\OneDrive\Desktop\Tribes-master\Tribes-master\src\players\SimpleAg
 C:\Users\mlcor\OneDrive\Desktop\Tribes-master\Tribes-master\src\players\emcts\EMCTSAgent.java
 C:\Users\mlcor\OneDrive\Desktop\Tribes-master\Tribes-master\src\players\emcts\EMCTSParams.java
 C:\Users\mlcor\OneDrive\Desktop\Tribes-master\Tribes-master\src\players\emcts\EMCTSTreeNode.java
+C:\Users\mlcor\OneDrive\Desktop\Tribes-master\Tribes-master\src\players\ExperimentalEMCTS\CrossoverBBAgent.java
+C:\Users\mlcor\OneDrive\Desktop\Tribes-master\Tribes-master\src\players\ExperimentalEMCTS\CrossoverComboAgent.java
+C:\Users\mlcor\OneDrive\Desktop\Tribes-master\Tribes-master\src\players\ExperimentalEMCTS\CrossoverExpansionAgent.java
+C:\Users\mlcor\OneDrive\Desktop\Tribes-master\Tribes-master\src\players\ExperimentalEMCTS\ExperimentalEMCTSAgent.java
+C:\Users\mlcor\OneDrive\Desktop\Tribes-master\Tribes-master\src\players\ExperimentalEMCTS\ExperimentalEMCTSParams.java
+C:\Users\mlcor\OneDrive\Desktop\Tribes-master\Tribes-master\src\players\ExperimentalEMCTS\ExperimentalEMCTSTreeNode.java
 C:\Users\mlcor\OneDrive\Desktop\Tribes-master\Tribes-master\src\players\heuristics\AlgParams.java
 C:\Users\mlcor\OneDrive\Desktop\Tribes-master\Tribes-master\src\players\heuristics\PruneHeuristic.java
 C:\Users\mlcor\OneDrive\Desktop\Tribes-master\Tribes-master\src\players\heuristics\PrunePortfolioHeuristic.java
