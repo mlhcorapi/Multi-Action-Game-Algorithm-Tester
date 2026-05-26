@@ -32,6 +32,8 @@ public class ExperimentalEMCTSAgent extends Agent {
     private int fmCallsCount;
     private int fmCallsRun;
     private PriorityQueue<ExperimentalEMCTSTreeNode> topNodesQueue;
+    private PriorityQueue<ExperimentalEMCTSTreeNode> globalTopNodesQueue;
+    private int crossoverExpansionCounter = 0;
 
 
     public ExperimentalEMCTSAgent(long seed, ExperimentalEMCTSParams params) {
@@ -55,9 +57,13 @@ public class ExperimentalEMCTSAgent extends Agent {
         bestNode = root;
         fmCallsRun = 0;
 
-        // Initialize PriorityQueue for tracking top nodes (max heap by value)
-        topNodesQueue = new PriorityQueue<>((n1, n2) -> Double.compare(n2.getValue(), n1.getValue()));
+        // Initialize PriorityQueue for tracking top nodes (min heap by value to keep the top K elements)
+        topNodesQueue = new PriorityQueue<>((n1, n2) -> Double.compare(n1.getValue(), n2.getValue()));
         topNodesQueue.offer(root);
+
+        globalTopNodesQueue = new PriorityQueue<>((n1, n2) -> Double.compare(n1.getValue(), n2.getValue()));
+        globalTopNodesQueue.offer(root);
+        crossoverExpansionCounter = 0;
 
         // Phase-based bridge burning approach
         long totalTimeMs = ect.remainingTimeMillis();
@@ -85,23 +91,21 @@ public class ExperimentalEMCTSAgent extends Agent {
                 ExperimentalEMCTSTreeNode toMutate = nodeToExpand();
                 ExperimentalEMCTSTreeNode child = null;
 
-                if (params.useCrossoverExpansion && topNodesQueue.size() >= 2) {
-                    int totalRatio = params.crossoverExpansionRatio + params.mutationExpansionRatio;
-                    if (m_rnd.nextInt(totalRatio) < params.crossoverExpansionRatio) {
-                        ArrayList<ExperimentalEMCTSTreeNode> topNodesList = new ArrayList<>(topNodesQueue);
-                        ExperimentalEMCTSTreeNode p1 = topNodesList.get(m_rnd.nextInt(topNodesList.size()));
-                        ExperimentalEMCTSTreeNode p2 = topNodesList.get(m_rnd.nextInt(topNodesList.size()));
+                if (params.useCrossoverExpansion && globalTopNodesQueue.size() >= 2) {
+                    crossoverExpansionCounter++;
+                    if (crossoverExpansionCounter >= params.mutationExpansionRatio) {
+                        crossoverExpansionCounter = 0;
+                        System.out.println("[Variant 2] Crossover expansion triggered");
 
-                        // Ensure parents are different if possible
-                        int attempts = 0;
-                        while (p1 == p2 && attempts < 5) {
-                            p2 = topNodesList.get(m_rnd.nextInt(topNodesList.size()));
-                            attempts++;
-                        }
+                        ArrayList<ExperimentalEMCTSTreeNode> topNodesList = new ArrayList<>(globalTopNodesQueue);
+                        ExperimentalEMCTSTreeNode p1 = topNodesList.get(0);
+                        ExperimentalEMCTSTreeNode p2 = topNodesList.get(1);
 
                         ArrayList<Action> crossoverSeq = crossover(p1, p2, gs.copy());
-                        child = new ExperimentalEMCTSTreeNode(crossoverSeq, toMutate);
-                        toMutate.addChild(child);
+
+                        ExperimentalEMCTSTreeNode strongerParent = (p1.getValue() > p2.getValue()) ? p1 : p2;
+                        child = new ExperimentalEMCTSTreeNode(crossoverSeq, strongerParent);
+                        strongerParent.addChild(child);
                     } else {
                         child = mutate(toMutate, gs.copy());
                     }
@@ -121,6 +125,11 @@ public class ExperimentalEMCTSAgent extends Agent {
                 topNodesQueue.offer(child);
                 if (topNodesQueue.size() > 8) {
                     topNodesQueue.poll();
+                }
+
+                globalTopNodesQueue.offer(child);
+                if (globalTopNodesQueue.size() > 2) {
+                    globalTopNodesQueue.poll();
                 }
 
                 // Backpropagate score up the tree (standard UCB update)
@@ -613,15 +622,26 @@ public class ExperimentalEMCTSAgent extends Agent {
             }
         }
 
-        // Compare with the absolute best node and return the winner
-        if (bestCrossoverChild.getValue() > bestNode.getValue()) {
-            if (bestCrossoverChild.getValue() > bestNode.getValue()) {
-                bestNode = bestCrossoverChild;
+        // Find the best among the original parent nodes
+        ExperimentalEMCTSTreeNode bestParent = topEight.get(0);
+        for (ExperimentalEMCTSTreeNode parent : topEight) {
+            if (parent.getValue() > bestParent.getValue()) {
+                bestParent = parent;
             }
-            return bestCrossoverChild;
-        } else {
-            return bestNode;
         }
+
+        // Compare with the best parent node and return the winner
+        ExperimentalEMCTSTreeNode newRootCandidate;
+        if (bestCrossoverChild.getValue() > bestParent.getValue()) {
+            newRootCandidate = bestCrossoverChild;
+        } else {
+            newRootCandidate = bestParent;
+        }
+
+        if (newRootCandidate.getValue() > bestNode.getValue()) {
+            bestNode = newRootCandidate;
+        }
+        return newRootCandidate;
     }
 
     /**
