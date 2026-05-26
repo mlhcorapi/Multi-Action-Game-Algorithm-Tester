@@ -19,6 +19,9 @@ import players.portfolio.Portfolio;
 import players.portfolio.SimplePortfolio;
 import players.portfolioMCTS.PortfolioMCTSParams;
 import players.portfolioMCTS.PortfolioMCTSPlayer;
+import players.ExperimentalEMCTS.CrossoverBBAgent;
+import players.ExperimentalEMCTS.CrossoverComboAgent;
+import players.ExperimentalEMCTS.CrossoverExpansionAgent;
 import players.rhea.RHEAAgent;
 import players.rhea.RHEAParams;
 
@@ -70,6 +73,9 @@ class Run {
         RHEA,
         OEP,
         EMCTS,
+        CROSSOVER_BB,
+        CROSSOVER_EXPANSION,
+        CROSSOVER_COMBO,
         PORTFOLIO_MCTS
     }
 
@@ -102,6 +108,9 @@ class Run {
             case "OEP": return Run.PlayerType.OEP;
             case "pMCTS": return Run.PlayerType.PORTFOLIO_MCTS;
             case "EMCTS": return Run.PlayerType.EMCTS;
+            case "CrossoverBB": return Run.PlayerType.CROSSOVER_BB;
+            case "CrossoverExpansion": return Run.PlayerType.CROSSOVER_EXPANSION;
+            case "CrossoverCombo": return Run.PlayerType.CROSSOVER_COMBO;
         }
         throw new Exception("Error: unrecognized Player Type: " + arg);
     }
@@ -192,7 +201,13 @@ class Run {
                 EMCTSParams emctsParams = new EMCTSParams();
                 emctsParams.stop_type = emctsParams.STOP_FMCALLS;
                 emctsParams.heuristic_method = emctsParams.DIFF_HEURISTIC;
-                return new EMCTSAgent(agentSeed,emctsParams);
+                return new EMCTSAgent(agentSeed, emctsParams);
+            case CROSSOVER_BB:
+                return new CrossoverBBAgent(agentSeed);
+            case CROSSOVER_EXPANSION:
+                return new CrossoverExpansionAgent(agentSeed);
+            case CROSSOVER_COMBO:
+                return new CrossoverComboAgent(agentSeed);
             case RHEA:
                 RHEAParams rheaParams = new RHEAParams();
                 rheaParams.stop_type = rheaParams.STOP_FMCALLS;
