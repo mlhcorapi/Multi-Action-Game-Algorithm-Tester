@@ -62,6 +62,19 @@ public class TribesSimpleHeuristic implements StateHeuristic{
         ArrayList<City> cities = gameState.getCities(playerId);
         ArrayList<Unit> units = gameState.getUnits(playerId);
 
+        int unitPositionReward = 0;
+        core.game.Board board = gameState.getBoard();
+        for (int i = 0; i < units.size(); i++) {
+            Unit u = units.get(i);
+            int x = u.getPosition().x;
+            int y = u.getPosition().y;
+            Types.TERRAIN t = board.getTerrainAt(x, y);
+            int cityId = board.getCityIdAt(x, y);
+            if (t == Types.TERRAIN.VILLAGE || (t == Types.TERRAIN.CITY && cityId != -1 && ((City) board.getActor(cityId)).getTribeId() != playerId)) {
+                unitPositionReward += 20;
+            }
+        }
+
         int boost = 0;
         if(gameState.isGameOver())
             if(gameState.getTribeWinStatus(playerId) == Types.RESULT.WIN)
@@ -70,6 +83,6 @@ public class TribesSimpleHeuristic implements StateHeuristic{
                 boost = LOSE_BOOST;
 
 
-        return boost + numAvailableActions + availableProduction*100 + tt.getNumResearched()*10 + score + cities.size()*500 + units.size()*10;
+        return boost + numAvailableActions + availableProduction*100 + tt.getNumResearched()*10 + score + cities.size()*500 + units.size()*10 + unitPositionReward;
     }
 }
