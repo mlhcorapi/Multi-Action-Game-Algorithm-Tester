@@ -422,7 +422,7 @@ public class OEPAgent extends Agent {
 
     public double eval( Individual actionSet){
         GameState gs = actionSet.getGs();
-        return heuristic.evaluateState(this.root.copy(),gs.copy());
+        return heuristic.evaluateState(this.root, gs);
         //return heuristic.evaluateState(gs.copy());
     }
 
