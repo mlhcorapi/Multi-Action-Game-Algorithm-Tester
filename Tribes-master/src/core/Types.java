@@ -137,6 +137,26 @@ public class Types {
         }
         public UNIT getStartingUnit() {return startingUnit;}
         public Color getColorDark() {return color_dark;}
+        public Color getColor() {return color;}
+        public Color getColorLight() {return color_light;}
+
+        public String getColorName() {
+            switch(this) {
+                case XIN_XI: return "Red";
+                case IMPERIUS: return "Blue";
+                case BARDUR: return "Black";
+                case OUMAJI: return "Yellow";
+                case KICKOO: return "Green";
+                case HOODRICK: return "Brown";
+                case LUXIDOOR: return "Purple";
+                case VENGIR: return "White";
+                case ZEBASI: return "Orange";
+                case AI_MO: return "Teal";
+                case QUETZALI: return "Dark Green";
+                case YADAKK: return "Dark Red";
+                default: return "Unknown";
+            }
+        }
     }
 
     /**

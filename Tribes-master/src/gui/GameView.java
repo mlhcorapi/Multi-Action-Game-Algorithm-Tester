@@ -487,7 +487,7 @@ public class GameView extends JComponent {
                         int progress = c.getPopulation();
                         int units = c.getUnitsID().size();
                         Tribe tr = gameState.getTribe(c.getTribeId());
-                        Color col = Types.TRIBE.values()[tr.getType().getKey()].getColorDark();
+                        Color col = tr.getColorDark();
                         Color colTransparent = new Color(col.getRed(), col.getGreen(), col.getBlue(), 170);
 
                         // Draw city walls
