@@ -68,7 +68,7 @@ public class TribeView extends JComponent {
                 String agentName = agentChunks[agentChunks.length - 1];
 
                 if (winState != Types.RESULT.INCOMPLETE) w = " (" + winState.toString() + ")";
-                s.append("<p><b>").append(t.getName()).append("</b> (").append(agentName).append(") ...........  ").append(t.getScore()).append(" points").append(w).append("</p>");
+                s.append("<p><b>").append(t.getName()).append("</b> (").append(agentName).append(") (").append(t.getColorName()).append(") ...........  ").append(t.getScore()).append(" points").append(w).append("</p>");
             }
 
             if (!textArea.getText().equals(s.toString())) {

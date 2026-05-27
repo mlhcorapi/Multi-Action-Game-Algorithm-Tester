@@ -181,19 +181,46 @@ public class Game {
 
         Tribe[] tribeObjects = gs.getTribes();
 
+        HashMap<core.Types.TRIBE, Integer> typeCounts = new HashMap<>();
+        // Keep track of which fallback colors we've assigned so we don't reuse them
+        HashSet<core.Types.TRIBE> usedFallbacks = new HashSet<>();
+
         for (int tribeIdx = 0; tribeIdx < tribeObjects.length; ++tribeIdx) {
             Tribe thisTribe = tribeObjects[tribeIdx];
             core.Types.TRIBE tribeType = thisTribe.getType();
 
-            ArrayList<Integer> allIds = new ArrayList<>();
-            int indexInTypes = -1;
-            for (int i = 0; i < tribes.length; ++i) {
-                allIds.add(i);
-                if (tribes[i] == tribeType)
-                    indexInTypes = i;
+            // Assign unique colors to duplicate tribes
+            int count = typeCounts.getOrDefault(tribeType, 0);
+            typeCounts.put(tribeType, count + 1);
+            if (count > 0) {
+                // Find a tribe type whose color isn't used
+                core.Types.TRIBE[] allTypes = core.Types.TRIBE.values();
+                core.Types.TRIBE fallback = null;
+                for (core.Types.TRIBE t : allTypes) {
+                    boolean used = false;
+                    for (int j = 0; j < tribes.length; j++) {
+                        if (tribes[j] == t) used = true;
+                    }
+                    if (!used && !usedFallbacks.contains(t)) {
+                        fallback = t;
+                        usedFallbacks.add(t);
+                        break;
+                    }
+                }
+                if (fallback != null) {
+                    thisTribe.assignedColor = fallback.getColor();
+                    thisTribe.assignedColorLight = fallback.getColorLight();
+                    thisTribe.assignedColorDark = fallback.getColorDark();
+                    thisTribe.assignedColorName = fallback.getColorName();
+                }
             }
 
-            this.players[tribeIdx] = players.get(indexInTypes);
+            ArrayList<Integer> allIds = new ArrayList<>();
+            for (int i = 0; i < tribes.length; ++i) {
+                allIds.add(i);
+            }
+
+            this.players[tribeIdx] = players.get(tribeIdx);
             this.players[tribeIdx].setPlayerIDs(tribeIdx, allIds);
             this.aiStats[tribeIdx] = new AIStats(tribeIdx);
             this.gpStats[tribeIdx] = new GameplayStats(tribeIdx);
