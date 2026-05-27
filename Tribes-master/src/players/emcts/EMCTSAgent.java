@@ -155,9 +155,9 @@ public class EMCTSAgent extends Agent {
                 advance(gs, move);
             }
             node.setGs(gs);
-            node.setValue(heuristic.evaluateState(old_gs.copy(), gs.copy()));
+            node.setValue(heuristic.evaluateState(old_gs, gs));
         }else{
-            node.setValue(heuristic.evaluateState(old_gs.copy(), node.getGs()));
+            node.setValue(heuristic.evaluateState(old_gs, node.getGs()));
         }
     }
 
@@ -227,7 +227,7 @@ public class EMCTSAgent extends Agent {
 
                 GameState testGs = gs.copy();
                 advance(testGs, candidateAction);
-                double score = heuristic.evaluateState(old_gs.copy(), testGs.copy());
+                double score = heuristic.evaluateState(old_gs, testGs);
 
                 if (score > bestScore) {
                     bestScore = score;
@@ -335,7 +335,7 @@ public class EMCTSAgent extends Agent {
                     for (Action candidateAction : allAvailableActions) {
                         GameState testGs = gs.copy();
                         advance(testGs, candidateAction);
-                        double score = heuristic.evaluateState(old_gs.copy(), testGs.copy());
+                        double score = heuristic.evaluateState(old_gs, testGs);
 
                         if (score > bestScore) {
                             bestScore = score;
@@ -368,7 +368,7 @@ public class EMCTSAgent extends Agent {
                 for (Action candidateAction : allAvailableActions) {
                     GameState testGs = gs.copy();
                     advance(testGs, candidateAction);
-                    double score = heuristic.evaluateState(old_gs.copy(), testGs.copy());
+                    double score = heuristic.evaluateState(old_gs, testGs);
 
                     if (score > bestScore) {
                         bestScore = score;
