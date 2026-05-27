@@ -6,6 +6,9 @@ import utils.stats.StatSummary;
 
 import java.util.ArrayList;
 
+import core.Constants;
+import core.Types;
+
 /**
  * Compares some important game metrics between an old gamestate and a new gamestate. Returns a score called 'entropy'.
  * An entropy of 0 means the gamestates are identical in terms of the metrics being compared, positive entropy means
@@ -89,6 +92,16 @@ public class TribesDiffHeuristic implements StateHeuristic {
         difference += 2 * (units - gsOld.getUnits(playerId).size());
         difference += 3 * (kills - gsOld.getNKills(playerId));
         difference += 2 * (sumCityLevelsNew - sumCityLevelsOld);
+
+        if (Constants.REMOVE_FISHING) {
+            core.TechnologyTree ttOld = gsOld.getTribeTechTree(playerId);
+            core.TechnologyTree ttNew = gsNew.getTribeTechTree(playerId);
+            if (ttNew.isResearched(Types.TECHNOLOGY.FISHING) && !ttOld.isResearched(Types.TECHNOLOGY.FISHING)) difference -= 100;
+            if (ttNew.isResearched(Types.TECHNOLOGY.SAILING) && !ttOld.isResearched(Types.TECHNOLOGY.SAILING)) difference -= 100;
+            if (ttNew.isResearched(Types.TECHNOLOGY.WHALING) && !ttOld.isResearched(Types.TECHNOLOGY.WHALING)) difference -= 100;
+            if (ttNew.isResearched(Types.TECHNOLOGY.NAVIGATION) && !ttOld.isResearched(Types.TECHNOLOGY.NAVIGATION)) difference -= 100;
+            if (ttNew.isResearched(Types.TECHNOLOGY.AQUATISM) && !ttOld.isResearched(Types.TECHNOLOGY.AQUATISM)) difference -= 100;
+        }
 
         return difference;
     }

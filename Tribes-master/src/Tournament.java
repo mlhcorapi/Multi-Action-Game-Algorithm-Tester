@@ -102,6 +102,9 @@ public class Tournament {
                     weights = (JSONArray) config.get("pMCTS Weights");
                 Run.pMCTSweights = Run.getWeights(weights);
 
+                if(config.has("Remove Fishing"))
+                    Constants.REMOVE_FISHING = config.getBoolean("Remove Fishing");
+
             } catch (Exception e) {
                 System.out.println("Malformed JSON config file: " + e);
                 e.printStackTrace();

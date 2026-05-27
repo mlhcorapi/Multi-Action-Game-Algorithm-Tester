@@ -82,7 +82,15 @@ public class TribesSimpleHeuristic implements StateHeuristic{
             else if (gameState.getTribeWinStatus(playerId) == Types.RESULT.LOSS)
                 boost = LOSE_BOOST;
 
+        double fishingPenalty = 0;
+        if (Constants.REMOVE_FISHING) {
+            if (tt.isResearched(Types.TECHNOLOGY.FISHING)) fishingPenalty -= 100;
+            if (tt.isResearched(Types.TECHNOLOGY.SAILING)) fishingPenalty -= 100;
+            if (tt.isResearched(Types.TECHNOLOGY.WHALING)) fishingPenalty -= 100;
+            if (tt.isResearched(Types.TECHNOLOGY.NAVIGATION)) fishingPenalty -= 100;
+            if (tt.isResearched(Types.TECHNOLOGY.AQUATISM)) fishingPenalty -= 100;
+        }
 
-        return boost + numAvailableActions + availableProduction*100 + tt.getNumResearched()*10 + score + cities.size()*500 + units.size()*10 + unitPositionReward;
+        return boost + numAvailableActions + availableProduction*100 + tt.getNumResearched()*10 + score + cities.size()*500 + units.size()*10 + unitPositionReward + fishingPenalty;
     }
 }
