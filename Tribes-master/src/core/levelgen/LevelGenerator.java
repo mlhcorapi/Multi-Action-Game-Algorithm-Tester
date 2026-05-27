@@ -206,7 +206,7 @@ public class LevelGenerator {
         }
 
         for (i = 0; i < capitalCells.size(); i++) {
-            writeTile((capitalCells.get(i) / mapSize) * mapSize + (capitalCells.get(i) % mapSize), ""+CITY.getMapChar(), String.valueOf(tribes[i].getKey()));
+            writeTile((capitalCells.get(i) / mapSize) * mapSize + (capitalCells.get(i) % mapSize), ""+CITY.getMapChar(), String.valueOf(i));
         }
 
         // Terrain distribution
