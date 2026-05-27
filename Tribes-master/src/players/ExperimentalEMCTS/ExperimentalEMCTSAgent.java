@@ -275,6 +275,7 @@ public class ExperimentalEMCTSAgent extends Agent {
             Action bestAction = null;
             double bestScore = Double.NEGATIVE_INFINITY;
             GameState bestState = null;
+            int numTies = 0;
 
             // Greedy evaluation: try each action and pick the highest-scoring one
             for (Action candidateAction : allAvailableActions) {
@@ -292,6 +293,13 @@ public class ExperimentalEMCTSAgent extends Agent {
                     bestScore = score;
                     bestAction = candidateAction;
                     bestState = testGs;
+                    numTies = 1;
+                } else if (score == bestScore) {
+                    numTies++;
+                    if (m_rnd.nextInt(numTies) == 0) {
+                        bestAction = candidateAction;
+                        bestState = testGs;
+                    }
                 }
             }
 
@@ -382,6 +390,7 @@ public class ExperimentalEMCTSAgent extends Agent {
                     
                     Action bestAction = null;
                     double bestScore = Double.NEGATIVE_INFINITY;
+                    int numTies = 0;
 
                     for (Action candidateAction : allAvailableActions) {
                         GameState testGs = gs.copy();
@@ -391,6 +400,12 @@ public class ExperimentalEMCTSAgent extends Agent {
                         if (score > bestScore) {
                             bestScore = score;
                             bestAction = candidateAction;
+                            numTies = 1;
+                        } else if (score == bestScore) {
+                            numTies++;
+                            if (m_rnd.nextInt(numTies) == 0) {
+                                bestAction = candidateAction;
+                            }
                         }
                     }
 
@@ -408,6 +423,7 @@ public class ExperimentalEMCTSAgent extends Agent {
 
                 Action bestAction = null;
                 double bestScore = Double.NEGATIVE_INFINITY;
+                int numTies = 0;
 
                 for (Action candidateAction : allAvailableActions) {
                     GameState testGs = gs.copy();
@@ -417,6 +433,12 @@ public class ExperimentalEMCTSAgent extends Agent {
                     if (score > bestScore) {
                         bestScore = score;
                         bestAction = candidateAction;
+                        numTies = 1;
+                    } else if (score == bestScore) {
+                        numTies++;
+                        if (m_rnd.nextInt(numTies) == 0) {
+                            bestAction = candidateAction;
+                        }
                     }
                 }
 
@@ -706,6 +728,7 @@ public class ExperimentalEMCTSAgent extends Agent {
 
                 Action bestAction = null;
                 double bestScore = Double.NEGATIVE_INFINITY;
+                int numTies = 0;
 
                 for (Action candidateAction : allAvailableActions) {
                     GameState candidateGs = testGs.copy();
@@ -715,6 +738,12 @@ public class ExperimentalEMCTSAgent extends Agent {
                     if (score > bestScore) {
                         bestScore = score;
                         bestAction = candidateAction;
+                        numTies = 1;
+                    } else if (score == bestScore) {
+                        numTies++;
+                        if (m_rnd.nextInt(numTies) == 0) {
+                            bestAction = candidateAction;
+                        }
                     }
                 }
 
