@@ -25,5 +25,6 @@
   "Level File": "levels/SampleLevel.csv",
   "Game Seed": "-1",
   "Agents Seed": "-1",
-  "Level Seed": "-1"
+  "Level Seed": "-1",
+  "Remove Fishing": true
 }

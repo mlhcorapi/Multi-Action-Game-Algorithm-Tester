@@ -32,7 +32,7 @@ jobs:
       with:
         java-version: ${{ matrix.java-version }}
         distribution: 'temurin'
-        cache: 'maven'
+# removed cache: 'maven' to fix CI
     
     # Compile Java code
     - name: Compile Java sources

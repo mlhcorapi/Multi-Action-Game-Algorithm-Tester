@@ -82,6 +82,9 @@ public class Play {
                     weights = (JSONArray) config.get("pMCTS Weights");
                 Run.pMCTSweights = Run.getWeights(weights);
 
+                if(config.has("Remove Fishing"))
+                    Constants.REMOVE_FISHING = config.getBoolean("Remove Fishing");
+
                 AGENT_SEED = config.getLong("Agents Seed");
                 GAME_SEED = config.getLong("Game Seed");
                 long levelSeed = config.getLong("Level Seed");
