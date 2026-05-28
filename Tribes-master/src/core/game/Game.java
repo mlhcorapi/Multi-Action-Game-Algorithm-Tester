@@ -3,6 +3,8 @@ package core.game;
 import core.Constants;
 import core.Types;
 import core.actions.Action;
+import static core.Types.ACTION.CONVERT;
+import static core.Types.ACTION.HEAL_OTHERS;
 import core.actions.tribeactions.EndTurn;
 import core.actors.Tribe;
 import players.Agent;
@@ -386,7 +388,8 @@ public class Game {
                 // Action request and execution if turn should be continued
                 if (continueTurn) {
                     //noinspection ConstantConditions
-                    if ((!VISUALS || frame == null) || actionDelayTimer.remainingTimeMillis() <= 0 || isHumanPlayer) {
+                    boolean waitingForAnimation = VISUALS && frame != null && frame.isAnimating();
+                    if (!waitingForAnimation && ((!VISUALS || frame == null) || actionDelayTimer.remainingTimeMillis() <= 0 || isHumanPlayer)) {
                         // Get one action from the player
                         ect.setMaxTimeMillis(remainingECT);  // Reset timer ignoring all other timers or updates
                         action = ag.act(gameStateObservations[playerID], ect);
@@ -444,7 +447,8 @@ public class Game {
                 break;
             }
 
-            if (action != null && !VISUALS || frame != null && (action != null && !(action.getActionType() == ATTACK) ||
+            if (action != null && !VISUALS || frame != null && (action != null &&
+                    !(action.getActionType() == ATTACK || action.getActionType() == CONVERT || action.getActionType() == HEAL_OTHERS) ||
                     (action = frame.getAnimatedAction()) != null)) {
                 // Play the action in the game and update the available actions list and observations
                 // Some actions are animated, the condition above checks if this animation is finished and retrieves
