@@ -95,7 +95,6 @@ public class ExperimentalEMCTSAgent extends Agent {
                     crossoverExpansionCounter++;
                     if (crossoverExpansionCounter >= params.mutationExpansionRatio) {
                         crossoverExpansionCounter = 0;
-                        System.out.println("[Variant 2] Crossover expansion triggered");
 
                         ArrayList<ExperimentalEMCTSTreeNode> topNodesList = new ArrayList<>(globalTopNodesQueue);
                         ExperimentalEMCTSTreeNode p1 = topNodesList.get(0);
@@ -200,6 +199,13 @@ public class ExperimentalEMCTSAgent extends Agent {
             }
         }
 
+        if (bestNode.getSequence() == null || bestNode.getSequence().isEmpty()) {
+            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
+            if (!allAvailableActions.isEmpty()) {
+                return allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+            }
+            return new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+        }
         return bestNode.returnNext();
     }
 
@@ -233,8 +239,14 @@ public class ExperimentalEMCTSAgent extends Agent {
         ExperimentalEMCTSTreeNode current = root;
 
         while (true) {
+            if (current == null) {
+                return root;
+            }
             ArrayList<ExperimentalEMCTSTreeNode> currentChildren = current.getChildren();
 
+            if (currentChildren == null) {
+                return current;
+            }
             // If no children, this is a leaf node - return it for mutation
             if (currentChildren.size() == 0) {
                 return current;
@@ -348,15 +360,18 @@ public class ExperimentalEMCTSAgent extends Agent {
     private ExperimentalEMCTSTreeNode mutate(ExperimentalEMCTSTreeNode node, GameState gs) {
         GameState clone = gs.copy();
         ArrayList<Action> seq = node.getSequence();
-        int moveToMutate = m_rnd.nextInt(seq.size());
+        int moveToMutate = seq.isEmpty() ? 0 : m_rnd.nextInt(seq.size());
         ArrayList<Action> newSeq = new ArrayList<>();
         for (int i = 0; i < moveToMutate; i++) {
             advance(gs, seq.get(i));
             newSeq.add(seq.get(i));
         }
         ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-        Action a = allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
-        newSeq.add(a);
+
+        if (!allAvailableActions.isEmpty()) {
+            Action a = allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+            newSeq.add(a);
+        }
 
         for (int i = moveToMutate + 1; i < seq.size(); i++) {
             newSeq.add(seq.get(i));
