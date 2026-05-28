@@ -261,15 +261,12 @@ public class GameState {
             return false;
 
         //Just one action for a city or a unit makes this question false.
-        int nActions = 0;
         for(int cityId : cityActions.keySet())
         {
-            nActions += cityActions.get(cityId).size();
-            if(nActions>0) return true;
+            if(cityActions.get(cityId).size() > 0) return true;
         }
-        for(int cityId : unitActions.keySet()) {
-            nActions += unitActions.get(cityId).size();
-            if(nActions>0) return true;
+        for(int unitId : unitActions.keySet()) {
+            if(unitActions.get(unitId).size() > 0) return true;
         }
 
         //No city or unit actions - if there's only one (EndTurn) tribe action, there are no actions available.
