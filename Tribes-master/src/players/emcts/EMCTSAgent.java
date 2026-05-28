@@ -446,7 +446,6 @@ public class EMCTSAgent extends Agent {
         }
 
         if (this.allGoodActions(gs, m_rnd).size() > 1) {
-            int loopCounter = 0;
             while (!gs.isGameOver() && (gs.getActiveTribeID() == getPlayerID())) {
                 ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
                 Action a = allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
@@ -456,12 +455,6 @@ public class EMCTSAgent extends Agent {
                 } else if (allAvailableActions.size() == 1) {
                     advance(gs, a);
                     newActions.add(a);
-                    break;
-                }
-
-                // Safety break to prevent infinite simulation loops
-                loopCounter++;
-                if (loopCounter > 1000) {
                     break;
                 }
             }

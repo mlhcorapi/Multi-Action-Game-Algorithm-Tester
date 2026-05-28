@@ -206,7 +206,7 @@ public class LevelGenerator {
         }
 
         for (i = 0; i < capitalCells.size(); i++) {
-            writeTile((capitalCells.get(i) / mapSize) * mapSize + (capitalCells.get(i) % mapSize), ""+CITY.getMapChar(), String.valueOf(i));
+            writeTile((capitalCells.get(i) / mapSize) * mapSize + (capitalCells.get(i) % mapSize), ""+CITY.getMapChar(), String.valueOf(tribes[i].getKey()));
         }
 
         // Terrain distribution
@@ -414,7 +414,7 @@ public class LevelGenerator {
         for(int capital : capitalCells) {
             int owner = Integer.parseInt(getResource(capital));
 
-            if(owner == (char)IMPERIUS.getKey() || owner == (char)IMPERIUS_2.getKey()) {
+            if(owner == (char)IMPERIUS.getKey()) {
                 postGenerate(FRUIT.getMapChar(), PLAIN.getMapChar(), 2, capital);
             } else if(owner == (char)BARDUR.getKey()) {
                 postGenerate(ANIMAL.getMapChar(), FOREST.getMapChar(), 2, capital);

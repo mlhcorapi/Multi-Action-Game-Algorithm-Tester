@@ -487,7 +487,7 @@ public class GameView extends JComponent {
                         int progress = c.getPopulation();
                         int units = c.getUnitsID().size();
                         Tribe tr = gameState.getTribe(c.getTribeId());
-                        Color col = tr.getColorDark();
+                        Color col = Types.TRIBE.values()[tr.getType().getKey()].getColorDark();
                         Color colTransparent = new Color(col.getRed(), col.getGreen(), col.getBlue(), 170);
 
                         // Draw city walls
@@ -894,6 +894,8 @@ public class GameView extends JComponent {
             Image weapon1 = source.getType().getWeaponImage(source.getTribeId());
 
             if (weapon1 != null) {
+                // Pause the game, paint this weapon image travelling from attacker to target
+                game.setAnimationPaused(true);
                 Pair<Image, Vector2d> sourceAnimationInfo = new Pair<>(weapon1, new Vector2d(source.getPosition().y * CELL_SIZE, source.getPosition().x * CELL_SIZE));
                 ArrayList<Unit> targets = new ArrayList<>();
                 Image weapon2 = null;
@@ -928,8 +930,6 @@ public class GameView extends JComponent {
                     sourceTargetAnimationInfo.add(new Pair<>(sourceAnimationInfo, targetAnimationInfo));
                 }
                 if (targets.size() > 0) {
-                    // Pause the game, paint this weapon image travelling from attacker to target
-                    game.setAnimationPaused(true);
                     this.animatedAction = a;
                 }
             }
@@ -1011,9 +1011,5 @@ public class GameView extends JComponent {
             return a;
         }
         return null;
-    }
-
-    boolean isAnimating() {
-        return sourceTargetAnimationInfo.size() > 0 || animatedAction != null || effectDrawingIdx != -1;
     }
 }

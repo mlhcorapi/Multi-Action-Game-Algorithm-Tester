@@ -121,7 +121,6 @@ class Run {
         {
             case "Xin Xi": return XIN_XI;
             case "Imperius": return IMPERIUS;
-            case "Imperius2": return IMPERIUS_2;
             case "Bardur": return BARDUR;
             case "Oumaji": return OUMAJI;
             case "Kickoo": return KICKOO;

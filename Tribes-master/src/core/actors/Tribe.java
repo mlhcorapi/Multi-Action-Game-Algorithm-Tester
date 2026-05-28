@@ -74,17 +74,6 @@ public class Tribe extends Actor {
     private int nWarsDeclared;
     private int nStarsSent;
 
-    // Optional assigned colors for when multiple players use the same tribe
-    public java.awt.Color assignedColor = null;
-    public java.awt.Color assignedColorLight = null;
-    public java.awt.Color assignedColorDark = null;
-    public String assignedColorName = null;
-
-    public java.awt.Color getColor() { return assignedColor != null ? assignedColor : tribe.getColor(); }
-    public java.awt.Color getColorLight() { return assignedColorLight != null ? assignedColorLight : tribe.getColorLight(); }
-    public java.awt.Color getColorDark() { return assignedColorDark != null ? assignedColorDark : tribe.getColorDark(); }
-    public String getColorName() { return assignedColorName != null ? assignedColorName : tribe.getColorName(); }
-
     public Tribe(Types.TRIBE tribe) {
         this.tribe = tribe;
         init();

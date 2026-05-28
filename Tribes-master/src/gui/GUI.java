@@ -543,8 +543,4 @@ public class GUI extends JFrame {
     public Action getAnimatedAction() {
         return boardView.getAnimatedAction();
     }
-
-    public boolean isAnimating() {
-        return boardView.isAnimating();
-    }
 }

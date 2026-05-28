@@ -3,8 +3,6 @@ package core.game;
 import core.Constants;
 import core.Types;
 import core.actions.Action;
-import static core.Types.ACTION.CONVERT;
-import static core.Types.ACTION.HEAL_OTHERS;
 import core.actions.tribeactions.EndTurn;
 import core.actors.Tribe;
 import players.Agent;
@@ -183,46 +181,19 @@ public class Game {
 
         Tribe[] tribeObjects = gs.getTribes();
 
-        HashMap<core.Types.TRIBE, Integer> typeCounts = new HashMap<>();
-        // Keep track of which fallback colors we've assigned so we don't reuse them
-        HashSet<core.Types.TRIBE> usedFallbacks = new HashSet<>();
-
         for (int tribeIdx = 0; tribeIdx < tribeObjects.length; ++tribeIdx) {
             Tribe thisTribe = tribeObjects[tribeIdx];
             core.Types.TRIBE tribeType = thisTribe.getType();
 
-            // Assign unique colors to duplicate tribes
-            int count = typeCounts.getOrDefault(tribeType, 0);
-            typeCounts.put(tribeType, count + 1);
-            if (count > 0) {
-                // Find a tribe type whose color isn't used
-                core.Types.TRIBE[] allTypes = core.Types.TRIBE.values();
-                core.Types.TRIBE fallback = null;
-                for (core.Types.TRIBE t : allTypes) {
-                    boolean used = false;
-                    for (int j = 0; j < tribes.length; j++) {
-                        if (tribes[j] == t) used = true;
-                    }
-                    if (!used && !usedFallbacks.contains(t)) {
-                        fallback = t;
-                        usedFallbacks.add(t);
-                        break;
-                    }
-                }
-                if (fallback != null) {
-                    thisTribe.assignedColor = fallback.getColor();
-                    thisTribe.assignedColorLight = fallback.getColorLight();
-                    thisTribe.assignedColorDark = fallback.getColorDark();
-                    thisTribe.assignedColorName = fallback.getColorName();
-                }
-            }
-
             ArrayList<Integer> allIds = new ArrayList<>();
+            int indexInTypes = -1;
             for (int i = 0; i < tribes.length; ++i) {
                 allIds.add(i);
+                if (tribes[i] == tribeType)
+                    indexInTypes = i;
             }
 
-            this.players[tribeIdx] = players.get(tribeIdx);
+            this.players[tribeIdx] = players.get(indexInTypes);
             this.players[tribeIdx].setPlayerIDs(tribeIdx, allIds);
             this.aiStats[tribeIdx] = new AIStats(tribeIdx);
             this.gpStats[tribeIdx] = new GameplayStats(tribeIdx);
@@ -388,8 +359,7 @@ public class Game {
                 // Action request and execution if turn should be continued
                 if (continueTurn) {
                     //noinspection ConstantConditions
-                    boolean waitingForAnimation = VISUALS && frame != null && frame.isAnimating();
-                    if (!waitingForAnimation && ((!VISUALS || frame == null) || actionDelayTimer.remainingTimeMillis() <= 0 || isHumanPlayer)) {
+                    if ((!VISUALS || frame == null) || actionDelayTimer.remainingTimeMillis() <= 0 || isHumanPlayer) {
                         // Get one action from the player
                         ect.setMaxTimeMillis(remainingECT);  // Reset timer ignoring all other timers or updates
                         action = ag.act(gameStateObservations[playerID], ect);
@@ -447,8 +417,7 @@ public class Game {
                 break;
             }
 
-            if (action != null && !VISUALS || frame != null && (action != null &&
-                    !(action.getActionType() == ATTACK || action.getActionType() == CONVERT || action.getActionType() == HEAL_OTHERS) ||
+            if (action != null && !VISUALS || frame != null && (action != null && !(action.getActionType() == ATTACK) ||
                     (action = frame.getAnimatedAction()) != null)) {
                 // Play the action in the game and update the available actions list and observations
                 // Some actions are animated, the condition above checks if this animation is finished and retrieves
