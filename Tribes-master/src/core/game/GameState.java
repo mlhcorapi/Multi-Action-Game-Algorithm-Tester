@@ -345,9 +345,14 @@ public class GameState {
                                 playerFound = true;
 
                             if(curActiveTribeId == board.getActiveTribeID()) {
+                                if (canEndTurn.length == 1) {
+                                    // It's a single player game, so this is normal. Just advance the turn.
+                                    break;
+                                }
                                 System.out.println("ForwardModel ERROR: this shouldn't happen (all players but " +
                                         board.getActiveTribeID() + " lost, but it's not game over?)");
                                 gameOver();
+                                break;
                             }
                         }
 
@@ -613,14 +618,22 @@ public class GameState {
         computeGameRanking();
 
         if(gameMode == Types.GAME_MODE.SCORE) {
-            int numNonLoss = 0;
-            for (TribeResult tr : ranking) {
-                int tribeId = tr.getId();
-                Types.RESULT res = getTribe(tribeId).getWinner();
-                if (res != Types.RESULT.LOSS)
-                    numNonLoss++;
+            if (ranking.size() == 1) {
+                TribeResult tr = ranking.first();
+                if (tr.getScore() >= 10000 || tick > core.Constants.solo_play_turn_limit) {
+                    isEnded = true;
+                    board.getTribe(tr.getId()).setWinner(Types.RESULT.WIN);
+                }
+            } else {
+                int numNonLoss = 0;
+                for (TribeResult tr : ranking) {
+                    int tribeId = tr.getId();
+                    Types.RESULT res = getTribe(tribeId).getWinner();
+                    if (res != Types.RESULT.LOSS)
+                        numNonLoss++;
+                }
+                isEnded = numNonLoss <= 1;
             }
-            isEnded = numNonLoss <= 1;
         }
 
         //We need to set all the winning conditions for the tribes if the game is over.
