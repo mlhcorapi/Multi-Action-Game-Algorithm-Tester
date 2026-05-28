@@ -894,8 +894,6 @@ public class GameView extends JComponent {
             Image weapon1 = source.getType().getWeaponImage(source.getTribeId());
 
             if (weapon1 != null) {
-                // Pause the game, paint this weapon image travelling from attacker to target
-                game.setAnimationPaused(true);
                 Pair<Image, Vector2d> sourceAnimationInfo = new Pair<>(weapon1, new Vector2d(source.getPosition().y * CELL_SIZE, source.getPosition().x * CELL_SIZE));
                 ArrayList<Unit> targets = new ArrayList<>();
                 Image weapon2 = null;
@@ -930,6 +928,8 @@ public class GameView extends JComponent {
                     sourceTargetAnimationInfo.add(new Pair<>(sourceAnimationInfo, targetAnimationInfo));
                 }
                 if (targets.size() > 0) {
+                    // Pause the game, paint this weapon image travelling from attacker to target
+                    game.setAnimationPaused(true);
                     this.animatedAction = a;
                 }
             }
