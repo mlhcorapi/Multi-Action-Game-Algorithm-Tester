@@ -1012,4 +1012,8 @@ public class GameView extends JComponent {
         }
         return null;
     }
+
+    boolean isAnimating() {
+        return sourceTargetAnimationInfo.size() > 0 || animatedAction != null || effectDrawingIdx != -1;
+    }
 }
