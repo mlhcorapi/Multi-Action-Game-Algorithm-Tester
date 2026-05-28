@@ -414,7 +414,7 @@ public class LevelGenerator {
         for(int capital : capitalCells) {
             int owner = Integer.parseInt(getResource(capital));
 
-            if(owner == (char)IMPERIUS.getKey()) {
+            if(owner == (char)IMPERIUS.getKey() || owner == (char)IMPERIUS2.getKey()) {
                 postGenerate(FRUIT.getMapChar(), PLAIN.getMapChar(), 2, capital);
             } else if(owner == (char)BARDUR.getKey()) {
                 postGenerate(ANIMAL.getMapChar(), FOREST.getMapChar(), 2, capital);
