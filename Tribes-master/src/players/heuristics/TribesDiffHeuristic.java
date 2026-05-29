@@ -4,6 +4,7 @@ import core.actors.City;
 import core.game.GameState;
 import utils.stats.StatSummary;
 
+import core.actors.units.Unit;
 import java.util.ArrayList;
 
 import core.Constants;
@@ -85,6 +86,36 @@ public class TribesDiffHeuristic implements StateHeuristic {
         for(City c : gsOld.getCities(playerId))
             sumCityLevelsOld += c.getLevel();
 
+        int unitPositionRewardOld = 0;
+        core.game.Board boardOld = gsOld.getBoard();
+        ArrayList<Unit> unitsOld = gsOld.getUnits(playerId);
+        for (int i = 0; i < unitsOld.size(); i++) {
+            Unit u = unitsOld.get(i);
+            int x = u.getPosition().x;
+            int y = u.getPosition().y;
+            Types.TERRAIN t = boardOld.getTerrainAt(x, y);
+            Types.RESOURCE r = boardOld.getResourceAt(x, y);
+            int cityId = boardOld.getCityIdAt(x, y);
+            if (t == Types.TERRAIN.VILLAGE || r == Types.RESOURCE.RUINS || (t == Types.TERRAIN.CITY && cityId != -1 && ((City) boardOld.getActor(cityId)).getTribeId() != playerId)) {
+                unitPositionRewardOld += 100;
+            }
+        }
+
+        int unitPositionRewardNew = 0;
+        core.game.Board boardNew = gsNew.getBoard();
+        ArrayList<Unit> unitsNew = gsNew.getUnits(playerId);
+        for (int i = 0; i < unitsNew.size(); i++) {
+            Unit u = unitsNew.get(i);
+            int x = u.getPosition().x;
+            int y = u.getPosition().y;
+            Types.TERRAIN t = boardNew.getTerrainAt(x, y);
+            Types.RESOURCE r = boardNew.getResourceAt(x, y);
+            int cityId = boardNew.getCityIdAt(x, y);
+            if (t == Types.TERRAIN.VILLAGE || r == Types.RESOURCE.RUINS || (t == Types.TERRAIN.CITY && cityId != -1 && ((City) boardNew.getActor(cityId)).getTribeId() != playerId)) {
+                unitPositionRewardNew += 100;
+            }
+        }
+
         difference += 5 * (production - gsOld.getTribeProduction(playerId));
         difference += 4 * (technologies - gsOld.getTribeTechTree(playerId).getNumResearched());
         difference += 0.1 * (score - gsOld.getScore(playerId));
@@ -92,6 +123,7 @@ public class TribesDiffHeuristic implements StateHeuristic {
         difference += 2 * (units - gsOld.getUnits(playerId).size());
         difference += 3 * (kills - gsOld.getNKills(playerId));
         difference += 2 * (sumCityLevelsNew - sumCityLevelsOld);
+        difference += (unitPositionRewardNew - unitPositionRewardOld);
 
         if (Constants.REMOVE_FISHING) {
             core.TechnologyTree ttOld = gsOld.getTribeTechTree(playerId);
