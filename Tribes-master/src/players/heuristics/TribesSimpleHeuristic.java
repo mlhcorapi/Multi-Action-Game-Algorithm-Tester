@@ -36,7 +36,7 @@ public class TribesSimpleHeuristic implements StateHeuristic{
             else
                 othersScore.add(scores[i]);
         }
-        double scoreDiff = myScore - othersScore.mean();
+        double scoreDiff = othersScore.n() > 0 ? myScore - othersScore.mean() : myScore;
 
         double visCount = viscPerc(gameState);
 
