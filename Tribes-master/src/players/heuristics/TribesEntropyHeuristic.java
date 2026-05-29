@@ -3,6 +3,8 @@ package players.heuristics;
 import core.game.GameState;
 import utils.stats.StatSummary;
 
+import core.actors.City;
+import core.actors.units.Unit;
 import java.util.ArrayList;
 
 import core.Constants;
@@ -76,12 +78,43 @@ public class TribesEntropyHeuristic implements StateHeuristic {
         //compare with old metrics and calculate entropy.
         double entropy = 0;
 
+        int unitPositionRewardOld = 0;
+        core.game.Board boardOld = gsOld.getBoard();
+        ArrayList<Unit> unitsOld = gsOld.getUnits(playerId);
+        for (int i = 0; i < unitsOld.size(); i++) {
+            Unit u = unitsOld.get(i);
+            int x = u.getPosition().x;
+            int y = u.getPosition().y;
+            Types.TERRAIN t = boardOld.getTerrainAt(x, y);
+            Types.RESOURCE r = boardOld.getResourceAt(x, y);
+            int cityId = boardOld.getCityIdAt(x, y);
+            if (t == Types.TERRAIN.VILLAGE || r == Types.RESOURCE.RUINS || (t == Types.TERRAIN.CITY && cityId != -1 && ((City) boardOld.getActor(cityId)).getTribeId() != playerId)) {
+                unitPositionRewardOld += 100;
+            }
+        }
+
+        int unitPositionRewardNew = 0;
+        core.game.Board boardNew = gsNew.getBoard();
+        ArrayList<Unit> unitsNew = gsNew.getUnits(playerId);
+        for (int i = 0; i < unitsNew.size(); i++) {
+            Unit u = unitsNew.get(i);
+            int x = u.getPosition().x;
+            int y = u.getPosition().y;
+            Types.TERRAIN t = boardNew.getTerrainAt(x, y);
+            Types.RESOURCE r = boardNew.getResourceAt(x, y);
+            int cityId = boardNew.getCityIdAt(x, y);
+            if (t == Types.TERRAIN.VILLAGE || r == Types.RESOURCE.RUINS || (t == Types.TERRAIN.CITY && cityId != -1 && ((City) boardNew.getActor(cityId)).getTribeId() != playerId)) {
+                unitPositionRewardNew += 100;
+            }
+        }
+
         entropy += production > gsOld.getTribeProduction(playerId) ? 1 : 0;
         entropy += technologies > gsOld.getTribeTechTree(playerId).getNumResearched() ? 1 : 0;
         entropy += score > gsOld.getScore(playerId) ? 1 : 0;
         entropy += cities > gsOld.getCities(playerId).size() ? 1 : 0;
         entropy += units > gsOld.getUnits(playerId).size() ? 1 : 0;
         entropy += kills > gsOld.getNKills(playerId) ? 1 : 0;
+        entropy += unitPositionRewardNew > unitPositionRewardOld ? 1 : 0;
 
         if (Constants.REMOVE_FISHING) {
             core.TechnologyTree ttOld = gsOld.getTribeTechTree(playerId);
