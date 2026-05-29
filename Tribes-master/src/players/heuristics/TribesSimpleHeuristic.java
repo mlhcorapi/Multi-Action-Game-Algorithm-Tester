@@ -69,8 +69,9 @@ public class TribesSimpleHeuristic implements StateHeuristic{
             int x = u.getPosition().x;
             int y = u.getPosition().y;
             Types.TERRAIN t = board.getTerrainAt(x, y);
+            Types.RESOURCE r = board.getResourceAt(x, y);
             int cityId = board.getCityIdAt(x, y);
-            if (t == Types.TERRAIN.VILLAGE || (t == Types.TERRAIN.CITY && cityId != -1 && ((City) board.getActor(cityId)).getTribeId() != playerId)) {
+            if (t == Types.TERRAIN.VILLAGE || r == Types.RESOURCE.RUINS || (t == Types.TERRAIN.CITY && cityId != -1 && ((City) board.getActor(cityId)).getTribeId() != playerId)) {
                 unitPositionReward += 100;
             }
         }
