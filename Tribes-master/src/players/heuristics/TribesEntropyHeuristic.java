@@ -90,7 +90,7 @@ public class TribesEntropyHeuristic implements StateHeuristic {
             int cityId = boardOld.getCityIdAt(x, y);
             if (!u.isFresh()) {
                 if (t == Types.TERRAIN.VILLAGE || r == Types.RESOURCE.RUINS || (t == Types.TERRAIN.CITY && cityId != -1 && ((City) boardOld.getActor(cityId)).getTribeId() != playerId)) {
-                    unitPositionRewardOld += 100;
+                    unitPositionRewardOld += 10;
                 }
             }
         }
@@ -107,7 +107,7 @@ public class TribesEntropyHeuristic implements StateHeuristic {
             int cityId = boardNew.getCityIdAt(x, y);
             if (!u.isFresh()) {
                 if (t == Types.TERRAIN.VILLAGE || r == Types.RESOURCE.RUINS || (t == Types.TERRAIN.CITY && cityId != -1 && ((City) boardNew.getActor(cityId)).getTribeId() != playerId)) {
-                    unitPositionRewardNew += 100;
+                    unitPositionRewardNew += 10;
                 }
             }
         }
