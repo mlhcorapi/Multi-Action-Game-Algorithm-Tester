@@ -96,8 +96,10 @@ public class TribesDiffHeuristic implements StateHeuristic {
             Types.TERRAIN t = boardOld.getTerrainAt(x, y);
             Types.RESOURCE r = boardOld.getResourceAt(x, y);
             int cityId = boardOld.getCityIdAt(x, y);
-            if (t == Types.TERRAIN.VILLAGE || r == Types.RESOURCE.RUINS || (t == Types.TERRAIN.CITY && cityId != -1 && ((City) boardOld.getActor(cityId)).getTribeId() != playerId)) {
-                unitPositionRewardOld += 100;
+            if (!u.isFresh()) {
+                if (t == Types.TERRAIN.VILLAGE || r == Types.RESOURCE.RUINS || (t == Types.TERRAIN.CITY && cityId != -1 && ((City) boardOld.getActor(cityId)).getTribeId() != playerId)) {
+                    unitPositionRewardOld += 100;
+                }
             }
         }
 
@@ -111,8 +113,10 @@ public class TribesDiffHeuristic implements StateHeuristic {
             Types.TERRAIN t = boardNew.getTerrainAt(x, y);
             Types.RESOURCE r = boardNew.getResourceAt(x, y);
             int cityId = boardNew.getCityIdAt(x, y);
-            if (t == Types.TERRAIN.VILLAGE || r == Types.RESOURCE.RUINS || (t == Types.TERRAIN.CITY && cityId != -1 && ((City) boardNew.getActor(cityId)).getTribeId() != playerId)) {
-                unitPositionRewardNew += 100;
+            if (!u.isFresh()) {
+                if (t == Types.TERRAIN.VILLAGE || r == Types.RESOURCE.RUINS || (t == Types.TERRAIN.CITY && cityId != -1 && ((City) boardNew.getActor(cityId)).getTribeId() != playerId)) {
+                    unitPositionRewardNew += 100;
+                }
             }
         }
 
