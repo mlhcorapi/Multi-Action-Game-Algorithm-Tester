@@ -41,7 +41,7 @@ public class TribesEntropyHeuristic implements StateHeuristic {
                 othersScore.add(scores[i]);
         }
 
-        double scoreDiff = myScore - othersScore.mean();
+        double scoreDiff = othersScore.n() > 0 ? myScore - othersScore.mean() : myScore;
         double scoreOwn = scoreOwn(gsOld, gsNew);
         return scoreDiff + scoreOwn;
     }
