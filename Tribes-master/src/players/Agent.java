@@ -139,16 +139,26 @@ public abstract class Agent {
         ArrayList<Action> allActions = new ArrayList<>();
         ArrayList<Action> cityActions = gs.getAllCityActions();
         for(Action act : cityActions)
-            if(!(act.getActionType() == Types.ACTION.DESTROY))
-                allActions.add(act);
+            if(!(act.getActionType() == Types.ACTION.DESTROY)) {
+                if (act.isFeasible(gs)) {
+                    allActions.add(act);
+                }
+            }
 
         ArrayList<Action> unitActions = gs.getAllUnitActions();
         for(Action act : unitActions)
-            if(!(act.getActionType() == Types.ACTION.DISBAND))
-                allActions.add(act);
+            if(!(act.getActionType() == Types.ACTION.DISBAND)) {
+                if (act.isFeasible(gs)) {
+                    allActions.add(act);
+                }
+            }
 
         ArrayList<Action> tribeActions = gs.getTribeActions();
-        allActions.addAll(tribeActions);
+        for(Action act : tribeActions) {
+            if (act.isFeasible(gs)) {
+                allActions.add(act);
+            }
+        }
         return allActions;
     }
 

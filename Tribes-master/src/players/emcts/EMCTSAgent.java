@@ -146,9 +146,23 @@ public class EMCTSAgent extends Agent {
             if (!allAvailableActions.isEmpty()) {
                 return allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
             }
-            return new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+            if (gs.canEndTurn(gs.getActiveTribeID())) {
+                return new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+            }
+            return null;
         }
-        return bestNode.returnNext();
+        Action nextAct = bestNode.returnNext();
+        if (!nextAct.isFeasible(gs)) {
+            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
+            if (!allAvailableActions.isEmpty()) {
+                return allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+            }
+            if (gs.canEndTurn(gs.getActiveTribeID())) {
+                return new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+            }
+            return null;
+        }
+        return nextAct;
     }
 
     @Override
