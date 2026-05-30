@@ -106,7 +106,7 @@ public class LevelGenerator {
         //Turning random water/ground grid into something smooth (only if water is enabled).
         if (generateWater) {
             if (LEVELGEN_VERBOSE) System.out.println("Turning random water/ground grid into something smooth.");
-            ArrayList<Integer> toBeGround = new ArrayList<>();
+            boolean[] toBeGround = new boolean[mapSize * mapSize];
 
             for (i = 0; i < smoothing; i++) {
                 for (int cell = 0; cell < mapSize * mapSize; cell++) {
@@ -121,11 +121,11 @@ public class LevelGenerator {
                     }
 
                     if (water_count / (double) tile_count <= landCoefficient)
-                        toBeGround.add(cell);
+                        toBeGround[cell] = true;
                 }
 
                 for (int cell = 0; cell < mapSize * mapSize; cell++) {
-                    if(toBeGround.contains(cell))
+                    if(toBeGround[cell])
                     {
                         writeTile(cell, ""+PLAIN.getMapChar(), null);
                     }else {
@@ -186,12 +186,16 @@ public class LevelGenerator {
             }
         }
         // If capital selection failed for some tribes, add fallback capitals
+        boolean[] isCapitalCell = new boolean[mapSize * mapSize];
+        for (int c : capitalCells) {
+            isCapitalCell[c] = true;
+        }
         for (int t = capitalCells.size(); t < tribes.length; t++) {
             int fallbackCell = -1;
             int attempts = 0;
             while (attempts < 1000) {
                 int candidate = randomInt(0, mapSize * mapSize);
-                if (!capitalCells.contains(candidate) && getTerrain(candidate) != DEEP_WATER.getMapChar()) {
+                if (!isCapitalCell[candidate] && getTerrain(candidate) != DEEP_WATER.getMapChar()) {
                     fallbackCell = candidate;
                     break;
                 }
@@ -199,10 +203,13 @@ public class LevelGenerator {
             }
             if (fallbackCell == -1) {
                 for (int idx = 0; idx < mapSize * mapSize; idx++) {
-                    if (!capitalCells.contains(idx)) { fallbackCell = idx; break; }
+                    if (!isCapitalCell[idx]) { fallbackCell = idx; break; }
                 }
             }
-            if (fallbackCell != -1) capitalCells.add(fallbackCell);
+            if (fallbackCell != -1) {
+                capitalCells.add(fallbackCell);
+                isCapitalCell[fallbackCell] = true;
+            }
         }
 
         for (i = 0; i < capitalCells.size(); i++) {
@@ -212,11 +219,13 @@ public class LevelGenerator {
         // Terrain distribution
         if (LEVELGEN_VERBOSE) System.out.println("Terrain distribution");
         ArrayList<Integer> doneTiles = new ArrayList<>();
+        boolean[] isDoneTile = new boolean[mapSize * mapSize];
         ArrayList<ArrayList<Integer>> activeTiles = new ArrayList<>(); // done tiles that generate terrain around them
         Types.TRIBE[] tileOwner = new Types.TRIBE[mapSize*mapSize];
 
         for (i = 0; i < capitalCells.size(); i++) {
             doneTiles.add(i, capitalCells.get(i));
+            isDoneTile[capitalCells.get(i)] = true;
             ArrayList<Integer> cap = new ArrayList<>();
             cap.add(capitalCells.get(i));
             activeTiles.add(i, cap);
@@ -232,14 +241,14 @@ public class LevelGenerator {
 
                     ArrayList<Integer> validNeighbours = new ArrayList<>();
                     for(int n : neighbours){
-                        if(!doneTiles.contains(n) && getTerrain(n) != DEEP_WATER.getMapChar()){
+                        if(!isDoneTile[n] && getTerrain(n) != DEEP_WATER.getMapChar()){
                             validNeighbours.add(n);
                         }
                     }
                     // If there are no land tiles around, accept water tiles
                     if (validNeighbours.size() == 0) {
                         for(int n : neighbours){
-                            if(!doneTiles.contains(n)){
+                            if(!isDoneTile[n]){
                                 validNeighbours.add(n);
                             }
                         }
@@ -250,6 +259,7 @@ public class LevelGenerator {
                         tileOwner[new_rand_cell] = tribes[i];
                         activeTiles.get(i).add(new_rand_cell);
                         doneTiles.add(new_rand_cell);
+                        isDoneTile[new_rand_cell] = true;
                     } else {
                         activeTiles.get(i).remove(randNumber); // deactivate tiles surrounded with done tiles
                     }
@@ -324,8 +334,18 @@ public class LevelGenerator {
 
         // Generate villages & mark tiles next to them
         // We will place villages until there are none of "far away" (villageMap == 0) tiles.
-        while(villageMap.contains(0)) {
-            int new_village = villageMap.indexOf(0);
+        int lastZeroIndex = 0;
+        while(true) {
+            int new_village = -1;
+            for (int cell = lastZeroIndex; cell < mapSize * mapSize; cell++) {
+                if (villageMap.get(cell) == 0) {
+                    new_village = cell;
+                    lastZeroIndex = cell;
+                    break;
+                }
+            }
+            if (new_village == -1) break;
+
             villageMap.set(new_village, 3);
             for (int cell : circle(new_village, 1)) {
                 villageMap.set(cell, Math.max(villageMap.get(cell), 2));
