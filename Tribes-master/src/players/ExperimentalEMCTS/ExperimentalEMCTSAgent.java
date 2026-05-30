@@ -35,43 +35,6 @@ public class ExperimentalEMCTSAgent extends Agent {
     private PriorityQueue<ExperimentalEMCTSTreeNode> globalTopNodesQueue;
     private int crossoverExpansionCounter = 0;
 
-    public static class ExperimentalEMCTSDataTracker {
-        public double initial_sequence_value = -1.0;
-        public double final_sequence_value = -1.0;
-        public int nodes_visited = 0;
-        public int bridge_burning_phase_number = 0;
-        public double new_root_node_value = -1.0;
-        public long expansion_phase_timestamp = -1L;
-
-        // Additional metrics for CrossoverBB and CrossoverCombo
-        public double best_node_value_before_crossover_bb = -1.0;
-        public double best_node_value_after_crossover_bb = -1.0;
-
-        // Getters for all 8 metrics
-        public double getInitial_sequence_value() { return initial_sequence_value; }
-        public double getFinal_sequence_value() { return final_sequence_value; }
-        public int getNodes_visited() { return nodes_visited; }
-        public int getBridge_burning_phase_number() { return bridge_burning_phase_number; }
-        public double getNew_root_node_value() { return new_root_node_value; }
-        public long getExpansion_phase_timestamp() { return expansion_phase_timestamp; }
-        public double getBest_node_value_before_crossover_bb() { return best_node_value_before_crossover_bb; }
-        public double getBest_node_value_after_crossover_bb() { return best_node_value_after_crossover_bb; }
-
-        public void resetTurnMetrics() {
-            bridge_burning_phase_number = 0;
-            new_root_node_value = -1.0;
-            expansion_phase_timestamp = -1L;
-            best_node_value_before_crossover_bb = -1.0;
-            best_node_value_after_crossover_bb = -1.0;
-        }
-    }
-
-    private ExperimentalEMCTSDataTracker tracker = new ExperimentalEMCTSDataTracker();
-
-    public ExperimentalEMCTSDataTracker getTracker() {
-        return tracker;
-    }
-
 
     public ExperimentalEMCTSAgent(long seed, ExperimentalEMCTSParams params) {
         super(seed);
@@ -81,8 +44,6 @@ public class ExperimentalEMCTSAgent extends Agent {
 
     @Override
     public Action act(GameState gs, ElapsedCpuTimer ect) {
-        ElapsedCpuTimer turnTimer = new ElapsedCpuTimer();
-        tracker.resetTurnMetrics();
 
         this.fmCallsCount = 0;
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
@@ -92,8 +53,6 @@ public class ExperimentalEMCTSAgent extends Agent {
         // Initialize root with 1-ply greedy initialization
         root = randomActions(gs.copy());
         eval(gs.copy(), root);
-
-        tracker.initial_sequence_value = root.getValue();
 
         bestNode = root;
         fmCallsRun = 0;
@@ -175,7 +134,6 @@ public class ExperimentalEMCTSAgent extends Agent {
                 // Backpropagate score up the tree (standard UCB update)
                 ExperimentalEMCTSTreeNode current = child;
                 while (current != null) {
-                    tracker.nodes_visited++;
                     current.refreshScore(params.bias);
                     current = current.getParent();
                 }
@@ -207,9 +165,7 @@ public class ExperimentalEMCTSAgent extends Agent {
 
                 // Crossover Bridge Burning: Use crossover to generate new root candidates
                 if (params.useCrossoverBridgeBurning && topNodesQueue.size() >= 2) {
-                    tracker.best_node_value_before_crossover_bb = bestNode.getValue();
                     newRoot = performCrossoverBridgeBurning(gs.copy());
-                    tracker.best_node_value_after_crossover_bb = bestNode.getValue();
                 } else {
                     // Standard Bridge Burning: Promote best child
                     newRoot = findBestChild(root);
@@ -226,10 +182,6 @@ public class ExperimentalEMCTSAgent extends Agent {
                     // Update root and clear old parent reference
                     newRoot.disconnectParent();  // Clears parent link
                     root = newRoot;
-                    
-                    tracker.bridge_burning_phase_number++;
-                    tracker.new_root_node_value = root.getValue();
-                    tracker.expansion_phase_timestamp = turnTimer.elapsedMillis();
 
                     // Clear and reset queue for next phase
                     topNodesQueue.clear();
@@ -246,8 +198,6 @@ public class ExperimentalEMCTSAgent extends Agent {
                 break;
             }
         }
-
-        tracker.final_sequence_value = bestNode.getValue();
 
         if (bestNode.getSequence() == null || bestNode.getSequence().isEmpty()) {
             ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
