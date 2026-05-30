@@ -13,8 +13,8 @@
   "Force End": false,
   "Population Size": 1,
   "Players": [
-    "EMCTS",
-    "EMCTS"
+    "ExperimentalEMCTS",
+    "ExperimentalEMCTS"
   ],
   "Tribes": [
     "Xin Xi",
