@@ -532,12 +532,16 @@ public class LevelGenerator {
      */
     public String getResource(int index)
     {
-        String[] pieces = level[index].split(":");
-        if(pieces.length > 1)
-            if(pieces[1].charAt(0) == ' ')
-                return "";
-            else return pieces[1];
-        else return "";
+        try {
+            String[] pieces = level[index].split(":");
+            if(pieces.length > 1)
+                if(pieces[1].charAt(0) == ' ')
+                    return "";
+                else return pieces[1];
+            else return "";
+        } catch (StringIndexOutOfBoundsException e) {
+            return "";
+        }
     }
 
     /**
