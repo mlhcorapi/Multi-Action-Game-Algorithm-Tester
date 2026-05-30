@@ -415,7 +415,10 @@ public class EMCTSAgent extends Agent {
                     if (bestAction != null) {
                         advance(gs, bestAction);
                         repairedChild.add(bestAction);
+                    } else {
+                        break;
                     }
+                
                 } else {
                     repairedChild.add(child.get(a));
                     advance(gs, child.get(a));
