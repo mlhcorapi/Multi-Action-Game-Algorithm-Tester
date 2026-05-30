@@ -11,13 +11,19 @@ import core.game.GameState;
 import players.Agent;
 import players.heuristics.StateHeuristic;
 import utils.ElapsedCpuTimer;
+import core.data.dto.TurnData;
+import core.data.dto.BridgeBurnEventData;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 
 
 public class EMCTSAgent extends Agent {
+
+    private List<TurnData> turnDataLog = new ArrayList<>();
+    private List<BridgeBurnEventData> bridgeBurnDataLog = new ArrayList<>();
 
     private Random m_rnd;
     private StateHeuristic heuristic;
@@ -29,6 +35,7 @@ public class EMCTSAgent extends Agent {
 
     private int fmCallsCount;
     private int fmCallsRun;
+    private int totalNodesVisited;
 
     public EMCTSAgent(long seed, EMCTSParams params) {
         super(seed);
@@ -37,8 +44,25 @@ public class EMCTSAgent extends Agent {
     }
 
     @Override
+    public List<TurnData> getTurnDataLog() {
+        return turnDataLog;
+    }
+
+    @Override
+    public List<BridgeBurnEventData> getBridgeBurnDataLog() {
+        return bridgeBurnDataLog;
+    }
+
+    @Override
+    public int getNodesVisited() {
+        return totalNodesVisited;
+    }
+
+    @Override
     public Action act(GameState gs, ElapsedCpuTimer ect) {
+        long turnStartTime = System.currentTimeMillis();
         this.fmCallsCount = 0;
+        this.totalNodesVisited = 1; // Count root node
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
         old_gs = gs.copy();
@@ -46,6 +70,8 @@ public class EMCTSAgent extends Agent {
         // Initialize root with 1-ply greedy initialization
         root = randomActions(gs.copy());
         eval(gs.copy(), root);
+
+        double initialSequenceValue = root.getValue();
 
         bestNode = root;
         fmCallsRun = 0;
@@ -55,6 +81,7 @@ public class EMCTSAgent extends Agent {
         long phaseTimeMs = Math.max(1, totalTimeMs / Math.max(1, params.depth));
         int currentPhase = 0;
         int remainingLimit = 5;
+        int bridgeBurningPhaseNumber = 0;
 
         boolean stop = false;
         int numIters = 0;
@@ -75,6 +102,7 @@ public class EMCTSAgent extends Agent {
                 // Standard MCTS iteration: select, mutate once, evaluate, backpropagate
                 EMCTSTreeNode toMutate = nodeToExpand();
                 EMCTSTreeNode child = mutate(toMutate, gs.copy());
+                totalNodesVisited++;
                 eval(gs.copy(), child);
 
                 if (child.getValue() > bestNode.getValue()) {
@@ -124,9 +152,13 @@ public class EMCTSAgent extends Agent {
                     }
                     
                     // Update root and clear old parent reference
-                    bestChild.unlink();  // Clears parent link
+                    bestChild.unlink();  // Clears parent link safely
                     root = bestChild;
                     
+                    bridgeBurningPhaseNumber++;
+                    long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
+                    bridgeBurnDataLog.add(new BridgeBurnEventData(-1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, root.getValue()));
+
                     // Continue search from new root
                     currentPhase++;
                 } else {
@@ -138,6 +170,9 @@ public class EMCTSAgent extends Agent {
                 break;
             }
         }
+
+        double finalSequenceValue = bestNode.getValue();
+        turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, totalNodesVisited));
 
         if (bestNode.getSequence() == null || bestNode.getSequence().isEmpty()) {
             ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
@@ -413,6 +448,8 @@ public class EMCTSAgent extends Agent {
                 if (bestAction != null) {
                     advance(gs, bestAction);
                     repairedChild.add(bestAction);
+                } else {
+                    break;
                 }
             }
         }
