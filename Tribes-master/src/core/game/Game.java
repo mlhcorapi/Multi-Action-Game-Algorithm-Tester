@@ -272,7 +272,6 @@ public class Game {
      */
     private void tick(GUI frame) {
 
-//        System.out.println("Tick: " + gs.getTick());
         Tribe[] tribes = gs.getTribes();
         for (int i = 0; i < numPlayers; i++) {
             Tribe tribe = tribes[i];
