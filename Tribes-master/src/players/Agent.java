@@ -18,6 +18,10 @@ public abstract class Agent {
     protected int playerID;
     protected long seed;
 
+    // Metric Storage
+    protected int gameDurationTurns = 0;
+    protected int gameOutcomeScore = 0;
+
     /**
      * Default constructor, to be called in subclasses (initializes player ID and random seed for this agent.
      * @param seed - random seed for this player.
@@ -38,7 +42,10 @@ public abstract class Agent {
      * Function called at the end of the game. May be used by agents for final analysis.
      * @param reward - final reward for this agent.
      */
-    public void result(GameState gs, double reward) {}
+    public void result(GameState gs, double reward) {
+        this.gameDurationTurns = gs.getTick();
+        this.gameOutcomeScore = (int) reward;
+    }
 
     /**
      * Getter for player ID field.
@@ -72,6 +79,17 @@ public abstract class Agent {
         this.seed = seed;
     }
 
+    // Metric Default Getters
+    public int getGameDurationTurns() { return gameDurationTurns; }
+    public int getGameOutcomeScore() { return gameOutcomeScore; }
+    public double getInitialSequenceValue() { return 0.0; }
+    public double getFinalSequenceValue() { return 0.0; }
+    public int getNodesVisited() { return 0; }
+    public int getBridgeBurningPhaseNumber() { return 0; }
+    public double getNewRootNodeValue() { return 0.0; }
+    public long getExpansionPhaseTimestamp() { return 0L; }
+    public double getAvgHeuristicValueImprovementBeforeAfterCrossoverBB() { return 0.0; }
+    public double getAvgPercentageImprovementCrossoverBB() { return 0.0; }
 
 
     enum ACTION_TYPE

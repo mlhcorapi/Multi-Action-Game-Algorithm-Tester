@@ -35,6 +35,11 @@ public class OEPAgent extends Agent {
     }
 
     @Override
+    public int getNodesVisited() {
+        return -1;
+    }
+
+    @Override
     public Action act(GameState gs, ElapsedCpuTimer ect) {
         double avgTimeTaken;
         double acumTimeTaken = 0;
