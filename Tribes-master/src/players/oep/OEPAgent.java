@@ -11,13 +11,16 @@ import core.game.GameState;
 import players.Agent;
 import players.heuristics.StateHeuristic;
 import utils.ElapsedCpuTimer;
+import core.data.dto.TurnData;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Collections;
 import java.util.Random;
 
 
 public class OEPAgent extends Agent {
 
+    private List<TurnData> turnDataLog = new ArrayList<>();
     private Random m_rnd;
     private StateHeuristic heuristic;
     private OEPParams params;
@@ -35,12 +38,18 @@ public class OEPAgent extends Agent {
     }
 
     @Override
+    public List<TurnData> getTurnDataLog() {
+        return turnDataLog;
+    }
+
+    @Override
     public int getNodesVisited() {
         return -1;
     }
 
     @Override
     public Action act(GameState gs, ElapsedCpuTimer ect) {
+        double initialSequenceValue = 0.0;
         double avgTimeTaken;
         double acumTimeTaken = 0;
         long remaining;
@@ -76,6 +85,10 @@ public class OEPAgent extends Agent {
             }
             Collections.sort(population, Collections.reverseOrder());
             this.bestIndividual = population.get(population.size() - 1);
+
+            if (numIters == 1) {
+                initialSequenceValue = this.bestIndividual.getValue();
+            }
 
             //Kill the amount of the population that needs to die
             int amount =  (int)(population.size() * params.KILL_RATE);
@@ -125,6 +138,11 @@ public class OEPAgent extends Agent {
 
         }
         //System.out.println(numIters);
+
+        double finalSequenceValue = this.bestIndividual.getValue();
+        int nodesVisited = -1; // Explicit requirement
+        turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, nodesVisited));
+
         return  bestIndividual.returnNext();
 
 
