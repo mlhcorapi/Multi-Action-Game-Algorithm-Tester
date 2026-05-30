@@ -16,8 +16,6 @@ import java.util.*;
  * Original source: https://github.com/QuasiStellar/Polytopia-Map-Generator.
  */
 
-//TODO: Clean up and write some comments.
-
 public class LevelGenerator {
 
     //Level parameters, can be changed using init().
