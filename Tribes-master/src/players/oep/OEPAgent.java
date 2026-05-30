@@ -72,6 +72,16 @@ public class OEPAgent extends Agent {
         this.bestIndividual = null;
         this.root = gs.copy();
 
+        // rate each individual and sort them
+        for(Individual individual : population){
+            individual.setValue(eval( individual));
+        }
+        Collections.sort(population, Collections.reverseOrder());
+        this.bestIndividual = population.get(population.size() - 1);
+        initialSequenceValue = this.bestIndividual.getValue();
+
+        boolean firstIteration = true;
+
         //keep going until time limit gone
         while(!stop){
 
@@ -79,16 +89,15 @@ public class OEPAgent extends Agent {
             ElapsedCpuTimer elapsedTimerIteration = new ElapsedCpuTimer();
             fmCallsRun = 0;
 
-            // rate each individual and sort them
-            for(Individual individual : population){
-                individual.setValue(eval( individual));
+            if (!firstIteration) {
+                // rate each individual and sort them
+                for(Individual individual : population){
+                    individual.setValue(eval( individual));
+                }
+                Collections.sort(population, Collections.reverseOrder());
+                this.bestIndividual = population.get(population.size() - 1);
             }
-            Collections.sort(population, Collections.reverseOrder());
-            this.bestIndividual = population.get(population.size() - 1);
-
-            if (numIters == 1) {
-                initialSequenceValue = this.bestIndividual.getValue();
-            }
+            firstIteration = false;
 
             //Kill the amount of the population that needs to die
             int amount =  (int)(population.size() * params.KILL_RATE);
