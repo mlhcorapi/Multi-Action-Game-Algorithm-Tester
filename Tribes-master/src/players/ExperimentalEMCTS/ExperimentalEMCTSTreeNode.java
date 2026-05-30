@@ -39,7 +39,6 @@ public class ExperimentalEMCTSTreeNode {
     }
 
     public ArrayList<ExperimentalEMCTSTreeNode> getChildren() {
-        this.times_visited ++; // if you are accessing children, you have visited the node.
         return children;
     }
 

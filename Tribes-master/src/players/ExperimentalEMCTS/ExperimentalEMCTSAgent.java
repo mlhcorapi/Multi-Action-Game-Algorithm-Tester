@@ -175,7 +175,7 @@ public class ExperimentalEMCTSAgent extends Agent {
                     // Unlink old root branches except new root
                     for (ExperimentalEMCTSTreeNode child : root.getChildren()) {
                         if (child != newRoot) {
-                            unlinkTree(child);
+                            unlinkTree(child, newRoot);
                         }
                     }
                     
@@ -441,6 +441,8 @@ public class ExperimentalEMCTSAgent extends Agent {
                     if (bestAction != null) {
                         advance(gs, bestAction);
                         repairedChild.add(bestAction);
+                    } else {
+                        break;
                     }
                 } else {
                     repairedChild.add(child.get(a));
@@ -474,6 +476,8 @@ public class ExperimentalEMCTSAgent extends Agent {
                 if (bestAction != null) {
                     advance(gs, bestAction);
                     repairedChild.add(bestAction);
+                } else {
+                    break;
                 }
             }
         }
@@ -588,15 +592,15 @@ public class ExperimentalEMCTSAgent extends Agent {
      * Recursively unlink a tree node and all its descendants to allow garbage collection.
      * Called during bridge burning to free memory from abandoned branches.
      */
-    private void unlinkTree(ExperimentalEMCTSTreeNode node) {
-        if (node == null) {
+    private void unlinkTree(ExperimentalEMCTSTreeNode node, ExperimentalEMCTSTreeNode protectedNode) {
+        if (node == null || node == protectedNode) {
             return;
         }
 
         ArrayList<ExperimentalEMCTSTreeNode> children = node.getChildren();
         if (children != null) {
             for (ExperimentalEMCTSTreeNode child : children) {
-                unlinkTree(child);
+                unlinkTree(child, protectedNode);
             }
         }
 
