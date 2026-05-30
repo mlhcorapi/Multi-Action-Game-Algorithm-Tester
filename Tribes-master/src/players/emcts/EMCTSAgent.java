@@ -30,35 +30,6 @@ public class EMCTSAgent extends Agent {
     private int fmCallsCount;
     private int fmCallsRun;
 
-    public static class EMCTSDataTracker {
-        public double initial_sequence_value = -1.0;
-        public double final_sequence_value = -1.0;
-        public int nodes_visited = 0;
-        public int bridge_burning_phase_number = 0;
-        public double new_root_node_value = -1.0;
-        public long expansion_phase_timestamp = -1L;
-
-        public double getInitial_sequence_value() { return initial_sequence_value; }
-        public double getFinal_sequence_value() { return final_sequence_value; }
-        public int getNodes_visited() { return nodes_visited; }
-        public int getBridge_burning_phase_number() { return bridge_burning_phase_number; }
-        public double getNew_root_node_value() { return new_root_node_value; }
-        public long getExpansion_phase_timestamp() { return expansion_phase_timestamp; }
-
-        public void resetTurnMetrics() {
-            bridge_burning_phase_number = 0;
-            new_root_node_value = -1.0;
-            expansion_phase_timestamp = -1L;
-        }
-    }
-
-    private EMCTSDataTracker tracker = new EMCTSDataTracker();
-
-    public EMCTSDataTracker getTracker() {
-        return tracker;
-    }
-
-
     public EMCTSAgent(long seed, EMCTSParams params) {
         super(seed);
         m_rnd = new Random(seed);
@@ -67,9 +38,6 @@ public class EMCTSAgent extends Agent {
 
     @Override
     public Action act(GameState gs, ElapsedCpuTimer ect) {
-        ElapsedCpuTimer turnTimer = new ElapsedCpuTimer();
-        tracker.resetTurnMetrics();
-
         this.fmCallsCount = 0;
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
@@ -78,8 +46,6 @@ public class EMCTSAgent extends Agent {
         // Initialize root with 1-ply greedy initialization
         root = randomActions(gs.copy());
         eval(gs.copy(), root);
-
-        tracker.initial_sequence_value = root.getValue();
 
         bestNode = root;
         fmCallsRun = 0;
@@ -120,7 +86,6 @@ public class EMCTSAgent extends Agent {
                 // Backpropagate score up the tree (standard UCB update)
                 EMCTSTreeNode current = child;
                 while (current != null) {
-                    tracker.nodes_visited++;
                     current.refreshScore(params.bias);
                     current = current.getParent();
                 }
@@ -162,10 +127,6 @@ public class EMCTSAgent extends Agent {
                     bestChild.unlink();  // Clears parent link
                     root = bestChild;
                     
-                    tracker.bridge_burning_phase_number++;
-                    tracker.new_root_node_value = root.getValue();
-                    tracker.expansion_phase_timestamp = turnTimer.elapsedMillis();
-
                     // Continue search from new root
                     currentPhase++;
                 } else {
@@ -177,8 +138,6 @@ public class EMCTSAgent extends Agent {
                 break;
             }
         }
-
-        tracker.final_sequence_value = bestNode.getValue();
 
         if (bestNode.getSequence() == null || bestNode.getSequence().isEmpty()) {
             ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
