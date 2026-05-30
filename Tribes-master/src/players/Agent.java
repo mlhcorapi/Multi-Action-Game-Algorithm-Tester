@@ -7,9 +7,14 @@ import core.actions.unitactions.Disband;
 import core.game.GameState;
 import players.mc.MonteCarloAgent;
 import utils.ElapsedCpuTimer;
+import core.data.dto.TurnData;
+import core.data.dto.BridgeBurnEventData;
+import core.data.dto.CrossoverEventData;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Random;
 
 public abstract class Agent {
@@ -90,6 +95,11 @@ public abstract class Agent {
     public long getExpansionPhaseTimestamp() { return 0L; }
     public double getAvgHeuristicValueImprovementBeforeAfterCrossoverBB() { return 0.0; }
     public double getAvgPercentageImprovementCrossoverBB() { return 0.0; }
+
+    // DTO Collection Exposer Hooks
+    public List<TurnData> getTurnDataLog() { return Collections.emptyList(); }
+    public List<BridgeBurnEventData> getBridgeBurnDataLog() { return Collections.emptyList(); }
+    public List<CrossoverEventData> getCrossoverDataLog() { return Collections.emptyList(); }
 
 
     enum ACTION_TYPE
