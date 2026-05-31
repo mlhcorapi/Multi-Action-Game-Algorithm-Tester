@@ -65,7 +65,7 @@ public class EMCTSAgent extends Agent {
     public Action act(GameState gs, ElapsedCpuTimer ect) {
         long turnStartTime = System.currentTimeMillis();
         this.fmCallsCount = 0;
-        this.totalNodesVisited = 1; // Count root node
+        this.totalNodesVisited = 0;
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
         old_gs = gs.copy();
@@ -107,7 +107,6 @@ public class EMCTSAgent extends Agent {
                 // Standard MCTS iteration: select, mutate once, evaluate, backpropagate
                 EMCTSTreeNode toMutate = nodeToExpand();
                 EMCTSTreeNode child = mutate(toMutate, gs.copy());
-                totalNodesVisited++;
                 eval(gs.copy(), child);
 
                 if (child.getValue() > bestNode.getValue()) {
@@ -228,8 +227,10 @@ public class EMCTSAgent extends Agent {
             }
             node.setGs(gs);
             node.setValue(heuristic.evaluateState(old_gs, gs));
+            this.totalNodesVisited++;
         }else{
             node.setValue(heuristic.evaluateState(old_gs, node.getGs()));
+            this.totalNodesVisited++;
         }
     }
 
@@ -306,6 +307,7 @@ public class EMCTSAgent extends Agent {
                 GameState testGs = gs.copy();
                 advance(testGs, candidateAction);
                 double score = heuristic.evaluateState(old_gs, testGs);
+                this.totalNodesVisited++;
 
                 if (score > bestScore) {
                     bestScore = score;
@@ -417,6 +419,7 @@ public class EMCTSAgent extends Agent {
                         GameState testGs = gs.copy();
                         advance(testGs, candidateAction);
                         double score = heuristic.evaluateState(old_gs, testGs);
+                        this.totalNodesVisited++;
 
                         if (score > bestScore) {
                             bestScore = score;
@@ -453,6 +456,7 @@ public class EMCTSAgent extends Agent {
                     GameState testGs = gs.copy();
                     advance(testGs, candidateAction);
                     double score = heuristic.evaluateState(old_gs, testGs);
+                    this.totalNodesVisited++;
 
                     if (score > bestScore) {
                         bestScore = score;
