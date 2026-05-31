@@ -281,5 +281,9 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
         return bridgeBurnDataLog;
     }
 
+    @Override
+    public List<CrossoverEventData> getCrossoverDataLog() {
+        return Collections.emptyList();
+    }
 }
 
