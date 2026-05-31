@@ -37,6 +37,8 @@ public class EMCTSAgent extends Agent {
     private int fmCallsRun;
     private int totalNodesVisited;
     private int turnNodesVisited = 0;
+    private double initialVal = 0.0;
+    private double finalVal = 0.0;
 
     public EMCTSAgent(long seed, EMCTSParams params) {
         super(seed);
@@ -72,7 +74,9 @@ public class EMCTSAgent extends Agent {
         root = randomActions(gs.copy());
         eval(gs.copy(), root);
 
-        double initialSequenceValue = root.getValue();
+        if (turnNodesVisited == 0) {
+            initialVal = root.getValue();
+        }
 
         bestNode = root;
         fmCallsRun = 0;
@@ -172,8 +176,6 @@ public class EMCTSAgent extends Agent {
             }
         }
 
-        double finalSequenceValue = bestNode.getValue();
-
         Action bestAction = null;
         if (bestNode.getSequence() != null && !bestNode.getSequence().isEmpty()) {
             bestAction = bestNode.returnNext();
@@ -197,10 +199,17 @@ public class EMCTSAgent extends Agent {
             bestAction = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
         }
 
+        if (!(bestAction instanceof core.actions.tribeactions.EndTurn)) {
+            finalVal = bestNode.getValue();
+        } else if (turnNodesVisited == 0) {
+            finalVal = bestNode.getValue();
+        }
+
+
         turnNodesVisited += totalNodesVisited;
 
         if (bestAction instanceof core.actions.tribeactions.EndTurn) {
-            turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited));
+            turnDataLog.add(new TurnData(-1, gs.getTick(), initialVal, finalVal, turnNodesVisited));
             turnNodesVisited = 0; // reset for next turn
         }
 
