@@ -11,19 +11,13 @@ import core.game.GameState;
 import players.Agent;
 import players.heuristics.StateHeuristic;
 import utils.ElapsedCpuTimer;
-import core.data.dto.TurnData;
-import core.data.dto.BridgeBurnEventData;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 
 
 
 public class EMCTSAgent extends Agent {
-
-    private List<TurnData> turnDataLog = new ArrayList<>();
-    private List<BridgeBurnEventData> bridgeBurnDataLog = new ArrayList<>();
 
     private Random m_rnd;
     private StateHeuristic heuristic;
@@ -35,10 +29,6 @@ public class EMCTSAgent extends Agent {
 
     private int fmCallsCount;
     private int fmCallsRun;
-    private int totalNodesVisited;
-    private int turnNodesVisited = 0;
-    private double initialVal = 0.0;
-    private double finalVal = 0.0;
 
     public EMCTSAgent(long seed, EMCTSParams params) {
         super(seed);
@@ -47,25 +37,8 @@ public class EMCTSAgent extends Agent {
     }
 
     @Override
-    public List<TurnData> getTurnDataLog() {
-        return turnDataLog;
-    }
-
-    @Override
-    public List<BridgeBurnEventData> getBridgeBurnDataLog() {
-        return bridgeBurnDataLog;
-    }
-
-    @Override
-    public int getNodesVisited() {
-        return totalNodesVisited;
-    }
-
-    @Override
     public Action act(GameState gs, ElapsedCpuTimer ect) {
-        long turnStartTime = System.currentTimeMillis();
         this.fmCallsCount = 0;
-        this.totalNodesVisited = 0;
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
         old_gs = gs.copy();
@@ -73,10 +46,6 @@ public class EMCTSAgent extends Agent {
         // Initialize root with 1-ply greedy initialization
         root = randomActions(gs.copy());
         eval(gs.copy(), root);
-
-        if (turnNodesVisited == 0) {
-            initialVal = root.getValue();
-        }
 
         bestNode = root;
         fmCallsRun = 0;
@@ -86,7 +55,6 @@ public class EMCTSAgent extends Agent {
         long phaseTimeMs = Math.max(1, totalTimeMs / Math.max(1, params.depth));
         int currentPhase = 0;
         int remainingLimit = 5;
-        int bridgeBurningPhaseNumber = 0;
 
         boolean stop = false;
         int numIters = 0;
@@ -156,13 +124,9 @@ public class EMCTSAgent extends Agent {
                     }
                     
                     // Update root and clear old parent reference
-                    bestChild.unlink();  // Clears parent link safely
+                    bestChild.unlink();  // Clears parent link
                     root = bestChild;
                     
-                    bridgeBurningPhaseNumber++;
-                    long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
-                    bridgeBurnDataLog.add(new BridgeBurnEventData(-1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, root.getValue()));
-
                     // Continue search from new root
                     currentPhase++;
                 } else {
@@ -175,44 +139,28 @@ public class EMCTSAgent extends Agent {
             }
         }
 
-        Action bestAction = null;
-        if (bestNode.getSequence() != null && !bestNode.getSequence().isEmpty()) {
-            bestAction = bestNode.returnNext();
-            if (bestAction != null && !bestAction.isFeasible(gs)) {
-                bestAction = null;
+        if (bestNode.getSequence() == null || bestNode.getSequence().isEmpty()) {
+            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
+            if (!allAvailableActions.isEmpty()) {
+                return allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
             }
-        }
-
-        // Tier 1 is already bestAction
-
-        // Tier 2 (Random)
-        if (bestAction == null) {
-            ArrayList<Action> availableActions = this.allGoodActions(gs, m_rnd);
-            if (availableActions != null && !availableActions.isEmpty()) {
-                bestAction = availableActions.get(m_rnd.nextInt(availableActions.size()));
+            if (gs.canEndTurn(gs.getActiveTribeID())) {
+                return new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
             }
+            return null;
         }
-
-        // Tier 3 (DoNothing/EndTurn)
-        if (bestAction == null) {
-            bestAction = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+        Action nextAct = bestNode.returnNext();
+        if (!nextAct.isFeasible(gs)) {
+            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
+            if (!allAvailableActions.isEmpty()) {
+                return allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+            }
+            if (gs.canEndTurn(gs.getActiveTribeID())) {
+                return new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+            }
+            return null;
         }
-
-        if (!(bestAction instanceof core.actions.tribeactions.EndTurn)) {
-            finalVal = bestNode.getValue();
-        } else if (turnNodesVisited == 0) {
-            finalVal = bestNode.getValue();
-        }
-
-
-        turnNodesVisited += totalNodesVisited;
-
-        if (bestAction instanceof core.actions.tribeactions.EndTurn) {
-            turnDataLog.add(new TurnData(-1, gs.getTick(), initialVal, finalVal, turnNodesVisited));
-            turnNodesVisited = 0; // reset for next turn
-        }
-
-        return bestAction;
+        return nextAct;
     }
 
     @Override
@@ -227,10 +175,8 @@ public class EMCTSAgent extends Agent {
             }
             node.setGs(gs);
             node.setValue(heuristic.evaluateState(old_gs, gs));
-            this.totalNodesVisited++;
         }else{
             node.setValue(heuristic.evaluateState(old_gs, node.getGs()));
-            this.totalNodesVisited++;
         }
     }
 
@@ -307,7 +253,6 @@ public class EMCTSAgent extends Agent {
                 GameState testGs = gs.copy();
                 advance(testGs, candidateAction);
                 double score = heuristic.evaluateState(old_gs, testGs);
-                this.totalNodesVisited++;
 
                 if (score > bestScore) {
                     bestScore = score;
@@ -419,7 +364,6 @@ public class EMCTSAgent extends Agent {
                         GameState testGs = gs.copy();
                         advance(testGs, candidateAction);
                         double score = heuristic.evaluateState(old_gs, testGs);
-                        this.totalNodesVisited++;
 
                         if (score > bestScore) {
                             bestScore = score;
@@ -436,10 +380,7 @@ public class EMCTSAgent extends Agent {
                     if (bestAction != null) {
                         advance(gs, bestAction);
                         repairedChild.add(bestAction);
-                    } else {
-                        break;
                     }
-                
                 } else {
                     repairedChild.add(child.get(a));
                     advance(gs, child.get(a));
@@ -456,7 +397,6 @@ public class EMCTSAgent extends Agent {
                     GameState testGs = gs.copy();
                     advance(testGs, candidateAction);
                     double score = heuristic.evaluateState(old_gs, testGs);
-                    this.totalNodesVisited++;
 
                     if (score > bestScore) {
                         bestScore = score;
@@ -473,8 +413,6 @@ public class EMCTSAgent extends Agent {
                 if (bestAction != null) {
                     advance(gs, bestAction);
                     repairedChild.add(bestAction);
-                } else {
-                    break;
                 }
             }
         }

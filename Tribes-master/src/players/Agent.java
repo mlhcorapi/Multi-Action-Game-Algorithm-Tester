@@ -7,14 +7,9 @@ import core.actions.unitactions.Disband;
 import core.game.GameState;
 import players.mc.MonteCarloAgent;
 import utils.ElapsedCpuTimer;
-import core.data.dto.TurnData;
-import core.data.dto.BridgeBurnEventData;
-import core.data.dto.CrossoverEventData;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Random;
 
 public abstract class Agent {
@@ -22,10 +17,6 @@ public abstract class Agent {
     protected ArrayList<Integer> allPlayerIDs;
     protected int playerID;
     protected long seed;
-
-    // Metric Storage
-    protected int gameDurationTurns = 0;
-    protected int gameOutcomeScore = 0;
 
     /**
      * Default constructor, to be called in subclasses (initializes player ID and random seed for this agent.
@@ -47,10 +38,7 @@ public abstract class Agent {
      * Function called at the end of the game. May be used by agents for final analysis.
      * @param reward - final reward for this agent.
      */
-    public void result(GameState gs, double reward) {
-        this.gameDurationTurns = gs.getTick();
-        this.gameOutcomeScore = (int) reward;
-    }
+    public void result(GameState gs, double reward) {}
 
     /**
      * Getter for player ID field.
@@ -84,22 +72,6 @@ public abstract class Agent {
         this.seed = seed;
     }
 
-    // Metric Default Getters
-    public int getGameDurationTurns() { return gameDurationTurns; }
-    public int getGameOutcomeScore() { return gameOutcomeScore; }
-    public double getInitialSequenceValue() { return 0.0; }
-    public double getFinalSequenceValue() { return 0.0; }
-    public int getNodesVisited() { return 0; }
-    public int getBridgeBurningPhaseNumber() { return 0; }
-    public double getNewRootNodeValue() { return 0.0; }
-    public long getExpansionPhaseTimestamp() { return 0L; }
-    public double getAvgHeuristicValueImprovementBeforeAfterCrossoverBB() { return 0.0; }
-    public double getAvgPercentageImprovementCrossoverBB() { return 0.0; }
-
-    // DTO Collection Exposer Hooks
-    public List<TurnData> getTurnDataLog() { return Collections.emptyList(); }
-    public List<BridgeBurnEventData> getBridgeBurnDataLog() { return Collections.emptyList(); }
-    public List<CrossoverEventData> getCrossoverDataLog() { return Collections.emptyList(); }
 
 
     enum ACTION_TYPE
