@@ -179,7 +179,7 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
 
                     newRoot = performCrossoverBridgeBurning(gs.copy());
 
-                    double bestSequenceAfter = bestNode.getValue();
+                    double bestSequenceAfter = (newRoot != null) ? newRoot.getValue() : bestNode.getValue();
                     double rawImprovement = bestSequenceAfter - bestSequenceBefore;
                     double percentageImprovement = (bestSequenceBefore == 0.0) ? 0.0 : (rawImprovement / Math.abs(bestSequenceBefore)) * 100.0;
 

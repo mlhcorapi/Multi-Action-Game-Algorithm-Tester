@@ -45,6 +45,7 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
     public Action act(GameState gs, ElapsedCpuTimer ect) {
         long turnStartTime = System.currentTimeMillis();
         int nodesVisited = 0;
+        int bridgeBurningPhaseNumber = 0;
 
         this.fmCallsCount = 0;
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
@@ -197,6 +198,12 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
                     // Clear and reset queue for next phase
                     topNodesQueue.clear();
                     topNodesQueue.offer(root);
+
+                    bridgeBurningPhaseNumber++;
+                    long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
+                    bridgeBurnDataLog.add(new BridgeBurnEventData(
+                            -1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, root.getValue()
+                    ));
 
                     // Continue search from new root
                     currentPhase++;
