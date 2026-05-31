@@ -36,6 +36,7 @@ public class EMCTSAgent extends Agent {
     private int fmCallsCount;
     private int fmCallsRun;
     private int totalNodesVisited;
+    private int turnNodesVisited = 0;
 
     public EMCTSAgent(long seed, EMCTSParams params) {
         super(seed);
@@ -172,7 +173,6 @@ public class EMCTSAgent extends Agent {
         }
 
         double finalSequenceValue = bestNode.getValue();
-        turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, totalNodesVisited));
 
         Action bestAction = null;
         if (bestNode.getSequence() != null && !bestNode.getSequence().isEmpty()) {
@@ -195,6 +195,13 @@ public class EMCTSAgent extends Agent {
         // Tier 3 (DoNothing/EndTurn)
         if (bestAction == null) {
             bestAction = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+        }
+
+        turnNodesVisited += totalNodesVisited;
+
+        if (bestAction instanceof core.actions.tribeactions.EndTurn) {
+            turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited));
+            turnNodesVisited = 0; // reset for next turn
         }
 
         return bestAction;
