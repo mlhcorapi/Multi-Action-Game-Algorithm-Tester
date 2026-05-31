@@ -64,28 +64,7 @@ public class ExperimentRunner {
             // Extract performance metrics
             int score = game.getScores()[agentIndex];
 
-            // Note: Since Game.getTick() isn't available, using a placeholder for now
-            // or we could reflect gs.getTick(). We use a workaround via game.getGameState() if possible.
-            // Let's use getGameState(-1) if it exists, or just use 0 as a placeholder since we only want to collect the data
-            // Looking at the code Game has `gs`, but it's private.
-            // We can iterate the results or use GameState directly.
-            // However, GameSummaryData only requires durationTurns. Agent result() method provides duration/score.
-            // It tracks gameDurationTurns and gameOutcomeScore natively.
-            // Let's rely on the agent's tracking or just use 0 for duration as a fallback.
-            // In session 1 it mentions Agent.java tracks gameDurationTurns and gameOutcomeScore natively within its result() method.
-            // But we need to get it from there. Wait, Agent has no public getters for those yet? Or maybe it does?
-            // "The base Agent.java class provides default stub getters for the EMCTS experiment metrics"
-            // Let's use reflection to get gs.getTick() for now.
-            int durationTurns = 0;
-            try {
-                java.lang.reflect.Field gsField = game.getClass().getDeclaredField("gs");
-                gsField.setAccessible(true);
-                Object gsObj = gsField.get(game);
-                java.lang.reflect.Method tickMethod = gsObj.getClass().getMethod("getTick");
-                durationTurns = (int) tickMethod.invoke(gsObj);
-            } catch (Exception e) {
-                System.err.println("Could not get tick: " + e);
-            }
+            int durationTurns = targetAgent.getGameDurationTurns();
 
             // Construct Summary
             GameSummaryData summary = new GameSummaryData(agentName, gameId, durationTurns, score);
@@ -95,13 +74,37 @@ public class ExperimentRunner {
             List<BridgeBurnEventData> bridgeBurns = new ArrayList<>(targetAgent.getBridgeBurnDataLog());
             List<CrossoverEventData> crossovers = new ArrayList<>(targetAgent.getCrossoverDataLog());
 
+            // Assign gameId to DTOs since they were instantiated with -1
+            for (TurnData td : turns) {
+                try {
+                    java.lang.reflect.Field field = TurnData.class.getDeclaredField("gameId");
+                    field.setAccessible(true);
+                    field.setInt(td, gameId);
+                } catch (Exception e) {}
+            }
+            for (BridgeBurnEventData bbd : bridgeBurns) {
+                try {
+                    java.lang.reflect.Field field = BridgeBurnEventData.class.getDeclaredField("gameId");
+                    field.setAccessible(true);
+                    field.setInt(bbd, gameId);
+                } catch (Exception e) {}
+            }
+            for (CrossoverEventData ced : crossovers) {
+                try {
+                    java.lang.reflect.Field field = CrossoverEventData.class.getDeclaredField("gameId");
+                    field.setAccessible(true);
+                    field.setInt(ced, gameId);
+                } catch (Exception e) {}
+            }
+
             return new SimulationResult(summary, turns, bridgeBurns, crossovers);
         }
     }
 
-    public static void runBatch(int phase, List<GameSimulationWorker> workers) {
+    public static List<SimulationResult> runBatch(int phase, List<GameSimulationWorker> workers) {
         ExecutorService executor = Executors.newFixedThreadPool(MAX_THREADS);
         List<Future<SimulationResult>> futures = new ArrayList<>();
+        List<SimulationResult> results = new ArrayList<>();
 
         for (GameSimulationWorker worker : workers) {
             futures.add(executor.submit(worker));
@@ -113,6 +116,7 @@ public class ExperimentRunner {
             try {
                 // Wait for the result with timeout
                 SimulationResult result = future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                results.add(result);
 
                 // Write results via CsvDataHarvester using ONLY the main thread
                 CsvDataHarvester.writeSummaryAndTurns(phase, result.summary, result.turns);
@@ -134,5 +138,7 @@ public class ExperimentRunner {
             System.err.println("Executor termination interrupted");
             executor.shutdownNow();
         }
+
+        return results;
     }
 }

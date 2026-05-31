@@ -73,20 +73,30 @@ public class Phase0SmokeTest {
                 Game game = new Game();
                 game.init(matchPlayers, 100 + i, tribes, 200 + i, gameMode);
 
+                // Track agent at index 0
                 workers.add(new ExperimentRunner.GameSimulationWorker(game, gameIdCounter++, 0));
             }
         }
 
         System.out.println("Total simulations queued: " + workers.size());
-        System.out.println("Phase 0 Setup Complete. Holding before CsvDataHarvester trigger.");
+        System.out.println("Executing ExperimentRunner runBatch with phase 0 (will trigger CsvDataHarvester)...");
 
-        for (ExperimentRunner.GameSimulationWorker worker : workers) {
-            try {
-                // Testing one
-                // worker.call();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        List<ExperimentRunner.SimulationResult> results = ExperimentRunner.runBatch(0, workers);
+
+        System.out.println("\n--- CONSOLE VERIFICATION LOGGING ---");
+
+        for (ExperimentRunner.SimulationResult result : results) {
+            String agentName = result.summary.getAgentName();
+            int gameId = result.summary.getGameId();
+            int turns = result.turns.size();
+            int bridgeBurns = result.bridgeBurns.size();
+            int crossovers = result.crossovers.size();
+
+            System.out.println(String.format("Agent: %-25s | Game ID: %3d | TurnData rows: %3d | BridgeBurn rows: %3d | Crossover rows: %3d",
+                    agentName, gameId, turns, bridgeBurns, crossovers));
         }
+
+        System.out.println("------------------------------------");
+        System.out.println("Phase 0 Execution Complete. Check /test_results/ for generated CSVs.");
     }
 }
