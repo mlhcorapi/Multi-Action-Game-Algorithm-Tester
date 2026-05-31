@@ -74,29 +74,6 @@ public class ExperimentRunner {
             List<BridgeBurnEventData> bridgeBurns = new ArrayList<>(targetAgent.getBridgeBurnDataLog());
             List<CrossoverEventData> crossovers = new ArrayList<>(targetAgent.getCrossoverDataLog());
 
-            // Assign gameId to DTOs since they were instantiated with -1
-            for (TurnData td : turns) {
-                try {
-                    java.lang.reflect.Field field = TurnData.class.getDeclaredField("gameId");
-                    field.setAccessible(true);
-                    field.setInt(td, gameId);
-                } catch (Exception e) {}
-            }
-            for (BridgeBurnEventData bbd : bridgeBurns) {
-                try {
-                    java.lang.reflect.Field field = BridgeBurnEventData.class.getDeclaredField("gameId");
-                    field.setAccessible(true);
-                    field.setInt(bbd, gameId);
-                } catch (Exception e) {}
-            }
-            for (CrossoverEventData ced : crossovers) {
-                try {
-                    java.lang.reflect.Field field = CrossoverEventData.class.getDeclaredField("gameId");
-                    field.setAccessible(true);
-                    field.setInt(ced, gameId);
-                } catch (Exception e) {}
-            }
-
             return new SimulationResult(summary, turns, bridgeBurns, crossovers);
         }
     }
@@ -116,6 +93,27 @@ public class ExperimentRunner {
             try {
                 // Wait for the result with timeout
                 SimulationResult result = future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+                int gameId = result.summary.getGameId();
+
+                List<TurnData> newTurns = new ArrayList<>();
+                for (TurnData td : result.turns) {
+                    newTurns.add(new TurnData(gameId, td.getTurnNumber(), td.getInitialSequenceValue(), td.getFinalSequenceValue(), td.getNodesVisited()));
+                }
+                result.turns = newTurns;
+
+                List<BridgeBurnEventData> newBridgeBurns = new ArrayList<>();
+                for (BridgeBurnEventData bbd : result.bridgeBurns) {
+                    newBridgeBurns.add(new BridgeBurnEventData(gameId, bbd.getTurnNumber(), bbd.getExpansionPhaseTimestamp(), bbd.getBridgeBurningPhaseNumber(), bbd.getNewRootNodeValue()));
+                }
+                result.bridgeBurns = newBridgeBurns;
+
+                List<CrossoverEventData> newCrossovers = new ArrayList<>();
+                for (CrossoverEventData ced : result.crossovers) {
+                    newCrossovers.add(new CrossoverEventData(gameId, ced.getTurnNumber(), ced.getExpansionPhaseTimestamp(), ced.getBridgeBurningPhaseNumber(), ced.getBestSequenceBefore(), ced.getBestSequenceAfter(), ced.getRawImprovement(), ced.getPercentageImprovement()));
+                }
+                result.crossovers = newCrossovers;
+
                 results.add(result);
 
                 // Write results via CsvDataHarvester using ONLY the main thread
@@ -126,7 +124,7 @@ public class ExperimentRunner {
             } catch (TimeoutException e) {
                 System.err.println("Game simulation timed out after " + TIMEOUT_SECONDS + " seconds.");
                 future.cancel(true); // Attempt to interrupt runaway thread
-            } catch (InterruptedException | ExecutionException e) {
+            } catch (Exception e) {
                 System.err.println("Game simulation failed: " + e.getMessage());
                 e.printStackTrace();
             }
