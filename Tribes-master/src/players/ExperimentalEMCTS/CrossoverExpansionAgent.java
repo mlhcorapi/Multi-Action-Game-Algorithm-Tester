@@ -206,7 +206,7 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
                     bridgeBurningPhaseNumber++;
                     long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
                     bridgeBurnDataLog.add(new BridgeBurnEventData(
-                            -1, gs.getTick(), expansionPhaseTimestamp, currentPhase, root.getValue()
+                            -1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, root.getValue()
                     ));
 
                     // Continue search from new root
