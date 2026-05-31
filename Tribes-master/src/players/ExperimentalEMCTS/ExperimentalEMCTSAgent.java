@@ -174,7 +174,7 @@ public class ExperimentalEMCTSAgent extends Agent {
 
                 // Crossover Bridge Burning: Use crossover to generate new root candidates
                 if (params.useCrossoverBridgeBurning && topNodesQueue.size() >= 2) {
-                    newRoot = performCrossoverBridgeBurning(gs.copy());
+                    newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase);
                 } else {
                     // Standard Bridge Burning: Promote best child
                     newRoot = findBestChild(root);
@@ -626,7 +626,7 @@ public class ExperimentalEMCTSAgent extends Agent {
      * - Level 3: 2 children -> 1 child via crossover
      * All 7 children are evaluated, and the best is compared with bestNode to determine new root.
      */
-    protected ExperimentalEMCTSTreeNode performCrossoverBridgeBurning(GameState gs) {
+    protected ExperimentalEMCTSTreeNode performCrossoverBridgeBurning(GameState gs, int currentPhase) {
         // Extract top 8 nodes from the priority queue
         ArrayList<ExperimentalEMCTSTreeNode> topEight = new ArrayList<>(topNodesQueue);
         
@@ -715,9 +715,9 @@ public class ExperimentalEMCTSAgent extends Agent {
         double percentageImprovement = (scoreBefore == 0.0) ? 0.0 : ((rawImprovement) / Math.abs(scoreBefore)) * 100.0;
 
         // CrossoverEventData (gameId, turnNumber, expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestSequenceBefore, bestSequenceAfter, rawImprovement, percentageImprovement)
-        // using 0 for timestamp/phase here, the specific agents log the actual phase details during their act loops
+        // using 0 for timestamp here, the specific agents log the actual phase details during their act loops
         crossoverDataList.add(new CrossoverEventData(
-                -1, gs.getTick(), 0, 0, scoreBefore, scoreAfter, rawImprovement, percentageImprovement
+                -1, gs.getTick(), 0, currentPhase, scoreBefore, scoreAfter, rawImprovement, percentageImprovement
         ));
 
         return newRootCandidate;
