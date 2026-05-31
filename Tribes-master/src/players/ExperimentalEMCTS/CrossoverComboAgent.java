@@ -17,6 +17,7 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
 
     private List<TurnData> turnDataLog = new ArrayList<>();
     private List<CrossoverEventData> crossoverDataLog = new ArrayList<>();
+    private int turnNodesVisited = 0;
 
     public CrossoverComboAgent(long seed) {
         super(seed, createParams());
@@ -225,17 +226,6 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
 
         double finalSequenceValue = bestNode.getValue();
 
-        // --- MILESTONE TRACKING ROW (END) ---
-        long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
-        crossoverDataLog.add(new CrossoverEventData(
-                -1, gs.getTick(), expansionPhaseTimestamp, 99, finalSequenceValue, finalSequenceValue, 0.0, 0.0
-        ));
-
-        // --- TURN DATA LOGGING ---
-        turnDataLog.add(new TurnData(
-                -1, gs.getTick(), initialSequenceValue, finalSequenceValue, nodesVisited
-        ));
-
         Action bestAction = null;
         if (bestNode.getSequence() != null && !bestNode.getSequence().isEmpty()) {
             bestAction = bestNode.returnNext();
@@ -257,6 +247,23 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
         // Tier 3 (DoNothing/EndTurn)
         if (bestAction == null) {
             bestAction = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+        }
+
+        turnNodesVisited += nodesVisited;
+
+        if (bestAction instanceof core.actions.tribeactions.EndTurn) {
+            // --- MILESTONE TRACKING ROW (END) ---
+            long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
+            crossoverDataLog.add(new CrossoverEventData(
+                    -1, gs.getTick(), expansionPhaseTimestamp, 99, finalSequenceValue, finalSequenceValue, 0.0, 0.0
+            ));
+
+            // --- TURN DATA LOGGING ---
+            turnDataLog.add(new TurnData(
+                    -1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited
+            ));
+
+            turnNodesVisited = 0; // reset for next turn
         }
 
         return bestAction;
