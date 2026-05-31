@@ -5,22 +5,17 @@ import core.actions.tribeactions.EndTurn;
 import core.game.Game;
 import core.game.GameState;
 import players.Agent;
-import players.heuristics.StateHeuristic;
 import utils.ElapsedCpuTimer;
-import core.data.dto.TurnData;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 
 import static core.Constants.TURN_TIME_MILLIS;
 
 public class MCTSPlayer extends Agent {
 
-    private List<TurnData> turnDataLog = new ArrayList<>();
     private Random m_rnd;
     private MCTSParams params;
-    private int turnNodesVisited = 0;
 
     public MCTSPlayer(long seed)
     {
@@ -35,63 +30,25 @@ public class MCTSPlayer extends Agent {
     }
 
     public Action act(GameState gs, ElapsedCpuTimer ect) {
-        StateHeuristic heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
-        double initialSequenceValue = heuristic.evaluateState(gs, gs);
-
         //Gather all available actions:
         ArrayList<Action> allActions = gs.getAllAvailableActions();
 
-        if(allActions.size() == 1) {
-            Action bestAction = allActions.get(0); //EndTurn, it's possible.
-            GameState nextState = gs.copy();
-            nextState.advance(bestAction, true);
-            double finalSequenceValue = heuristic.evaluateState(gs, nextState);
-            if (bestAction instanceof EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
-                turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited));
-                turnNodesVisited = 0;
-            }
-            return bestAction;
-        }
+        if(allActions.size() == 1)
+            return allActions.get(0); //EndTurn, it's possible.
 
         ArrayList<Action> rootActions = params.PRIORITIZE_ROOT ? determineActionGroup(gs, m_rnd) : allActions;
-        if(rootActions == null) {
-            Action bestAction = new EndTurn(gs.getActiveTribeID());
-            GameState nextState = gs.copy();
-            nextState.advance(bestAction, true);
-            double finalSequenceValue = heuristic.evaluateState(gs, nextState);
-            if (bestAction instanceof EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
-                turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited));
-                turnNodesVisited = 0;
-            }
-            return bestAction;
-        }
+        if(rootActions == null)
+            return new EndTurn();
 
         SingleTreeNode m_root = new SingleTreeNode(params, m_rnd, rootActions.size(), rootActions, this.playerID);
         m_root.setRootGameState(m_root, gs, allPlayerIDs);
 
         m_root.mctsSearch(ect);
 
-        Action bestAction = rootActions.get(m_root.mostVisitedAction());
+        return rootActions.get(m_root.mostVisitedAction());
 
-        int nodesVisited = m_root.getNumNodes();
-        turnNodesVisited += nodesVisited;
-
-        GameState nextState = gs.copy();
-        nextState.advance(bestAction, true);
-        double finalSequenceValue = heuristic.evaluateState(gs, nextState);
-
-        if (bestAction instanceof EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
-            turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited));
-            turnNodesVisited = 0;
-        }
-
-        return bestAction;
     }
 
-    @Override
-    public List<TurnData> getTurnDataLog() {
-        return turnDataLog;
-    }
 
     @Override
     public Agent copy() {
