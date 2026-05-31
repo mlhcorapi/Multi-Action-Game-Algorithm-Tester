@@ -16,7 +16,6 @@ import java.util.PriorityQueue;
 public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
 
     private List<TurnData> turnDataLog = new ArrayList<>();
-    private List<CrossoverEventData> crossoverDataLog = new ArrayList<>();
     private int turnNodesVisited = 0;
     private double initialVal = 0.0;
     private double finalVal = 0.0;
@@ -58,11 +57,6 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
         if (turnNodesVisited == 0) {
             initialVal = root.getValue();
         }
-
-        // --- BASELINE TRACKING ROW (START) ---
-        crossoverDataLog.add(new CrossoverEventData(
-                -1, gs.getTick(), 0, 0, root.getValue(), root.getValue(), 0.0, 0.0
-        ));
 
         bestNode = root;
         fmCallsRun = 0;
@@ -190,11 +184,6 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
                     bridgeBurningPhaseNumber++;
                     long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
 
-                    crossoverDataLog.add(new CrossoverEventData(
-                        -1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber,
-                        bestSequenceBefore, bestSequenceAfter, rawImprovement, percentageImprovement
-                    ));
-
                 } else {
                     // Standard Bridge Burning: Promote best child
                     newRoot = findBestChild(root);
@@ -261,11 +250,6 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
         turnNodesVisited += nodesVisited;
 
         if (bestAction instanceof core.actions.tribeactions.EndTurn) {
-            // --- MILESTONE TRACKING ROW (END) ---
-            long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
-            crossoverDataLog.add(new CrossoverEventData(
-                    -1, gs.getTick(), expansionPhaseTimestamp, 99, bestNode.getValue(), bestNode.getValue(), 0.0, 0.0
-            ));
 
             // --- TURN DATA LOGGING ---
             turnDataLog.add(new TurnData(
@@ -281,11 +265,6 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
     @Override
     public List<TurnData> getTurnDataLog() {
         return turnDataLog;
-    }
-
-    @Override
-    public List<CrossoverEventData> getCrossoverDataLog() {
-        return crossoverDataLog;
     }
 
     @Override
