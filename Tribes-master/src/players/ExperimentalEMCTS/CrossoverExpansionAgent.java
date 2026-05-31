@@ -62,11 +62,6 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
             initialVal = root.getValue();
         }
 
-        // --- TRAJECTORY ENTRY (START) ---
-        bridgeBurnDataLog.add(new BridgeBurnEventData(
-                -1, gs.getTick(), 0, 0, root.getValue()
-        ));
-
         bestNode = root;
         fmCallsRun = 0;
 
@@ -181,7 +176,7 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
 
                 // Crossover Bridge Burning: Use crossover to generate new root candidates
                 if (params.useCrossoverBridgeBurning && topNodesQueue.size() >= 2) {
-                    newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase);
+                    newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase, turnStartTime);
                 } else {
                     // Standard Bridge Burning: Promote best child
                     newRoot = findBestChild(root);
@@ -202,12 +197,6 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
                     // Clear and reset queue for next phase
                     topNodesQueue.clear();
                     topNodesQueue.offer(root);
-
-                    bridgeBurningPhaseNumber++;
-                    long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
-                    bridgeBurnDataLog.add(new BridgeBurnEventData(
-                            -1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, root.getValue()
-                    ));
 
                     // Continue search from new root
                     currentPhase++;
@@ -254,12 +243,6 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
         turnNodesVisited += nodesVisited;
 
         if (bestAction instanceof core.actions.tribeactions.EndTurn) {
-            // --- TRAJECTORY ENTRY (END) ---
-            long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
-            bridgeBurnDataLog.add(new BridgeBurnEventData(
-                    -1, gs.getTick(), expansionPhaseTimestamp, 99, bestNode.getValue()
-            ));
-
             // --- TURN DATA LOGGING ---
             turnDataLog.add(new TurnData(
                     -1, gs.getTick(), initialVal, finalVal, turnNodesVisited

@@ -65,6 +65,7 @@ public class ExperimentalEMCTSAgent extends Agent {
 
     @Override
     public Action act(GameState gs, ElapsedCpuTimer ect) {
+        long turnStartTime = System.currentTimeMillis();
 
         this.fmCallsCount = 0;
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
@@ -190,7 +191,7 @@ public class ExperimentalEMCTSAgent extends Agent {
 
                 // Crossover Bridge Burning: Use crossover to generate new root candidates
                 if (params.useCrossoverBridgeBurning && topNodesQueue.size() >= 2) {
-                    newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase);
+                        newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase, turnStartTime);
                 } else {
                     // Standard Bridge Burning: Promote best child
                     newRoot = findBestChild(root);
@@ -657,7 +658,7 @@ public class ExperimentalEMCTSAgent extends Agent {
      * - Level 3: 2 children -> 1 child via crossover
      * All 7 children are evaluated, and the best is compared with bestNode to determine new root.
      */
-    protected ExperimentalEMCTSTreeNode performCrossoverBridgeBurning(GameState gs, int currentPhase) {
+    protected ExperimentalEMCTSTreeNode performCrossoverBridgeBurning(GameState gs, int currentPhase, long turnStartTime) {
         // Extract top 8 nodes from the priority queue
         ArrayList<ExperimentalEMCTSTreeNode> topEight = new ArrayList<>(topNodesQueue);
         
@@ -739,16 +740,16 @@ public class ExperimentalEMCTSAgent extends Agent {
             bestNode = newRootCandidate;
         }
 
+        // SCROLL SENSOR CORRECTION
         double scoreBefore = bestParent.getValue();
-        double scoreAfter = bestCrossoverChild.getValue();
+        double scoreAfter = bestCrossoverChild.getValue(); // Measures the generation child directly, bypassing fallback allocation
 
         double rawImprovement = scoreAfter - scoreBefore;
         double percentageImprovement = (scoreBefore == 0.0) ? 0.0 : ((rawImprovement) / Math.abs(scoreBefore)) * 100.0;
 
-        // CrossoverEventData (gameId, turnNumber, expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestSequenceBefore, bestSequenceAfter, rawImprovement, percentageImprovement)
-        // using 0 for timestamp here, the specific agents log the actual phase details during their act loops
+        long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
         crossoverDataList.add(new CrossoverEventData(
-                -1, gs.getTick(), 0, currentPhase, scoreBefore, scoreAfter, rawImprovement, percentageImprovement
+                -1, gs.getTick(), expansionPhaseTimestamp, currentPhase, scoreBefore, scoreAfter, rawImprovement, percentageImprovement
         ));
 
         return newRootCandidate;

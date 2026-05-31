@@ -59,11 +59,6 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
             initialVal = root.getValue();
         }
 
-        // --- BASELINE TRACKING ROW (START) ---
-        crossoverDataLog.add(new CrossoverEventData(
-                -1, gs.getTick(), 0, 0, root.getValue(), root.getValue(), 0.0, 0.0
-        ));
-
         bestNode = root;
         fmCallsRun = 0;
 
@@ -179,21 +174,7 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
                 // Crossover Bridge Burning: Use crossover to generate new root candidates
                 if (params.useCrossoverBridgeBurning && topNodesQueue.size() >= 2) {
 
-                    double bestSequenceBefore = bestNode.getValue();
-
-                    newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase);
-
-                    double bestSequenceAfter = (newRoot != null) ? newRoot.getValue() : bestNode.getValue();
-                    double rawImprovement = bestSequenceAfter - bestSequenceBefore;
-                    double percentageImprovement = (bestSequenceBefore == 0.0) ? 0.0 : (rawImprovement / Math.abs(bestSequenceBefore)) * 100.0;
-
-                    bridgeBurningPhaseNumber++;
-                    long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
-
-                    crossoverDataLog.add(new CrossoverEventData(
-                        -1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber,
-                        bestSequenceBefore, bestSequenceAfter, rawImprovement, percentageImprovement
-                    ));
+                    newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase, turnStartTime);
 
                 } else {
                     // Standard Bridge Burning: Promote best child
@@ -261,12 +242,6 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
         turnNodesVisited += nodesVisited;
 
         if (bestAction instanceof core.actions.tribeactions.EndTurn) {
-            // --- MILESTONE TRACKING ROW (END) ---
-            long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
-            crossoverDataLog.add(new CrossoverEventData(
-                    -1, gs.getTick(), expansionPhaseTimestamp, 99, bestNode.getValue(), bestNode.getValue(), 0.0, 0.0
-            ));
-
             // --- TURN DATA LOGGING ---
             turnDataLog.add(new TurnData(
                     -1, gs.getTick(), initialVal, finalVal, turnNodesVisited
