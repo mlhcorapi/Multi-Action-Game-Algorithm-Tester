@@ -18,6 +18,7 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
 
     private List<TurnData> turnDataLog = new ArrayList<>();
     private List<BridgeBurnEventData> bridgeBurnDataLog = new ArrayList<>();
+    private int turnNodesVisited = 0;
 
     public CrossoverExpansionAgent(long seed) {
         super(seed, createParams());
@@ -44,6 +45,7 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
     public Action act(GameState gs, ElapsedCpuTimer ect) {
         long turnStartTime = System.currentTimeMillis();
         int nodesVisited = 0;
+        int bridgeBurningPhaseNumber = 0;
 
         this.fmCallsCount = 0;
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
@@ -197,6 +199,12 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
                     topNodesQueue.clear();
                     topNodesQueue.offer(root);
 
+                    bridgeBurningPhaseNumber++;
+                    long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
+                    bridgeBurnDataLog.add(new BridgeBurnEventData(
+                            -1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, root.getValue()
+                    ));
+
                     // Continue search from new root
                     currentPhase++;
                 } else {
@@ -210,17 +218,6 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
         }
 
         double finalSequenceValue = bestNode.getValue();
-
-        // --- TRAJECTORY ENTRY (END) ---
-        long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
-        bridgeBurnDataLog.add(new BridgeBurnEventData(
-                -1, gs.getTick(), expansionPhaseTimestamp, 99, finalSequenceValue
-        ));
-
-        // --- TURN DATA LOGGING ---
-        turnDataLog.add(new TurnData(
-                -1, gs.getTick(), initialSequenceValue, finalSequenceValue, nodesVisited
-        ));
 
         Action bestAction = null;
         if (bestNode.getSequence() != null && !bestNode.getSequence().isEmpty()) {
@@ -243,6 +240,23 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
         // Tier 3 (DoNothing/EndTurn)
         if (bestAction == null) {
             bestAction = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+        }
+
+        turnNodesVisited += nodesVisited;
+
+        if (bestAction instanceof core.actions.tribeactions.EndTurn) {
+            // --- TRAJECTORY ENTRY (END) ---
+            long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
+            bridgeBurnDataLog.add(new BridgeBurnEventData(
+                    -1, gs.getTick(), expansionPhaseTimestamp, 99, finalSequenceValue
+            ));
+
+            // --- TURN DATA LOGGING ---
+            turnDataLog.add(new TurnData(
+                    -1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited
+            ));
+
+            turnNodesVisited = 0; // reset for next turn
         }
 
         return bestAction;

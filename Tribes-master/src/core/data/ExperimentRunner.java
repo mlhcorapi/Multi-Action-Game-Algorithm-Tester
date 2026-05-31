@@ -64,28 +64,7 @@ public class ExperimentRunner {
             // Extract performance metrics
             int score = game.getScores()[agentIndex];
 
-            // Note: Since Game.getTick() isn't available, using a placeholder for now
-            // or we could reflect gs.getTick(). We use a workaround via game.getGameState() if possible.
-            // Let's use getGameState(-1) if it exists, or just use 0 as a placeholder since we only want to collect the data
-            // Looking at the code Game has `gs`, but it's private.
-            // We can iterate the results or use GameState directly.
-            // However, GameSummaryData only requires durationTurns. Agent result() method provides duration/score.
-            // It tracks gameDurationTurns and gameOutcomeScore natively.
-            // Let's rely on the agent's tracking or just use 0 for duration as a fallback.
-            // In session 1 it mentions Agent.java tracks gameDurationTurns and gameOutcomeScore natively within its result() method.
-            // But we need to get it from there. Wait, Agent has no public getters for those yet? Or maybe it does?
-            // "The base Agent.java class provides default stub getters for the EMCTS experiment metrics"
-            // Let's use reflection to get gs.getTick() for now.
-            int durationTurns = 0;
-            try {
-                java.lang.reflect.Field gsField = game.getClass().getDeclaredField("gs");
-                gsField.setAccessible(true);
-                Object gsObj = gsField.get(game);
-                java.lang.reflect.Method tickMethod = gsObj.getClass().getMethod("getTick");
-                durationTurns = (int) tickMethod.invoke(gsObj);
-            } catch (Exception e) {
-                System.err.println("Could not get tick: " + e);
-            }
+            int durationTurns = targetAgent.getGameDurationTurns();
 
             // Construct Summary
             GameSummaryData summary = new GameSummaryData(agentName, gameId, durationTurns, score);
@@ -99,9 +78,10 @@ public class ExperimentRunner {
         }
     }
 
-    public static void runBatch(int phase, List<GameSimulationWorker> workers) {
+    public static List<SimulationResult> runBatch(int phase, List<GameSimulationWorker> workers) {
         ExecutorService executor = Executors.newFixedThreadPool(MAX_THREADS);
         List<Future<SimulationResult>> futures = new ArrayList<>();
+        List<SimulationResult> results = new ArrayList<>();
 
         for (GameSimulationWorker worker : workers) {
             futures.add(executor.submit(worker));
@@ -114,6 +94,28 @@ public class ExperimentRunner {
                 // Wait for the result with timeout
                 SimulationResult result = future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
+                int gameId = result.summary.getGameId();
+
+                List<TurnData> newTurns = new ArrayList<>();
+                for (TurnData td : result.turns) {
+                    newTurns.add(new TurnData(gameId, td.getTurnNumber(), td.getInitialSequenceValue(), td.getFinalSequenceValue(), td.getNodesVisited()));
+                }
+                result.turns = newTurns;
+
+                List<BridgeBurnEventData> newBridgeBurns = new ArrayList<>();
+                for (BridgeBurnEventData bbd : result.bridgeBurns) {
+                    newBridgeBurns.add(new BridgeBurnEventData(gameId, bbd.getTurnNumber(), bbd.getExpansionPhaseTimestamp(), bbd.getBridgeBurningPhaseNumber(), bbd.getNewRootNodeValue()));
+                }
+                result.bridgeBurns = newBridgeBurns;
+
+                List<CrossoverEventData> newCrossovers = new ArrayList<>();
+                for (CrossoverEventData ced : result.crossovers) {
+                    newCrossovers.add(new CrossoverEventData(gameId, ced.getTurnNumber(), ced.getExpansionPhaseTimestamp(), ced.getBridgeBurningPhaseNumber(), ced.getBestSequenceBefore(), ced.getBestSequenceAfter(), ced.getRawImprovement(), ced.getPercentageImprovement()));
+                }
+                result.crossovers = newCrossovers;
+
+                results.add(result);
+
                 // Write results via CsvDataHarvester using ONLY the main thread
                 CsvDataHarvester.writeSummaryAndTurns(phase, result.summary, result.turns);
                 CsvDataHarvester.writeBridgeBurns(phase, result.bridgeBurns);
@@ -122,7 +124,7 @@ public class ExperimentRunner {
             } catch (TimeoutException e) {
                 System.err.println("Game simulation timed out after " + TIMEOUT_SECONDS + " seconds.");
                 future.cancel(true); // Attempt to interrupt runaway thread
-            } catch (InterruptedException | ExecutionException e) {
+            } catch (Exception e) {
                 System.err.println("Game simulation failed: " + e.getMessage());
                 e.printStackTrace();
             }
@@ -134,5 +136,7 @@ public class ExperimentRunner {
             System.err.println("Executor termination interrupted");
             executor.shutdownNow();
         }
+
+        return results;
     }
 }
