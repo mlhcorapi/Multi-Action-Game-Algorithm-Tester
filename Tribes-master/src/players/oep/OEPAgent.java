@@ -2,6 +2,7 @@ package players.oep;
 
 import core.Types;
 import core.actions.Action;
+import core.actions.tribeactions.EndTurn;
 import core.actions.cityactions.CityAction;
 import core.actions.unitactions.UnitAction;
 import core.actors.Actor;
@@ -148,10 +149,26 @@ public class OEPAgent extends Agent {
         }
         //System.out.println(numIters);
 
-        Action bestAction = bestIndividual.returnNext();
-
-        double finalSequenceValue = this.bestIndividual.getValue();
+        Action bestAction = null;
+        double finalSequenceValue = 0.0;
         int nodesVisited = -1; // Explicit requirement
+
+        if (this.bestIndividual != null) {
+            bestAction = this.bestIndividual.returnNext();
+            finalSequenceValue = this.bestIndividual.getValue();
+        } else {
+            finalSequenceValue = 0.0;
+            nodesVisited = 0;
+        }
+
+        if (bestAction == null) {
+            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
+            if (!allAvailableActions.isEmpty()) {
+                bestAction = allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+            } else {
+                bestAction = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+            }
+        }
 
         if (bestAction instanceof core.actions.tribeactions.EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
             turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, nodesVisited));
