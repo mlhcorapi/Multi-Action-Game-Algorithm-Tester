@@ -20,6 +20,7 @@ public class MCTSPlayer extends Agent {
     private List<TurnData> turnDataLog = new ArrayList<>();
     private Random m_rnd;
     private MCTSParams params;
+    private int turnNodesVisited = 0;
 
     public MCTSPlayer(long seed)
     {
@@ -45,7 +46,10 @@ public class MCTSPlayer extends Agent {
             GameState nextState = gs.copy();
             nextState.advance(bestAction, true);
             double finalSequenceValue = heuristic.evaluateState(gs, nextState);
-            turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, 0));
+            if (bestAction instanceof EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
+                turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited));
+                turnNodesVisited = 0;
+            }
             return bestAction;
         }
 
@@ -55,7 +59,10 @@ public class MCTSPlayer extends Agent {
             GameState nextState = gs.copy();
             nextState.advance(bestAction, true);
             double finalSequenceValue = heuristic.evaluateState(gs, nextState);
-            turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, 0));
+            if (bestAction instanceof EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
+                turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited));
+                turnNodesVisited = 0;
+            }
             return bestAction;
         }
 
@@ -67,12 +74,16 @@ public class MCTSPlayer extends Agent {
         Action bestAction = rootActions.get(m_root.mostVisitedAction());
 
         int nodesVisited = m_root.getNumNodes();
+        turnNodesVisited += nodesVisited;
 
         GameState nextState = gs.copy();
         nextState.advance(bestAction, true);
         double finalSequenceValue = heuristic.evaluateState(gs, nextState);
 
-        turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, nodesVisited));
+        if (bestAction instanceof EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
+            turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited));
+            turnNodesVisited = 0;
+        }
 
         return bestAction;
     }

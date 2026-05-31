@@ -148,11 +148,16 @@ public class OEPAgent extends Agent {
         }
         //System.out.println(numIters);
 
+        Action bestAction = bestIndividual.returnNext();
+
         double finalSequenceValue = this.bestIndividual.getValue();
         int nodesVisited = -1; // Explicit requirement
-        turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, nodesVisited));
 
-        return  bestIndividual.returnNext();
+        if (bestAction instanceof core.actions.tribeactions.EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
+            turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, nodesVisited));
+        }
+
+        return bestAction;
 
 
     }
