@@ -14,12 +14,33 @@ import utils.ElapsedCpuTimer;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Random;
-
+import core.data.dto.CrossoverEventData;
+import core.data.dto.TurnData;
 
 
 public class ExperimentalEMCTSAgent extends Agent {
+
+    public ArrayList<CrossoverEventData> crossoverDataList = new ArrayList<>();
+    public ArrayList<TurnData> turnDataList = new ArrayList<>();
+
+    @Override
+    public List<CrossoverEventData> getCrossoverDataLog() {
+        return crossoverDataList;
+    }
+
+    @Override
+    public List<TurnData> getTurnDataLog() {
+        return turnDataList;
+    }
+
+    // variables to persist values across mid-turn act() invocations before gating TurnData logging via EndTurn
+    protected double initialSequenceValue;
+    protected double finalSequenceValue;
+    protected int turnNodesVisited = 0;
+
 
     protected Random m_rnd;
     protected StateHeuristic heuristic;
@@ -53,6 +74,10 @@ public class ExperimentalEMCTSAgent extends Agent {
         // Initialize root with 1-ply greedy initialization
         root = randomActions(gs.copy());
         eval(gs.copy(), root);
+
+        if (turnNodesVisited == 0) {
+            initialSequenceValue = root.getValue();
+        }
 
         bestNode = root;
         fmCallsRun = 0;
@@ -165,7 +190,7 @@ public class ExperimentalEMCTSAgent extends Agent {
 
                 // Crossover Bridge Burning: Use crossover to generate new root candidates
                 if (params.useCrossoverBridgeBurning && topNodesQueue.size() >= 2) {
-                    newRoot = performCrossoverBridgeBurning(gs.copy());
+                    newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase);
                 } else {
                     // Standard Bridge Burning: Promote best child
                     newRoot = findBestChild(root);
@@ -220,6 +245,21 @@ public class ExperimentalEMCTSAgent extends Agent {
         // Tier 3 (DoNothing/EndTurn)
         if (bestAction == null) {
             bestAction = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+        }
+
+        if (!(bestAction instanceof core.actions.tribeactions.EndTurn)) {
+            finalSequenceValue = bestNode.getValue();
+        } else if (turnNodesVisited == 0) {
+            finalSequenceValue = bestNode.getValue();
+        }
+
+        turnNodesVisited += this.fmCallsCount; // standardizing evaluation workload
+
+        if (bestAction instanceof core.actions.tribeactions.EndTurn) {
+            turnDataList.add(new TurnData(
+                    -1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited
+            ));
+            turnNodesVisited = 0;
         }
 
         return bestAction;
@@ -617,7 +657,7 @@ public class ExperimentalEMCTSAgent extends Agent {
      * - Level 3: 2 children -> 1 child via crossover
      * All 7 children are evaluated, and the best is compared with bestNode to determine new root.
      */
-    protected ExperimentalEMCTSTreeNode performCrossoverBridgeBurning(GameState gs) {
+    protected ExperimentalEMCTSTreeNode performCrossoverBridgeBurning(GameState gs, int currentPhase) {
         // Extract top 8 nodes from the priority queue
         ArrayList<ExperimentalEMCTSTreeNode> topEight = new ArrayList<>(topNodesQueue);
         
@@ -698,6 +738,19 @@ public class ExperimentalEMCTSAgent extends Agent {
         if (newRootCandidate.getValue() > bestNode.getValue()) {
             bestNode = newRootCandidate;
         }
+
+        double scoreBefore = bestParent.getValue();
+        double scoreAfter = bestCrossoverChild.getValue();
+
+        double rawImprovement = scoreAfter - scoreBefore;
+        double percentageImprovement = (scoreBefore == 0.0) ? 0.0 : ((rawImprovement) / Math.abs(scoreBefore)) * 100.0;
+
+        // CrossoverEventData (gameId, turnNumber, expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestSequenceBefore, bestSequenceAfter, rawImprovement, percentageImprovement)
+        // using 0 for timestamp here, the specific agents log the actual phase details during their act loops
+        crossoverDataList.add(new CrossoverEventData(
+                -1, gs.getTick(), 0, currentPhase, scoreBefore, scoreAfter, rawImprovement, percentageImprovement
+        ));
+
         return newRootCandidate;
     }
 
