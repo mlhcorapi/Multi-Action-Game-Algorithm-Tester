@@ -739,14 +739,13 @@ public class ExperimentalEMCTSAgent extends Agent {
             bestNode = newRootCandidate;
         }
 
+        // SCROLL SENSOR CORRECTION
         double scoreBefore = bestParent.getValue();
-        double scoreAfter = bestCrossoverChild.getValue();
+        double scoreAfter = bestCrossoverChild.getValue(); // Measures the generation child directly, bypassing fallback allocation
 
         double rawImprovement = scoreAfter - scoreBefore;
         double percentageImprovement = (scoreBefore == 0.0) ? 0.0 : ((rawImprovement) / Math.abs(scoreBefore)) * 100.0;
 
-        // CrossoverEventData (gameId, turnNumber, expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestSequenceBefore, bestSequenceAfter, rawImprovement, percentageImprovement)
-        // using 0 for timestamp here, the specific agents log the actual phase details during their act loops
         crossoverDataList.add(new CrossoverEventData(
                 -1, gs.getTick(), 0, currentPhase, scoreBefore, scoreAfter, rawImprovement, percentageImprovement
         ));
