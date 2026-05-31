@@ -174,7 +174,7 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
                 // Crossover Bridge Burning: Use crossover to generate new root candidates
                 if (params.useCrossoverBridgeBurning && topNodesQueue.size() >= 2) {
 
-                    newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase);
+                    newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase, turnStartTime);
 
                 } else {
                     // Standard Bridge Burning: Promote best child
