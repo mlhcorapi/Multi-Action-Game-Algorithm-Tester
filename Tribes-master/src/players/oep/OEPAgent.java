@@ -30,6 +30,11 @@ public class OEPAgent extends Agent {
     private int fmCallsCount;
     private int fmCallsRun;
     private GameState root;
+    // Per-turn telemetry captured on the first act() of the turn (engine calls act()
+    // once per action; a tick change marks a new turn).
+    private int turnStartTick = -1;
+    private int turnStartScore = 0;
+    private double turnPlanValue = 0.0;
 
 
     public OEPAgent(long seed, OEPParams params) {
@@ -50,6 +55,13 @@ public class OEPAgent extends Agent {
 
     @Override
     public Action act(GameState gs, ElapsedCpuTimer ect) {
+        // First act() of a new turn? Capture the turn-start score.
+        boolean firstActOfTurn = (gs.getTick() != turnStartTick);
+        if (firstActOfTurn) {
+            turnStartTick = gs.getTick();
+            turnStartScore = gs.getScore(playerID);
+        }
+
         double initialSequenceValue = 0.0;
         double avgTimeTaken;
         double acumTimeTaken = 0;
@@ -161,6 +173,12 @@ public class OEPAgent extends Agent {
             nodesVisited = 0;
         }
 
+        // The "sequence OEP uses on its turn" is the plan it evolves on the first act();
+        // remember its value so the per-turn row reports it (not a later re-plan).
+        if (firstActOfTurn) {
+            turnPlanValue = finalSequenceValue;
+        }
+
         if (bestAction == null) {
             ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
             if (!allAvailableActions.isEmpty()) {
@@ -170,8 +188,10 @@ public class OEPAgent extends Agent {
             }
         }
 
+        // Initial sequence value is not meaningful for OEP (pre-evolution random pop),
+        // so it is logged as 0.0; Final = the value of the turn plan OEP commits to.
         if (bestAction instanceof core.actions.tribeactions.EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
-            turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, nodesVisited));
+            turnDataLog.add(new TurnData(-1, gs.getTick(), 0.0, turnPlanValue, nodesVisited, turnStartScore));
         }
 
         return bestAction;

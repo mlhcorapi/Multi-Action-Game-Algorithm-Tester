@@ -43,8 +43,8 @@ public class Phase0SmokeTest {
 
                 if (agentName.equals("MCTSPlayer")) {
                     MCTSParams mctsParams = new MCTSParams();
-                    mctsParams.stop_type = mctsParams.STOP_ITERATIONS;
-                    mctsParams.num_iterations = 10;
+                    mctsParams.stop_type = mctsParams.STOP_FMCALLS;
+                    mctsParams.num_fmcalls = 8000; // match the EMCTS-family budget (was num_iterations=10)
                     mctsParams.ROLLOUT_LENGTH = 5;
                     agent = new MCTSPlayer(42, mctsParams);
                 } else if (agentName.equals("OEPAgent")) {

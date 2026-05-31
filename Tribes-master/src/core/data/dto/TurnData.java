@@ -6,13 +6,15 @@ public class TurnData {
     private final double initialSequenceValue;
     private final double finalSequenceValue;
     private final int nodesVisited;
+    private final int scoreAtTurnStart;
 
-    public TurnData(int gameId, int turnNumber, double initialSequenceValue, double finalSequenceValue, int nodesVisited) {
+    public TurnData(int gameId, int turnNumber, double initialSequenceValue, double finalSequenceValue, int nodesVisited, int scoreAtTurnStart) {
         this.gameId = gameId;
         this.turnNumber = turnNumber;
         this.initialSequenceValue = initialSequenceValue;
         this.finalSequenceValue = finalSequenceValue;
         this.nodesVisited = nodesVisited;
+        this.scoreAtTurnStart = scoreAtTurnStart;
     }
 
     public int getGameId() {
@@ -35,6 +37,10 @@ public class TurnData {
         return nodesVisited;
     }
 
+    public int getScoreAtTurnStart() {
+        return scoreAtTurnStart;
+    }
+
     @Override
     public String toString() {
         return "TurnData{" +
@@ -43,6 +49,7 @@ public class TurnData {
                 ", initialSequenceValue=" + initialSequenceValue +
                 ", finalSequenceValue=" + finalSequenceValue +
                 ", nodesVisited=" + nodesVisited +
+                ", scoreAtTurnStart=" + scoreAtTurnStart +
                 '}';
     }
 }

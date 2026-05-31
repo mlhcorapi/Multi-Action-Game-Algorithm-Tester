@@ -48,10 +48,10 @@ public class ExperimentalEMCTSAgent extends Agent {
      * variant so that both standard and crossover bridge burning are captured.
      * gameId is a placeholder (-1) and reassigned by the main thread in ExperimentRunner.
      */
-    protected void recordBridgeBurn(int bridgeBurningPhaseNumber, double newRootNodeValue, long turnStartTime, int tick) {
+    protected void recordBridgeBurn(int bridgeBurningPhaseNumber, double bestSequenceValue, long turnStartTime, int tick) {
         long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
         bridgeBurnDataList.add(new BridgeBurnEventData(
-                -1, tick, expansionPhaseTimestamp, bridgeBurningPhaseNumber, newRootNodeValue
+                -1, tick, expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestSequenceValue
         ));
     }
 
@@ -132,6 +132,9 @@ public class ExperimentalEMCTSAgent extends Agent {
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
         old_gs = gs.copy();
+
+        // Player score at the very start of the turn (for the score-progression column).
+        int scoreAtTurnStart = gs.getScore(playerID);
 
         // Initialize root with 1-ply greedy initialization
         root = randomActions(gs.copy());
@@ -291,8 +294,12 @@ public class ExperimentalEMCTSAgent extends Agent {
                     // Continue search from new root
                     currentPhase++;
 
-                    // Record the bridge-burn (root promotion) trajectory point.
-                    recordBridgeBurn(currentPhase, root.getValue(), turnStartTimeMillis, gs.getTick());
+                    // Record the bridge-burn trajectory point. We log the best sequence
+                    // value found SO FAR (bestNode), not the promoted root's value: the
+                    // promoted root is the best child of the current root and its value
+                    // degrades/goes negative as the search dives, whereas best-so-far is
+                    // the monotonic "expansion phase" curve we want to plot.
+                    recordBridgeBurn(currentPhase, bestNode.getValue(), turnStartTimeMillis, gs.getTick());
                 } else {
                     // No improvement, exit phase loop
                     break;
@@ -308,7 +315,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         // nodesVisited = number of search iterations this turn.
         double finalValue = bestNode.getValue();
         turnDataList.add(new TurnData(
-                -1, gs.getTick(), initialValue, finalValue, nodesVisited
+                -1, gs.getTick(), initialValue, finalValue, nodesVisited, scoreAtTurnStart
         ));
 
         // Cache the best full action sequence; act() replays it over the turn.

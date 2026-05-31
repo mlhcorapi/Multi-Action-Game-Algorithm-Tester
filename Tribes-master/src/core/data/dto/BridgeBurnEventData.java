@@ -5,14 +5,14 @@ public class BridgeBurnEventData {
     private final int turnNumber;
     private final long expansionPhaseTimestamp;
     private final int bridgeBurningPhaseNumber;
-    private final double newRootNodeValue;
+    private final double bestSequenceValue;
 
-    public BridgeBurnEventData(int gameId, int turnNumber, long expansionPhaseTimestamp, int bridgeBurningPhaseNumber, double newRootNodeValue) {
+    public BridgeBurnEventData(int gameId, int turnNumber, long expansionPhaseTimestamp, int bridgeBurningPhaseNumber, double bestSequenceValue) {
         this.gameId = gameId;
         this.turnNumber = turnNumber;
         this.expansionPhaseTimestamp = expansionPhaseTimestamp;
         this.bridgeBurningPhaseNumber = bridgeBurningPhaseNumber;
-        this.newRootNodeValue = newRootNodeValue;
+        this.bestSequenceValue = bestSequenceValue;
     }
 
     public int getGameId() {
@@ -31,8 +31,8 @@ public class BridgeBurnEventData {
         return bridgeBurningPhaseNumber;
     }
 
-    public double getNewRootNodeValue() {
-        return newRootNodeValue;
+    public double getBestSequenceValue() {
+        return bestSequenceValue;
     }
 
     @Override
@@ -42,7 +42,7 @@ public class BridgeBurnEventData {
                 ", turnNumber=" + turnNumber +
                 ", expansionPhaseTimestamp=" + expansionPhaseTimestamp +
                 ", bridgeBurningPhaseNumber=" + bridgeBurningPhaseNumber +
-                ", newRootNodeValue=" + newRootNodeValue +
+                ", bestSequenceValue=" + bestSequenceValue +
                 '}';
     }
 }

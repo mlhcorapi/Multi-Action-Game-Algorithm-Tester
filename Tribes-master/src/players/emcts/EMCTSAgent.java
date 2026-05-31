@@ -111,6 +111,9 @@ public class EMCTSAgent extends Agent {
 
         old_gs = gs.copy();
 
+        // Player score at the very start of the turn (for the score-progression column).
+        int scoreAtTurnStart = gs.getScore(playerID);
+
         // Initialize root with 1-ply greedy initialization
         root = randomActions(gs.copy());
         eval(gs.copy(), root);
@@ -212,8 +215,11 @@ public class EMCTSAgent extends Agent {
                     root = bestChild;
                     
                     bridgeBurningPhaseNumber++;
+                    // Log the best sequence value found SO FAR (bestNode), not the promoted
+                    // root's value (which degrades as the search dives) - this is the
+                    // monotonic "expansion phase" curve.
                     long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTimeMillis;
-                    bridgeBurnDataLog.add(new BridgeBurnEventData(-1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, root.getValue()));
+                    bridgeBurnDataLog.add(new BridgeBurnEventData(-1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestNode.getValue()));
 
                     // Continue search from new root
                     currentPhase++;
@@ -231,7 +237,7 @@ public class EMCTSAgent extends Agent {
         // Initial = greedy root (pre-search); Final = best node found (post-search);
         // nodesVisited = number of search iterations this turn.
         double finalValue = bestNode.getValue();
-        turnDataLog.add(new TurnData(-1, gs.getTick(), initialValue, finalValue, totalNodesVisited));
+        turnDataLog.add(new TurnData(-1, gs.getTick(), initialValue, finalValue, totalNodesVisited, scoreAtTurnStart));
 
         // Cache the best full action sequence; act() replays it over the turn.
         ArrayList<Action> bestSeq = bestNode.getSequence();
