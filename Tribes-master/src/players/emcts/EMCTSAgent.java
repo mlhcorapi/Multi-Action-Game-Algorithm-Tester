@@ -11,13 +11,19 @@ import core.game.GameState;
 import players.Agent;
 import players.heuristics.StateHeuristic;
 import utils.ElapsedCpuTimer;
+import core.data.dto.TurnData;
+import core.data.dto.BridgeBurnEventData;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 
 
 public class EMCTSAgent extends Agent {
+
+    private List<TurnData> turnDataLog = new ArrayList<>();
+    private List<BridgeBurnEventData> bridgeBurnDataLog = new ArrayList<>();
 
     private Random m_rnd;
     private StateHeuristic heuristic;
@@ -29,6 +35,14 @@ public class EMCTSAgent extends Agent {
 
     private int fmCallsCount;
     private int fmCallsRun;
+    private int totalNodesVisited;
+    // Per-turn planning state: the engine calls act() once per action, so we plan the
+    // entire turn once (a single phased search) and replay the cached best action
+    // sequence across the turn's subsequent act() calls instead of re-searching.
+    private ArrayList<Action> turnPlan = new ArrayList<>();
+    private int plannedTick = -1;
+    // Wall-clock baseline for event timestamps: the start of the turn (set when planning).
+    private long turnStartTimeMillis;
 
     public EMCTSAgent(long seed, EMCTSParams params) {
         super(seed);
@@ -37,8 +51,62 @@ public class EMCTSAgent extends Agent {
     }
 
     @Override
+    public List<TurnData> getTurnDataLog() {
+        return turnDataLog;
+    }
+
+    @Override
+    public List<BridgeBurnEventData> getBridgeBurnDataLog() {
+        return bridgeBurnDataLog;
+    }
+
+    @Override
+    public int getNodesVisited() {
+        return totalNodesVisited;
+    }
+
+    @Override
     public Action act(GameState gs, ElapsedCpuTimer ect) {
+        // The engine calls act() once per action. Plan the ENTIRE turn with a single
+        // phased search on the first act() of the turn, then replay the cached best
+        // action sequence on subsequent calls. A change in game tick marks a new turn.
+        int tick = gs.getTick();
+        if (tick != plannedTick) {
+            planTurn(gs, ect);
+            plannedTick = tick;
+        }
+
+        // Tier 1 (Salvage): next action from the cached best macro-sequence.
+        Action next = null;
+        if (!turnPlan.isEmpty()) {
+            Action candidate = turnPlan.remove(0);
+            if (candidate != null && candidate.isFeasible(gs)) {
+                next = candidate;
+            }
+        }
+        // Tier 2 (Greedy Random): cached step broke; pick a random valid action.
+        if (next == null) {
+            ArrayList<Action> availableActions = this.allGoodActions(gs, m_rnd);
+            if (availableActions != null && !availableActions.isEmpty()) {
+                next = availableActions.get(m_rnd.nextInt(availableActions.size()));
+            }
+        }
+        // Tier 3 (End Turn): nothing valid left.
+        if (next == null) {
+            next = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+        }
+        return next;
+    }
+
+    /**
+     * Plans the whole turn with a single phased (bridge-burning) search and caches the
+     * best full action sequence. Records Initial/Final sequence values, nodesVisited
+     * (search iterations), and bridge-burn events for this turn.
+     */
+    private void planTurn(GameState gs, ElapsedCpuTimer ect) {
+        turnStartTimeMillis = System.currentTimeMillis();
         this.fmCallsCount = 0;
+        this.totalNodesVisited = 0;
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
         old_gs = gs.copy();
@@ -46,6 +114,8 @@ public class EMCTSAgent extends Agent {
         // Initialize root with 1-ply greedy initialization
         root = randomActions(gs.copy());
         eval(gs.copy(), root);
+
+        double initialValue = root.getValue();
 
         bestNode = root;
         fmCallsRun = 0;
@@ -55,6 +125,7 @@ public class EMCTSAgent extends Agent {
         long phaseTimeMs = Math.max(1, totalTimeMs / Math.max(1, params.depth));
         int currentPhase = 0;
         int remainingLimit = 5;
+        int bridgeBurningPhaseNumber = 0;
 
         boolean stop = false;
         int numIters = 0;
@@ -64,6 +135,7 @@ public class EMCTSAgent extends Agent {
         while (!stop && currentPhase < params.depth) {
             ElapsedCpuTimer phaseTimer = new ElapsedCpuTimer();
             long phaseStartFmCalls = fmCallsCount;
+            int phaseStartIters = numIters;
             boolean phaseComplete = false;
 
             // Execute MCTS iterations within this phase
@@ -75,6 +147,7 @@ public class EMCTSAgent extends Agent {
                 // Standard MCTS iteration: select, mutate once, evaluate, backpropagate
                 EMCTSTreeNode toMutate = nodeToExpand();
                 EMCTSTreeNode child = mutate(toMutate, gs.copy());
+                this.totalNodesVisited++;  // one node per search iteration (mirrors experimental agents)
                 eval(gs.copy(), child);
 
                 if (child.getValue() > bestNode.getValue()) {
@@ -105,8 +178,19 @@ public class EMCTSAgent extends Agent {
                            (fmCallsRun > (params.num_fmcalls - fmCallsCount));
                 }
 
-                // Check if phase time is exhausted
-                if (phaseTimer.elapsedMillis() >= phaseTimeMs) {
+                // Phase completion is gated by the SAME budget as the stop criterion,
+                // so bridge burning triggers between phases regardless of stop_type.
+                boolean phaseBudgetExhausted;
+                if (params.stop_type == params.STOP_FMCALLS) {
+                    long fmCallsPerPhase = Math.max(1, params.num_fmcalls / Math.max(1, params.depth));
+                    phaseBudgetExhausted = (fmCallsCount - phaseStartFmCalls) >= fmCallsPerPhase;
+                } else if (params.stop_type == params.STOP_ITERATIONS) {
+                    int itersPerPhase = Math.max(1, params.num_iterations / Math.max(1, params.depth));
+                    phaseBudgetExhausted = (numIters - phaseStartIters) >= itersPerPhase;
+                } else {
+                    phaseBudgetExhausted = phaseTimer.elapsedMillis() >= phaseTimeMs;
+                }
+                if (phaseBudgetExhausted) {
                     phaseComplete = true;
                 }
             }
@@ -124,9 +208,13 @@ public class EMCTSAgent extends Agent {
                     }
                     
                     // Update root and clear old parent reference
-                    bestChild.unlink();  // Clears parent link
+                    bestChild.unlink();  // Clears parent link safely
                     root = bestChild;
                     
+                    bridgeBurningPhaseNumber++;
+                    long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTimeMillis;
+                    bridgeBurnDataLog.add(new BridgeBurnEventData(-1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, root.getValue()));
+
                     // Continue search from new root
                     currentPhase++;
                 } else {
@@ -139,28 +227,15 @@ public class EMCTSAgent extends Agent {
             }
         }
 
-        if (bestNode.getSequence() == null || bestNode.getSequence().isEmpty()) {
-            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-            if (!allAvailableActions.isEmpty()) {
-                return allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
-            }
-            if (gs.canEndTurn(gs.getActiveTribeID())) {
-                return new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
-            }
-            return null;
-        }
-        Action nextAct = bestNode.returnNext();
-        if (!nextAct.isFeasible(gs)) {
-            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-            if (!allAvailableActions.isEmpty()) {
-                return allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
-            }
-            if (gs.canEndTurn(gs.getActiveTribeID())) {
-                return new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
-            }
-            return null;
-        }
-        return nextAct;
+        // Telemetry for this single turn-planning episode:
+        // Initial = greedy root (pre-search); Final = best node found (post-search);
+        // nodesVisited = number of search iterations this turn.
+        double finalValue = bestNode.getValue();
+        turnDataLog.add(new TurnData(-1, gs.getTick(), initialValue, finalValue, totalNodesVisited));
+
+        // Cache the best full action sequence; act() replays it over the turn.
+        ArrayList<Action> bestSeq = bestNode.getSequence();
+        turnPlan = (bestSeq != null) ? new ArrayList<>(bestSeq) : new ArrayList<>();
     }
 
     @Override
@@ -380,7 +455,10 @@ public class EMCTSAgent extends Agent {
                     if (bestAction != null) {
                         advance(gs, bestAction);
                         repairedChild.add(bestAction);
+                    } else {
+                        break;
                     }
+                
                 } else {
                     repairedChild.add(child.get(a));
                     advance(gs, child.get(a));
@@ -413,6 +491,8 @@ public class EMCTSAgent extends Agent {
                 if (bestAction != null) {
                     advance(gs, bestAction);
                     repairedChild.add(bestAction);
+                } else {
+                    break;
                 }
             }
         }
