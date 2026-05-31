@@ -18,17 +18,29 @@ import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Random;
 import core.data.dto.CrossoverEventData;
-
+import core.data.dto.TurnData;
 
 
 public class ExperimentalEMCTSAgent extends Agent {
 
     public ArrayList<CrossoverEventData> crossoverDataList = new ArrayList<>();
+    public ArrayList<TurnData> turnDataList = new ArrayList<>();
 
     @Override
     public List<CrossoverEventData> getCrossoverDataLog() {
         return crossoverDataList;
     }
+
+    @Override
+    public List<TurnData> getTurnDataLog() {
+        return turnDataList;
+    }
+
+    // variables to persist values across mid-turn act() invocations before gating TurnData logging via EndTurn
+    protected double initialSequenceValue;
+    protected double finalSequenceValue;
+    protected int turnNodesVisited = 0;
+
 
     protected Random m_rnd;
     protected StateHeuristic heuristic;
@@ -62,6 +74,10 @@ public class ExperimentalEMCTSAgent extends Agent {
         // Initialize root with 1-ply greedy initialization
         root = randomActions(gs.copy());
         eval(gs.copy(), root);
+
+        if (turnNodesVisited == 0) {
+            initialSequenceValue = root.getValue();
+        }
 
         bestNode = root;
         fmCallsRun = 0;
@@ -229,6 +245,21 @@ public class ExperimentalEMCTSAgent extends Agent {
         // Tier 3 (DoNothing/EndTurn)
         if (bestAction == null) {
             bestAction = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+        }
+
+        if (!(bestAction instanceof core.actions.tribeactions.EndTurn)) {
+            finalSequenceValue = bestNode.getValue();
+        } else if (turnNodesVisited == 0) {
+            finalSequenceValue = bestNode.getValue();
+        }
+
+        turnNodesVisited += this.fmCallsCount; // standardizing evaluation workload
+
+        if (bestAction instanceof core.actions.tribeactions.EndTurn) {
+            turnDataList.add(new TurnData(
+                    -1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited
+            ));
+            turnNodesVisited = 0;
         }
 
         return bestAction;
