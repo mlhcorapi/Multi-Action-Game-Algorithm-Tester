@@ -222,28 +222,30 @@ public class CrossoverExpansionAgent extends ExperimentalEMCTSAgent {
                 -1, gs.getTick(), initialSequenceValue, finalSequenceValue, nodesVisited
         ));
 
-        if (bestNode.getSequence() == null || bestNode.getSequence().isEmpty()) {
-            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-            if (!allAvailableActions.isEmpty()) {
-                return allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+        Action bestAction = null;
+        if (bestNode.getSequence() != null && !bestNode.getSequence().isEmpty()) {
+            bestAction = bestNode.returnNext();
+            if (bestAction != null && !bestAction.isFeasible(gs)) {
+                bestAction = null;
             }
-            if (gs.canEndTurn(gs.getActiveTribeID())) {
-                return new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
-            }
-            return null;
         }
-        Action nextAct = bestNode.returnNext();
-        if (!nextAct.isFeasible(gs)) {
-            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-            if (!allAvailableActions.isEmpty()) {
-                return allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+
+        // Tier 1 is already bestAction
+
+        // Tier 2 (Random)
+        if (bestAction == null) {
+            ArrayList<Action> availableActions = this.allGoodActions(gs, m_rnd);
+            if (availableActions != null && !availableActions.isEmpty()) {
+                bestAction = availableActions.get(m_rnd.nextInt(availableActions.size()));
             }
-            if (gs.canEndTurn(gs.getActiveTribeID())) {
-                return new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
-            }
-            return null;
         }
-        return nextAct;
+
+        // Tier 3 (DoNothing/EndTurn)
+        if (bestAction == null) {
+            bestAction = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+        }
+
+        return bestAction;
     }
 
     @Override
