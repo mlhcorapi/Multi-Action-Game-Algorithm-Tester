@@ -107,13 +107,13 @@ public class ExperimentRunner {
 
                 List<TurnData> newTurns = new ArrayList<>();
                 for (TurnData td : result.turns) {
-                    newTurns.add(new TurnData(gameId, td.getTurnNumber(), td.getInitialSequenceValue(), td.getFinalSequenceValue(), td.getNodesVisited()));
+                    newTurns.add(new TurnData(gameId, td.getTurnNumber(), td.getInitialSequenceValue(), td.getFinalSequenceValue(), td.getNodesVisited(), td.getScoreAtTurnStart()));
                 }
                 result.turns = newTurns;
 
                 List<BridgeBurnEventData> newBridgeBurns = new ArrayList<>();
                 for (BridgeBurnEventData bbd : result.bridgeBurns) {
-                    newBridgeBurns.add(new BridgeBurnEventData(gameId, bbd.getTurnNumber(), bbd.getExpansionPhaseTimestamp(), bbd.getBridgeBurningPhaseNumber(), bbd.getNewRootNodeValue()));
+                    newBridgeBurns.add(new BridgeBurnEventData(gameId, bbd.getTurnNumber(), bbd.getExpansionPhaseTimestamp(), bbd.getBridgeBurningPhaseNumber(), bbd.getBestSequenceValue()));
                 }
                 result.bridgeBurns = newBridgeBurns;
 
