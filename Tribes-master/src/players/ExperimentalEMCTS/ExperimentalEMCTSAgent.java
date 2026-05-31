@@ -14,12 +14,21 @@ import utils.ElapsedCpuTimer;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Random;
+import core.data.dto.CrossoverEventData;
 
 
 
 public class ExperimentalEMCTSAgent extends Agent {
+
+    public ArrayList<CrossoverEventData> crossoverDataList = new ArrayList<>();
+
+    @Override
+    public List<CrossoverEventData> getCrossoverDataLog() {
+        return crossoverDataList;
+    }
 
     protected Random m_rnd;
     protected StateHeuristic heuristic;
@@ -698,6 +707,19 @@ public class ExperimentalEMCTSAgent extends Agent {
         if (newRootCandidate.getValue() > bestNode.getValue()) {
             bestNode = newRootCandidate;
         }
+
+        double scoreBefore = bestParent.getValue();
+        double scoreAfter = bestCrossoverChild.getValue();
+
+        double rawImprovement = scoreAfter - scoreBefore;
+        double percentageImprovement = (scoreBefore == 0.0) ? 0.0 : ((rawImprovement) / Math.abs(scoreBefore)) * 100.0;
+
+        // CrossoverEventData (gameId, turnNumber, expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestSequenceBefore, bestSequenceAfter, rawImprovement, percentageImprovement)
+        // using 0 for timestamp/phase here, the specific agents log the actual phase details during their act loops
+        crossoverDataList.add(new CrossoverEventData(
+                -1, gs.getTick(), 0, 0, scoreBefore, scoreAfter, rawImprovement, percentageImprovement
+        ));
+
         return newRootCandidate;
     }
 
