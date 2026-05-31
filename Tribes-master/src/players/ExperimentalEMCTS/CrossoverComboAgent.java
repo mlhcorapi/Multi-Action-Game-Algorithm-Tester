@@ -18,6 +18,8 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
     private List<TurnData> turnDataLog = new ArrayList<>();
     private List<CrossoverEventData> crossoverDataLog = new ArrayList<>();
     private int turnNodesVisited = 0;
+    private double initialVal = 0.0;
+    private double finalVal = 0.0;
 
     public CrossoverComboAgent(long seed) {
         super(seed, createParams());
@@ -53,11 +55,13 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
         root = randomActions(gs.copy());
         eval(gs.copy(), root);
 
-        double initialSequenceValue = root.getValue();
+        if (turnNodesVisited == 0) {
+            initialVal = root.getValue();
+        }
 
         // --- BASELINE TRACKING ROW (START) ---
         crossoverDataLog.add(new CrossoverEventData(
-                -1, gs.getTick(), 0, 0, initialSequenceValue, initialSequenceValue, 0.0, 0.0
+                -1, gs.getTick(), 0, 0, root.getValue(), root.getValue(), 0.0, 0.0
         ));
 
         bestNode = root;
@@ -224,8 +228,6 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
             }
         }
 
-        double finalSequenceValue = bestNode.getValue();
-
         Action bestAction = null;
         if (bestNode.getSequence() != null && !bestNode.getSequence().isEmpty()) {
             bestAction = bestNode.returnNext();
@@ -249,18 +251,25 @@ public class CrossoverComboAgent extends ExperimentalEMCTSAgent {
             bestAction = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
         }
 
+        if (!(bestAction instanceof core.actions.tribeactions.EndTurn)) {
+            finalVal = bestNode.getValue();
+        } else if (turnNodesVisited == 0) {
+            finalVal = bestNode.getValue();
+        }
+
+
         turnNodesVisited += nodesVisited;
 
         if (bestAction instanceof core.actions.tribeactions.EndTurn) {
             // --- MILESTONE TRACKING ROW (END) ---
             long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
             crossoverDataLog.add(new CrossoverEventData(
-                    -1, gs.getTick(), expansionPhaseTimestamp, 99, finalSequenceValue, finalSequenceValue, 0.0, 0.0
+                    -1, gs.getTick(), expansionPhaseTimestamp, 99, bestNode.getValue(), bestNode.getValue(), 0.0, 0.0
             ));
 
             // --- TURN DATA LOGGING ---
             turnDataLog.add(new TurnData(
-                    -1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited
+                    -1, gs.getTick(), initialVal, finalVal, turnNodesVisited
             ));
 
             turnNodesVisited = 0; // reset for next turn
