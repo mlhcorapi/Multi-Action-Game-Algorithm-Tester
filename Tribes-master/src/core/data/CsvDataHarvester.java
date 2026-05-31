@@ -15,6 +15,17 @@ public class CsvDataHarvester {
 
     private static final String DIRECTORY = "test_results";
 
+    /**
+     * Rounds a heuristic value to 4 decimals before logging, so floating-point
+     * representation noise (e.g. 0.1 * 3 = 0.30000000000000004) does not pollute the
+     * CSV. Search/decision logic always uses the full-precision values; only the
+     * recorded telemetry is rounded.
+     */
+    private static double round(double v) {
+        if (Double.isNaN(v) || Double.isInfinite(v)) return v;
+        return Math.round(v * 10000.0) / 10000.0;
+    }
+
     private static void ensureDirectoryExists() {
         File dir = new File(DIRECTORY);
         if (!dir.exists()) {
@@ -47,8 +58,8 @@ public class CsvDataHarvester {
                             summary.getGameDurationTurns() + "," +
                             summary.getGameOutcomeScore() + "," +
                             turn.getTurnNumber() + "," +
-                            turn.getInitialSequenceValue() + "," +
-                            turn.getFinalSequenceValue() + "," +
+                            round(turn.getInitialSequenceValue()) + "," +
+                            round(turn.getFinalSequenceValue()) + "," +
                             turn.getNodesVisited());
                 }
             }
@@ -75,7 +86,7 @@ public class CsvDataHarvester {
                         event.getTurnNumber() + "," +
                         event.getExpansionPhaseTimestamp() + "," +
                         event.getBridgeBurningPhaseNumber() + "," +
-                        event.getNewRootNodeValue());
+                        round(event.getNewRootNodeValue()));
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -100,10 +111,10 @@ public class CsvDataHarvester {
                         event.getTurnNumber() + "," +
                         event.getExpansionPhaseTimestamp() + "," +
                         event.getBridgeBurningPhaseNumber() + "," +
-                        event.getBestSequenceBefore() + "," +
-                        event.getBestSequenceAfter() + "," +
-                        event.getRawImprovement() + "," +
-                        event.getPercentageImprovement());
+                        round(event.getBestSequenceBefore()) + "," +
+                        round(event.getBestSequenceAfter()) + "," +
+                        round(event.getRawImprovement()) + "," +
+                        round(event.getPercentageImprovement()));
             }
         } catch (IOException e) {
             e.printStackTrace();

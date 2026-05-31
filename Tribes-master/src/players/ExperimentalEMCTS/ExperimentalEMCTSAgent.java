@@ -19,12 +19,14 @@ import java.util.PriorityQueue;
 import java.util.Random;
 import core.data.dto.CrossoverEventData;
 import core.data.dto.TurnData;
+import core.data.dto.BridgeBurnEventData;
 
 
 public class ExperimentalEMCTSAgent extends Agent {
 
     public ArrayList<CrossoverEventData> crossoverDataList = new ArrayList<>();
     public ArrayList<TurnData> turnDataList = new ArrayList<>();
+    public ArrayList<BridgeBurnEventData> bridgeBurnDataList = new ArrayList<>();
 
     @Override
     public List<CrossoverEventData> getCrossoverDataLog() {
@@ -36,10 +38,30 @@ public class ExperimentalEMCTSAgent extends Agent {
         return turnDataList;
     }
 
-    // variables to persist values across mid-turn act() invocations before gating TurnData logging via EndTurn
-    protected double initialSequenceValue;
-    protected double finalSequenceValue;
-    protected int turnNodesVisited = 0;
+    @Override
+    public List<BridgeBurnEventData> getBridgeBurnDataLog() {
+        return bridgeBurnDataList;
+    }
+
+    /**
+     * Records a bridge-burn (root promotion) event. Shared by every experimental
+     * variant so that both standard and crossover bridge burning are captured.
+     * gameId is a placeholder (-1) and reassigned by the main thread in ExperimentRunner.
+     */
+    protected void recordBridgeBurn(int bridgeBurningPhaseNumber, double newRootNodeValue, long turnStartTime, int tick) {
+        long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
+        bridgeBurnDataList.add(new BridgeBurnEventData(
+                -1, tick, expansionPhaseTimestamp, bridgeBurningPhaseNumber, newRootNodeValue
+        ));
+    }
+
+    // Per-turn planning state: the engine calls act() once per action, so we plan the
+    // entire turn once (a single phased search) and replay the cached best action
+    // sequence across the turn's subsequent act() calls instead of re-searching.
+    protected ArrayList<Action> turnPlan = new ArrayList<>();
+    protected int plannedTick = -1;
+    // Wall-clock baseline for event timestamps: the start of the turn (set when planning).
+    protected long turnStartTimeMillis;
 
 
     protected Random m_rnd;
@@ -65,7 +87,46 @@ public class ExperimentalEMCTSAgent extends Agent {
 
     @Override
     public Action act(GameState gs, ElapsedCpuTimer ect) {
-        long turnStartTime = System.currentTimeMillis();
+        // The engine calls act() once per action. Plan the ENTIRE turn with a single
+        // phased search on the first act() of the turn, then replay the cached best
+        // action sequence on subsequent calls (no mid-turn re-search). A change in the
+        // game tick marks a new turn - robust even if the engine auto-ends a turn.
+        int tick = gs.getTick();
+        if (tick != plannedTick) {
+            planTurn(gs, ect);
+            plannedTick = tick;
+        }
+
+        // Tier 1 (Salvage): next action from the cached best macro-sequence.
+        Action next = null;
+        if (!turnPlan.isEmpty()) {
+            Action candidate = turnPlan.remove(0);
+            if (candidate != null && candidate.isFeasible(gs)) {
+                next = candidate;
+            }
+        }
+        // Tier 2 (Greedy Random): cached step broke; pick a random valid action.
+        if (next == null) {
+            ArrayList<Action> availableActions = this.allGoodActions(gs, m_rnd);
+            if (availableActions != null && !availableActions.isEmpty()) {
+                next = availableActions.get(m_rnd.nextInt(availableActions.size()));
+            }
+        }
+        // Tier 3 (End Turn): nothing valid left.
+        if (next == null) {
+            next = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+        }
+        return next;
+    }
+
+    /**
+     * Plans the whole turn with a single phased (bridge-burning) search and caches the
+     * best full action sequence in turnPlan. Records this turn's telemetry:
+     * InitialSequenceValue (greedy root, pre-search), FinalSequenceValue (best node,
+     * post-search), nodesVisited (search iterations), and bridge-burn / crossover events.
+     */
+    protected void planTurn(GameState gs, ElapsedCpuTimer ect) {
+        turnStartTimeMillis = System.currentTimeMillis();
 
         this.fmCallsCount = 0;
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
@@ -76,12 +137,11 @@ public class ExperimentalEMCTSAgent extends Agent {
         root = randomActions(gs.copy());
         eval(gs.copy(), root);
 
-        if (turnNodesVisited == 0) {
-            initialSequenceValue = root.getValue();
-        }
+        double initialValue = root.getValue();
 
         bestNode = root;
         fmCallsRun = 0;
+        int nodesVisited = 0;
 
         // Initialize PriorityQueue for tracking top nodes (min heap by value to keep the top K elements)
         topNodesQueue = new PriorityQueue<>((n1, n2) -> Double.compare(n1.getValue(), n2.getValue()));
@@ -105,6 +165,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         while (!stop && currentPhase < params.depth) {
             ElapsedCpuTimer phaseTimer = new ElapsedCpuTimer();
             long phaseStartFmCalls = fmCallsCount;
+            int phaseStartIters = numIters;
             boolean phaseComplete = false;
 
             // Execute MCTS iterations within this phase
@@ -145,6 +206,7 @@ public class ExperimentalEMCTSAgent extends Agent {
                 }
 
                 child.visited();
+                nodesVisited++;  // one node per search iteration
 
                 // Track top nodes for crossover bridge burning
                 topNodesQueue.offer(child);
@@ -179,8 +241,21 @@ public class ExperimentalEMCTSAgent extends Agent {
                            (fmCallsRun > (params.num_fmcalls - fmCallsCount));
                 }
 
-                // Check if phase time is exhausted
-                if (phaseTimer.elapsedMillis() >= phaseTimeMs) {
+                // Phase completion is gated by the SAME budget as the stop criterion,
+                // so bridge burning triggers between phases regardless of stop_type.
+                // (Previously gated on wall-clock only, which never elapsed under
+                // STOP_FMCALLS/STOP_ITERATIONS, so bridge burning never ran.)
+                boolean phaseBudgetExhausted;
+                if (params.stop_type == params.STOP_FMCALLS) {
+                    long fmCallsPerPhase = Math.max(1, params.num_fmcalls / Math.max(1, params.depth));
+                    phaseBudgetExhausted = (fmCallsCount - phaseStartFmCalls) >= fmCallsPerPhase;
+                } else if (params.stop_type == params.STOP_ITERATIONS) {
+                    int itersPerPhase = Math.max(1, params.num_iterations / Math.max(1, params.depth));
+                    phaseBudgetExhausted = (numIters - phaseStartIters) >= itersPerPhase;
+                } else {
+                    phaseBudgetExhausted = phaseTimer.elapsedMillis() >= phaseTimeMs;
+                }
+                if (phaseBudgetExhausted) {
                     phaseComplete = true;
                 }
             }
@@ -191,7 +266,7 @@ public class ExperimentalEMCTSAgent extends Agent {
 
                 // Crossover Bridge Burning: Use crossover to generate new root candidates
                 if (params.useCrossoverBridgeBurning && topNodesQueue.size() >= 2) {
-                        newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase, turnStartTime);
+                        newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase, turnStartTimeMillis);
                 } else {
                     // Standard Bridge Burning: Promote best child
                     newRoot = findBestChild(root);
@@ -212,9 +287,12 @@ public class ExperimentalEMCTSAgent extends Agent {
                     // Clear and reset queue for next phase
                     topNodesQueue.clear();
                     topNodesQueue.offer(root);
-                    
+
                     // Continue search from new root
                     currentPhase++;
+
+                    // Record the bridge-burn (root promotion) trajectory point.
+                    recordBridgeBurn(currentPhase, root.getValue(), turnStartTimeMillis, gs.getTick());
                 } else {
                     // No improvement, exit phase loop
                     break;
@@ -225,45 +303,17 @@ public class ExperimentalEMCTSAgent extends Agent {
             }
         }
 
-        Action bestAction = null;
-        if (bestNode.getSequence() != null && !bestNode.getSequence().isEmpty()) {
-            bestAction = bestNode.returnNext();
-            if (bestAction != null && !bestAction.isFeasible(gs)) {
-                bestAction = null;
-            }
-        }
+        // Telemetry for this single turn-planning episode:
+        // Initial = greedy root (pre-search); Final = best node found (post-search);
+        // nodesVisited = number of search iterations this turn.
+        double finalValue = bestNode.getValue();
+        turnDataList.add(new TurnData(
+                -1, gs.getTick(), initialValue, finalValue, nodesVisited
+        ));
 
-        // Tier 1 is already bestAction
-
-        // Tier 2 (Random)
-        if (bestAction == null) {
-            ArrayList<Action> availableActions = this.allGoodActions(gs, m_rnd);
-            if (availableActions != null && !availableActions.isEmpty()) {
-                bestAction = availableActions.get(m_rnd.nextInt(availableActions.size()));
-            }
-        }
-
-        // Tier 3 (DoNothing/EndTurn)
-        if (bestAction == null) {
-            bestAction = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
-        }
-
-        if (!(bestAction instanceof core.actions.tribeactions.EndTurn)) {
-            finalSequenceValue = bestNode.getValue();
-        } else if (turnNodesVisited == 0) {
-            finalSequenceValue = bestNode.getValue();
-        }
-
-        turnNodesVisited += this.fmCallsCount; // standardizing evaluation workload
-
-        if (bestAction instanceof core.actions.tribeactions.EndTurn) {
-            turnDataList.add(new TurnData(
-                    -1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited
-            ));
-            turnNodesVisited = 0;
-        }
-
-        return bestAction;
+        // Cache the best full action sequence; act() replays it over the turn.
+        ArrayList<Action> bestSeq = bestNode.getSequence();
+        turnPlan = (bestSeq != null) ? new ArrayList<>(bestSeq) : new ArrayList<>();
     }
 
     @Override
@@ -720,7 +770,7 @@ public class ExperimentalEMCTSAgent extends Agent {
             }
         }
 
-        // Find the best among the original parent nodes
+        // Find the best among the up-to-8 elite parents (crossover MEASUREMENT baseline only).
         ExperimentalEMCTSTreeNode bestParent = topEight.get(0);
         for (ExperimentalEMCTSTreeNode parent : topEight) {
             if (parent.getValue() > bestParent.getValue()) {
@@ -728,28 +778,42 @@ public class ExperimentalEMCTSAgent extends Agent {
             }
         }
 
-        // Compare with the best parent node and return the winner
+        // New-root selection (per the ALGORITHMS spec): the standard bridge-burning target
+        // is the best immediate child of the root - identical to EMCTS / CrossoverExpansion.
+        // The bred candidate only replaces it if it strictly beats it. This keeps the
+        // non-crossover path identical to the baseline, so the experiment isolates the
+        // impact of crossover rather than also changing the fallback to "best of 8 elite".
+        ExperimentalEMCTSTreeNode standardBestChild = findBestChild(root);
         ExperimentalEMCTSTreeNode newRootCandidate;
-        if (bestCrossoverChild.getValue() > bestParent.getValue()) {
+        if (standardBestChild == null) {
+            newRootCandidate = bestCrossoverChild;
+        } else if (bestCrossoverChild.getValue() > standardBestChild.getValue()) {
             newRootCandidate = bestCrossoverChild;
         } else {
-            newRootCandidate = bestParent;
+            newRootCandidate = standardBestChild;
         }
 
         if (newRootCandidate.getValue() > bestNode.getValue()) {
             bestNode = newRootCandidate;
         }
 
-        // SCROLL SENSOR CORRECTION
+        // bestSequenceBefore: heuristic value of the BEST of the up-to-8 elite parent nodes
+        //   selected at the end of the previous search phase (before any breeding).
+        // bestSequenceAfter: heuristic value of the BEST of the 7 bred children, measured
+        //   directly off the crossover generation and BEFORE the tournament fallback that
+        //   may keep the parent — so this isolates breeding efficacy, not the final root.
         double scoreBefore = bestParent.getValue();
-        double scoreAfter = bestCrossoverChild.getValue(); // Measures the generation child directly, bypassing fallback allocation
+        double scoreAfter = bestCrossoverChild.getValue();
 
         double rawImprovement = scoreAfter - scoreBefore;
         double percentageImprovement = (scoreBefore == 0.0) ? 0.0 : ((rawImprovement) / Math.abs(scoreBefore)) * 100.0;
 
         long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
+        // Use 1-indexed phase number (currentPhase + 1) so this crossover event aligns
+        // with the BridgeBurnEventData recorded for the same promotion (which logs the
+        // post-increment phase), letting the two files join on (GameId, TurnNumber, phase).
         crossoverDataList.add(new CrossoverEventData(
-                -1, gs.getTick(), expansionPhaseTimestamp, currentPhase, scoreBefore, scoreAfter, rawImprovement, percentageImprovement
+                -1, gs.getTick(), expansionPhaseTimestamp, currentPhase + 1, scoreBefore, scoreAfter, rawImprovement, percentageImprovement
         ));
 
         return newRootCandidate;

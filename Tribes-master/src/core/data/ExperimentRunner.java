@@ -37,12 +37,12 @@ public class ExperimentRunner {
     public static class GameSimulationWorker implements Callable<SimulationResult> {
         private final Game game;
         private final int gameId;
-        private final int agentIndex;
+        private final Agent targetAgent;
 
-        public GameSimulationWorker(Game game, int gameId, int agentIndex) {
+        public GameSimulationWorker(Game game, int gameId, Agent targetAgent) {
             this.game = game;
             this.gameId = gameId;
-            this.agentIndex = agentIndex;
+            this.targetAgent = targetAgent;
         }
 
         @Override
@@ -50,19 +50,28 @@ public class ExperimentRunner {
             // Run the game synchronously on this thread
             game.run(null, null);
 
-            // Fetch players
+            // Locate the tracked agent by object identity. Game.init() reseats players
+            // according to tribe placement (which depends on the level seed), so the
+            // tracked agent is NOT necessarily at a fixed index. The same agent object
+            // references are reused, so identity matching is reliable.
             Agent[] players = game.getPlayers();
-            if (agentIndex >= players.length) {
-                throw new IllegalStateException("Agent index out of bounds.");
+            int resolvedIndex = -1;
+            for (int i = 0; i < players.length; i++) {
+                if (players[i] == targetAgent) {
+                    resolvedIndex = i;
+                    break;
+                }
             }
-            Agent targetAgent = players[agentIndex];
+            if (resolvedIndex < 0) {
+                throw new IllegalStateException("Tracked agent not found among game players.");
+            }
 
             // Reconstruct Agent name (could be enhanced, basic here)
             String[] agentChunks = targetAgent.getClass().toString().split("\\.");
             String agentName = agentChunks[agentChunks.length - 1];
 
             // Extract performance metrics
-            int score = game.getScores()[agentIndex];
+            int score = game.getScores()[resolvedIndex];
 
             int durationTurns = targetAgent.getGameDurationTurns();
 

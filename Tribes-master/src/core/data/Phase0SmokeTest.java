@@ -54,10 +54,13 @@ public class Phase0SmokeTest {
                     oepParams.POP_SIZE = 10;
                     agent = new OEPAgent(42, oepParams);
                 } else if (agentName.equals("EMCTSAgent")) {
+                    // EMCTS is a close mirror of the experimental agents (which derive from
+                    // it), so it is configured identically to CrossoverExpansionAgent:
+                    // STOP_FMCALLS + DIFF_HEURISTIC (defaults: depth=10, num_fmcalls=2000).
                     EMCTSParams emctsParams = new EMCTSParams();
-                    emctsParams.stop_type = emctsParams.STOP_ITERATIONS;
-                    emctsParams.num_iterations = 10;
-                    emctsParams.depth = 2;
+                    emctsParams.stop_type = emctsParams.STOP_FMCALLS;
+                    emctsParams.num_fmcalls = 8000; // match the experimental agents' budget
+                    emctsParams.heuristic_method = emctsParams.SIMPLE_HEURISTIC;
                     agent = new EMCTSAgent(42, emctsParams);
                 } else if (agentName.equals("CrossoverExpansionAgent")) {
                     agent = new CrossoverExpansionAgent(42);
@@ -73,8 +76,9 @@ public class Phase0SmokeTest {
                 Game game = new Game();
                 game.init(matchPlayers, 100 + i, tribes, 200 + i, gameMode);
 
-                // Track agent at index 0
-                workers.add(new ExperimentRunner.GameSimulationWorker(game, gameIdCounter++, 0));
+                // Track the experimental/baseline agent by reference (its seat index is
+                // resolved after init, since Game reseats players by tribe placement).
+                workers.add(new ExperimentRunner.GameSimulationWorker(game, gameIdCounter++, agent));
             }
         }
 

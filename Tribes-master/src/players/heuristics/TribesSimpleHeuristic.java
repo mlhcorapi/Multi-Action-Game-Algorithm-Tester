@@ -22,6 +22,17 @@ public class TribesSimpleHeuristic implements StateHeuristic{
         this.playerID = playerID;
     }
 
+    /**
+     * Two-argument form used by the (Experimental)EMCTS agents. SIMPLE is a RAW
+     * (absolute) state evaluation, so the old state is ignored and we return the raw
+     * value of the new state. (DIFF, by contrast, returns new-vs-old differences.)
+     */
+    @Override
+    public double evaluateState(GameState oldState, GameState newState)
+    {
+        return evaluateState(newState);
+    }
+
     @Override
     public double evaluateState(GameState gameState)
     {
