@@ -14,26 +14,47 @@ import utils.ElapsedCpuTimer;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Random;
-
+import core.data.dto.CrossoverEventData;
+import core.data.dto.TurnData;
 
 
 public class ExperimentalEMCTSAgent extends Agent {
 
-    private Random m_rnd;
-    private StateHeuristic heuristic;
-    private ExperimentalEMCTSParams params;
+    public ArrayList<CrossoverEventData> crossoverDataList = new ArrayList<>();
+    public ArrayList<TurnData> turnDataList = new ArrayList<>();
 
-    private ExperimentalEMCTSTreeNode root;
-    private ExperimentalEMCTSTreeNode bestNode;
-    private GameState old_gs;
+    @Override
+    public List<CrossoverEventData> getCrossoverDataLog() {
+        return crossoverDataList;
+    }
 
-    private int fmCallsCount;
-    private int fmCallsRun;
-    private PriorityQueue<ExperimentalEMCTSTreeNode> topNodesQueue;
-    private PriorityQueue<ExperimentalEMCTSTreeNode> globalTopNodesQueue;
-    private int crossoverExpansionCounter = 0;
+    @Override
+    public List<TurnData> getTurnDataLog() {
+        return turnDataList;
+    }
+
+    // variables to persist values across mid-turn act() invocations before gating TurnData logging via EndTurn
+    protected double initialSequenceValue;
+    protected double finalSequenceValue;
+    protected int turnNodesVisited = 0;
+
+
+    protected Random m_rnd;
+    protected StateHeuristic heuristic;
+    protected ExperimentalEMCTSParams params;
+
+    protected ExperimentalEMCTSTreeNode root;
+    protected ExperimentalEMCTSTreeNode bestNode;
+    protected GameState old_gs;
+
+    protected int fmCallsCount;
+    protected int fmCallsRun;
+    protected PriorityQueue<ExperimentalEMCTSTreeNode> topNodesQueue;
+    protected PriorityQueue<ExperimentalEMCTSTreeNode> globalTopNodesQueue;
+    protected int crossoverExpansionCounter = 0;
 
 
     public ExperimentalEMCTSAgent(long seed, ExperimentalEMCTSParams params) {
@@ -53,6 +74,10 @@ public class ExperimentalEMCTSAgent extends Agent {
         // Initialize root with 1-ply greedy initialization
         root = randomActions(gs.copy());
         eval(gs.copy(), root);
+
+        if (turnNodesVisited == 0) {
+            initialSequenceValue = root.getValue();
+        }
 
         bestNode = root;
         fmCallsRun = 0;
@@ -165,7 +190,7 @@ public class ExperimentalEMCTSAgent extends Agent {
 
                 // Crossover Bridge Burning: Use crossover to generate new root candidates
                 if (params.useCrossoverBridgeBurning && topNodesQueue.size() >= 2) {
-                    newRoot = performCrossoverBridgeBurning(gs.copy());
+                    newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase);
                 } else {
                     // Standard Bridge Burning: Promote best child
                     newRoot = findBestChild(root);
@@ -199,28 +224,45 @@ public class ExperimentalEMCTSAgent extends Agent {
             }
         }
 
-        if (bestNode.getSequence() == null || bestNode.getSequence().isEmpty()) {
-            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-            if (!allAvailableActions.isEmpty()) {
-                return allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+        Action bestAction = null;
+        if (bestNode.getSequence() != null && !bestNode.getSequence().isEmpty()) {
+            bestAction = bestNode.returnNext();
+            if (bestAction != null && !bestAction.isFeasible(gs)) {
+                bestAction = null;
             }
-            if (gs.canEndTurn(gs.getActiveTribeID())) {
-                return new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
-            }
-            return null;
         }
-        Action nextAct = bestNode.returnNext();
-        if (!nextAct.isFeasible(gs)) {
-            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
-            if (!allAvailableActions.isEmpty()) {
-                return allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+
+        // Tier 1 is already bestAction
+
+        // Tier 2 (Random)
+        if (bestAction == null) {
+            ArrayList<Action> availableActions = this.allGoodActions(gs, m_rnd);
+            if (availableActions != null && !availableActions.isEmpty()) {
+                bestAction = availableActions.get(m_rnd.nextInt(availableActions.size()));
             }
-            if (gs.canEndTurn(gs.getActiveTribeID())) {
-                return new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
-            }
-            return null;
         }
-        return nextAct;
+
+        // Tier 3 (DoNothing/EndTurn)
+        if (bestAction == null) {
+            bestAction = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+        }
+
+        if (!(bestAction instanceof core.actions.tribeactions.EndTurn)) {
+            finalSequenceValue = bestNode.getValue();
+        } else if (turnNodesVisited == 0) {
+            finalSequenceValue = bestNode.getValue();
+        }
+
+        turnNodesVisited += this.fmCallsCount; // standardizing evaluation workload
+
+        if (bestAction instanceof core.actions.tribeactions.EndTurn) {
+            turnDataList.add(new TurnData(
+                    -1, gs.getTick(), initialSequenceValue, finalSequenceValue, turnNodesVisited
+            ));
+            turnNodesVisited = 0;
+        }
+
+        return bestAction;
     }
 
     @Override
@@ -240,7 +282,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         }
     }
 
-    private ExperimentalEMCTSTreeNode nodeToExpand() {
+    protected ExperimentalEMCTSTreeNode nodeToExpand() {
         ArrayList<ExperimentalEMCTSTreeNode> children = root.getChildren();
 
         // If root has no children, return root for first mutation
@@ -287,7 +329,7 @@ public class ExperimentalEMCTSAgent extends Agent {
      * 1-ply greedy initialization: for each action in the sequence,
      * evaluate all available actions and select the one with the highest heuristic score.
      */
-    private ExperimentalEMCTSTreeNode randomActions(GameState gs) {
+    protected ExperimentalEMCTSTreeNode randomActions(GameState gs) {
         ArrayList<Action> individual = new ArrayList<>();
         
         while ((!gs.isGameOver() && (gs.getActiveTribeID() == getPlayerID())) && 
@@ -364,14 +406,14 @@ public class ExperimentalEMCTSAgent extends Agent {
     }
 
 
-    private void advance(GameState gs, Action move) {
+    protected void advance(GameState gs, Action move) {
         this.fmCallsCount++;
         this.fmCallsRun++;
         gs.advance(move, true);
     }
 
     //mutate a random action
-    private ExperimentalEMCTSTreeNode mutate(ExperimentalEMCTSTreeNode node, GameState gs) {
+    protected ExperimentalEMCTSTreeNode mutate(ExperimentalEMCTSTreeNode node, GameState gs) {
         GameState clone = gs.copy();
         ArrayList<Action> seq = node.getSequence();
         int moveToMutate = seq.isEmpty() ? 0 : m_rnd.nextInt(seq.size());
@@ -402,7 +444,7 @@ public class ExperimentalEMCTSAgent extends Agent {
      * Uses 1-ply greedy repair: if an action fails, replace it by selecting
      * the available action with the highest heuristic score.
      */
-    private ArrayList<Action> repair(ArrayList<Action> child, GameState gs) {
+    protected ArrayList<Action> repair(ArrayList<Action> child, GameState gs) {
         ArrayList<Action> repairedChild = new ArrayList<>();
 
         for (int a = 0; a < child.size(); a++) {
@@ -501,7 +543,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         return repairedChild;
     }
 
-    private boolean checkActionFeasibility(Action a, GameState gs) {
+    protected boolean checkActionFeasibility(Action a, GameState gs) {
         if (gs.isGameOver())
             return false;
 
@@ -529,7 +571,7 @@ public class ExperimentalEMCTSAgent extends Agent {
     }
 
     // try to see of the node can be extended
-    private void extend(ExperimentalEMCTSTreeNode node, GameState gs) {
+    protected void extend(ExperimentalEMCTSTreeNode node, GameState gs) {
         GameState clone = gs.copy();
         ArrayList<Action> currentActions = node.getSequence();
         ArrayList<Action> newActions = new ArrayList<>();
@@ -569,7 +611,7 @@ public class ExperimentalEMCTSAgent extends Agent {
      * Find the best child of a node based on highest value.
      * Used during bridge burning phase transitions.
      */
-    private ExperimentalEMCTSTreeNode findBestChild(ExperimentalEMCTSTreeNode node) {
+    protected ExperimentalEMCTSTreeNode findBestChild(ExperimentalEMCTSTreeNode node) {
         ArrayList<ExperimentalEMCTSTreeNode> children = node.getChildren();
         if (children.isEmpty()) {
             return null;
@@ -592,7 +634,7 @@ public class ExperimentalEMCTSAgent extends Agent {
      * Recursively unlink a tree node and all its descendants to allow garbage collection.
      * Called during bridge burning to free memory from abandoned branches.
      */
-    private void unlinkTree(ExperimentalEMCTSTreeNode node, ExperimentalEMCTSTreeNode protectedNode) {
+    protected void unlinkTree(ExperimentalEMCTSTreeNode node, ExperimentalEMCTSTreeNode protectedNode) {
         if (node == null || node == protectedNode) {
             return;
         }
@@ -615,7 +657,7 @@ public class ExperimentalEMCTSAgent extends Agent {
      * - Level 3: 2 children -> 1 child via crossover
      * All 7 children are evaluated, and the best is compared with bestNode to determine new root.
      */
-    private ExperimentalEMCTSTreeNode performCrossoverBridgeBurning(GameState gs) {
+    protected ExperimentalEMCTSTreeNode performCrossoverBridgeBurning(GameState gs, int currentPhase) {
         // Extract top 8 nodes from the priority queue
         ArrayList<ExperimentalEMCTSTreeNode> topEight = new ArrayList<>(topNodesQueue);
         
@@ -696,6 +738,18 @@ public class ExperimentalEMCTSAgent extends Agent {
         if (newRootCandidate.getValue() > bestNode.getValue()) {
             bestNode = newRootCandidate;
         }
+
+        double scoreBefore = bestParent.getValue();
+        double scoreAfter = newRootCandidate.getValue();
+
+        double rawImprovement = scoreAfter - scoreBefore;
+        double percentageImprovement = (scoreBefore == 0.0) ? 0.0 : ((rawImprovement) / Math.abs(scoreBefore)) * 100.0;
+
+        // CrossoverEventData (gameId, turnNumber, expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestSequenceBefore, bestSequenceAfter, rawImprovement, percentageImprovement)
+        crossoverDataList.add(new CrossoverEventData(
+                -1, gs.getTick(), 0, currentPhase, scoreBefore, scoreAfter, rawImprovement, percentageImprovement
+        ));
+
         return newRootCandidate;
     }
 
@@ -709,7 +763,7 @@ public class ExperimentalEMCTSAgent extends Agent {
      * @param gs Current game state for action validation and greedy evaluation
      * @return An ArrayList of actions representing the crossed-over and repaired sequence
      */
-    private ArrayList<Action> crossover(ExperimentalEMCTSTreeNode p1, ExperimentalEMCTSTreeNode p2, GameState gs) {
+    protected ArrayList<Action> crossover(ExperimentalEMCTSTreeNode p1, ExperimentalEMCTSTreeNode p2, GameState gs) {
         ArrayList<Action> seq1 = p1.getSequence();
         ArrayList<Action> seq2 = p2.getSequence();
         ArrayList<Action> crossoverSeq = new ArrayList<>();

@@ -74,7 +74,7 @@ public class EMCTSTreeNode {
     public void visited(){ times_visited++; } // if needs be
 
     public void refreshScore(float bias){
-        this.score = value + bias * Math.sqrt((Math.log((getParentVisited())/times_visited)));
+        this.score = this.value;
     }
 
     public void setGs(GameState gs) {

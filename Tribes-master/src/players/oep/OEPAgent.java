@@ -2,6 +2,7 @@ package players.oep;
 
 import core.Types;
 import core.actions.Action;
+import core.actions.tribeactions.EndTurn;
 import core.actions.cityactions.CityAction;
 import core.actions.unitactions.UnitAction;
 import core.actors.Actor;
@@ -11,13 +12,16 @@ import core.game.GameState;
 import players.Agent;
 import players.heuristics.StateHeuristic;
 import utils.ElapsedCpuTimer;
+import core.data.dto.TurnData;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Collections;
 import java.util.Random;
 
 
 public class OEPAgent extends Agent {
 
+    private List<TurnData> turnDataLog = new ArrayList<>();
     private Random m_rnd;
     private StateHeuristic heuristic;
     private OEPParams params;
@@ -35,7 +39,18 @@ public class OEPAgent extends Agent {
     }
 
     @Override
+    public List<TurnData> getTurnDataLog() {
+        return turnDataLog;
+    }
+
+    @Override
+    public int getNodesVisited() {
+        return -1;
+    }
+
+    @Override
     public Action act(GameState gs, ElapsedCpuTimer ect) {
+        double initialSequenceValue = 0.0;
         double avgTimeTaken;
         double acumTimeTaken = 0;
         long remaining;
@@ -58,6 +73,16 @@ public class OEPAgent extends Agent {
         this.bestIndividual = null;
         this.root = gs.copy();
 
+        // rate each individual and sort them
+        for(Individual individual : population){
+            individual.setValue(eval( individual));
+        }
+        Collections.sort(population, Collections.reverseOrder());
+        this.bestIndividual = population.get(population.size() - 1);
+        initialSequenceValue = this.bestIndividual.getValue();
+
+        boolean firstIteration = true;
+
         //keep going until time limit gone
         while(!stop){
 
@@ -65,12 +90,15 @@ public class OEPAgent extends Agent {
             ElapsedCpuTimer elapsedTimerIteration = new ElapsedCpuTimer();
             fmCallsRun = 0;
 
-            // rate each individual and sort them
-            for(Individual individual : population){
-                individual.setValue(eval( individual));
+            if (!firstIteration) {
+                // rate each individual and sort them
+                for(Individual individual : population){
+                    individual.setValue(eval( individual));
+                }
+                Collections.sort(population, Collections.reverseOrder());
+                this.bestIndividual = population.get(population.size() - 1);
             }
-            Collections.sort(population, Collections.reverseOrder());
-            this.bestIndividual = population.get(population.size() - 1);
+            firstIteration = false;
 
             //Kill the amount of the population that needs to die
             int amount =  (int)(population.size() * params.KILL_RATE);
@@ -120,7 +148,33 @@ public class OEPAgent extends Agent {
 
         }
         //System.out.println(numIters);
-        return  bestIndividual.returnNext();
+
+        Action bestAction = null;
+        double finalSequenceValue = 0.0;
+        int nodesVisited = -1; // Explicit requirement
+
+        if (this.bestIndividual != null) {
+            bestAction = this.bestIndividual.returnNext();
+            finalSequenceValue = this.bestIndividual.getValue();
+        } else {
+            finalSequenceValue = 0.0;
+            nodesVisited = 0;
+        }
+
+        if (bestAction == null) {
+            ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
+            if (!allAvailableActions.isEmpty()) {
+                bestAction = allAvailableActions.get(m_rnd.nextInt(allAvailableActions.size()));
+            } else {
+                bestAction = new core.actions.tribeactions.EndTurn(gs.getActiveTribeID());
+            }
+        }
+
+        if (bestAction instanceof core.actions.tribeactions.EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
+            turnDataLog.add(new TurnData(-1, gs.getTick(), initialSequenceValue, finalSequenceValue, nodesVisited));
+        }
+
+        return bestAction;
 
 
     }
