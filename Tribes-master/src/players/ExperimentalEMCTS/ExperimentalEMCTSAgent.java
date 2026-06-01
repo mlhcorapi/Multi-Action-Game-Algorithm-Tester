@@ -469,6 +469,21 @@ public class ExperimentalEMCTSAgent extends Agent {
         gs.advance(move, true);
     }
 
+    /**
+     * A turn's action sequence must end at the FIRST END_TURN. In solo (1-tribe) games the
+     * active tribe does not change after END_TURN, so the mutate/crossover/repair builders
+     * would otherwise keep generating actions PAST it into future turns, producing multi-turn
+     * plans the agent never executes (and inflating the final-sequence-value metric). Truncate.
+     */
+    protected ArrayList<Action> truncateAtEndTurn(ArrayList<Action> seq) {
+        ArrayList<Action> out = new ArrayList<>();
+        for (Action a : seq) {
+            out.add(a);
+            if (a != null && a.getActionType() == Types.ACTION.END_TURN) break;
+        }
+        return out;
+    }
+
     //mutate a random action
     protected ExperimentalEMCTSTreeNode mutate(ExperimentalEMCTSTreeNode node, GameState gs) {
         GameState clone = gs.copy();
@@ -489,7 +504,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         for (int i = moveToMutate + 1; i < seq.size(); i++) {
             newSeq.add(seq.get(i));
         }
-        newSeq = repair(newSeq, clone);
+        newSeq = truncateAtEndTurn(repair(newSeq, clone));
         ExperimentalEMCTSTreeNode newNode = new ExperimentalEMCTSTreeNode(newSeq, node);
         node.addChild(newNode);
 
@@ -932,6 +947,6 @@ public class ExperimentalEMCTSAgent extends Agent {
             }
         }
 
-        return repairedSeq;
+        return truncateAtEndTurn(repairedSeq);
     }
 }

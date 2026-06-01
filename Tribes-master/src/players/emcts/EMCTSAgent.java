@@ -392,6 +392,17 @@ public class EMCTSAgent extends Agent {
         gs.advance(move, true);
     }
 
+    /** Truncate a sequence at the first END_TURN (single-turn plan). In solo games the active
+     *  tribe does not change after END_TURN, so builders would otherwise run into future turns. */
+    private ArrayList<Action> truncateAtEndTurn(ArrayList<Action> seq) {
+        ArrayList<Action> out = new ArrayList<>();
+        for (Action a : seq) {
+            out.add(a);
+            if (a != null && a.getActionType() == Types.ACTION.END_TURN) break;
+        }
+        return out;
+    }
+
     //mutate a random action
     private EMCTSTreeNode mutate(EMCTSTreeNode node, GameState gs) {
         GameState clone = gs.copy();
@@ -412,7 +423,7 @@ public class EMCTSAgent extends Agent {
         for (int i = moveToMutate + 1; i < seq.size(); i++) {
             newSeq.add(seq.get(i));
         }
-        newSeq = repair(newSeq, clone);
+        newSeq = truncateAtEndTurn(repair(newSeq, clone));
         EMCTSTreeNode newNode = new EMCTSTreeNode(newSeq, node);
         node.addChild(newNode);
 
