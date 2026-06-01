@@ -16,8 +16,9 @@ There are **two phases**, run in this order:
 
 - **Phase 3 — Ratio selection + trajectory** (low-variance isolated setup): sweeps the
   CrossoverExpansion mutation:crossover-expansion ratio and records per-turn search trajectories,
-  then picks the best ratio by average `FinalSequenceValue`.
-- **Phase 2 — Win rates**: experimental-vs-baseline matchups, using the ratio chosen in Phase 3.
+  then picks the best ratio **per budget level** by average `FinalSequenceValue`.
+- **Phase 2 — Win rates**: experimental-vs-baseline matchups, using **{5 (a fixed standard), the
+  per-budget best ratio}** chosen in Phase 3.
 
 > Phase 3 runs **before** Phase 2 because it selects the crossover ratio that Phase 2 needs.
 > (The old standalone "Phase 1" ratio analysis was folded into Phase 3's controlled environment —
@@ -127,15 +128,16 @@ identical conditions and variance is low. Budgets: `500ms`, `1000ms`, `5000ms` (
 Configurations run:
 - `EMCTS` and `CrossoverBB` (ratio-independent),
 - `CrossoverExpansion` at each ratio in **{2, 5, 10, 15, 20}** (the sweep),
-- `CrossoverCombo` at the selected best ratio.
+- `CrossoverCombo` at **{5, the per-level best ratio}** (the standard 5 plus the per-budget best).
 
-**Ratio selection:** the best ratio is the one with the highest **average `FinalSequenceValue`**
-— the best heuristic value the search reaches. The tree search optimises heuristic value (it has
-no direct control over in-game score or combat; it only finds the highest-scoring sequence it
-can), so *search effectiveness*, not game outcome, is the right basis for the choice. To stop the
-larger budgets (which reach higher absolute values) from dominating, ratios are **ranked within
-each budget level** and the best average rank wins. Result → `phase3_best_ratio.txt`, consumed by
-Phase 2.
+**Ratio selection:** for **each budget level**, the best ratio is the one with the highest
+**average `FinalSequenceValue`** at that level — the best heuristic value the search reaches. The
+tree search optimises heuristic value (it has no direct control over in-game score or combat; it
+only finds the highest-scoring sequence it can), so *search effectiveness*, not game outcome, is
+the right basis. Selecting **per level** lets the best ratio differ by budget (e.g. 10 at 500 ms,
+5 at 1000 ms). Downstream — Phase 2 and this phase's `CrossoverCombo` trajectory — uses
+**{5 (a fixed standard baseline), best-for-that-level}** at each level. Result →
+`phase3_best_ratio.txt`, consumed by Phase 2.
 
 > **Why select the ratio here, not in a win-rate-vs-EMCTS phase?** Three reasons: (1) no
 > opponent-interference confound — the signal is the agent's own search quality, not the
@@ -153,8 +155,8 @@ Phase 2.
 |---|---|---|
 | `Phase3_turns_<level>.csv` | one row **per agent per turn**, every config (incl. all swept ratios) | `AgentName, Ratio, GameId, TurnNumber, ScoreAtTurnStart, InitialSequenceValue, FinalSequenceValue, NodesVisited, SequencesEvaluated, FinalScore` |
 | `Phase3_standardBB_<level>.csv` | one row per bridge-burn; standard burners (`EMCTS`, `CrossoverExpansion` at every swept ratio) | `AgentName, Ratio, GameId, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp, ScoreAtTurnStart, NodesVisited, SequencesEvaluated, FinalScore` |
-| `Phase3_crossoverBB_<level>.csv` | one row per bridge-burn; crossover burners (`CrossoverBB`, `CrossoverCombo`@best) | …same… **plus** `RawImprovement, PercentageImprovement` |
-| `phase3_best_ratio.txt` | summary | per-ratio average `FinalSequenceValue` per level + `BEST_RATIO=<n>` (read automatically by Phase 2) |
+| `Phase3_crossoverBB_<level>.csv` | one row per bridge-burn; crossover burners (`CrossoverBB`, `CrossoverCombo`@{5,best}) | …same… **plus** `RawImprovement, PercentageImprovement` |
+| `phase3_best_ratio.txt` | summary | per-ratio average `FinalSequenceValue` per level + a `BEST_RATIO_<level>=<n>` line per budget level (read automatically by Phase 2) |
 
 - `Ratio` is `NA` for the ratio-independent agents (`EMCTS`, `CrossoverBB`); the ratio value for
   `CrossoverExpansion`/`CrossoverCombo`. Filter the turns CSV to `AgentName=CrossoverExpansion`
@@ -169,7 +171,9 @@ Phase 2.
 **Goal:** competitive win rates of each experimental agent vs each baseline.
 **Setup:** 9 matchups (3 experimental × 3 baselines; experimental agents do not play each other),
 Capitals, 50-turn limit, IMPERIUS vs IMPERIUS2, 100 random-map games per matchup, at 500/1000 ms.
-`CrossoverExpansion`/`Combo` use the ratio chosen in Phase 3.
+`CrossoverExpansion`/`Combo` run at **{5 (standard), the per-budget best ratio}** from Phase 3 —
+each time level uses the best ratio Phase 3 found at the level of the same name (so 500 ms uses
+the 500 ms best, 1000 ms uses the 1000 ms best). When the best happens to be 5, only ratio 5 runs.
 
 **Output (`test_results/full/phase2/`):** one file per time level.
 

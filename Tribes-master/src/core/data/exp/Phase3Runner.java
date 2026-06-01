@@ -19,16 +19,17 @@ import java.util.*;
  *
  * This phase does two jobs:
  *   1. RATIO SELECTION. CrossoverExpansion is swept over several mutation:crossover-expansion
- *      ratios. The "best" ratio is the one with the highest AVERAGE FinalSequenceValue - the best
- *      heuristic value the search reaches. That is exactly what the tree search optimises (it has
- *      no control over in-game score or combat; it only finds the highest-scoring sequence it can),
- *      so search effectiveness, not game outcome, is the right basis for choosing the ratio. To
- *      avoid the budget-scale problem (larger budgets reach higher absolute values), ratios are
- *      RANKED within each budget level and the best average rank wins. Written to
- *      phase3_best_ratio.txt and consumed by Phase 2. (Done in the isolated setup, with no opponent
- *      interference, and without tuning on any agent that Phase 2 later tests against.)
+ *      ratios. The "best" ratio is chosen PER BUDGET LEVEL as the one with the highest AVERAGE
+ *      FinalSequenceValue at that level - the best heuristic value the search reaches. That is
+ *      exactly what the tree search optimises (it has no control over in-game score or combat; it
+ *      only finds the highest-scoring sequence it can), so search effectiveness, not game outcome,
+ *      is the right basis. Selecting per level (rather than one global ratio) lets the best ratio
+ *      differ by budget. Downstream (Phase 2 and this phase's Combo trajectory) uses
+ *      {5 (a fixed standard baseline), best-for-that-level} at each level. Written to
+ *      phase3_best_ratio.txt. (Done in the isolated setup, with no opponent interference, and
+ *      without tuning on any agent that Phase 2 later tests against.)
  *   2. TRAJECTORY. Per-bridge-burn curves for the agent families: EMCTS and CrossoverExpansion
- *      (standard burners) and CrossoverBB / CrossoverCombo@best (crossover burners).
+ *      (standard burners) and CrossoverBB / CrossoverCombo@{5,best} (crossover burners).
  *
  * Output (per budget level):
  *   - Phase3_turns_<level>.csv      : one row per agent per turn, for every config run (incl. all
@@ -37,8 +38,9 @@ import java.util.*;
  *   - Phase3_standardBB_<level>.csv : per-bridge-burn rows for the standard burners (EMCTS,
  *                                     CrossoverExpansion at every swept ratio).
  *   - Phase3_crossoverBB_<level>.csv: per-bridge-burn rows for the crossover burners (CrossoverBB,
- *                                     CrossoverCombo@best); also carries Raw/PercentageImprovement.
- *   - phase3_best_ratio.txt         : per-ratio average FinalSequenceValue per level + BEST_RATIO.
+ *                                     CrossoverCombo@{5,best}); also carries Raw/PercentageImprovement.
+ *   - phase3_best_ratio.txt         : per-ratio average FinalSequenceValue per level + a
+ *                                     BEST_RATIO_<level>=<n> line for each budget level.
  */
 public class Phase3Runner {
 
@@ -48,6 +50,9 @@ public class Phase3Runner {
 
     /** Mutation:crossover-expansion ratios swept for CrossoverExpansion (mutations per crossover). */
     public static final int[] DEFAULT_RATIOS = {2, 5, 10, 15, 20};
+
+    /** Fixed "standard" ratio always evaluated downstream alongside the per-level best. */
+    public static final int STANDARD_RATIO = 5;
 
     // Calibrated fmcall budgets ~500/1000/5000ms on the target machine (~30.8 fmcalls/ms; see Calibrate).
     // NB: the smallest level is 500ms (not 200ms): with bridge burns fixed at 20, the 20 mandatory
@@ -82,14 +87,15 @@ public class Phase3Runner {
                 "tribes=IMPERIUS (tracked agent) vs IMPERIUS2 (DoNothing/passive opponent)\n" +
                 "fixedLevelSeed=" + FIXED_LEVEL_SEED + " fixedGameSeed=" + FIXED_GAME_SEED + " agentSeed=" + AGENT_SEED_BASE + "+gameIndex\n" +
                 "ratiosSwept(CrossoverExpansion)=" + Arrays.toString(ratios) + "\n" +
-                "bestRatio=argmax avg FinalSequenceValue (rank-aggregated across budget levels)\n" +
+                "bestRatioPerLevel=argmax avg FinalSequenceValue; downstream uses {" + STANDARD_RATIO + ", best} per level\n" +
                 "budgets(fmcalls)=" + budgetsStr(levels) + "\n");
 
-        int totalMatchups = levels.length * (3 + ratios.length); // EMCTS + BB + (#ratios)Expansion + Combo
+        // pass 1 = EMCTS + CrossoverBB + (#ratios) Expansion; pass 2 = Combo at {5,best} per level (<=2 each).
+        int totalMatchups = levels.length * (2 + ratios.length) + levels.length * 2;
         int[] idx = {0};
 
         // ---- Pass 1: ratio-independent baselines + the CrossoverExpansion ratio sweep ----
-        // (CrossoverCombo needs the selected ratio, so it runs in pass 2.)
+        // (CrossoverCombo needs the per-level selected ratio, so it runs in pass 2.)
         for (Budget level : levels) {
             runConfig(dir, ckpt, done, level, tribes, numGames, threads, idx, totalMatchups,
                     ExpAgents.emcts(level.fmcalls), "EMCTS", -1, false);
@@ -101,16 +107,25 @@ public class Phase3Runner {
             }
         }
 
-        // ---- Select the best ratio by average FinalSequenceValue (read back from the turns CSVs) ----
-        int bestRatio = computeBestRatio(dir, levels, ratios);
+        // ---- Select the best ratio PER budget level by average FinalSequenceValue ----
+        Map<String, Integer> bestByLevel = computeBestRatioPerLevel(dir, levels, ratios);
 
-        // ---- Pass 2: CrossoverCombo at the selected ratio (crossover burner) ----
+        // ---- Pass 2: CrossoverCombo at {5 (standard), best-for-this-level} per level ----
         for (Budget level : levels) {
-            runConfig(dir, ckpt, done, level, tribes, numGames, threads, idx, totalMatchups,
-                    ExpAgents.crossoverCombo(level.fmcalls, bestRatio), "CrossoverCombo", bestRatio, true);
+            for (int r : comboRatiosFor(bestByLevel.get(level.name))) {
+                runConfig(dir, ckpt, done, level, tribes, numGames, threads, idx, totalMatchups,
+                        ExpAgents.crossoverCombo(level.fmcalls, r), "CrossoverCombo", r, true);
+            }
         }
 
-        System.out.println("[Phase3] Complete (best ratio=" + bestRatio + "). Output in " + dir.getPath());
+        System.out.println("[Phase3] Complete (best ratios by level=" + bestByLevel + "). Output in " + dir.getPath());
+    }
+
+    /** The ratio set used downstream at a given level: the standard ratio, plus the per-level best
+     *  (deduplicated, so just {STANDARD_RATIO} when the best is itself the standard). */
+    static int[] comboRatiosFor(Integer best) {
+        int b = (best == null) ? STANDARD_RATIO : best;
+        return (b == STANDARD_RATIO) ? new int[]{STANDARD_RATIO} : new int[]{STANDARD_RATIO, b};
     }
 
     /** Runs one configuration (tracked agent vs the passive opponent) and appends its per-turn and
@@ -202,48 +217,41 @@ public class Phase3Runner {
     }
 
     /**
-     * Reads the per-turn CSVs and picks the CrossoverExpansion ratio with the best AVERAGE
-     * FinalSequenceValue. Ratios are ranked WITHIN each budget level (rank 1 = highest average)
-     * and the best average rank across levels wins - this avoids letting the larger budgets
-     * (which reach higher absolute values) dominate the comparison. Writes phase3_best_ratio.txt.
+     * Reads the per-turn CSVs and picks, FOR EACH budget level, the CrossoverExpansion ratio with
+     * the best AVERAGE FinalSequenceValue at that level. Writes phase3_best_ratio.txt with the
+     * per-ratio averages and a machine-readable BEST_RATIO_<level>=<n> line per level.
      */
-    private static int computeBestRatio(File dir, Budget[] levels, int[] ratios) {
-        // level -> ratio -> [sumFinalSeq, count]
-        Map<String, Map<Integer, double[]>> agg = new LinkedHashMap<>();
-        for (Budget level : levels) {
-            Map<Integer, double[]> perRatio = new TreeMap<>();
-            agg.put(level.name, perRatio);
-            File turns = new File(dir, "Phase3_turns_" + level.name + ".csv");
-            if (!turns.exists()) continue;
-            try {
-                List<String> lines = Files.readAllLines(turns.toPath());
-                // header: AgentName,Ratio,GameId,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,...
-                for (int i = 1; i < lines.size(); i++) {
-                    String[] f = lines.get(i).split(",");
-                    if (f.length < 7) continue;
-                    if (!f[0].trim().equals("CrossoverExpansion")) continue;
-                    String rl = f[1].trim();
-                    if (rl.equals("NA")) continue;
-                    int ratio = Integer.parseInt(rl);
-                    double finalSeq = Double.parseDouble(f[6].trim());
-                    double[] sc = perRatio.computeIfAbsent(ratio, k -> new double[2]);
-                    sc[0] += finalSeq;
-                    sc[1] += 1;
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
-        Map<Integer, Integer> rankSum = new TreeMap<>();
-        Map<Integer, Integer> rankCount = new TreeMap<>();
-        for (int r : ratios) { rankSum.put(r, 0); rankCount.put(r, 0); }
-
+    private static Map<String, Integer> computeBestRatioPerLevel(File dir, Budget[] levels, int[] ratios) {
+        Map<String, Integer> bestByLevel = new LinkedHashMap<>();
         StringBuilder sb = new StringBuilder();
-        sb.append("Phase 3 - CrossoverExpansion average FinalSequenceValue by ratio (search effectiveness)\n");
-        sb.append("Best ratio = best average rank across budget levels (rank 1 = highest avg sequence value).\n\n");
+        sb.append("Phase 3 - CrossoverExpansion average FinalSequenceValue by ratio, per budget level.\n");
+        sb.append("Best ratio per level = highest average FinalSequenceValue (search effectiveness).\n");
+        sb.append("Phase 2 uses {" + STANDARD_RATIO + " (standard), best-for-that-level} at each shared budget level.\n\n");
+
         for (Budget level : levels) {
-            Map<Integer, double[]> perRatio = agg.get(level.name);
+            Map<Integer, double[]> perRatio = new TreeMap<>(); // ratio -> [sumFinalSeq, count]
+            File turns = new File(dir, "Phase3_turns_" + level.name + ".csv");
+            if (turns.exists()) {
+                try {
+                    List<String> lines = Files.readAllLines(turns.toPath());
+                    // header: AgentName,Ratio,GameId,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,...
+                    for (int i = 1; i < lines.size(); i++) {
+                        String[] f = lines.get(i).split(",");
+                        if (f.length < 7) continue;
+                        if (!f[0].trim().equals("CrossoverExpansion")) continue;
+                        String rl = f[1].trim();
+                        if (rl.equals("NA")) continue;
+                        int ratio = Integer.parseInt(rl);
+                        double finalSeq = Double.parseDouble(f[6].trim());
+                        double[] sc = perRatio.computeIfAbsent(ratio, k -> new double[2]);
+                        sc[0] += finalSeq;
+                        sc[1] += 1;
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
             List<double[]> avgs = new ArrayList<>(); // {ratio, avgFinalSeq}
             for (int r : ratios) {
                 double[] sc = perRatio.get(r);
@@ -251,46 +259,46 @@ public class Phase3Runner {
                 avgs.add(new double[]{r, avg});
             }
             avgs.sort((a, b) -> Double.compare(b[1], a[1])); // descending by avg
+
+            int best = ratios.length > 0 ? ratios[0] : STANDARD_RATIO;
+            if (!avgs.isEmpty() && avgs.get(0)[1] != Double.NEGATIVE_INFINITY) best = (int) avgs.get(0)[0];
+            bestByLevel.put(level.name, best);
+
             sb.append("  level ").append(level.name).append(":\n");
-            int rank = 1;
             for (double[] e : avgs) {
-                int r = (int) e[0];
                 String avgStr = (e[1] == Double.NEGATIVE_INFINITY) ? "n/a" : String.format("%.2f", e[1]);
-                sb.append(String.format("    rank %d : ratio %2d  avgFinalSeq=%s%n", rank, r, avgStr));
-                rankSum.merge(r, rank, Integer::sum);
-                rankCount.merge(r, 1, Integer::sum);
-                rank++;
+                sb.append(String.format("    ratio %2d  avgFinalSeq=%s%n", (int) e[0], avgStr));
             }
             sb.append("\n");
         }
 
-        int bestRatio = ratios.length > 0 ? ratios[0] : 5;
-        double bestAvgRank = Double.POSITIVE_INFINITY;
-        sb.append("Average rank across levels (lower is better):\n");
-        for (int r : ratios) {
-            double avgRank = rankCount.get(r) > 0 ? (double) rankSum.get(r) / rankCount.get(r) : Double.POSITIVE_INFINITY;
-            sb.append(String.format("  ratio %2d : avgRank=%.2f%n", r, avgRank));
-            if (avgRank < bestAvgRank) { bestAvgRank = avgRank; bestRatio = r; }
-        }
-        sb.append("BEST_RATIO=").append(bestRatio).append("\n");
+        sb.append("Selected best ratio per level (Phase 2 also always includes ratio ").append(STANDARD_RATIO).append("):\n");
+        for (Budget level : levels)
+            sb.append("BEST_RATIO_").append(level.name).append("=").append(bestByLevel.get(level.name)).append("\n");
         ExpCsv.writeText(new File(dir, "phase3_best_ratio.txt"), sb.toString());
         System.out.println("[Phase3] " + sb);
-        return bestRatio;
+        return bestByLevel;
     }
 
-    /** Reads BEST_RATIO from phase3_best_ratio.txt; defaults to 5 if absent. Used by Phase 2. */
-    public static int bestRatioFromPhase3(String phase3Dir) {
+    /** Reads the per-level BEST_RATIO_<level>=<n> lines from phase3_best_ratio.txt. Used by Phase 2. */
+    public static Map<String, Integer> bestRatiosByLevel(String phase3Dir) {
+        Map<String, Integer> map = new LinkedHashMap<>();
         File f = new File(phase3Dir, "phase3_best_ratio.txt");
-        int best = 5;
         if (f.exists()) {
             try {
-                for (String line : Files.readAllLines(f.toPath()))
-                    if (line.startsWith("BEST_RATIO=")) best = Integer.parseInt(line.substring("BEST_RATIO=".length()).trim());
+                for (String line : Files.readAllLines(f.toPath())) {
+                    if (line.startsWith("BEST_RATIO_")) {
+                        String rest = line.substring("BEST_RATIO_".length());
+                        int eq = rest.indexOf('=');
+                        if (eq > 0)
+                            map.put(rest.substring(0, eq).trim(), Integer.parseInt(rest.substring(eq + 1).trim()));
+                    }
+                }
             } catch (Exception e) { e.printStackTrace(); }
         } else {
-            System.out.println("[Phase3] WARNING: " + f.getPath() + " not found; defaulting ratio to 5.");
+            System.out.println("[Phase3] WARNING: " + f.getPath() + " not found; Phase 2 will default to ratio " + STANDARD_RATIO + ".");
         }
-        return best;
+        return map;
     }
 
     private static GameResult.AgentRecord recordFor(GameResult res, String name) {

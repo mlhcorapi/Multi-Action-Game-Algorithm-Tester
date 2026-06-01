@@ -1,6 +1,7 @@
 package core.data.exp;
 
 import java.io.File;
+import java.util.Map;
 
 /**
  * Single entry point for the full experiment suite. Runs in dependency order:
@@ -37,11 +38,11 @@ public class RunAllExperiments {
         banner("PHASE 3 - Ratio selection + trajectory", "4 EMCTS-family agents + CrossoverExpansion ratio sweep vs fixed passive opponent, SCORE/30, 50 games", t0);
         Phase3Runner.run(50, Phase3Runner.defaultLevels(), Phase3Runner.DEFAULT_RATIOS, threads, base + "/phase3");
 
-        int best = Phase3Runner.bestRatioFromPhase3(base + "/phase3");
-        System.out.println(">> Best crossover ratio (highest avg FinalSequenceValue) from Phase 3: " + best);
+        Map<String, Integer> bestByLevel = Phase3Runner.bestRatiosByLevel(base + "/phase3");
+        System.out.println(">> Best crossover ratio per budget level (highest avg FinalSequenceValue): " + bestByLevel);
 
         banner("PHASE 2 - Win rates", "3 experimental vs 3 baselines, Capitals/50, time budgets, 100 games", t0);
-        Phase2Runner.run(100, 50, Phase2Runner.defaultTimesMs(), new int[]{best}, threads, base + "/phase2");
+        Phase2Runner.run(100, 50, Phase2Runner.defaultTimesMs(), bestByLevel, threads, base + "/phase2");
 
         System.out.println("\n############################################################");
         System.out.println("# ALL PHASES COMPLETE in " + elapsed(t0) + ".  Output in " + new File(base).getAbsolutePath());
