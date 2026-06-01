@@ -49,18 +49,20 @@ public class Phase1Runner {
                 "budgets(fmcalls)=" + budgetsStr(levels) + "\n" +
                 "agents=EMCTS vs CrossoverExpansion\n");
 
+        int totalMatchups = levels.length * ratios.length, matchupIdx = 0;
         for (Budget level : levels) {
             File turnsCsv = new File(dir, "Phase1_turns_" + level.name + ".csv");
             File bbCsv = new File(dir, "Phase1_bridgeburns_" + level.name + ".csv");
             File gamesCsv = new File(dir, "Phase1_games_" + level.name + ".csv");
 
             for (int ratio : ratios) {
+                matchupIdx++;
                 String key = "level=" + level.name + ";ratio=" + ratio;
                 if (done.contains(key)) {
-                    System.out.println("[Phase1] SKIP (done): " + key);
+                    System.out.println("[Phase1] (" + matchupIdx + "/" + totalMatchups + ") SKIP (done): " + key);
                     continue;
                 }
-                System.out.println("[Phase1] RUN " + key + " (" + numGames + " games)");
+                System.out.println("[Phase1] (" + matchupIdx + "/" + totalMatchups + ") RUN " + key + " (" + numGames + " games)");
 
                 List<AgentSpec> specs = Arrays.asList(
                         ExpAgents.emcts(level.fmcalls),

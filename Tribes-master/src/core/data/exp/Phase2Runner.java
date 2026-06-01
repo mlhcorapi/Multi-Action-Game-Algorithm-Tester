@@ -47,6 +47,7 @@ public class Phase2Runner {
                 "baselines=MCTS,OEP,EMCTS  experimental=CrossoverExpansion,CrossoverBB,CrossoverCombo\n");
 
         String[] baselineNames = {"MCTS", "OEP", "EMCTS"};
+        int totalMatchups = timesMs.length * (1 + 2 * ratios.length) * baselineNames.length, matchupIdx = 0;
 
         for (int ms : timesMs) {
             // TIME budget shared across each turn's actions; agents self-limit via STOP_TIME
@@ -71,12 +72,13 @@ public class Phase2Runner {
 
                 for (String baseName : baselineNames) {
                     String matchup = expName + (ratioLabel.equals("NA") ? "" : "_r" + ratioLabel) + "_vs_" + baseName;
+                    matchupIdx++;
                     String key = "level=" + levelName + ";" + matchup;
                     if (done.contains(key)) {
-                        System.out.println("[Phase2] SKIP (done): " + key);
+                        System.out.println("[Phase2] (" + matchupIdx + "/" + totalMatchups + ") SKIP (done): " + key);
                         continue;
                     }
-                    System.out.println("[Phase2] RUN " + key + " (" + numGames + " games, " + ms + "ms/turn)");
+                    System.out.println("[Phase2] (" + matchupIdx + "/" + totalMatchups + ") RUN " + key + " (" + numGames + " games, " + ms + "ms/turn)");
 
                     AgentSpec expSpec = buildExperimentalTime(expName, ratio);
                     AgentSpec baseSpec = buildBaselineTime(baseName);

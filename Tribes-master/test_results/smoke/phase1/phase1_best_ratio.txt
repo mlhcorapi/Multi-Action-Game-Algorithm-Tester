@@ -1,5 +1,5 @@
 Phase 1 - CrossoverExpansion win-rate vs EMCTS (aggregated across budgets)
-  ratio  5 : 1/2 = 50.0%
-  ratio 20 : 1/2 = 50.0%
+  ratio  5 : 0/2 = 0.0%
+  ratio 20 : 0/2 = 0.0%
 BEST_RATIO=5
 NOTE=if BEST_RATIO==20, Phase 2 will also evaluate ratio 5 as a sanity baseline.

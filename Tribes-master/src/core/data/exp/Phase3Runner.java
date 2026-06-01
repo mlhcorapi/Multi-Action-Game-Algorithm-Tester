@@ -57,6 +57,7 @@ public class Phase3Runner {
                 "ratio(Expansion/Combo)=" + ratio + "\n" +
                 "budgets(fmcalls)=" + budgetsStr(levels) + "\n");
 
+        int totalMatchups = levels.length * 4, matchupIdx = 0;
         for (Budget level : levels) {
             File standardCsv = new File(dir, "Phase3_standardBB_" + level.name + ".csv");
             File crossoverCsv = new File(dir, "Phase3_crossoverBB_" + level.name + ".csv");
@@ -71,12 +72,13 @@ public class Phase3Runner {
             for (Object[] entry : agents) {
                 AgentSpec spec = (AgentSpec) entry[0];
                 boolean isCrossoverBB = (Boolean) entry[1];
+                matchupIdx++;
                 String key = "level=" + level.name + ";agent=" + spec.name;
                 if (done.contains(key)) {
-                    System.out.println("[Phase3] SKIP (done): " + key);
+                    System.out.println("[Phase3] (" + matchupIdx + "/" + totalMatchups + ") SKIP (done): " + key);
                     continue;
                 }
-                System.out.println("[Phase3] RUN " + key + " (" + numGames + " games)");
+                System.out.println("[Phase3] (" + matchupIdx + "/" + totalMatchups + ") RUN " + key + " (" + numGames + " games)");
 
                 List<GameResult> results = ExperimentEngine.runMatchup(
                         Arrays.asList(spec, ExpAgents.passiveOpponent()), tribes, Types.GAME_MODE.SCORE, numGames, 1,
