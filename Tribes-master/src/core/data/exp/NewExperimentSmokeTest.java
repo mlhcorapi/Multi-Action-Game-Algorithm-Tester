@@ -16,9 +16,10 @@ public class NewExperimentSmokeTest {
         deleteDir(new File(base));
 
         int games = 2;
-        int turnLimit = 8;   // short Capitals games so the smoke is fast
+        int turnLimit = 10;  // short Capitals games so the smoke is fast
         int threads = 4;
-        Budget[] tiny = { new Budget("tiny", 400) };
+        // Use a representative (not micro) budget so node counts / fmcalls are meaningful.
+        Budget[] tiny = { new Budget("b2000", 2000) };
 
         System.out.println("==================== PHASE 1 (smoke) ====================");
         Phase1Runner.run(games, turnLimit, tiny, new int[]{5, 20}, threads, base + "/phase1");

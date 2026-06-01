@@ -219,7 +219,7 @@ public class EMCTSAgent extends Agent {
                     // root's value (which degrades as the search dives) - this is the
                     // monotonic "expansion phase" curve.
                     long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTimeMillis;
-                    bridgeBurnDataLog.add(new BridgeBurnEventData(-1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestNode.getValue()));
+                    bridgeBurnDataLog.add(new BridgeBurnEventData(-1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestNode.getValue(), this.fmCallsCount));
 
                     // Continue search from new root
                     currentPhase++;

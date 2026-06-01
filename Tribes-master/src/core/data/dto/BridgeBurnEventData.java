@@ -6,13 +6,15 @@ public class BridgeBurnEventData {
     private final long expansionPhaseTimestamp;
     private final int bridgeBurningPhaseNumber;
     private final double bestSequenceValue;
+    private final int fmCallsElapsed; // forward-model calls done so far this turn (deterministic search-progress measure)
 
-    public BridgeBurnEventData(int gameId, int turnNumber, long expansionPhaseTimestamp, int bridgeBurningPhaseNumber, double bestSequenceValue) {
+    public BridgeBurnEventData(int gameId, int turnNumber, long expansionPhaseTimestamp, int bridgeBurningPhaseNumber, double bestSequenceValue, int fmCallsElapsed) {
         this.gameId = gameId;
         this.turnNumber = turnNumber;
         this.expansionPhaseTimestamp = expansionPhaseTimestamp;
         this.bridgeBurningPhaseNumber = bridgeBurningPhaseNumber;
         this.bestSequenceValue = bestSequenceValue;
+        this.fmCallsElapsed = fmCallsElapsed;
     }
 
     public int getGameId() {
@@ -35,6 +37,10 @@ public class BridgeBurnEventData {
         return bestSequenceValue;
     }
 
+    public int getFmCallsElapsed() {
+        return fmCallsElapsed;
+    }
+
     @Override
     public String toString() {
         return "BridgeBurnEventData{" +
@@ -43,6 +49,7 @@ public class BridgeBurnEventData {
                 ", expansionPhaseTimestamp=" + expansionPhaseTimestamp +
                 ", bridgeBurningPhaseNumber=" + bridgeBurningPhaseNumber +
                 ", bestSequenceValue=" + bestSequenceValue +
+                ", fmCallsElapsed=" + fmCallsElapsed +
                 '}';
     }
 }

@@ -51,7 +51,7 @@ public class ExperimentalEMCTSAgent extends Agent {
     protected void recordBridgeBurn(int bridgeBurningPhaseNumber, double bestSequenceValue, long turnStartTime, int tick) {
         long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
         bridgeBurnDataList.add(new BridgeBurnEventData(
-                -1, tick, expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestSequenceValue
+                -1, tick, expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestSequenceValue, this.fmCallsCount
         ));
     }
 
@@ -820,7 +820,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         // with the BridgeBurnEventData recorded for the same promotion (which logs the
         // post-increment phase), letting the two files join on (GameId, TurnNumber, phase).
         crossoverDataList.add(new CrossoverEventData(
-                -1, gs.getTick(), expansionPhaseTimestamp, currentPhase + 1, scoreBefore, scoreAfter, rawImprovement, percentageImprovement
+                -1, gs.getTick(), expansionPhaseTimestamp, currentPhase + 1, scoreBefore, scoreAfter, rawImprovement, percentageImprovement, this.fmCallsCount
         ));
 
         return newRootCandidate;

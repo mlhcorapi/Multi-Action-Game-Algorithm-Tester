@@ -99,6 +99,7 @@ public class Phase3Runner {
                         row.append(spec.name).append(",").append(res.gameId).append(",")
                            .append(b.getTurnNumber()).append(",").append(b.getBridgeBurningPhaseNumber()).append(",")
                            .append(ExpCsv.round(b.getBestSequenceValue())).append(",")
+                           .append(b.getFmCallsElapsed()).append(",")
                            .append(b.getExpansionPhaseTimestamp()).append(",")
                            .append(startScore).append(",").append(rec.finalScore);
                         if (isCrossoverBB) {
@@ -113,11 +114,11 @@ public class Phase3Runner {
 
                 if (isCrossoverBB) {
                     ExpCsv.append(crossoverCsv,
-                            "AgentName,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,Timestamp,ScoreAtTurnStart,FinalScore,RawImprovement,PercentageImprovement",
+                            "AgentName,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,FinalScore,RawImprovement,PercentageImprovement",
                             rows);
                 } else {
                     ExpCsv.append(standardCsv,
-                            "AgentName,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,Timestamp,ScoreAtTurnStart,FinalScore",
+                            "AgentName,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,FinalScore",
                             rows);
                 }
                 ExpCsv.markCompleted(ckpt, key);

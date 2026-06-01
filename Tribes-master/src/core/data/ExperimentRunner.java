@@ -113,13 +113,13 @@ public class ExperimentRunner {
 
                 List<BridgeBurnEventData> newBridgeBurns = new ArrayList<>();
                 for (BridgeBurnEventData bbd : result.bridgeBurns) {
-                    newBridgeBurns.add(new BridgeBurnEventData(gameId, bbd.getTurnNumber(), bbd.getExpansionPhaseTimestamp(), bbd.getBridgeBurningPhaseNumber(), bbd.getBestSequenceValue()));
+                    newBridgeBurns.add(new BridgeBurnEventData(gameId, bbd.getTurnNumber(), bbd.getExpansionPhaseTimestamp(), bbd.getBridgeBurningPhaseNumber(), bbd.getBestSequenceValue(), bbd.getFmCallsElapsed()));
                 }
                 result.bridgeBurns = newBridgeBurns;
 
                 List<CrossoverEventData> newCrossovers = new ArrayList<>();
                 for (CrossoverEventData ced : result.crossovers) {
-                    newCrossovers.add(new CrossoverEventData(gameId, ced.getTurnNumber(), ced.getExpansionPhaseTimestamp(), ced.getBridgeBurningPhaseNumber(), ced.getBestSequenceBefore(), ced.getBestSequenceAfter(), ced.getRawImprovement(), ced.getPercentageImprovement()));
+                    newCrossovers.add(new CrossoverEventData(gameId, ced.getTurnNumber(), ced.getExpansionPhaseTimestamp(), ced.getBridgeBurningPhaseNumber(), ced.getBestSequenceBefore(), ced.getBestSequenceAfter(), ced.getRawImprovement(), ced.getPercentageImprovement(), ced.getFmCallsElapsed()));
                 }
                 result.crossovers = newCrossovers;
 

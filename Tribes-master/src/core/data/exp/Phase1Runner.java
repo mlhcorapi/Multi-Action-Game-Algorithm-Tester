@@ -87,14 +87,15 @@ public class Phase1Runner {
                         for (BridgeBurnEventData b : rec.bridgeBurns) {
                             bbRows.add(ratio + "," + res.gameId + "," + rec.name + "," +
                                     b.getTurnNumber() + "," + b.getBridgeBurningPhaseNumber() + "," +
-                                    ExpCsv.round(b.getBestSequenceValue()) + "," + b.getExpansionPhaseTimestamp());
+                                    ExpCsv.round(b.getBestSequenceValue()) + "," +
+                                    b.getFmCallsElapsed() + "," + b.getExpansionPhaseTimestamp());
                         }
                     }
                     gameRows.add(ratio + "," + res.gameId + "," + res.winnerName + "," +
                             scoreOf(res, "EMCTS") + "," + scoreOf(res, "CrossoverExpansion") + "," + res.endTurn);
                 }
                 ExpCsv.append(turnsCsv, "Ratio,GameId,AgentName,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,NodesVisited", turnRows);
-                ExpCsv.append(bbCsv, "Ratio,GameId,AgentName,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,Timestamp", bbRows);
+                ExpCsv.append(bbCsv, "Ratio,GameId,AgentName,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp", bbRows);
                 ExpCsv.append(gamesCsv, "Ratio,GameId,Winner,EMCTSScore,CrossoverExpansionScore,EndTurn", gameRows);
 
                 ExpCsv.markCompleted(ckpt, key);

@@ -79,7 +79,7 @@ public class CsvDataHarvester {
              PrintWriter pw = new PrintWriter(fw)) {
 
             if (isNew) {
-                pw.println("GameId,TurnNumber,ExpansionPhaseTimestamp,BridgeBurningPhaseNumber,BestSequenceValue");
+                pw.println("GameId,TurnNumber,ExpansionPhaseTimestamp,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed");
             }
 
             for (BridgeBurnEventData event : events) {
@@ -87,7 +87,8 @@ public class CsvDataHarvester {
                         event.getTurnNumber() + "," +
                         event.getExpansionPhaseTimestamp() + "," +
                         event.getBridgeBurningPhaseNumber() + "," +
-                        round(event.getBestSequenceValue()));
+                        round(event.getBestSequenceValue()) + "," +
+                        event.getFmCallsElapsed());
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -104,7 +105,7 @@ public class CsvDataHarvester {
              PrintWriter pw = new PrintWriter(fw)) {
 
             if (isNew) {
-                pw.println("GameId,TurnNumber,ExpansionPhaseTimestamp,BridgeBurningPhaseNumber,BestSequenceBefore,BestSequenceAfter,RawImprovement,PercentageImprovement");
+                pw.println("GameId,TurnNumber,ExpansionPhaseTimestamp,BridgeBurningPhaseNumber,BestSequenceBefore,BestSequenceAfter,RawImprovement,PercentageImprovement,FmCallsElapsed");
             }
 
             for (CrossoverEventData event : events) {
@@ -115,7 +116,8 @@ public class CsvDataHarvester {
                         round(event.getBestSequenceBefore()) + "," +
                         round(event.getBestSequenceAfter()) + "," +
                         round(event.getRawImprovement()) + "," +
-                        round(event.getPercentageImprovement()));
+                        round(event.getPercentageImprovement()) + "," +
+                        event.getFmCallsElapsed());
             }
         } catch (IOException e) {
             e.printStackTrace();
