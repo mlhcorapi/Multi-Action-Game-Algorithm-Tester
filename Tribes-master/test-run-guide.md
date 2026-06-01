@@ -54,6 +54,11 @@ java -Xmx8g -cp "out;lib/*" core.data.exp.RunAllExperiments 4
   **Phase 2** (win rates), writing to `test_results/full/{phase3,phase2}/`.
 - **It is resumable**: if it is interrupted, just run the same command again — completed
   matchups are skipped (recorded in each phase's `_completed.txt`) and it continues.
+- **Crash-resilient**: the Tribes engine occasionally throws under deep search (a `ClassCastException`
+  of a unit to `City`). Such a game is automatically **re-run with a perturbed RNG seed** (the level
+  seed is kept fixed, so Phase 3's map is unchanged), up to 4 attempts, so each matchup still reaches
+  its full game count. A game that still fails after all attempts is logged (`[warn] … dropped`) and
+  that matchup finishes with one fewer game — rare in practice.
 
 You can also run the phases individually (each takes an optional thread count). **Run Phase 3
 first** — Phase 2 reads the ratio it writes:
@@ -120,10 +125,11 @@ Then edit the `defaultLevels()` / `defaultTimesMs()` numbers in the `PhaseNRunne
 mutation:crossover-expansion ratio, and (2) measure **how each EMCTS-family agent's search
 improves within a turn** (the bridge-burning trajectory) and how its score grows.
 
-**Setup:** SCORE mode, 30-turn limit. Each configuration plays **50** games on a **fixed map
-seed** against a **fixed passive opponent** (`DoNothing`, IMPERIUS2); only the tracked agent's
-RNG seed varies per game (game *k* uses the same seed across every config), so all configs face
-identical conditions and variance is low. Budgets: `500ms`, `1000ms`, `5000ms` (fmcalls).
+**Setup:** SCORE mode, 30-turn limit. Each configuration plays **50** games (the `5000ms` level
+plays **25**, since each game there costs ~5× as much and its ratio choice is not used by Phase 2)
+on a **fixed map seed** against a **fixed passive opponent** (`DoNothing`, IMPERIUS2); only the
+tracked agent's RNG seed varies per game (game *k* uses the same seed across every config), so all
+configs face identical conditions and variance is low. Budgets: `500ms`, `1000ms`, `5000ms` (fmcalls).
 
 Configurations run:
 - `EMCTS` and `CrossoverBB` (ratio-independent),
@@ -207,7 +213,10 @@ the 500 ms best, 1000 ms uses the 1000 ms best). When the best happens to be 5, 
   (one per search iteration). This is the count that *differs* between agents under a fixed FM budget:
   the crossover-bridge-burning variants spend FM calls on their per-transition tournaments, so they
   evaluate **fewer** distinct sequences than `EMCTS`/`Expansion` for the same `NodesVisited` (≈budget).
-  `-1` for MCTS (tree search) and OEP (not tracked).
+  `-1` for MCTS (tree search) and OEP (not tracked). It has a structural **floor of 20 per turn**
+  (one forced iteration per burning phase) and otherwise ≈ `budget ÷ per-iteration cost`, so it
+  varies widely with game state — the floor is reached only at very small budgets (≈2% of turns at
+  15000 fmcalls, ≈0% at 30000+).
 - **Bridge burns are fixed at 20 per turn for *every* agent** (`depth − 1`, `depth = 21`), so the
   *number* of burns is never a confound between families. Each turn's search is split into 21 phases,
   each given an equal **cumulative** slice of the budget, and a burn fires at each of the first 20

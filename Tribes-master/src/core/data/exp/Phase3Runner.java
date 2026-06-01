@@ -54,7 +54,10 @@ public class Phase3Runner {
     // any search - the crossover agents would overshoot it and barely search. At 15000+ the 20 burns
     // are a modest fraction of the budget, so every agent spends the same total fmcalls (see BurnBudgetCheck).
     public static Budget[] defaultLevels() {
-        return new Budget[]{ new Budget("500ms", 15000), new Budget("1000ms", 30000), new Budget("5000ms", 154000) };
+        // The 5000ms level costs ~5x per game of 1000ms, so it runs fewer games (25 vs 50) to keep
+        // total runtime manageable; its ratio choice only feeds this phase's own deep trajectory
+        // (Phase 2 has no 5000ms level), so halving its sample does not affect the win-rate phase.
+        return new Budget[]{ new Budget("500ms", 15000, 50), new Budget("1000ms", 30000, 50), new Budget("5000ms", 154000, 25) };
     }
 
     public static void run(int numGames, Budget[] levels, int[] ratios, int threads, String outDir) {
@@ -75,9 +78,12 @@ public class Phase3Runner {
         File ckpt = new File(dir, "_completed.txt");
         Set<String> done = ExpCsv.readCompleted(ckpt);
 
+        StringBuilder gamesPerLevel = new StringBuilder();
+        for (Budget b : levels) gamesPerLevel.append(b.name).append("=").append(b.games > 0 ? b.games : numGames).append("g ");
+
         ExpCsv.writeText(new File(dir, "config.txt"),
                 "Phase 3 - Ratio selection + trajectory (tracked agent vs fixed passive opponent)\n" +
-                "mode=SCORE turnLimit=" + scoreTurnLimit + " gamesPerConfig=" + numGames + " threads=" + threads + "\n" +
+                "mode=SCORE turnLimit=" + scoreTurnLimit + " gamesPerConfig(per level)=" + gamesPerLevel.toString().trim() + " threads=" + threads + "\n" +
                 "tribes=IMPERIUS (tracked agent) vs IMPERIUS2 (DoNothing/passive opponent)\n" +
                 "fixedLevelSeed=" + FIXED_LEVEL_SEED + " fixedGameSeed=" + FIXED_GAME_SEED + " agentSeed=" + AGENT_SEED_BASE + "+gameIndex\n" +
                 "ratioTest=CrossoverExpansion swept over " + Arrays.toString(ratios) + " (-> Phase3_ratio_turns/_trajectory)\n" +
@@ -92,12 +98,13 @@ public class Phase3Runner {
         // ---- Pass 1: family-trajectory baselines + the CrossoverExpansion ratio sweep ----
         // (CrossoverCombo needs the per-level selected ratio, so it runs in pass 2.)
         for (Budget level : levels) {
-            runConfig(dir, ckpt, done, level, tribes, numGames, threads, idx, totalMatchups,
+            int levelGames = (level.games > 0) ? level.games : numGames;
+            runConfig(dir, ckpt, done, level, tribes, levelGames, threads, idx, totalMatchups,
                     ExpAgents.emcts(level.fmcalls), "EMCTS", -1, Group.STANDARD_BB);
-            runConfig(dir, ckpt, done, level, tribes, numGames, threads, idx, totalMatchups,
+            runConfig(dir, ckpt, done, level, tribes, levelGames, threads, idx, totalMatchups,
                     ExpAgents.crossoverBB(level.fmcalls), "CrossoverBB", -1, Group.CROSSOVER_BB);
             for (int r : ratios) {
-                runConfig(dir, ckpt, done, level, tribes, numGames, threads, idx, totalMatchups,
+                runConfig(dir, ckpt, done, level, tribes, levelGames, threads, idx, totalMatchups,
                         ExpAgents.crossoverExpansion(level.fmcalls, r), "CrossoverExpansion", r, Group.RATIO);
             }
         }
@@ -107,8 +114,9 @@ public class Phase3Runner {
 
         // ---- Pass 2: CrossoverCombo at {5 (standard), best-for-this-level} per level ----
         for (Budget level : levels) {
+            int levelGames = (level.games > 0) ? level.games : numGames;
             for (int r : comboRatiosFor(bestByLevel.get(level.name))) {
-                runConfig(dir, ckpt, done, level, tribes, numGames, threads, idx, totalMatchups,
+                runConfig(dir, ckpt, done, level, tribes, levelGames, threads, idx, totalMatchups,
                         ExpAgents.crossoverCombo(level.fmcalls, r), "CrossoverCombo", r, Group.CROSSOVER_BB);
             }
         }
