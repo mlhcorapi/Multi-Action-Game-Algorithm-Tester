@@ -232,6 +232,10 @@ the 500 ms best, 1000 ms uses the 1000 ms best). When the best happens to be 5, 
 - **`FinalScore`** = the game's end-of-game score for that agent. It is a separate, *in-game* measure of
   performance; comparing it against `FinalSequenceValue` is really a measure of the heuristic's quality
   (how well heuristic value tracks in-game impact), which is why it is **not** used to choose the ratio.
+- **Maps** are **11×11** (`DEFAULT_MAP_SIZE` for 2 tribes) and **water-free** (the level generator runs
+  with `includeWater=false`, so the board is 100% land — no deep/shallow water, fish or whales). Because
+  of that, the runners enable `REMOVE_FISHING`, so the SIMPLE heuristic **penalises** the now-useless
+  naval techs (`FISHING/SAILING/WHALING/NAVIGATION/AQUATISM`) instead of rewarding their research.
 
 ---
 

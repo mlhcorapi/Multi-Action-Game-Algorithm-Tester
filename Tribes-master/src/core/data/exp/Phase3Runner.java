@@ -63,6 +63,9 @@ public class Phase3Runner {
     public static void run(int numGames, Budget[] levels, int[] ratios, int threads, String outDir) {
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
+        // Maps are water-free (LevelGenerator includeWater=false), so penalize the now-useless naval
+        // techs (FISHING/SAILING/WHALING/NAVIGATION/AQUATISM) in the SIMPLE heuristic.
+        Constants.REMOVE_FISHING = true;
         // fmcall-budgeted phase: ensure the engine does not impose any time cutoff.
         Constants.TURN_TIME_LIMITED = false;
         Constants.TURN_TIME_MILLIS = 10_000_000L;

@@ -34,6 +34,9 @@ public class Phase2Runner {
     public static void run(int numGames, int turnLimit, int[] timesMs, Map<String, Integer> bestRatioByLevel, int threads, String outDir) {
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
+        // Maps are water-free (LevelGenerator includeWater=false), so penalize the now-useless naval
+        // techs (FISHING/SAILING/WHALING/NAVIGATION/AQUATISM) in the SIMPLE heuristic.
+        Constants.REMOVE_FISHING = true;
         Constants.MAX_TURNS_CAPITALS = turnLimit;
         Types.TRIBE[] tribes = {Types.TRIBE.IMPERIUS, Types.TRIBE.IMPERIUS2};
 
