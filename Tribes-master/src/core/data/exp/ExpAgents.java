@@ -77,6 +77,15 @@ public class ExpAgents {
                 seed -> new CrossoverComboAgent(seed, expParams(fmcalls, ratio)));
     }
 
+    /**
+     * A fixed PASSIVE opponent (always ends its turn). Used as the 2nd tribe in Phase 3 so
+     * the map has expansion opportunities (a 1-tribe map is degenerate) while leaving the
+     * villages/development to the tracked experimental agent.
+     */
+    public static AgentSpec passiveOpponent() {
+        return new AgentSpec("Opponent", seed -> new players.DoNothingAgent(seed));
+    }
+
     // ---- STOP_TIME variants (Phase 2) ----
     // Under STOP_TIME the per-turn budget comes from the engine's ElapsedCpuTimer
     // (Constants.TURN_TIME_MILLIS, shared across a turn's actions), so per-action agents

@@ -1,5 +1,5 @@
 Ratio,GameId,Winner,EMCTSScore,CrossoverExpansionScore,EndTurn
-5,1,EMCTS,1803,1614,11
+5,1,CrossoverExpansion,1869,6659,11
 5,2,EMCTS,2086,1728,11
-20,1,CrossoverExpansion,1602,1645,11
-20,2,CrossoverExpansion,1490,1722,11
+20,1,EMCTS,2006,1406,11
+20,2,CrossoverExpansion,1490,1906,11

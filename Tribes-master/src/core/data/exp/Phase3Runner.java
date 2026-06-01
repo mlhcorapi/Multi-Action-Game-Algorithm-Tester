@@ -39,7 +39,10 @@ public class Phase3Runner {
         Constants.TURN_TIME_MILLIS = 10_000_000L;
         // SCORE mode uses Constants.MAX_TURNS (= 30, package-private; referenced as a literal below).
         final int scoreTurnLimit = 30;
-        Types.TRIBE[] tribes = {Types.TRIBE.IMPERIUS};
+        // A 1-tribe map is degenerate (no expansion -> every agent stalls), so we use a
+        // 2-tribe map with a fixed PASSIVE opponent: the map then has villages to capture,
+        // and the tracked experimental agent develops while the opponent never interferes.
+        Types.TRIBE[] tribes = {Types.TRIBE.IMPERIUS, Types.TRIBE.IMPERIUS2};
 
         File dir = new File(outDir);
         ExpCsv.ensureDir(dir);
@@ -47,9 +50,9 @@ public class Phase3Runner {
         Set<String> done = ExpCsv.readCompleted(ckpt);
 
         ExpCsv.writeText(new File(dir, "config.txt"),
-                "Phase 3 - Solo Trajectory Analysis\n" +
+                "Phase 3 - Trajectory Analysis (tracked agent vs fixed passive opponent)\n" +
                 "mode=SCORE turnLimit=" + scoreTurnLimit + " gamesPerAgent=" + numGames + " threads=" + threads + "\n" +
-                "tribe=IMPERIUS (solo)\n" +
+                "tribes=IMPERIUS (tracked agent) vs IMPERIUS2 (DoNothing/passive opponent)\n" +
                 "fixedLevelSeed=" + FIXED_LEVEL_SEED + " fixedGameSeed=" + FIXED_GAME_SEED + " agentSeed=" + AGENT_SEED_BASE + "+gameIndex\n" +
                 "ratio(Expansion/Combo)=" + ratio + "\n" +
                 "budgets(fmcalls)=" + budgetsStr(levels) + "\n");
@@ -76,7 +79,7 @@ public class Phase3Runner {
                 System.out.println("[Phase3] RUN " + key + " (" + numGames + " games)");
 
                 List<GameResult> results = ExperimentEngine.runMatchup(
-                        Collections.singletonList(spec), tribes, Types.GAME_MODE.SCORE, numGames, 1,
+                        Arrays.asList(spec, ExpAgents.passiveOpponent()), tribes, Types.GAME_MODE.SCORE, numGames, 1,
                         g -> FIXED_LEVEL_SEED, g -> FIXED_GAME_SEED, g -> AGENT_SEED_BASE + g,
                         threads,
                         (completed, total, r) -> {
@@ -86,7 +89,7 @@ public class Phase3Runner {
 
                 List<String> rows = new ArrayList<>();
                 for (GameResult res : results) {
-                    GameResult.AgentRecord rec = res.agents.get(0); // solo
+                    GameResult.AgentRecord rec = recordFor(res, spec.name); // the tracked experimental agent
                     Map<Integer, Integer> scoreAtTurn = new HashMap<>();
                     Map<Integer, Integer> nodesAtTurn = new HashMap<>();
                     for (TurnData t : rec.turns) {
@@ -133,6 +136,12 @@ public class Phase3Runner {
             }
         }
         System.out.println("[Phase3] Complete. Output in " + dir.getPath());
+    }
+
+    private static GameResult.AgentRecord recordFor(GameResult res, String name) {
+        for (GameResult.AgentRecord rec : res.agents)
+            if (rec.name.equals(name)) return rec;
+        return res.agents.get(0);
     }
 
     private static String budgetsStr(Budget[] levels) {
