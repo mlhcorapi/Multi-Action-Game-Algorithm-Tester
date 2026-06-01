@@ -34,9 +34,15 @@ public class Phase3Runner {
     public static void run(int numGames, Budget[] levels, int ratio, int threads, String outDir) {
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
+        // fmcall-budgeted phase: ensure the engine does not impose any time cutoff.
+        Constants.TURN_TIME_LIMITED = false;
+        Constants.TURN_TIME_MILLIS = 10_000_000L;
         // SCORE mode uses Constants.MAX_TURNS (= 30, package-private; referenced as a literal below).
         final int scoreTurnLimit = 30;
-        Types.TRIBE[] tribes = {Types.TRIBE.IMPERIUS};
+        // A 1-tribe map is degenerate (no expansion -> every agent stalls), so we use a
+        // 2-tribe map with a fixed PASSIVE opponent: the map then has villages to capture,
+        // and the tracked experimental agent develops while the opponent never interferes.
+        Types.TRIBE[] tribes = {Types.TRIBE.IMPERIUS, Types.TRIBE.IMPERIUS2};
 
         File dir = new File(outDir);
         ExpCsv.ensureDir(dir);
@@ -44,13 +50,14 @@ public class Phase3Runner {
         Set<String> done = ExpCsv.readCompleted(ckpt);
 
         ExpCsv.writeText(new File(dir, "config.txt"),
-                "Phase 3 - Solo Trajectory Analysis\n" +
+                "Phase 3 - Trajectory Analysis (tracked agent vs fixed passive opponent)\n" +
                 "mode=SCORE turnLimit=" + scoreTurnLimit + " gamesPerAgent=" + numGames + " threads=" + threads + "\n" +
-                "tribe=IMPERIUS (solo)\n" +
+                "tribes=IMPERIUS (tracked agent) vs IMPERIUS2 (DoNothing/passive opponent)\n" +
                 "fixedLevelSeed=" + FIXED_LEVEL_SEED + " fixedGameSeed=" + FIXED_GAME_SEED + " agentSeed=" + AGENT_SEED_BASE + "+gameIndex\n" +
                 "ratio(Expansion/Combo)=" + ratio + "\n" +
                 "budgets(fmcalls)=" + budgetsStr(levels) + "\n");
 
+        int totalMatchups = levels.length * 4, matchupIdx = 0;
         for (Budget level : levels) {
             File standardCsv = new File(dir, "Phase3_standardBB_" + level.name + ".csv");
             File crossoverCsv = new File(dir, "Phase3_crossoverBB_" + level.name + ".csv");
@@ -65,15 +72,16 @@ public class Phase3Runner {
             for (Object[] entry : agents) {
                 AgentSpec spec = (AgentSpec) entry[0];
                 boolean isCrossoverBB = (Boolean) entry[1];
+                matchupIdx++;
                 String key = "level=" + level.name + ";agent=" + spec.name;
                 if (done.contains(key)) {
-                    System.out.println("[Phase3] SKIP (done): " + key);
+                    System.out.println("[Phase3] (" + matchupIdx + "/" + totalMatchups + ") SKIP (done): " + key);
                     continue;
                 }
-                System.out.println("[Phase3] RUN " + key + " (" + numGames + " games)");
+                System.out.println("[Phase3] (" + matchupIdx + "/" + totalMatchups + ") RUN " + key + " (" + numGames + " games)");
 
                 List<GameResult> results = ExperimentEngine.runMatchup(
-                        Collections.singletonList(spec), tribes, Types.GAME_MODE.SCORE, numGames, 1,
+                        Arrays.asList(spec, ExpAgents.passiveOpponent()), tribes, Types.GAME_MODE.SCORE, numGames, 1,
                         g -> FIXED_LEVEL_SEED, g -> FIXED_GAME_SEED, g -> AGENT_SEED_BASE + g,
                         threads,
                         (completed, total, r) -> {
@@ -83,9 +91,15 @@ public class Phase3Runner {
 
                 List<String> rows = new ArrayList<>();
                 for (GameResult res : results) {
-                    GameResult.AgentRecord rec = res.agents.get(0); // solo
+                    GameResult.AgentRecord rec = recordFor(res, spec.name); // the tracked experimental agent
                     Map<Integer, Integer> scoreAtTurn = new HashMap<>();
-                    for (TurnData t : rec.turns) scoreAtTurn.put(t.getTurnNumber(), t.getScoreAtTurnStart());
+                    Map<Integer, Integer> nodesAtTurn = new HashMap<>();
+                    Map<Integer, Integer> seqAtTurn = new HashMap<>();
+                    for (TurnData t : rec.turns) {
+                        scoreAtTurn.put(t.getTurnNumber(), t.getScoreAtTurnStart());
+                        nodesAtTurn.put(t.getTurnNumber(), t.getNodesVisited());
+                        seqAtTurn.put(t.getTurnNumber(), t.getSequencesEvaluated());
+                    }
 
                     Map<String, CrossoverEventData> crossByTurnPhase = new HashMap<>();
                     if (isCrossoverBB) {
@@ -95,12 +109,16 @@ public class Phase3Runner {
 
                     for (BridgeBurnEventData b : rec.bridgeBurns) {
                         int startScore = scoreAtTurn.getOrDefault(b.getTurnNumber(), -1);
+                        int nodesThisTurn = nodesAtTurn.getOrDefault(b.getTurnNumber(), -1);
+                        int seqThisTurn = seqAtTurn.getOrDefault(b.getTurnNumber(), -1);
                         StringBuilder row = new StringBuilder();
                         row.append(spec.name).append(",").append(res.gameId).append(",")
                            .append(b.getTurnNumber()).append(",").append(b.getBridgeBurningPhaseNumber()).append(",")
                            .append(ExpCsv.round(b.getBestSequenceValue())).append(",")
+                           .append(b.getFmCallsElapsed()).append(",")
                            .append(b.getExpansionPhaseTimestamp()).append(",")
-                           .append(startScore).append(",").append(rec.finalScore);
+                           .append(startScore).append(",").append(nodesThisTurn).append(",")
+                           .append(seqThisTurn).append(",").append(rec.finalScore);
                         if (isCrossoverBB) {
                             CrossoverEventData c = crossByTurnPhase.get(b.getTurnNumber() + ":" + b.getBridgeBurningPhaseNumber());
                             double raw = (c != null) ? c.getRawImprovement() : 0.0;
@@ -113,17 +131,23 @@ public class Phase3Runner {
 
                 if (isCrossoverBB) {
                     ExpCsv.append(crossoverCsv,
-                            "AgentName,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,Timestamp,ScoreAtTurnStart,FinalScore,RawImprovement,PercentageImprovement",
+                            "AgentName,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore,RawImprovement,PercentageImprovement",
                             rows);
                 } else {
                     ExpCsv.append(standardCsv,
-                            "AgentName,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,Timestamp,ScoreAtTurnStart,FinalScore",
+                            "AgentName,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore",
                             rows);
                 }
                 ExpCsv.markCompleted(ckpt, key);
             }
         }
         System.out.println("[Phase3] Complete. Output in " + dir.getPath());
+    }
+
+    private static GameResult.AgentRecord recordFor(GameResult res, String name) {
+        for (GameResult.AgentRecord rec : res.agents)
+            if (rec.name.equals(name)) return rec;
+        return res.agents.get(0);
     }
 
     private static String budgetsStr(Budget[] levels) {

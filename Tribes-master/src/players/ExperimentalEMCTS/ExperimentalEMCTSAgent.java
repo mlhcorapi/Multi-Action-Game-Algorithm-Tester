@@ -51,7 +51,7 @@ public class ExperimentalEMCTSAgent extends Agent {
     protected void recordBridgeBurn(int bridgeBurningPhaseNumber, double bestSequenceValue, long turnStartTime, int tick) {
         long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
         bridgeBurnDataList.add(new BridgeBurnEventData(
-                -1, tick, expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestSequenceValue
+                -1, tick, expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestSequenceValue, this.fmCallsCount
         ));
     }
 
@@ -144,7 +144,7 @@ public class ExperimentalEMCTSAgent extends Agent {
 
         bestNode = root;
         fmCallsRun = 0;
-        int nodesVisited = 0;
+        int sequencesEvaluated = 0; // distinct candidate sequences evaluated this turn (one per search iteration)
 
         // Initialize PriorityQueue for tracking top nodes (min heap by value to keep the top K elements)
         topNodesQueue = new PriorityQueue<>((n1, n2) -> Double.compare(n1.getValue(), n2.getValue()));
@@ -209,7 +209,7 @@ public class ExperimentalEMCTSAgent extends Agent {
                 }
 
                 child.visited();
-                nodesVisited++;  // one node per search iteration
+                sequencesEvaluated++;
 
                 // Track top nodes for crossover bridge burning
                 topNodesQueue.offer(child);
@@ -312,10 +312,11 @@ public class ExperimentalEMCTSAgent extends Agent {
 
         // Telemetry for this single turn-planning episode:
         // Initial = greedy root (pre-search); Final = best node found (post-search);
-        // nodesVisited = number of search iterations this turn.
+        // nodesVisited = forward-model calls this turn (the computational-workload metric;
+        // dominated by sequence evaluations + greedy repair, in the thousands at real budgets).
         double finalValue = bestNode.getValue();
         turnDataList.add(new TurnData(
-                -1, gs.getTick(), initialValue, finalValue, nodesVisited, scoreAtTurnStart
+                -1, gs.getTick(), initialValue, finalValue, this.fmCallsCount, scoreAtTurnStart, sequencesEvaluated
         ));
 
         // Cache the best full action sequence; act() replays it over the turn.
@@ -470,6 +471,21 @@ public class ExperimentalEMCTSAgent extends Agent {
         gs.advance(move, true);
     }
 
+    /**
+     * A turn's action sequence must end at the FIRST END_TURN. In solo (1-tribe) games the
+     * active tribe does not change after END_TURN, so the mutate/crossover/repair builders
+     * would otherwise keep generating actions PAST it into future turns, producing multi-turn
+     * plans the agent never executes (and inflating the final-sequence-value metric). Truncate.
+     */
+    protected ArrayList<Action> truncateAtEndTurn(ArrayList<Action> seq) {
+        ArrayList<Action> out = new ArrayList<>();
+        for (Action a : seq) {
+            out.add(a);
+            if (a != null && a.getActionType() == Types.ACTION.END_TURN) break;
+        }
+        return out;
+    }
+
     //mutate a random action
     protected ExperimentalEMCTSTreeNode mutate(ExperimentalEMCTSTreeNode node, GameState gs) {
         GameState clone = gs.copy();
@@ -490,7 +506,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         for (int i = moveToMutate + 1; i < seq.size(); i++) {
             newSeq.add(seq.get(i));
         }
-        newSeq = repair(newSeq, clone);
+        newSeq = truncateAtEndTurn(repair(newSeq, clone));
         ExperimentalEMCTSTreeNode newNode = new ExperimentalEMCTSTreeNode(newSeq, node);
         node.addChild(newNode);
 
@@ -820,7 +836,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         // with the BridgeBurnEventData recorded for the same promotion (which logs the
         // post-increment phase), letting the two files join on (GameId, TurnNumber, phase).
         crossoverDataList.add(new CrossoverEventData(
-                -1, gs.getTick(), expansionPhaseTimestamp, currentPhase + 1, scoreBefore, scoreAfter, rawImprovement, percentageImprovement
+                -1, gs.getTick(), expansionPhaseTimestamp, currentPhase + 1, scoreBefore, scoreAfter, rawImprovement, percentageImprovement, this.fmCallsCount
         ));
 
         return newRootCandidate;
@@ -933,6 +949,6 @@ public class ExperimentalEMCTSAgent extends Agent {
             }
         }
 
-        return repairedSeq;
+        return truncateAtEndTurn(repairedSeq);
     }
 }

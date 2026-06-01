@@ -31,6 +31,9 @@ public class Phase1Runner {
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
         Constants.MAX_TURNS_CAPITALS = turnLimit;
+        // fmcall-budgeted phase: ensure the engine does not impose any time cutoff.
+        Constants.TURN_TIME_LIMITED = false;
+        Constants.TURN_TIME_MILLIS = 10_000_000L;
         Types.TRIBE[] tribes = {Types.TRIBE.IMPERIUS, Types.TRIBE.IMPERIUS2};
 
         File dir = new File(outDir);
@@ -46,18 +49,20 @@ public class Phase1Runner {
                 "budgets(fmcalls)=" + budgetsStr(levels) + "\n" +
                 "agents=EMCTS vs CrossoverExpansion\n");
 
+        int totalMatchups = levels.length * ratios.length, matchupIdx = 0;
         for (Budget level : levels) {
             File turnsCsv = new File(dir, "Phase1_turns_" + level.name + ".csv");
             File bbCsv = new File(dir, "Phase1_bridgeburns_" + level.name + ".csv");
             File gamesCsv = new File(dir, "Phase1_games_" + level.name + ".csv");
 
             for (int ratio : ratios) {
+                matchupIdx++;
                 String key = "level=" + level.name + ";ratio=" + ratio;
                 if (done.contains(key)) {
-                    System.out.println("[Phase1] SKIP (done): " + key);
+                    System.out.println("[Phase1] (" + matchupIdx + "/" + totalMatchups + ") SKIP (done): " + key);
                     continue;
                 }
-                System.out.println("[Phase1] RUN " + key + " (" + numGames + " games)");
+                System.out.println("[Phase1] (" + matchupIdx + "/" + totalMatchups + ") RUN " + key + " (" + numGames + " games)");
 
                 List<AgentSpec> specs = Arrays.asList(
                         ExpAgents.emcts(level.fmcalls),
@@ -82,19 +87,21 @@ public class Phase1Runner {
                             turnRows.add(ratio + "," + res.gameId + "," + rec.name + "," +
                                     t.getTurnNumber() + "," + t.getScoreAtTurnStart() + "," +
                                     ExpCsv.round(t.getInitialSequenceValue()) + "," +
-                                    ExpCsv.round(t.getFinalSequenceValue()) + "," + t.getNodesVisited());
+                                    ExpCsv.round(t.getFinalSequenceValue()) + "," + t.getNodesVisited() + "," +
+                                    t.getSequencesEvaluated());
                         }
                         for (BridgeBurnEventData b : rec.bridgeBurns) {
                             bbRows.add(ratio + "," + res.gameId + "," + rec.name + "," +
                                     b.getTurnNumber() + "," + b.getBridgeBurningPhaseNumber() + "," +
-                                    ExpCsv.round(b.getBestSequenceValue()) + "," + b.getExpansionPhaseTimestamp());
+                                    ExpCsv.round(b.getBestSequenceValue()) + "," +
+                                    b.getFmCallsElapsed() + "," + b.getExpansionPhaseTimestamp());
                         }
                     }
                     gameRows.add(ratio + "," + res.gameId + "," + res.winnerName + "," +
                             scoreOf(res, "EMCTS") + "," + scoreOf(res, "CrossoverExpansion") + "," + res.endTurn);
                 }
-                ExpCsv.append(turnsCsv, "Ratio,GameId,AgentName,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,NodesVisited", turnRows);
-                ExpCsv.append(bbCsv, "Ratio,GameId,AgentName,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,Timestamp", bbRows);
+                ExpCsv.append(turnsCsv, "Ratio,GameId,AgentName,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,NodesVisited,SequencesEvaluated", turnRows);
+                ExpCsv.append(bbCsv, "Ratio,GameId,AgentName,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp", bbRows);
                 ExpCsv.append(gamesCsv, "Ratio,GameId,Winner,EMCTSScore,CrossoverExpansionScore,EndTurn", gameRows);
 
                 ExpCsv.markCompleted(ckpt, key);

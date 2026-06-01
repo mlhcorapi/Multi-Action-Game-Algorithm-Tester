@@ -191,7 +191,7 @@ public class OEPAgent extends Agent {
         // Initial sequence value is not meaningful for OEP (pre-evolution random pop),
         // so it is logged as 0.0; Final = the value of the turn plan OEP commits to.
         if (bestAction instanceof core.actions.tribeactions.EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
-            turnDataLog.add(new TurnData(-1, gs.getTick(), 0.0, turnPlanValue, nodesVisited, turnStartScore));
+            turnDataLog.add(new TurnData(-1, gs.getTick(), 0.0, turnPlanValue, nodesVisited, turnStartScore, -1));
         }
 
         return bestAction;

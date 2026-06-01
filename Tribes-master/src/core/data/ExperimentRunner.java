@@ -107,19 +107,19 @@ public class ExperimentRunner {
 
                 List<TurnData> newTurns = new ArrayList<>();
                 for (TurnData td : result.turns) {
-                    newTurns.add(new TurnData(gameId, td.getTurnNumber(), td.getInitialSequenceValue(), td.getFinalSequenceValue(), td.getNodesVisited(), td.getScoreAtTurnStart()));
+                    newTurns.add(new TurnData(gameId, td.getTurnNumber(), td.getInitialSequenceValue(), td.getFinalSequenceValue(), td.getNodesVisited(), td.getScoreAtTurnStart(), td.getSequencesEvaluated()));
                 }
                 result.turns = newTurns;
 
                 List<BridgeBurnEventData> newBridgeBurns = new ArrayList<>();
                 for (BridgeBurnEventData bbd : result.bridgeBurns) {
-                    newBridgeBurns.add(new BridgeBurnEventData(gameId, bbd.getTurnNumber(), bbd.getExpansionPhaseTimestamp(), bbd.getBridgeBurningPhaseNumber(), bbd.getBestSequenceValue()));
+                    newBridgeBurns.add(new BridgeBurnEventData(gameId, bbd.getTurnNumber(), bbd.getExpansionPhaseTimestamp(), bbd.getBridgeBurningPhaseNumber(), bbd.getBestSequenceValue(), bbd.getFmCallsElapsed()));
                 }
                 result.bridgeBurns = newBridgeBurns;
 
                 List<CrossoverEventData> newCrossovers = new ArrayList<>();
                 for (CrossoverEventData ced : result.crossovers) {
-                    newCrossovers.add(new CrossoverEventData(gameId, ced.getTurnNumber(), ced.getExpansionPhaseTimestamp(), ced.getBridgeBurningPhaseNumber(), ced.getBestSequenceBefore(), ced.getBestSequenceAfter(), ced.getRawImprovement(), ced.getPercentageImprovement()));
+                    newCrossovers.add(new CrossoverEventData(gameId, ced.getTurnNumber(), ced.getExpansionPhaseTimestamp(), ced.getBridgeBurningPhaseNumber(), ced.getBestSequenceBefore(), ced.getBestSequenceAfter(), ced.getRawImprovement(), ced.getPercentageImprovement(), ced.getFmCallsElapsed()));
                 }
                 result.crossovers = newCrossovers;
 

@@ -122,6 +122,7 @@ public class EMCTSAgent extends Agent {
 
         bestNode = root;
         fmCallsRun = 0;
+        int sequencesEvaluated = 0; // distinct candidate sequences evaluated this turn (one per search iteration)
 
         // Phase-based bridge burning approach
         long totalTimeMs = ect.remainingTimeMillis();
@@ -150,7 +151,6 @@ public class EMCTSAgent extends Agent {
                 // Standard MCTS iteration: select, mutate once, evaluate, backpropagate
                 EMCTSTreeNode toMutate = nodeToExpand();
                 EMCTSTreeNode child = mutate(toMutate, gs.copy());
-                this.totalNodesVisited++;  // one node per search iteration (mirrors experimental agents)
                 eval(gs.copy(), child);
 
                 if (child.getValue() > bestNode.getValue()) {
@@ -158,6 +158,7 @@ public class EMCTSAgent extends Agent {
                 }
 
                 child.visited();
+                sequencesEvaluated++;
 
                 // Backpropagate score up the tree (standard UCB update)
                 EMCTSTreeNode current = child;
@@ -219,7 +220,7 @@ public class EMCTSAgent extends Agent {
                     // root's value (which degrades as the search dives) - this is the
                     // monotonic "expansion phase" curve.
                     long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTimeMillis;
-                    bridgeBurnDataLog.add(new BridgeBurnEventData(-1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestNode.getValue()));
+                    bridgeBurnDataLog.add(new BridgeBurnEventData(-1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestNode.getValue(), this.fmCallsCount));
 
                     // Continue search from new root
                     currentPhase++;
@@ -236,8 +237,11 @@ public class EMCTSAgent extends Agent {
         // Telemetry for this single turn-planning episode:
         // Initial = greedy root (pre-search); Final = best node found (post-search);
         // nodesVisited = number of search iterations this turn.
+        // nodesVisited = forward-model calls this turn (the computational-workload metric;
+        // dominated by sequence evaluations + greedy repair, in the thousands at real budgets).
+        this.totalNodesVisited = this.fmCallsCount;
         double finalValue = bestNode.getValue();
-        turnDataLog.add(new TurnData(-1, gs.getTick(), initialValue, finalValue, totalNodesVisited, scoreAtTurnStart));
+        turnDataLog.add(new TurnData(-1, gs.getTick(), initialValue, finalValue, totalNodesVisited, scoreAtTurnStart, sequencesEvaluated));
 
         // Cache the best full action sequence; act() replays it over the turn.
         ArrayList<Action> bestSeq = bestNode.getSequence();
@@ -390,6 +394,17 @@ public class EMCTSAgent extends Agent {
         gs.advance(move, true);
     }
 
+    /** Truncate a sequence at the first END_TURN (single-turn plan). In solo games the active
+     *  tribe does not change after END_TURN, so builders would otherwise run into future turns. */
+    private ArrayList<Action> truncateAtEndTurn(ArrayList<Action> seq) {
+        ArrayList<Action> out = new ArrayList<>();
+        for (Action a : seq) {
+            out.add(a);
+            if (a != null && a.getActionType() == Types.ACTION.END_TURN) break;
+        }
+        return out;
+    }
+
     //mutate a random action
     private EMCTSTreeNode mutate(EMCTSTreeNode node, GameState gs) {
         GameState clone = gs.copy();
@@ -410,7 +425,7 @@ public class EMCTSAgent extends Agent {
         for (int i = moveToMutate + 1; i < seq.size(); i++) {
             newSeq.add(seq.get(i));
         }
-        newSeq = repair(newSeq, clone);
+        newSeq = truncateAtEndTurn(repair(newSeq, clone));
         EMCTSTreeNode newNode = new EMCTSTreeNode(newSeq, node);
         node.addChild(newNode);
 

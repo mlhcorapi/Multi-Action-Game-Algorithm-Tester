@@ -16,19 +16,20 @@ public class NewExperimentSmokeTest {
         deleteDir(new File(base));
 
         int games = 2;
-        int turnLimit = 8;   // short Capitals games so the smoke is fast
+        int turnLimit = 10;  // short Capitals games so the smoke is fast
         int threads = 4;
-        Budget[] tiny = { new Budget("tiny", 400) };
+        // Use a representative (not micro) budget so node counts / fmcalls are meaningful.
+        Budget[] tiny = { new Budget("b2000", 2000) };
 
         System.out.println("==================== PHASE 1 (smoke) ====================");
         Phase1Runner.run(games, turnLimit, tiny, new int[]{5, 20}, threads, base + "/phase1");
 
-        System.out.println("==================== PHASE 2 (smoke) ====================");
+        System.out.println("==================== PHASE 2 (smoke, TIME budget) ====================");
         int[] ratios = Phase2Runner.ratiosFromPhase1(base + "/phase1");
         System.out.println("  (ratios from Phase 1: " + java.util.Arrays.toString(ratios) + ")");
-        Phase2Runner.run(games, turnLimit, tiny, ratios, threads, base + "/phase2");
+        Phase2Runner.run(games, turnLimit, new int[]{40}, ratios, threads, base + "/phase2"); // 40ms/turn for a fast smoke
 
-        System.out.println("==================== PHASE 3 (smoke, solo 1-tribe) ====================");
+        System.out.println("==================== PHASE 3 (smoke, vs passive opponent) ====================");
         Phase3Runner.run(games, tiny, ratios[0], threads, base + "/phase3");
 
         System.out.println("\n==================== VERIFICATION ====================");
@@ -40,7 +41,7 @@ public class NewExperimentSmokeTest {
         System.out.println("\nphase1_best_ratio.txt present: " + bestRatio.exists());
         System.out.println("Total smoke time: " + (System.currentTimeMillis() - t0) / 1000.0 + "s");
         System.out.println("If all CSVs above have >1 line (header + data) and Phase 3 produced rows,");
-        System.out.println("the solo SCORE mode works and the pipeline is healthy.");
+        System.out.println("the SCORE-mode (vs passive opponent) games work and the pipeline is healthy.");
     }
 
     private static void verifyDir(File dir) {

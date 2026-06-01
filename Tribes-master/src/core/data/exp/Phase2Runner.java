@@ -11,20 +11,23 @@ import java.util.*;
 /**
  * Phase 2 - Final Win Rates. Round-robin of the 3 experimental agents vs the 3 baselines
  * (9 matchups; experimental agents do NOT play each other), Capitals, 50-turn limit,
- * 100 random-map games per matchup, at 3 fmcall budgets. CrossoverExpansion/Combo use the
- * best ratio from Phase 1 (and ratio 5 too if the best was 20).
+ * 100 random-map games per matchup, at 3 thinking-TIME budgets.
  *
- * Output (per budget level): one game-level CSV, long format (one row per agent per game)
+ * Time budgets (not fmcalls) are used here so every agent gets an EQUAL per-turn budget:
+ * the engine shares each turn's time across all of a turn's actions, so the per-action
+ * baselines (MCTS/OEP) and the plan-once experimental agents are budgeted fairly. (Phase 1
+ * and Phase 3 use fmcalls, where all participants are plan-once and fmcalls is already fair.)
+ *
+ * Output (per time level): one game-level CSV, long format (one row per agent per game)
  * with the winner and per-game AVERAGES of initial/final sequence value and nodes visited.
  */
 public class Phase2Runner {
 
-    // Calibrated fmcall budgets ~200/500/1000ms on the target machine (~30.8 fmcalls/ms; see Calibrate).
-    public static Budget[] defaultLevels() {
-        return new Budget[]{ new Budget("200ms", 6000), new Budget("500ms", 15000), new Budget("1000ms", 30000) };
+    public static int[] defaultTimesMs() {
+        return new int[]{200, 500, 1000};
     }
 
-    public static void run(int numGames, int turnLimit, Budget[] levels, int[] ratios, int threads, String outDir) {
+    public static void run(int numGames, int turnLimit, int[] timesMs, int[] ratios, int threads, String outDir) {
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
         Constants.MAX_TURNS_CAPITALS = turnLimit;
@@ -39,16 +42,22 @@ public class Phase2Runner {
                 "Phase 2 - Final Win Rates\n" +
                 "mode=CAPITALS turnLimit=" + turnLimit + " gamesPerMatchup=" + numGames + " threads=" + threads + "\n" +
                 "tribes=IMPERIUS vs IMPERIUS2\n" +
+                "budget=TIME (STOP_TIME, shared per turn) timesMs=" + Arrays.toString(timesMs) + "\n" +
                 "ratios(for Expansion/Combo)=" + Arrays.toString(ratios) + "\n" +
-                "budgets(fmcalls)=" + budgetsStr(levels) + "\n" +
                 "baselines=MCTS,OEP,EMCTS  experimental=CrossoverExpansion,CrossoverBB,CrossoverCombo\n");
 
         String[] baselineNames = {"MCTS", "OEP", "EMCTS"};
+        int totalMatchups = timesMs.length * (1 + 2 * ratios.length) * baselineNames.length, matchupIdx = 0;
 
-        for (Budget level : levels) {
-            File gamesCsv = new File(dir, "Phase2_games_" + level.name + ".csv");
+        for (int ms : timesMs) {
+            // TIME budget shared across each turn's actions; agents self-limit via STOP_TIME
+            // on the per-turn timer (the engine carries the remaining time across actions).
+            Constants.TURN_TIME_MILLIS = ms;
+            Constants.TURN_TIME_LIMITED = false;
+            String levelName = ms + "ms";
+            File gamesCsv = new File(dir, "Phase2_games_" + levelName + ".csv");
 
-            // Build the experimental side: BB once (ratio-independent); Expansion & Combo per ratio.
+            // Experimental side: BB once (ratio-independent); Expansion & Combo per ratio.
             List<String[]> experimental = new ArrayList<>(); // {label, ratioLabel}
             experimental.add(new String[]{"CrossoverBB", "NA"});
             for (int r : ratios) {
@@ -63,15 +72,16 @@ public class Phase2Runner {
 
                 for (String baseName : baselineNames) {
                     String matchup = expName + (ratioLabel.equals("NA") ? "" : "_r" + ratioLabel) + "_vs_" + baseName;
-                    String key = "level=" + level.name + ";" + matchup;
+                    matchupIdx++;
+                    String key = "level=" + levelName + ";" + matchup;
                     if (done.contains(key)) {
-                        System.out.println("[Phase2] SKIP (done): " + key);
+                        System.out.println("[Phase2] (" + matchupIdx + "/" + totalMatchups + ") SKIP (done): " + key);
                         continue;
                     }
-                    System.out.println("[Phase2] RUN " + key + " (" + numGames + " games)");
+                    System.out.println("[Phase2] (" + matchupIdx + "/" + totalMatchups + ") RUN " + key + " (" + numGames + " games, " + ms + "ms/turn)");
 
-                    AgentSpec expSpec = buildExperimental(expName, level.fmcalls, ratio);
-                    AgentSpec baseSpec = buildBaseline(baseName, level.fmcalls);
+                    AgentSpec expSpec = buildExperimentalTime(expName, ratio);
+                    AgentSpec baseSpec = buildBaselineTime(baseName);
                     List<AgentSpec> specs = Arrays.asList(expSpec, baseSpec);
 
                     List<GameResult> results = ExperimentEngine.runMatchup(
@@ -87,15 +97,15 @@ public class Phase2Runner {
                     for (GameResult res : results) {
                         for (GameResult.AgentRecord rec : res.agents) {
                             double[] avg = averages(rec);
-                            rows.add(level.name + "," + matchup + "," + res.gameId + "," + rec.name + "," +
+                            rows.add(levelName + "," + matchup + "," + res.gameId + "," + rec.name + "," +
                                     ratioLabel + "," + (rec.name.equals(res.winnerName) ? 1 : 0) + "," +
                                     res.winnerName + "," +
                                     ExpCsv.round(avg[0]) + "," + ExpCsv.round(avg[1]) + "," + ExpCsv.round(avg[2]) + "," +
-                                    res.endTurn);
+                                    ExpCsv.round(avg[3]) + "," + res.endTurn);
                         }
                     }
                     ExpCsv.append(gamesCsv,
-                            "Level,Matchup,GameId,AgentName,Ratio,Won,Winner,AvgInitialSeq,AvgFinalSeq,AvgNodesVisited,EndTurn",
+                            "Level,Matchup,GameId,AgentName,Ratio,Won,Winner,AvgInitialSeq,AvgFinalSeq,AvgNodesVisited,AvgSequencesEvaluated,EndTurn",
                             rows);
                     ExpCsv.markCompleted(ckpt, key);
                 }
@@ -104,33 +114,34 @@ public class Phase2Runner {
         System.out.println("[Phase2] Complete. Output in " + dir.getPath());
     }
 
-    /** Per-game averages over an agent's turns: [avgInitial, avgFinal, avgNodes]. */
+    /** Per-game averages over an agent's turns: [avgInitial, avgFinal, avgNodes, avgSequences]. */
     private static double[] averages(GameResult.AgentRecord rec) {
-        if (rec.turns.isEmpty()) return new double[]{0, 0, 0};
-        double si = 0, sf = 0, sn = 0;
+        if (rec.turns.isEmpty()) return new double[]{0, 0, 0, 0};
+        double si = 0, sf = 0, sn = 0, sq = 0;
         for (TurnData t : rec.turns) {
             si += t.getInitialSequenceValue();
             sf += t.getFinalSequenceValue();
             sn += t.getNodesVisited();
+            sq += t.getSequencesEvaluated();
         }
         int n = rec.turns.size();
-        return new double[]{si / n, sf / n, sn / n};
+        return new double[]{si / n, sf / n, sn / n, sq / n};
     }
 
-    private static AgentSpec buildExperimental(String name, int fmcalls, int ratio) {
+    private static AgentSpec buildExperimentalTime(String name, int ratio) {
         switch (name) {
-            case "CrossoverExpansion": return ExpAgents.crossoverExpansion(fmcalls, ratio);
-            case "CrossoverBB":        return ExpAgents.crossoverBB(fmcalls);
-            case "CrossoverCombo":     return ExpAgents.crossoverCombo(fmcalls, ratio);
+            case "CrossoverExpansion": return ExpAgents.crossoverExpansionTime(ratio);
+            case "CrossoverBB":        return ExpAgents.crossoverBBTime();
+            case "CrossoverCombo":     return ExpAgents.crossoverComboTime(ratio);
             default: throw new IllegalArgumentException("Unknown experimental agent: " + name);
         }
     }
 
-    private static AgentSpec buildBaseline(String name, int fmcalls) {
+    private static AgentSpec buildBaselineTime(String name) {
         switch (name) {
-            case "MCTS":  return ExpAgents.mcts(fmcalls);
-            case "OEP":   return ExpAgents.oep(fmcalls);
-            case "EMCTS": return ExpAgents.emcts(fmcalls);
+            case "MCTS":  return ExpAgents.mctsTime();
+            case "OEP":   return ExpAgents.oepTime();
+            case "EMCTS": return ExpAgents.emctsTime();
             default: throw new IllegalArgumentException("Unknown baseline agent: " + name);
         }
     }
@@ -151,15 +162,9 @@ public class Phase2Runner {
         return best == 20 ? new int[]{20, 5} : new int[]{best};
     }
 
-    private static String budgetsStr(Budget[] levels) {
-        StringBuilder sb = new StringBuilder();
-        for (Budget b : levels) sb.append(b.name).append("=").append(b.fmcalls).append(" ");
-        return sb.toString().trim();
-    }
-
     public static void main(String[] args) {
         int threads = args.length > 0 ? Integer.parseInt(args[0]) : 4; // keep low: memory-bound (see ThreadBenchmark)
         int[] ratios = ratiosFromPhase1("test_results/phase1");
-        run(100, 50, defaultLevels(), ratios, threads, "test_results/phase2");
+        run(100, 50, defaultTimesMs(), ratios, threads, "test_results/phase2");
     }
 }

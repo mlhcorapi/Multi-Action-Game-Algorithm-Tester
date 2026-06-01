@@ -9,8 +9,9 @@ public class CrossoverEventData {
     private final double bestSequenceAfter;
     private final double rawImprovement;
     private final double percentageImprovement;
+    private final int fmCallsElapsed; // forward-model calls done so far this turn (deterministic search-progress measure)
 
-    public CrossoverEventData(int gameId, int turnNumber, long expansionPhaseTimestamp, int bridgeBurningPhaseNumber, double bestSequenceBefore, double bestSequenceAfter, double rawImprovement, double percentageImprovement) {
+    public CrossoverEventData(int gameId, int turnNumber, long expansionPhaseTimestamp, int bridgeBurningPhaseNumber, double bestSequenceBefore, double bestSequenceAfter, double rawImprovement, double percentageImprovement, int fmCallsElapsed) {
         this.gameId = gameId;
         this.turnNumber = turnNumber;
         this.expansionPhaseTimestamp = expansionPhaseTimestamp;
@@ -19,6 +20,7 @@ public class CrossoverEventData {
         this.bestSequenceAfter = bestSequenceAfter;
         this.rawImprovement = rawImprovement;
         this.percentageImprovement = percentageImprovement;
+        this.fmCallsElapsed = fmCallsElapsed;
     }
 
     public int getGameId() {
@@ -53,6 +55,10 @@ public class CrossoverEventData {
         return percentageImprovement;
     }
 
+    public int getFmCallsElapsed() {
+        return fmCallsElapsed;
+    }
+
     @Override
     public String toString() {
         return "CrossoverEventData{" +
@@ -64,6 +70,7 @@ public class CrossoverEventData {
                 ", bestSequenceAfter=" + bestSequenceAfter +
                 ", rawImprovement=" + rawImprovement +
                 ", percentageImprovement=" + percentageImprovement +
+                ", fmCallsElapsed=" + fmCallsElapsed +
                 '}';
     }
 }

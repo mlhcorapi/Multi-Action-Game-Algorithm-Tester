@@ -76,4 +76,67 @@ public class ExpAgents {
         return new AgentSpec("CrossoverCombo",
                 seed -> new CrossoverComboAgent(seed, expParams(fmcalls, ratio)));
     }
+
+    /**
+     * A fixed PASSIVE opponent (always ends its turn). Used as the 2nd tribe in Phase 3 so
+     * the map has expansion opportunities (a 1-tribe map is degenerate) while leaving the
+     * villages/development to the tracked experimental agent.
+     */
+    public static AgentSpec passiveOpponent() {
+        return new AgentSpec("Opponent", seed -> new players.DoNothingAgent(seed));
+    }
+
+    // ---- STOP_TIME variants (Phase 2) ----
+    // Under STOP_TIME the per-turn budget comes from the engine's ElapsedCpuTimer
+    // (Constants.TURN_TIME_MILLIS, shared across a turn's actions), so per-action agents
+    // (MCTS/OEP) and plan-once agents (EMCTS family) get an EQUAL per-turn budget.
+
+    private static ExperimentalEMCTSParams expParamsTime(int ratio) {
+        ExperimentalEMCTSParams p = new ExperimentalEMCTSParams();
+        p.stop_type = p.STOP_TIME;
+        p.heuristic_method = p.SIMPLE_HEURISTIC;
+        p.depth = DEPTH;
+        p.mutationExpansionRatio = ratio;
+        return p;
+    }
+
+    public static AgentSpec emctsTime() {
+        return new AgentSpec("EMCTS", seed -> {
+            EMCTSParams p = new EMCTSParams();
+            p.stop_type = p.STOP_TIME;
+            p.heuristic_method = p.SIMPLE_HEURISTIC;
+            p.depth = DEPTH;
+            return new EMCTSAgent(seed, p);
+        });
+    }
+
+    public static AgentSpec mctsTime() {
+        return new AgentSpec("MCTS", seed -> {
+            MCTSParams p = new MCTSParams();
+            p.stop_type = p.STOP_TIME;
+            p.heuristic_method = p.SIMPLE_HEURISTIC;
+            return new MCTSPlayer(seed, p);
+        });
+    }
+
+    public static AgentSpec oepTime() {
+        return new AgentSpec("OEP", seed -> {
+            OEPParams p = new OEPParams();
+            p.stop_type = p.STOP_TIME;
+            p.heuristic_method = p.SIMPLE_HEURISTIC;
+            return new OEPAgent(seed, p);
+        });
+    }
+
+    public static AgentSpec crossoverExpansionTime(int ratio) {
+        return new AgentSpec("CrossoverExpansion", seed -> new CrossoverExpansionAgent(seed, expParamsTime(ratio)));
+    }
+
+    public static AgentSpec crossoverBBTime() {
+        return new AgentSpec("CrossoverBB", seed -> new CrossoverBBAgent(seed, expParamsTime(5)));
+    }
+
+    public static AgentSpec crossoverComboTime(int ratio) {
+        return new AgentSpec("CrossoverCombo", seed -> new CrossoverComboAgent(seed, expParamsTime(ratio)));
+    }
 }
