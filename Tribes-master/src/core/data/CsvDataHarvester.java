@@ -42,7 +42,7 @@ public class CsvDataHarvester {
              PrintWriter pw = new PrintWriter(fw)) {
 
             if (isNew) {
-                pw.println("AgentName,GameId,GameDurationTurns,GameOutcomeScore,TurnNumber,InitialSequenceValue,FinalSequenceValue,NodesVisited,ScoreAtTurnStart");
+                pw.println("AgentName,GameId,GameDurationTurns,GameOutcomeScore,TurnNumber,InitialSequenceValue,FinalSequenceValue,NodesVisited,ScoreAtTurnStart,SequencesEvaluated");
             }
 
             if (turns == null || turns.isEmpty()) {
@@ -50,7 +50,7 @@ public class CsvDataHarvester {
                         summary.getGameId() + "," +
                         summary.getGameDurationTurns() + "," +
                         summary.getGameOutcomeScore() + "," +
-                        "-1,0.0,0.0,0,-1");
+                        "-1,0.0,0.0,0,-1,-1");
             } else {
                 for (TurnData turn : turns) {
                     pw.println(summary.getAgentName() + "," +
@@ -61,7 +61,8 @@ public class CsvDataHarvester {
                             round(turn.getInitialSequenceValue()) + "," +
                             round(turn.getFinalSequenceValue()) + "," +
                             turn.getNodesVisited() + "," +
-                            turn.getScoreAtTurnStart());
+                            turn.getScoreAtTurnStart() + "," +
+                            turn.getSequencesEvaluated());
                 }
             }
         } catch (IOException e) {

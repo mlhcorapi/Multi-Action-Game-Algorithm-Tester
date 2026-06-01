@@ -144,6 +144,7 @@ public class ExperimentalEMCTSAgent extends Agent {
 
         bestNode = root;
         fmCallsRun = 0;
+        int sequencesEvaluated = 0; // distinct candidate sequences evaluated this turn (one per search iteration)
 
         // Initialize PriorityQueue for tracking top nodes (min heap by value to keep the top K elements)
         topNodesQueue = new PriorityQueue<>((n1, n2) -> Double.compare(n1.getValue(), n2.getValue()));
@@ -208,6 +209,7 @@ public class ExperimentalEMCTSAgent extends Agent {
                 }
 
                 child.visited();
+                sequencesEvaluated++;
 
                 // Track top nodes for crossover bridge burning
                 topNodesQueue.offer(child);
@@ -314,7 +316,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         // dominated by sequence evaluations + greedy repair, in the thousands at real budgets).
         double finalValue = bestNode.getValue();
         turnDataList.add(new TurnData(
-                -1, gs.getTick(), initialValue, finalValue, this.fmCallsCount, scoreAtTurnStart
+                -1, gs.getTick(), initialValue, finalValue, this.fmCallsCount, scoreAtTurnStart, sequencesEvaluated
         ));
 
         // Cache the best full action sequence; act() replays it over the turn.

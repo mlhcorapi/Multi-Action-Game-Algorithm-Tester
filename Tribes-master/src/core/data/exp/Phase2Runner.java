@@ -101,11 +101,11 @@ public class Phase2Runner {
                                     ratioLabel + "," + (rec.name.equals(res.winnerName) ? 1 : 0) + "," +
                                     res.winnerName + "," +
                                     ExpCsv.round(avg[0]) + "," + ExpCsv.round(avg[1]) + "," + ExpCsv.round(avg[2]) + "," +
-                                    res.endTurn);
+                                    ExpCsv.round(avg[3]) + "," + res.endTurn);
                         }
                     }
                     ExpCsv.append(gamesCsv,
-                            "Level,Matchup,GameId,AgentName,Ratio,Won,Winner,AvgInitialSeq,AvgFinalSeq,AvgNodesVisited,EndTurn",
+                            "Level,Matchup,GameId,AgentName,Ratio,Won,Winner,AvgInitialSeq,AvgFinalSeq,AvgNodesVisited,AvgSequencesEvaluated,EndTurn",
                             rows);
                     ExpCsv.markCompleted(ckpt, key);
                 }
@@ -114,17 +114,18 @@ public class Phase2Runner {
         System.out.println("[Phase2] Complete. Output in " + dir.getPath());
     }
 
-    /** Per-game averages over an agent's turns: [avgInitial, avgFinal, avgNodes]. */
+    /** Per-game averages over an agent's turns: [avgInitial, avgFinal, avgNodes, avgSequences]. */
     private static double[] averages(GameResult.AgentRecord rec) {
-        if (rec.turns.isEmpty()) return new double[]{0, 0, 0};
-        double si = 0, sf = 0, sn = 0;
+        if (rec.turns.isEmpty()) return new double[]{0, 0, 0, 0};
+        double si = 0, sf = 0, sn = 0, sq = 0;
         for (TurnData t : rec.turns) {
             si += t.getInitialSequenceValue();
             sf += t.getFinalSequenceValue();
             sn += t.getNodesVisited();
+            sq += t.getSequencesEvaluated();
         }
         int n = rec.turns.size();
-        return new double[]{si / n, sf / n, sn / n};
+        return new double[]{si / n, sf / n, sn / n, sq / n};
     }
 
     private static AgentSpec buildExperimentalTime(String name, int ratio) {

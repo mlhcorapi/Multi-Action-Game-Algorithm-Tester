@@ -105,7 +105,7 @@ Then edit the `defaultLevels()` / `defaultTimesMs()` numbers in the `PhaseNRunne
 
 | File | Granularity | Columns |
 |---|---|---|
-| `Phase1_turns_<level>.csv` | one row per agent per turn | `Ratio, GameId, AgentName, TurnNumber, ScoreAtTurnStart, InitialSequenceValue, FinalSequenceValue, NodesVisited` |
+| `Phase1_turns_<level>.csv` | one row per agent per turn | `Ratio, GameId, AgentName, TurnNumber, ScoreAtTurnStart, InitialSequenceValue, FinalSequenceValue, NodesVisited, SequencesEvaluated` |
 | `Phase1_bridgeburns_<level>.csv` | one row per bridge-burn | `Ratio, GameId, AgentName, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp` |
 | `Phase1_games_<level>.csv` | one row per game | `Ratio, GameId, Winner, EMCTSScore, CrossoverExpansionScore, EndTurn` |
 | `phase1_best_ratio.txt` | summary | win-rate per ratio + `BEST_RATIO=<n>` (read automatically by Phases 2 & 3) |
@@ -125,7 +125,7 @@ Capitals, 50-turn limit, IMPERIUS vs IMPERIUS2, 100 random-map games per matchup
 
 | File | Granularity | Columns |
 |---|---|---|
-| `Phase2_games_<level>.csv` | one row **per agent per game** | `Level, Matchup, GameId, AgentName, Ratio, Won, Winner, AvgInitialSeq, AvgFinalSeq, AvgNodesVisited, EndTurn` |
+| `Phase2_games_<level>.csv` | one row **per agent per game** | `Level, Matchup, GameId, AgentName, Ratio, Won, Winner, AvgInitialSeq, AvgFinalSeq, AvgNodesVisited, AvgSequencesEvaluated, EndTurn` |
 
 - `Won` = 1 if this agent won that game, else 0. Win rate of an agent in a matchup = mean of `Won`.
 - `AvgInitialSeq / AvgFinalSeq / AvgNodesVisited` are averaged over that agent's turns in the game.
@@ -151,7 +151,7 @@ identical conditions. Budgets: `200ms`, `1000ms`, `5000ms` (fmcalls).
 
 | File | Agents | Columns |
 |---|---|---|
-| `Phase3_standardBB_<level>.csv` | `EMCTS`, `CrossoverExpansion` | `AgentName, GameId, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp, ScoreAtTurnStart, NodesVisited, FinalScore` |
+| `Phase3_standardBB_<level>.csv` | `EMCTS`, `CrossoverExpansion` | `AgentName, GameId, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp, ScoreAtTurnStart, NodesVisited, SequencesEvaluated, FinalScore` |
 | `Phase3_crossoverBB_<level>.csv` | `CrossoverBB`, `CrossoverCombo` | …same… **plus** `RawImprovement, PercentageImprovement` |
 
 - `BestSequenceValue` = best sequence value found so far at that bridge burn (monotonic within a turn).
@@ -165,6 +165,11 @@ identical conditions. Budgets: `200ms`, `1000ms`, `5000ms` (fmcalls).
   fmcall budget (Phases 1 & 3) it ≈ the budget for every agent, so the meaningful comparison there is
   *value gained per node* = `(FinalSequenceValue − InitialSequenceValue) / NodesVisited`. Under Phase 2's
   time budget it varies and indicates efficiency.
+- **`SequencesEvaluated` = number of distinct candidate full-turn sequences the search evaluated**
+  (one per search iteration). This is the count that *differs* between agents under a fixed FM budget:
+  the crossover-bridge-burning variants spend FM calls on their per-transition tournaments, so they
+  evaluate **fewer** distinct sequences than `EMCTS`/`Expansion` for the same `NodesVisited` (≈budget).
+  `-1` for MCTS (tree search) and OEP (not tracked).
 - **`FmCallsElapsed`** is the deterministic search-progress axis for bridge-burn/crossover rows
   (prefer it over `Timestamp`, which is wall-clock and noisy under multithreading).
 - **`InitialSequenceValue` / `FinalSequenceValue`** = greedy-root (pre-search) vs best-node (post-search)

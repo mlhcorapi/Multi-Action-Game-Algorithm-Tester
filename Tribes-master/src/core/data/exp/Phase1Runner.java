@@ -87,7 +87,8 @@ public class Phase1Runner {
                             turnRows.add(ratio + "," + res.gameId + "," + rec.name + "," +
                                     t.getTurnNumber() + "," + t.getScoreAtTurnStart() + "," +
                                     ExpCsv.round(t.getInitialSequenceValue()) + "," +
-                                    ExpCsv.round(t.getFinalSequenceValue()) + "," + t.getNodesVisited());
+                                    ExpCsv.round(t.getFinalSequenceValue()) + "," + t.getNodesVisited() + "," +
+                                    t.getSequencesEvaluated());
                         }
                         for (BridgeBurnEventData b : rec.bridgeBurns) {
                             bbRows.add(ratio + "," + res.gameId + "," + rec.name + "," +
@@ -99,7 +100,7 @@ public class Phase1Runner {
                     gameRows.add(ratio + "," + res.gameId + "," + res.winnerName + "," +
                             scoreOf(res, "EMCTS") + "," + scoreOf(res, "CrossoverExpansion") + "," + res.endTurn);
                 }
-                ExpCsv.append(turnsCsv, "Ratio,GameId,AgentName,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,NodesVisited", turnRows);
+                ExpCsv.append(turnsCsv, "Ratio,GameId,AgentName,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,NodesVisited,SequencesEvaluated", turnRows);
                 ExpCsv.append(bbCsv, "Ratio,GameId,AgentName,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp", bbRows);
                 ExpCsv.append(gamesCsv, "Ratio,GameId,Winner,EMCTSScore,CrossoverExpansionScore,EndTurn", gameRows);
 

@@ -94,9 +94,11 @@ public class Phase3Runner {
                     GameResult.AgentRecord rec = recordFor(res, spec.name); // the tracked experimental agent
                     Map<Integer, Integer> scoreAtTurn = new HashMap<>();
                     Map<Integer, Integer> nodesAtTurn = new HashMap<>();
+                    Map<Integer, Integer> seqAtTurn = new HashMap<>();
                     for (TurnData t : rec.turns) {
                         scoreAtTurn.put(t.getTurnNumber(), t.getScoreAtTurnStart());
                         nodesAtTurn.put(t.getTurnNumber(), t.getNodesVisited());
+                        seqAtTurn.put(t.getTurnNumber(), t.getSequencesEvaluated());
                     }
 
                     Map<String, CrossoverEventData> crossByTurnPhase = new HashMap<>();
@@ -108,13 +110,15 @@ public class Phase3Runner {
                     for (BridgeBurnEventData b : rec.bridgeBurns) {
                         int startScore = scoreAtTurn.getOrDefault(b.getTurnNumber(), -1);
                         int nodesThisTurn = nodesAtTurn.getOrDefault(b.getTurnNumber(), -1);
+                        int seqThisTurn = seqAtTurn.getOrDefault(b.getTurnNumber(), -1);
                         StringBuilder row = new StringBuilder();
                         row.append(spec.name).append(",").append(res.gameId).append(",")
                            .append(b.getTurnNumber()).append(",").append(b.getBridgeBurningPhaseNumber()).append(",")
                            .append(ExpCsv.round(b.getBestSequenceValue())).append(",")
                            .append(b.getFmCallsElapsed()).append(",")
                            .append(b.getExpansionPhaseTimestamp()).append(",")
-                           .append(startScore).append(",").append(nodesThisTurn).append(",").append(rec.finalScore);
+                           .append(startScore).append(",").append(nodesThisTurn).append(",")
+                           .append(seqThisTurn).append(",").append(rec.finalScore);
                         if (isCrossoverBB) {
                             CrossoverEventData c = crossByTurnPhase.get(b.getTurnNumber() + ":" + b.getBridgeBurningPhaseNumber());
                             double raw = (c != null) ? c.getRawImprovement() : 0.0;
@@ -127,11 +131,11 @@ public class Phase3Runner {
 
                 if (isCrossoverBB) {
                     ExpCsv.append(crossoverCsv,
-                            "AgentName,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,FinalScore,RawImprovement,PercentageImprovement",
+                            "AgentName,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore,RawImprovement,PercentageImprovement",
                             rows);
                 } else {
                     ExpCsv.append(standardCsv,
-                            "AgentName,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,FinalScore",
+                            "AgentName,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore",
                             rows);
                 }
                 ExpCsv.markCompleted(ckpt, key);

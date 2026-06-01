@@ -122,6 +122,7 @@ public class EMCTSAgent extends Agent {
 
         bestNode = root;
         fmCallsRun = 0;
+        int sequencesEvaluated = 0; // distinct candidate sequences evaluated this turn (one per search iteration)
 
         // Phase-based bridge burning approach
         long totalTimeMs = ect.remainingTimeMillis();
@@ -157,6 +158,7 @@ public class EMCTSAgent extends Agent {
                 }
 
                 child.visited();
+                sequencesEvaluated++;
 
                 // Backpropagate score up the tree (standard UCB update)
                 EMCTSTreeNode current = child;
@@ -239,7 +241,7 @@ public class EMCTSAgent extends Agent {
         // dominated by sequence evaluations + greedy repair, in the thousands at real budgets).
         this.totalNodesVisited = this.fmCallsCount;
         double finalValue = bestNode.getValue();
-        turnDataLog.add(new TurnData(-1, gs.getTick(), initialValue, finalValue, totalNodesVisited, scoreAtTurnStart));
+        turnDataLog.add(new TurnData(-1, gs.getTick(), initialValue, finalValue, totalNodesVisited, scoreAtTurnStart, sequencesEvaluated));
 
         // Cache the best full action sequence; act() replays it over the turn.
         ArrayList<Action> bestSeq = bestNode.getSequence();

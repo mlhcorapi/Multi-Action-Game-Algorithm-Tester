@@ -66,7 +66,8 @@ public class MCTSPlayer extends Agent {
         // MCTS selects a single action via tree search and has no evolved macro-sequence,
         // so InitialSequenceValue / FinalSequenceValue are not applicable (logged as 0.0).
         if (bestAction instanceof EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
-            turnDataLog.add(new TurnData(-1, gs.getTick(), 0.0, 0.0, turnNodesVisited, turnStartScore));
+            // MCTS does tree search (no evolved sequences): sequencesEvaluated = -1 (N/A).
+            turnDataLog.add(new TurnData(-1, gs.getTick(), 0.0, 0.0, turnNodesVisited, turnStartScore, -1));
             turnNodesVisited = 0;
         }
 

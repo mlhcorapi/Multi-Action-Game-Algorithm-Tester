@@ -7,14 +7,16 @@ public class TurnData {
     private final double finalSequenceValue;
     private final int nodesVisited;
     private final int scoreAtTurnStart;
+    private final int sequencesEvaluated; // distinct candidate sequences the search evaluated this turn (-1 if N/A)
 
-    public TurnData(int gameId, int turnNumber, double initialSequenceValue, double finalSequenceValue, int nodesVisited, int scoreAtTurnStart) {
+    public TurnData(int gameId, int turnNumber, double initialSequenceValue, double finalSequenceValue, int nodesVisited, int scoreAtTurnStart, int sequencesEvaluated) {
         this.gameId = gameId;
         this.turnNumber = turnNumber;
         this.initialSequenceValue = initialSequenceValue;
         this.finalSequenceValue = finalSequenceValue;
         this.nodesVisited = nodesVisited;
         this.scoreAtTurnStart = scoreAtTurnStart;
+        this.sequencesEvaluated = sequencesEvaluated;
     }
 
     public int getGameId() {
@@ -41,6 +43,10 @@ public class TurnData {
         return scoreAtTurnStart;
     }
 
+    public int getSequencesEvaluated() {
+        return sequencesEvaluated;
+    }
+
     @Override
     public String toString() {
         return "TurnData{" +
@@ -50,6 +56,7 @@ public class TurnData {
                 ", finalSequenceValue=" + finalSequenceValue +
                 ", nodesVisited=" + nodesVisited +
                 ", scoreAtTurnStart=" + scoreAtTurnStart +
+                ", sequencesEvaluated=" + sequencesEvaluated +
                 '}';
     }
 }
