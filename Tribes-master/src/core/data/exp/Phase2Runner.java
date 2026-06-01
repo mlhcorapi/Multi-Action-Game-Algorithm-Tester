@@ -5,7 +5,6 @@ import core.Types;
 import core.data.dto.TurnData;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.util.*;
 
 /**
@@ -151,25 +150,11 @@ public class Phase2Runner {
         }
     }
 
-    /** Reads BEST_RATIO from phase1_best_ratio.txt; if it is 20, also returns 5. Default {5}. */
-    public static int[] ratiosFromPhase1(String phase1Dir) {
-        File f = new File(phase1Dir, "phase1_best_ratio.txt");
-        int best = 5;
-        if (f.exists()) {
-            try {
-                for (String line : Files.readAllLines(f.toPath())) {
-                    if (line.startsWith("BEST_RATIO=")) best = Integer.parseInt(line.substring("BEST_RATIO=".length()).trim());
-                }
-            } catch (Exception e) { e.printStackTrace(); }
-        } else {
-            System.out.println("[Phase2] WARNING: " + f.getPath() + " not found; defaulting ratio to 5.");
-        }
-        return best == 20 ? new int[]{20, 5} : new int[]{best};
-    }
-
     public static void main(String[] args) {
         int threads = args.length > 0 ? Integer.parseInt(args[0]) : 4; // keep low: memory-bound (see ThreadBenchmark)
-        int[] ratios = ratiosFromPhase1("test_results/phase1");
+        // The crossover ratio is selected in Phase 3 (low-variance isolated setup, by average
+        // FinalSequenceValue), so Phase 3 must run before Phase 2.
+        int[] ratios = { Phase3Runner.bestRatioFromPhase3("test_results/phase3") };
         run(100, 50, defaultTimesMs(), ratios, threads, "test_results/phase2");
     }
 }
