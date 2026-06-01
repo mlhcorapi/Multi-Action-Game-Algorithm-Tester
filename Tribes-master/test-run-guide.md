@@ -1,6 +1,6 @@
 # Test-Run Guide — EMCTS Crossover Experiments
 
-This guide explains the three experiment phases, how to launch them with a single command,
+This guide explains the experiment phases, how to launch them with a single command,
 what gets written, and how to read each output file.
 
 The experiment measures the impact of adding **crossover** to EMCTS, in two forms:
@@ -11,6 +11,17 @@ The experiment measures the impact of adding **crossover** to EMCTS, in two form
 |---|---|
 | Baselines | `MCTS`, `OEP`, `EMCTS` |
 | Experimental | `CrossoverExpansion`, `CrossoverBB`, `CrossoverCombo` |
+
+There are **two phases**, run in this order:
+
+- **Phase 3 — Ratio selection + trajectory** (low-variance isolated setup): sweeps the
+  CrossoverExpansion mutation:crossover-expansion ratio and records per-turn search trajectories,
+  then picks the best ratio by average `FinalSequenceValue`.
+- **Phase 2 — Win rates**: experimental-vs-baseline matchups, using the ratio chosen in Phase 3.
+
+> Phase 3 runs **before** Phase 2 because it selects the crossover ratio that Phase 2 needs.
+> (The old standalone "Phase 1" ratio analysis was folded into Phase 3's controlled environment —
+> see §3 for why.)
 
 ---
 
@@ -38,17 +49,17 @@ java -Xmx8g -cp "out;lib/*" core.data.exp.RunAllExperiments 4
 ```
 
 - The trailing `4` is the **worker-thread count** (optional, default 4).
-- `RunAllExperiments` runs Phase 1 → reads the best ratio → Phase 2 → Phase 3, writing to
-  `test_results/full/{phase1,phase2,phase3}/`.
+- `RunAllExperiments` runs **Phase 3** (ratio sweep + trajectory) → reads the best ratio →
+  **Phase 2** (win rates), writing to `test_results/full/{phase3,phase2}/`.
 - **It is resumable**: if it is interrupted, just run the same command again — completed
   matchups are skipped (recorded in each phase's `_completed.txt`) and it continues.
 
-You can also run phases individually (each takes an optional thread count):
+You can also run the phases individually (each takes an optional thread count). **Run Phase 3
+first** — Phase 2 reads the ratio it writes:
 
 ```bash
-java -Xmx8g -cp "out;lib/*" core.data.exp.Phase1Runner 4
-java -Xmx8g -cp "out;lib/*" core.data.exp.Phase2Runner 4   # reads phase1's best ratio
-java -Xmx8g -cp "out;lib/*" core.data.exp.Phase3Runner 2   # 2 threads for the heavy 5000ms level
+java -Xmx8g -cp "out;lib/*" core.data.exp.Phase3Runner 2   # FIRST: ratio sweep + trajectory; writes phase3_best_ratio.txt (2 threads for the heavy 5000ms level)
+java -Xmx8g -cp "out;lib/*" core.data.exp.Phase2Runner 4   # reads phase3's best ratio
 ```
 (The standalone runners write to `test_results/phaseN/`; the orchestrator writes to `test_results/full/phaseN/`.)
 
@@ -61,9 +72,9 @@ use `-Xmx8g` with **4 threads**. For Phase 3's heaviest budget (`5000ms`), use 2
 
 ### Progress indication
 The console shows, live:
-- A **phase banner** with elapsed time (`== PHASE 2 / 3 [elapsed 1h 12m 03s]`).
-- A **per-matchup counter**: `[Phase2] (7/15) RUN level=500ms;CrossoverBB_vs_MCTS (100 games, 500ms/turn)`.
-- A **per-game counter** within each matchup: `    CrossoverBB_vs_MCTS: 40/100`.
+- A **phase banner** with elapsed time (`== PHASE 2 - Win rates  [elapsed 1h 12m 03s]`).
+- A **per-matchup counter**: `[Phase3] (7/24) RUN level=1000ms;agent=CrossoverExpansion;ratio=10 (50 games)`.
+- A **per-game counter** within each matchup: `    CrossoverExpansion@r10: 40/50`.
 
 ### Runtime
 Rough order of magnitude on the target machine at 4 threads: **several hours per phase**
@@ -78,14 +89,21 @@ All budgets were calibrated so the search effort roughly matches a target *think
 
 | Phase | Budget type | Levels |
 |---|---|---|
-| 1 | **fmcalls** (both agents plan-once → fair) | `500ms`≈15000, `2000ms`≈61000 |
-| 2 | **wall-clock time** (per-action MCTS/OEP vs plan-once need equal *per-turn* time) | 200, 500, 1000 ms |
-| 3 | **fmcalls** | `200ms`≈6000, `1000ms`≈30000, `5000ms`≈154000 |
+| 3 | **fmcalls** (all participants plan-once → fair) | `500ms`≈15000, `1000ms`≈30000, `5000ms`≈154000 |
+| 2 | **wall-clock time** (per-action MCTS/OEP vs plan-once need equal *per-turn* time) | 500, 1000 ms |
 
 > Phase 2 uses **time**, not fmcalls, on purpose: MCTS/OEP search **per action** while the
 > EMCTS-family plan **once per turn**, so an fmcall budget would give MCTS/OEP ~K× more
 > compute per turn. Wall-clock time is shared across a turn's actions by the engine, so every
-> agent gets an equal per-turn budget.
+> agent gets an equal per-turn budget. Phase 3 uses fmcalls (all its participants are plan-once).
+
+> **Why the smallest level is 500 ms, not 200 ms.** Bridge burns are fixed at 20 per turn for every
+> agent (see §5). For the crossover-bridge-burning agents those 20 tournaments are *mandatory* and
+> cost ~7000 fmcalls in total — so a ~200 ms (~6000-fmcall) budget is below that floor: the crossover
+> agents would spend their whole budget (and more) just on the burns and do almost no search,
+> overrunning the budget by ~20%. At 500 ms (~15000) and above, the 20 burns are a modest share of the
+> budget, so every agent spends the **same** total fmcalls/time (verified with `BurnBudgetCheck`:
+> all four agents land within ±0.5% of the target at 30000). Phase 2 likewise starts at 500 ms.
 
 To recalibrate budgets for your hardware:
 ```bash
@@ -95,31 +113,63 @@ Then edit the `defaultLevels()` / `defaultTimesMs()` numbers in the `PhaseNRunne
 
 ---
 
-## 3. Phase 1 — Ratio Analysis
+## 3. Phase 3 — Ratio selection + trajectory (runs first)
 
-**Goal:** find the mutation-to-crossover ratio for Crossover Expansion that wins most against EMCTS.
-**Setup:** `EMCTS` vs `CrossoverExpansion`, Capitals, 50-turn limit, tribes IMPERIUS vs IMPERIUS2,
-100 random-map games per (ratio, budget). Ratios tested: **2, 5, 10, 15, 20** (mutations per crossover).
+**Goal:** two jobs in one controlled environment — (1) **choose** the CrossoverExpansion
+mutation:crossover-expansion ratio, and (2) measure **how each EMCTS-family agent's search
+improves within a turn** (the bridge-burning trajectory) and how its score grows.
 
-**Output (`test_results/full/phase1/`):** files are suffixed by budget level (`500ms`, `2000ms`).
+**Setup:** SCORE mode, 30-turn limit. Each configuration plays **50** games on a **fixed map
+seed** against a **fixed passive opponent** (`DoNothing`, IMPERIUS2); only the tracked agent's
+RNG seed varies per game (game *k* uses the same seed across every config), so all configs face
+identical conditions and variance is low. Budgets: `500ms`, `1000ms`, `5000ms` (fmcalls).
+
+Configurations run:
+- `EMCTS` and `CrossoverBB` (ratio-independent),
+- `CrossoverExpansion` at each ratio in **{2, 5, 10, 15, 20}** (the sweep),
+- `CrossoverCombo` at the selected best ratio.
+
+**Ratio selection:** the best ratio is the one with the highest **average `FinalSequenceValue`**
+— the best heuristic value the search reaches. The tree search optimises heuristic value (it has
+no direct control over in-game score or combat; it only finds the highest-scoring sequence it
+can), so *search effectiveness*, not game outcome, is the right basis for the choice. To stop the
+larger budgets (which reach higher absolute values) from dominating, ratios are **ranked within
+each budget level** and the best average rank wins. Result → `phase3_best_ratio.txt`, consumed by
+Phase 2.
+
+> **Why select the ratio here, not in a win-rate-vs-EMCTS phase?** Three reasons: (1) no
+> opponent-interference confound — the signal is the agent's own search quality, not the
+> interaction with a particular opponent; (2) no train/test leakage — the ratio is not tuned on
+> EMCTS (an agent Phase 2 later tests against); (3) far lower variance — a continuous fixed-seed
+> measure separates ratios with many fewer games than a noisy binary win-rate.
+>
+> A true 1-tribe map is degenerate (no villages to capture → every agent, even random, stalls at
+> ~1 city), so the passive 2nd tribe gives the map expansion opportunities without interfering:
+> "agent vs do-nothing on a fixed map" rather than literal solo play.
+
+**Output (`test_results/full/phase3/`):** files are suffixed by budget level (`500ms`, `1000ms`, `5000ms`).
 
 | File | Granularity | Columns |
 |---|---|---|
-| `Phase1_turns_<level>.csv` | one row per agent per turn | `Ratio, GameId, AgentName, TurnNumber, ScoreAtTurnStart, InitialSequenceValue, FinalSequenceValue, NodesVisited, SequencesEvaluated` |
-| `Phase1_bridgeburns_<level>.csv` | one row per bridge-burn | `Ratio, GameId, AgentName, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp` |
-| `Phase1_games_<level>.csv` | one row per game | `Ratio, GameId, Winner, EMCTSScore, CrossoverExpansionScore, EndTurn` |
-| `phase1_best_ratio.txt` | summary | win-rate per ratio + `BEST_RATIO=<n>` (read automatically by Phases 2 & 3) |
+| `Phase3_turns_<level>.csv` | one row **per agent per turn**, every config (incl. all swept ratios) | `AgentName, Ratio, GameId, TurnNumber, ScoreAtTurnStart, InitialSequenceValue, FinalSequenceValue, NodesVisited, SequencesEvaluated, FinalScore` |
+| `Phase3_standardBB_<level>.csv` | one row per bridge-burn; standard burners (`EMCTS`, `CrossoverExpansion` at every swept ratio) | `AgentName, Ratio, GameId, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp, ScoreAtTurnStart, NodesVisited, SequencesEvaluated, FinalScore` |
+| `Phase3_crossoverBB_<level>.csv` | one row per bridge-burn; crossover burners (`CrossoverBB`, `CrossoverCombo`@best) | …same… **plus** `RawImprovement, PercentageImprovement` |
+| `phase3_best_ratio.txt` | summary | per-ratio average `FinalSequenceValue` per level + `BEST_RATIO=<n>` (read automatically by Phase 2) |
 
-If the best ratio is **20** (i.e. crossover rarely helps), Phase 2 also evaluates ratio **5** as a sanity baseline.
+- `Ratio` is `NA` for the ratio-independent agents (`EMCTS`, `CrossoverBB`); the ratio value for
+  `CrossoverExpansion`/`CrossoverCombo`. Filter the turns CSV to `AgentName=CrossoverExpansion`
+  for the ratio-vs-`FinalSequenceValue` / ratio-vs-`SequencesEvaluated` efficiency analysis.
+- `BestSequenceValue` = best sequence value found so far at that bridge burn (monotonic within a turn).
+- `RawImprovement / PercentageImprovement` (crossover-BB only) = best-of-7-bred-children minus best-of-8-elite.
 
 ---
 
-## 4. Phase 2 — Final Win Rates
+## 4. Phase 2 — Win rates
 
 **Goal:** competitive win rates of each experimental agent vs each baseline.
 **Setup:** 9 matchups (3 experimental × 3 baselines; experimental agents do not play each other),
-Capitals, 50-turn limit, IMPERIUS vs IMPERIUS2, 100 random-map games per matchup, at 200/500/1000 ms.
-`CrossoverExpansion`/`Combo` use the best ratio from Phase 1.
+Capitals, 50-turn limit, IMPERIUS vs IMPERIUS2, 100 random-map games per matchup, at 500/1000 ms.
+`CrossoverExpansion`/`Combo` use the ratio chosen in Phase 3.
 
 **Output (`test_results/full/phase2/`):** one file per time level.
 
@@ -128,41 +178,16 @@ Capitals, 50-turn limit, IMPERIUS vs IMPERIUS2, 100 random-map games per matchup
 | `Phase2_games_<level>.csv` | one row **per agent per game** | `Level, Matchup, GameId, AgentName, Ratio, Won, Winner, AvgInitialSeq, AvgFinalSeq, AvgNodesVisited, AvgSequencesEvaluated, EndTurn` |
 
 - `Won` = 1 if this agent won that game, else 0. Win rate of an agent in a matchup = mean of `Won`.
-- `AvgInitialSeq / AvgFinalSeq / AvgNodesVisited` are averaged over that agent's turns in the game.
-  (MCTS logs sequence values as `0` — not applicable; OEP logs `NodesVisited = -1`.)
+- `AvgInitialSeq / AvgFinalSeq / AvgNodesVisited / AvgSequencesEvaluated` are averaged over that
+  agent's turns in the game. (MCTS logs sequence values as `0`; OEP logs `NodesVisited = -1`;
+  both log `SequencesEvaluated = -1` — not applicable.)
 
 ---
 
-## 5. Phase 3 — Trajectory Analysis
-
-**Goal:** how each EMCTS-family agent's search improves within a turn (the bridge-burning
-trajectory) and how its score grows, on a **fixed** scenario.
-**Setup:** SCORE mode, 30-turn limit. Each of the 4 EMCTS-family agents (`EMCTS`,
-`CrossoverExpansion`, `CrossoverBB`, `CrossoverCombo`) plays 100 games on a **fixed map seed**
-against a **fixed passive opponent** (`DoNothing`, IMPERIUS2). Only the tracked agent's RNG seed
-varies per game (game *k* uses the same seed across all four agents), so the agents face
-identical conditions. Budgets: `200ms`, `1000ms`, `5000ms` (fmcalls).
-
-> A true 1-tribe map is degenerate (no villages to capture → every agent, even random, stalls
-> at ~1 city). The passive 2nd tribe gives the map expansion opportunities without interfering,
-> so this is "agent vs do-nothing on a fixed map" rather than literal solo play.
-
-**Output (`test_results/full/phase3/`):** two files per budget level, one row **per bridge-burn**.
-
-| File | Agents | Columns |
-|---|---|---|
-| `Phase3_standardBB_<level>.csv` | `EMCTS`, `CrossoverExpansion` | `AgentName, GameId, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp, ScoreAtTurnStart, NodesVisited, SequencesEvaluated, FinalScore` |
-| `Phase3_crossoverBB_<level>.csv` | `CrossoverBB`, `CrossoverCombo` | …same… **plus** `RawImprovement, PercentageImprovement` |
-
-- `BestSequenceValue` = best sequence value found so far at that bridge burn (monotonic within a turn).
-- `RawImprovement / PercentageImprovement` (crossover-BB only) = best-of-7-bred-children minus best-of-8-elite.
-
----
-
-## 6. Metric definitions (read this)
+## 5. Metric definitions (read this)
 
 - **`NodesVisited` = forward-model calls that turn** (the computational-workload metric). Under an
-  fmcall budget (Phases 1 & 3) it ≈ the budget for every agent, so the meaningful comparison there is
+  fmcall budget (Phase 3) it ≈ the budget for every agent, so the meaningful comparison there is
   *value gained per node* = `(FinalSequenceValue − InitialSequenceValue) / NodesVisited`. Under Phase 2's
   time budget it varies and indicates efficiency.
 - **`SequencesEvaluated` = number of distinct candidate full-turn sequences the search evaluated**
@@ -170,21 +195,38 @@ identical conditions. Budgets: `200ms`, `1000ms`, `5000ms` (fmcalls).
   the crossover-bridge-burning variants spend FM calls on their per-transition tournaments, so they
   evaluate **fewer** distinct sequences than `EMCTS`/`Expansion` for the same `NodesVisited` (≈budget).
   `-1` for MCTS (tree search) and OEP (not tracked).
+- **Bridge burns are fixed at 20 per turn for *every* agent** (`depth − 1`, `depth = 21`), so the
+  *number* of burns is never a confound between families. Each turn's search is split into 21 phases,
+  each given an equal **cumulative** slice of the budget, and a burn fires at each of the first 20
+  phase boundaries. A crossover tournament's forward-model calls are charged against the shared budget
+  and absorbed by later phases doing fewer iterations — so all agents spend the **same** total budget
+  *and* perform the **same** 20 burns. The crossover cost therefore shows up purely as a lower
+  `SequencesEvaluated`, not as fewer burns.
 - **`FmCallsElapsed`** is the deterministic search-progress axis for bridge-burn/crossover rows
   (prefer it over `Timestamp`, which is wall-clock and noisy under multithreading).
 - **`InitialSequenceValue` / `FinalSequenceValue`** = greedy-root (pre-search) vs best-node (post-search)
   value of the turn's single planning episode, using the **SIMPLE** heuristic (raw absolute board value).
-- Bridge-burning agents (`CrossoverBB`/`Combo`) complete **fewer** bridge-burn phases per fmcall budget
-  than `EMCTS`/`Expansion`, because their per-transition crossover tournament spends forward-model calls
-  (the budget is FM-calls; standard bridge burning is free). This is expected.
+  Phase 3 selects the crossover ratio on average `FinalSequenceValue` (search effectiveness).
+- **`FinalScore`** = the game's end-of-game score for that agent. It is a separate, *in-game* measure of
+  performance; comparing it against `FinalSequenceValue` is really a measure of the heuristic's quality
+  (how well heuristic value tracks in-game impact), which is why it is **not** used to choose the ratio.
 
 ---
 
-## 7. Validate before the full run
+## 6. Validate before the full run
 
 ```bash
 java -Xmx2g -cp "out;lib/*" core.data.exp.NewExperimentSmokeTest
 ```
-Runs a tiny version of all three phases (few games, short Capitals turns, small budgets) into
-`test_results/smoke/` in ~30 s. If every CSV has more than the header row and there are 0 failed
-games, the pipeline is healthy and the full run is safe to start.
+Runs a tiny version of both phases (Phase 3 with a 2-ratio sweep, then Phase 2 using the chosen
+ratio; few games, short turns, small budgets) into `test_results/smoke/` in ~80 s. If every CSV has
+more than the header row, `phase3_best_ratio.txt` is present, and there are 0 failed games, the
+pipeline is healthy and the full run is safe to start.
+
+### Fairness diagnostic (optional)
+```bash
+java -Xmx2g -cp "out;lib/*" core.data.exp.BurnBudgetCheck
+```
+Prints, per agent at the 6000 and 30000 fmcall budgets, the average `NodesVisited`, `SequencesEvaluated`
+and bridge-burn count per turn — used to confirm that every agent performs 20 burns and spends the same
+total budget (they converge at 30000; 6000 is shown to illustrate the small-budget floor).

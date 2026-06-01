@@ -1,13 +1,18 @@
 package core.data.exp;
 
 import java.io.File;
-import java.util.Arrays;
 
 /**
- * Single entry point for the full experiment suite: runs Phase 1 (ratio analysis), then
- * Phase 2 (win rates, using Phase 1's best ratio), then Phase 3 (trajectory analysis), in
- * sequence, into test_results/full/. Prints a banner + elapsed time for each phase, and the
- * per-runner output shows per-matchup (M/TOTAL) and per-game progress.
+ * Single entry point for the full experiment suite. Runs in dependency order:
+ *   1. Phase 3 (low-variance isolated setup): sweeps the crossover ratio and records trajectories,
+ *      then selects the best ratio by average FinalSequenceValue.
+ *   2. Phase 2 (win rates): uses that ratio for the experimental-vs-baseline matchups.
+ * Output goes to test_results/full/. Prints a banner + elapsed time per phase; the per-runner
+ * output shows per-matchup (M/TOTAL) and per-game progress.
+ *
+ * (There is no separate Phase 1 any more: the old ratio-analysis phase was folded into Phase 3's
+ * controlled environment, where the ratio is chosen on search effectiveness with no opponent
+ * interference and without tuning on an agent that Phase 2 later tests against.)
  *
  * Resumable: each phase checkpoints completed matchups, so re-running this skips finished
  * work and continues where it stopped.
@@ -27,17 +32,16 @@ public class RunAllExperiments {
         System.out.println("# Resumable: re-run to continue after an interruption.");
         System.out.println("############################################################");
 
-        banner("PHASE 1 / 3", "Ratio analysis: EMCTS vs CrossoverExpansion, Capitals/50, 100 games", t0);
-        Phase1Runner.run(100, 50, Phase1Runner.defaultLevels(), Phase1Runner.DEFAULT_RATIOS, threads, base + "/phase1");
+        // Phase 3 runs FIRST: in the low-variance isolated setup it sweeps the crossover ratio
+        // (selecting the best by average FinalSequenceValue) and records the per-turn trajectories.
+        banner("PHASE 3 - Ratio selection + trajectory", "4 EMCTS-family agents + CrossoverExpansion ratio sweep vs fixed passive opponent, SCORE/30, 50 games", t0);
+        Phase3Runner.run(50, Phase3Runner.defaultLevels(), Phase3Runner.DEFAULT_RATIOS, threads, base + "/phase3");
 
-        int[] ratios = Phase2Runner.ratiosFromPhase1(base + "/phase1");
-        System.out.println(">> Best crossover ratio(s) from Phase 1: " + Arrays.toString(ratios));
+        int best = Phase3Runner.bestRatioFromPhase3(base + "/phase3");
+        System.out.println(">> Best crossover ratio (highest avg FinalSequenceValue) from Phase 3: " + best);
 
-        banner("PHASE 2 / 3", "Win rates: 3 experimental vs 3 baselines, Capitals/50, time budgets, 100 games", t0);
-        Phase2Runner.run(100, 50, Phase2Runner.defaultTimesMs(), ratios, threads, base + "/phase2");
-
-        banner("PHASE 3 / 3", "Trajectory analysis: 4 EMCTS-family agents vs fixed passive opponent, SCORE/30, 100 games", t0);
-        Phase3Runner.run(100, Phase3Runner.defaultLevels(), ratios[0], threads, base + "/phase3");
+        banner("PHASE 2 - Win rates", "3 experimental vs 3 baselines, Capitals/50, time budgets, 100 games", t0);
+        Phase2Runner.run(100, 50, Phase2Runner.defaultTimesMs(), new int[]{best}, threads, base + "/phase2");
 
         System.out.println("\n############################################################");
         System.out.println("# ALL PHASES COMPLETE in " + elapsed(t0) + ".  Output in " + new File(base).getAbsolutePath());

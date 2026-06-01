@@ -154,30 +154,57 @@ public class ExperimentalEMCTSAgent extends Agent {
         globalTopNodesQueue.offer(root);
         crossoverExpansionCounter = 0;
 
-        // Phase-based bridge burning approach
-        long totalTimeMs = ect.remainingTimeMillis();
-        long phaseTimeMs = Math.max(1, totalTimeMs / Math.max(1, params.depth));
-        int currentPhase = 0;
-        int remainingLimit = 5;
-
-        boolean stop = false;
+        // ---- Phase-based bridge burning (FIXED burn count for every agent) ----
+        // The turn's search is split into params.depth (=21) phases; a bridge burn fires at each
+        // of the first depth-1 (=20) phase boundaries. The number of burns is therefore FIXED at
+        // 20 for EVERY agent - standard and crossover alike - so cross-model variance can never be
+        // attributed to one family pruning (burning) more or less than another.
+        //
+        // Each phase is allotted an equal CUMULATIVE slice of the budget: a phase runs MCTS
+        // iterations until the running total reaches that phase's ceiling = (phase+1)*budget/depth.
+        // Because the ceiling is cumulative, the forward-model calls a crossover bridge-burn
+        // tournament spends are absorbed by the NEXT phase doing proportionally fewer iterations.
+        // Net effect: every agent consumes the SAME total budget (num_fmcalls / turn time) AND
+        // performs the SAME 20 burns; crossover agents simply evaluate fewer distinct sequences
+        // (the cost of their tournaments) - which is the effect under study, not a difference in
+        // the amount of pruning.
+        long turnBudgetTime = ect.remainingTimeMillis();
+        ElapsedCpuTimer turnTimer = new ElapsedCpuTimer();
+        long fmPerPhase    = Math.max(1, params.num_fmcalls    / Math.max(1, params.depth));
+        long itersPerPhase = Math.max(1, params.num_iterations / Math.max(1, params.depth));
+        long timePerPhase  = Math.max(1, turnBudgetTime        / Math.max(1, params.depth));
+        final int MAX_ITERS_PER_PHASE = 1_000_000; // safety net against a no-progress stall
         int numIters = 0;
-        double avgTimeTaken = 0;
-        double acumTimeTaken = 0;
 
-        while (!stop && currentPhase < params.depth) {
-            ElapsedCpuTimer phaseTimer = new ElapsedCpuTimer();
-            long phaseStartFmCalls = fmCallsCount;
+        for (int currentPhase = 0; currentPhase < params.depth; currentPhase++) {
+            // Cumulative budget ceiling at the end of this phase's MCTS iterations.
+            long fmCeiling   = (long) (currentPhase + 1) * fmPerPhase;
+            long iterCeiling = (long) (currentPhase + 1) * itersPerPhase;
+            long timeCeiling = (long) (currentPhase + 1) * timePerPhase;
             int phaseStartIters = numIters;
-            boolean phaseComplete = false;
 
-            // Execute MCTS iterations within this phase
-            while (!phaseComplete && !stop) {
+            // Run iterations until this phase's cumulative budget ceiling is reached. We only
+            // force an extra iteration PAST the ceiling when a non-final phase still has no
+            // promotable child for its upcoming burn. Agents whose burn inherits a subtree (the
+            // common case) therefore do ZERO wasted iterations once over budget, so total spend
+            // stays at num_fmcalls / turn time while all 20 burns are still guaranteed.
+            while (true) {
+                boolean ceilingReached;
+                if (params.stop_type == params.STOP_TIME) {
+                    ceilingReached = turnTimer.elapsedMillis() >= timeCeiling;
+                } else if (params.stop_type == params.STOP_ITERATIONS) {
+                    ceilingReached = numIters >= iterCeiling;
+                } else { // STOP_FMCALLS (default)
+                    ceilingReached = fmCallsCount >= fmCeiling;
+                }
+                boolean needChildForBurn = (currentPhase < params.depth - 1) && root.getChildren().isEmpty();
+                if (ceilingReached && !needChildForBurn) break;
+                if ((numIters - phaseStartIters) >= MAX_ITERS_PER_PHASE) break;
+
                 numIters++;
-                ElapsedCpuTimer elapsedTimerIteration = new ElapsedCpuTimer();
                 fmCallsRun = 0;
 
-                // Standard MCTS iteration: select, mutate once, evaluate, backpropagate
+                // Standard MCTS iteration: select, mutate once (or crossover-expand), evaluate, backpropagate.
                 ExperimentalEMCTSTreeNode toMutate = nodeToExpand();
                 ExperimentalEMCTSTreeNode child = null;
 
@@ -228,62 +255,27 @@ public class ExperimentalEMCTSAgent extends Agent {
                     current.refreshScore(params.bias);
                     current = current.getParent();
                 }
-
-                // Check iteration stopping criteria
-                long iterationTime = elapsedTimerIteration.elapsedMillis();
-                acumTimeTaken += iterationTime;
-                avgTimeTaken = acumTimeTaken / numIters;
-
-                if (params.stop_type == params.STOP_TIME) {
-                    long remaining = ect.remainingTimeMillis();
-                    stop = remaining <= 2 * avgTimeTaken || remaining <= remainingLimit;
-                } else if (params.stop_type == params.STOP_ITERATIONS) {
-                    stop = numIters >= params.num_iterations;
-                } else if (params.stop_type == params.STOP_FMCALLS) {
-                    stop = (fmCallsCount > params.num_fmcalls) || 
-                           (fmCallsRun > (params.num_fmcalls - fmCallsCount));
-                }
-
-                // Phase completion is gated by the SAME budget as the stop criterion,
-                // so bridge burning triggers between phases regardless of stop_type.
-                // (Previously gated on wall-clock only, which never elapsed under
-                // STOP_FMCALLS/STOP_ITERATIONS, so bridge burning never ran.)
-                boolean phaseBudgetExhausted;
-                if (params.stop_type == params.STOP_FMCALLS) {
-                    long fmCallsPerPhase = Math.max(1, params.num_fmcalls / Math.max(1, params.depth));
-                    phaseBudgetExhausted = (fmCallsCount - phaseStartFmCalls) >= fmCallsPerPhase;
-                } else if (params.stop_type == params.STOP_ITERATIONS) {
-                    int itersPerPhase = Math.max(1, params.num_iterations / Math.max(1, params.depth));
-                    phaseBudgetExhausted = (numIters - phaseStartIters) >= itersPerPhase;
-                } else {
-                    phaseBudgetExhausted = phaseTimer.elapsedMillis() >= phaseTimeMs;
-                }
-                if (phaseBudgetExhausted) {
-                    phaseComplete = true;
-                }
             }
 
-            // Bridge Burning: promote best child to new root if phase complete and not at end
-            if (!stop && currentPhase < params.depth - 1 && root.getChildren().size() > 0) {
-                ExperimentalEMCTSTreeNode newRoot = null;
-
-                // Crossover Bridge Burning: Use crossover to generate new root candidates
+            // Bridge burn at every phase boundary except the last: FIXED at depth-1 = 20 burns,
+            // independent of the budget. Standard agents promote the best child (free); crossover
+            // agents breed a new root via the tournament (which spends forward-model calls).
+            if (currentPhase < params.depth - 1 && root.getChildren().size() > 0) {
+                ExperimentalEMCTSTreeNode newRoot;
                 if (params.useCrossoverBridgeBurning && topNodesQueue.size() >= 2) {
-                        newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase, turnStartTimeMillis);
+                    newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase, turnStartTimeMillis);
                 } else {
-                    // Standard Bridge Burning: Promote best child
                     newRoot = findBestChild(root);
                 }
 
                 if (newRoot != null && newRoot != root) {
-                    // Unlink old root branches except new root
+                    // Unlink old root branches except the new root
                     for (ExperimentalEMCTSTreeNode child : root.getChildren()) {
                         if (child != newRoot) {
                             unlinkTree(child, newRoot);
                         }
                     }
-                    
-                    // Update root and clear old parent reference
+
                     newRoot.disconnectParent();  // Clears parent link
                     root = newRoot;
 
@@ -291,22 +283,12 @@ public class ExperimentalEMCTSAgent extends Agent {
                     topNodesQueue.clear();
                     topNodesQueue.offer(root);
 
-                    // Continue search from new root
-                    currentPhase++;
-
-                    // Record the bridge-burn trajectory point. We log the best sequence
-                    // value found SO FAR (bestNode), not the promoted root's value: the
-                    // promoted root is the best child of the current root and its value
-                    // degrades/goes negative as the search dives, whereas best-so-far is
-                    // the monotonic "expansion phase" curve we want to plot.
-                    recordBridgeBurn(currentPhase, bestNode.getValue(), turnStartTimeMillis, gs.getTick());
-                } else {
-                    // No improvement, exit phase loop
-                    break;
+                    // Record the bridge-burn trajectory point (1-indexed phase number), logging the
+                    // best sequence value found SO FAR (bestNode) - the monotonic expansion curve.
+                    recordBridgeBurn(currentPhase + 1, bestNode.getValue(), turnStartTimeMillis, gs.getTick());
                 }
-            } else {
-                // Reached end of phase budget or stop condition
-                break;
+                // If no promotable child exists (only possible on a degenerate short turn), we skip
+                // this single burn; that limit applies identically to every agent, so it is unbiased.
             }
         }
 
