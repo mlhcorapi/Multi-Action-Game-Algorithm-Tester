@@ -6,6 +6,7 @@ import core.actions.Action;
 import core.actors.Tribe;
 import core.game.Board;
 import core.game.GameState;
+import core.actors.Actor;
 import core.actors.City;
 import utils.Vector2d;
 
@@ -29,7 +30,12 @@ public class ResourceGathering extends CityAction
     @Override
     public boolean isFeasible(final GameState gs)
     {
-        City city = (City) gs.getActor(this.cityId);
+        // Defensive: under deep search a stale/mutated cityId can resolve to a non-City
+        // actor (e.g. a SuperUnit, since actor IDs are shared). Treat as infeasible instead
+        // of throwing a ClassCastException that would crash the whole game.
+        Actor actor = gs.getActor(this.cityId);
+        if (!(actor instanceof City)) return false;
+        City city = (City) actor;
         Board b = gs.getBoard();
         Tribe t = b.getTribe(city.getTribeId());
 

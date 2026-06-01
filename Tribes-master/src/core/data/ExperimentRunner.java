@@ -100,8 +100,8 @@ public class ExperimentRunner {
 
         for (Future<SimulationResult> future : futures) {
             try {
-                // Wait for the result with timeout
-                SimulationResult result = future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                // Wait for the result (no timeout: real games run to completion).
+                SimulationResult result = future.get();
 
                 int gameId = result.summary.getGameId();
 
@@ -130,9 +130,6 @@ public class ExperimentRunner {
                 CsvDataHarvester.writeBridgeBurns(phase, result.bridgeBurns);
                 CsvDataHarvester.writeCrossovers(phase, result.crossovers);
 
-            } catch (TimeoutException e) {
-                System.err.println("Game simulation timed out after " + TIMEOUT_SECONDS + " seconds.");
-                future.cancel(true); // Attempt to interrupt runaway thread
             } catch (Exception e) {
                 System.err.println("Game simulation failed: " + e.getMessage());
                 e.printStackTrace();
