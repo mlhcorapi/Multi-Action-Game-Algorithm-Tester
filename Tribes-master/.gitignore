@@ -14,3 +14,7 @@ py/venv/
 # test/
 map/
 map_elites_*
+# transient experiment outputs / build dirs
+test_results/smoke/
+out_build/
+_*.tmp
