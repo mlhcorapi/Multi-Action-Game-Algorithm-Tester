@@ -23,8 +23,13 @@ import java.util.*;
  */
 public class Phase2Runner {
 
+    // Smallest time level is 500ms (not 200ms): with bridge burns fixed at 20, the 20 mandatory
+    // crossover tournaments dominate a ~200ms turn, so the crossover agents could not fit them plus
+    // meaningful search and would overrun the shared per-turn time. At 500ms+ the burns are a modest
+    // share of the turn, so every agent gets a fair, equal per-turn budget. (Add a third level such
+    // as 2000 here if a wider time sweep is wanted - it roughly doubles the heaviest matchups' time.)
     public static int[] defaultTimesMs() {
-        return new int[]{200, 500, 1000};
+        return new int[]{500, 1000};
     }
 
     public static void run(int numGames, int turnLimit, int[] timesMs, int[] ratios, int threads, String outDir) {

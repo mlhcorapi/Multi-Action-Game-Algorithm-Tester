@@ -26,9 +26,13 @@ public class Phase3Runner {
     private static final long FIXED_GAME_SEED = 888_888L;
     private static final long AGENT_SEED_BASE = 100L;
 
-    // Calibrated fmcall budgets ~200/1000/5000ms on the target machine (~30.8 fmcalls/ms; see Calibrate).
+    // Calibrated fmcall budgets ~500/1000/5000ms on the target machine (~30.8 fmcalls/ms; see Calibrate).
+    // NB: the smallest level is 500ms (not 200ms): with bridge burns fixed at 20, the 20 mandatory
+    // crossover tournaments alone cost ~7000 fmcalls, so a 200ms (~6000) budget cannot fit them plus
+    // any search - the crossover agents would overshoot it and barely search. At 15000+ the 20 burns
+    // are a modest fraction of the budget, so every agent spends the same total fmcalls (see BurnBudgetCheck).
     public static Budget[] defaultLevels() {
-        return new Budget[]{ new Budget("200ms", 6000), new Budget("1000ms", 30000), new Budget("5000ms", 154000) };
+        return new Budget[]{ new Budget("500ms", 15000), new Budget("1000ms", 30000), new Budget("5000ms", 154000) };
     }
 
     public static void run(int numGames, Budget[] levels, int ratio, int threads, String outDir) {

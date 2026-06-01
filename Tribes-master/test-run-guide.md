@@ -79,8 +79,16 @@ All budgets were calibrated so the search effort roughly matches a target *think
 | Phase | Budget type | Levels |
 |---|---|---|
 | 1 | **fmcalls** (both agents plan-once → fair) | `500ms`≈15000, `2000ms`≈61000 |
-| 2 | **wall-clock time** (per-action MCTS/OEP vs plan-once need equal *per-turn* time) | 200, 500, 1000 ms |
-| 3 | **fmcalls** | `200ms`≈6000, `1000ms`≈30000, `5000ms`≈154000 |
+| 2 | **wall-clock time** (per-action MCTS/OEP vs plan-once need equal *per-turn* time) | 500, 1000 ms |
+| 3 | **fmcalls** | `500ms`≈15000, `1000ms`≈30000, `5000ms`≈154000 |
+
+> **Why the smallest level is 500 ms, not 200 ms.** Bridge burns are fixed at 20 per turn for every
+> agent (see §6). For the crossover-bridge-burning agents those 20 tournaments are *mandatory* and
+> cost ~7000 fmcalls in total — so a ~200 ms (~6000-fmcall) budget is below that floor: the crossover
+> agents would spend their whole budget (and more) just on the burns and do almost no search,
+> overrunning the budget by ~20%. At 500 ms (~15000) and above, the 20 burns are a modest share of the
+> budget, so every agent spends the **same** total fmcalls/time (verified with `BurnBudgetCheck`:
+> all four agents land within ±0.5% of the target at 30000). Phase 2 likewise starts at 500 ms.
 
 > Phase 2 uses **time**, not fmcalls, on purpose: MCTS/OEP search **per action** while the
 > EMCTS-family plan **once per turn**, so an fmcall budget would give MCTS/OEP ~K× more
@@ -118,7 +126,7 @@ If the best ratio is **20** (i.e. crossover rarely helps), Phase 2 also evaluate
 
 **Goal:** competitive win rates of each experimental agent vs each baseline.
 **Setup:** 9 matchups (3 experimental × 3 baselines; experimental agents do not play each other),
-Capitals, 50-turn limit, IMPERIUS vs IMPERIUS2, 100 random-map games per matchup, at 200/500/1000 ms.
+Capitals, 50-turn limit, IMPERIUS vs IMPERIUS2, 100 random-map games per matchup, at 500/1000 ms.
 `CrossoverExpansion`/`Combo` use the best ratio from Phase 1.
 
 **Output (`test_results/full/phase2/`):** one file per time level.
@@ -141,7 +149,7 @@ trajectory) and how its score grows, on a **fixed** scenario.
 `CrossoverExpansion`, `CrossoverBB`, `CrossoverCombo`) plays 100 games on a **fixed map seed**
 against a **fixed passive opponent** (`DoNothing`, IMPERIUS2). Only the tracked agent's RNG seed
 varies per game (game *k* uses the same seed across all four agents), so the agents face
-identical conditions. Budgets: `200ms`, `1000ms`, `5000ms` (fmcalls).
+identical conditions. Budgets: `500ms`, `1000ms`, `5000ms` (fmcalls).
 
 > A true 1-tribe map is degenerate (no villages to capture → every agent, even random, stalls
 > at ~1 city). The passive 2nd tribe gives the map expansion opportunities without interfering,
@@ -174,9 +182,13 @@ identical conditions. Budgets: `200ms`, `1000ms`, `5000ms` (fmcalls).
   (prefer it over `Timestamp`, which is wall-clock and noisy under multithreading).
 - **`InitialSequenceValue` / `FinalSequenceValue`** = greedy-root (pre-search) vs best-node (post-search)
   value of the turn's single planning episode, using the **SIMPLE** heuristic (raw absolute board value).
-- Bridge-burning agents (`CrossoverBB`/`Combo`) complete **fewer** bridge-burn phases per fmcall budget
-  than `EMCTS`/`Expansion`, because their per-transition crossover tournament spends forward-model calls
-  (the budget is FM-calls; standard bridge burning is free). This is expected.
+- **Bridge burns are fixed at 20 per turn for *every* agent** (`depth − 1`, `depth = 21`), so the
+  *number* of burns is never a confound between families. Each turn's search is split into 21 phases,
+  each given an equal **cumulative** slice of the budget, and a burn fires at each of the first 20
+  phase boundaries. A crossover tournament's forward-model calls are charged against the shared budget
+  and absorbed by later phases doing fewer iterations — so all agents spend the **same** total budget
+  *and* perform the **same** 20 burns. The crossover cost therefore shows up purely as a lower
+  `SequencesEvaluated`, not as fewer burns.
 
 ---
 
