@@ -151,16 +151,25 @@ the right basis. Selecting **per level** lets the best ratio differ by budget (e
 
 **Output (`test_results/full/phase3/`):** files are suffixed by budget level (`500ms`, `1000ms`, `5000ms`).
 
+The output is split by experiment into **four** CSVs per level — two for the ratio test
+(`CrossoverExpansion` only, all swept ratios) and two for the family trajectory comparison:
+
 | File | Granularity | Columns |
 |---|---|---|
-| `Phase3_turns_<level>.csv` | one row **per agent per turn**, every config (incl. all swept ratios) | `AgentName, Ratio, GameId, TurnNumber, ScoreAtTurnStart, InitialSequenceValue, FinalSequenceValue, NodesVisited, SequencesEvaluated, FinalScore` |
-| `Phase3_standardBB_<level>.csv` | one row per bridge-burn; standard burners (`EMCTS`, `CrossoverExpansion` at every swept ratio) | `AgentName, Ratio, GameId, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp, ScoreAtTurnStart, NodesVisited, SequencesEvaluated, FinalScore` |
-| `Phase3_crossoverBB_<level>.csv` | one row per bridge-burn; crossover burners (`CrossoverBB`, `CrossoverCombo`@{5,best}) | …same… **plus** `RawImprovement, PercentageImprovement` |
+| `Phase3_ratio_turns_<level>.csv` | **ratio test** — one row per turn (`CrossoverExpansion`, all swept ratios) | `AgentName, Ratio, GameId, TurnNumber, ScoreAtTurnStart, InitialSequenceValue, FinalSequenceValue, NodesVisited, SequencesEvaluated, FinalScore` |
+| `Phase3_ratio_trajectory_<level>.csv` | **ratio test** — one row per bridge-burn (`CrossoverExpansion`, all swept ratios) | `AgentName, Ratio, GameId, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp, ScoreAtTurnStart, NodesVisited, SequencesEvaluated, FinalScore` |
+| `Phase3_standardBB_<level>.csv` | **family trajectory** — the normal bridge burner (`EMCTS`) | `AgentName, GameId, Ratio, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp, ScoreAtTurnStart, NodesVisited, SequencesEvaluated, FinalScore` |
+| `Phase3_crossoverBB_<level>.csv` | **family trajectory** — the crossover bridge burners (`CrossoverBB`, `CrossoverCombo`@{5,best}) | …same as standardBB… **plus** `RawImprovement, PercentageImprovement` |
 | `phase3_best_ratio.txt` | summary | per-ratio average `FinalSequenceValue` per level + a `BEST_RATIO_<level>=<n>` line per budget level (read automatically by Phase 2) |
 
-- `Ratio` is `NA` for the ratio-independent agents (`EMCTS`, `CrossoverBB`); the ratio value for
-  `CrossoverExpansion`/`CrossoverCombo`. Filter the turns CSV to `AgentName=CrossoverExpansion`
-  for the ratio-vs-`FinalSequenceValue` / ratio-vs-`SequencesEvaluated` efficiency analysis.
+- The **ratio-test** CSVs contain only `CrossoverExpansion`, one block per swept ratio; use the
+  `Ratio` column for the ratio-vs-`FinalSequenceValue` / ratio-vs-`SequencesEvaluated` analysis.
+  (Note the `Ratio` column sits after `AgentName` here, but after `GameId` in the family-trajectory
+  CSVs — per the agreed schemas.)
+- The **family-trajectory** CSVs use `Ratio = NA` for `EMCTS` and `CrossoverBB`; `CrossoverCombo`
+  carries its ratio (it runs at {5, best}). There is no per-turn CSV for these — their per-turn
+  values (`ScoreAtTurnStart`, `NodesVisited`, `SequencesEvaluated`, `FinalScore`) ride on each
+  bridge-burn row, matching the old 3-phase Phase 3.
 - `BestSequenceValue` = best sequence value found so far at that bridge burn (monotonic within a turn).
 - `RawImprovement / PercentageImprovement` (crossover-BB only) = best-of-7-bred-children minus best-of-8-elite.
 

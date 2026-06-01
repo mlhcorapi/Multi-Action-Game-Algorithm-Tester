@@ -17,30 +17,21 @@ import java.util.*;
  * RNG seed varies per game (game k uses the same seed across configs), so every configuration
  * faces identical conditions and variance is low.
  *
- * This phase does two jobs:
- *   1. RATIO SELECTION. CrossoverExpansion is swept over several mutation:crossover-expansion
- *      ratios. The "best" ratio is chosen PER BUDGET LEVEL as the one with the highest AVERAGE
- *      FinalSequenceValue at that level - the best heuristic value the search reaches. That is
- *      exactly what the tree search optimises (it has no control over in-game score or combat; it
- *      only finds the highest-scoring sequence it can), so search effectiveness, not game outcome,
- *      is the right basis. Selecting per level (rather than one global ratio) lets the best ratio
- *      differ by budget. Downstream (Phase 2 and this phase's Combo trajectory) uses
- *      {5 (a fixed standard baseline), best-for-that-level} at each level. Written to
- *      phase3_best_ratio.txt. (Done in the isolated setup, with no opponent interference, and
- *      without tuning on any agent that Phase 2 later tests against.)
- *   2. TRAJECTORY. Per-bridge-burn curves for the agent families: EMCTS and CrossoverExpansion
- *      (standard burners) and CrossoverBB / CrossoverCombo@{5,best} (crossover burners).
+ * The output is split by experiment into four CSVs per budget level:
  *
- * Output (per budget level):
- *   - Phase3_turns_<level>.csv      : one row per agent per turn, for every config run (incl. all
- *                                     swept ratios). Carries InitialSequenceValue, FinalSequenceValue,
- *                                     NodesVisited, SequencesEvaluated, FinalScore. Drives selection.
- *   - Phase3_standardBB_<level>.csv : per-bridge-burn rows for the standard burners (EMCTS,
- *                                     CrossoverExpansion at every swept ratio).
- *   - Phase3_crossoverBB_<level>.csv: per-bridge-burn rows for the crossover burners (CrossoverBB,
- *                                     CrossoverCombo@{5,best}); also carries Raw/PercentageImprovement.
- *   - phase3_best_ratio.txt         : per-ratio average FinalSequenceValue per level + a
- *                                     BEST_RATIO_<level>=<n> line for each budget level.
+ *   RATIO TEST (CrossoverExpansion only, swept over {2,5,10,15,20}; the per-level best ratio - the
+ *   one with the highest AVERAGE FinalSequenceValue at that level - is what the search optimises and
+ *   is written to phase3_best_ratio.txt for Phase 2 and for this phase's Combo trajectory):
+ *     - Phase3_ratio_turns_<level>.csv      : one row per turn  (AgentName,Ratio,GameId,TurnNumber,
+ *           ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,NodesVisited,SequencesEvaluated,FinalScore)
+ *     - Phase3_ratio_trajectory_<level>.csv : one row per bridge-burn (AgentName,Ratio,GameId,TurnNumber,
+ *           BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,
+ *           NodesVisited,SequencesEvaluated,FinalScore)
+ *
+ *   FAMILY TRAJECTORY (per-bridge-burn comparison of the bridge-burning mechanism):
+ *     - Phase3_standardBB_<level>.csv  : the normal bridge burner, EMCTS (Ratio=NA).
+ *     - Phase3_crossoverBB_<level>.csv : the crossover bridge burners, CrossoverBB (Ratio=NA) and
+ *           CrossoverCombo@{5,best} - same columns plus RawImprovement,PercentageImprovement.
  */
 public class Phase3Runner {
 
@@ -53,6 +44,9 @@ public class Phase3Runner {
 
     /** Fixed "standard" ratio always evaluated downstream alongside the per-level best. */
     public static final int STANDARD_RATIO = 5;
+
+    /** Which experiment a configuration belongs to (decides which CSV(s) it is written to). */
+    private enum Group { RATIO, STANDARD_BB, CROSSOVER_BB }
 
     // Calibrated fmcall budgets ~500/1000/5000ms on the target machine (~30.8 fmcalls/ms; see Calibrate).
     // NB: the smallest level is 500ms (not 200ms): with bridge burns fixed at 20, the 20 mandatory
@@ -86,7 +80,8 @@ public class Phase3Runner {
                 "mode=SCORE turnLimit=" + scoreTurnLimit + " gamesPerConfig=" + numGames + " threads=" + threads + "\n" +
                 "tribes=IMPERIUS (tracked agent) vs IMPERIUS2 (DoNothing/passive opponent)\n" +
                 "fixedLevelSeed=" + FIXED_LEVEL_SEED + " fixedGameSeed=" + FIXED_GAME_SEED + " agentSeed=" + AGENT_SEED_BASE + "+gameIndex\n" +
-                "ratiosSwept(CrossoverExpansion)=" + Arrays.toString(ratios) + "\n" +
+                "ratioTest=CrossoverExpansion swept over " + Arrays.toString(ratios) + " (-> Phase3_ratio_turns/_trajectory)\n" +
+                "familyTrajectory=EMCTS (standardBB) + CrossoverBB,CrossoverCombo@{" + STANDARD_RATIO + ",best} (crossoverBB)\n" +
                 "bestRatioPerLevel=argmax avg FinalSequenceValue; downstream uses {" + STANDARD_RATIO + ", best} per level\n" +
                 "budgets(fmcalls)=" + budgetsStr(levels) + "\n");
 
@@ -94,27 +89,27 @@ public class Phase3Runner {
         int totalMatchups = levels.length * (2 + ratios.length) + levels.length * 2;
         int[] idx = {0};
 
-        // ---- Pass 1: ratio-independent baselines + the CrossoverExpansion ratio sweep ----
+        // ---- Pass 1: family-trajectory baselines + the CrossoverExpansion ratio sweep ----
         // (CrossoverCombo needs the per-level selected ratio, so it runs in pass 2.)
         for (Budget level : levels) {
             runConfig(dir, ckpt, done, level, tribes, numGames, threads, idx, totalMatchups,
-                    ExpAgents.emcts(level.fmcalls), "EMCTS", -1, false);
+                    ExpAgents.emcts(level.fmcalls), "EMCTS", -1, Group.STANDARD_BB);
             runConfig(dir, ckpt, done, level, tribes, numGames, threads, idx, totalMatchups,
-                    ExpAgents.crossoverBB(level.fmcalls), "CrossoverBB", -1, true);
+                    ExpAgents.crossoverBB(level.fmcalls), "CrossoverBB", -1, Group.CROSSOVER_BB);
             for (int r : ratios) {
                 runConfig(dir, ckpt, done, level, tribes, numGames, threads, idx, totalMatchups,
-                        ExpAgents.crossoverExpansion(level.fmcalls, r), "CrossoverExpansion", r, false);
+                        ExpAgents.crossoverExpansion(level.fmcalls, r), "CrossoverExpansion", r, Group.RATIO);
             }
         }
 
-        // ---- Select the best ratio PER budget level by average FinalSequenceValue ----
+        // ---- Select the best ratio PER budget level by average FinalSequenceValue (ratio test) ----
         Map<String, Integer> bestByLevel = computeBestRatioPerLevel(dir, levels, ratios);
 
         // ---- Pass 2: CrossoverCombo at {5 (standard), best-for-this-level} per level ----
         for (Budget level : levels) {
             for (int r : comboRatiosFor(bestByLevel.get(level.name))) {
                 runConfig(dir, ckpt, done, level, tribes, numGames, threads, idx, totalMatchups,
-                        ExpAgents.crossoverCombo(level.fmcalls, r), "CrossoverCombo", r, true);
+                        ExpAgents.crossoverCombo(level.fmcalls, r), "CrossoverCombo", r, Group.CROSSOVER_BB);
             }
         }
 
@@ -128,11 +123,11 @@ public class Phase3Runner {
         return (b == STANDARD_RATIO) ? new int[]{STANDARD_RATIO} : new int[]{STANDARD_RATIO, b};
     }
 
-    /** Runs one configuration (tracked agent vs the passive opponent) and appends its per-turn and
-     *  per-bridge-burn rows. Resumable via the per-config checkpoint key. */
+    /** Runs one configuration (tracked agent vs the passive opponent) and appends its rows to the
+     *  CSV(s) for its experiment group. Resumable via the per-config checkpoint key. */
     private static void runConfig(File dir, File ckpt, Set<String> done, Budget level, Types.TRIBE[] tribes,
                                   int numGames, int threads, int[] idx, int totalMatchups,
-                                  AgentSpec spec, String name, int ratio, boolean isCrossoverBB) {
+                                  AgentSpec spec, String name, int ratio, Group group) {
         idx[0]++;
         String ratioLabel = (ratio < 0) ? "NA" : String.valueOf(ratio);
         String label = name + (ratio < 0 ? "" : "@r" + ratio);
@@ -152,20 +147,23 @@ public class Phase3Runner {
                         System.out.println("    " + label + ": " + completed + "/" + total);
                 });
 
+        boolean isCrossoverBB = (group == Group.CROSSOVER_BB);
         List<String> turnRows = new ArrayList<>();
         List<String> bbRows = new ArrayList<>();
         for (GameResult res : results) {
             GameResult.AgentRecord rec = recordFor(res, spec.name); // the tracked experimental agent
 
-            // Per-turn rows: drive ratio selection (FinalSequenceValue) + the efficiency story.
-            for (TurnData t : rec.turns) {
-                turnRows.add(name + "," + ratioLabel + "," + res.gameId + "," + t.getTurnNumber() + "," +
-                        t.getScoreAtTurnStart() + "," + ExpCsv.round(t.getInitialSequenceValue()) + "," +
-                        ExpCsv.round(t.getFinalSequenceValue()) + "," + t.getNodesVisited() + "," +
-                        t.getSequencesEvaluated() + "," + rec.finalScore);
+            // Per-turn rows: only for the ratio test (drives ratio selection + the efficiency story).
+            if (group == Group.RATIO) {
+                for (TurnData t : rec.turns) {
+                    turnRows.add(name + "," + ratioLabel + "," + res.gameId + "," + t.getTurnNumber() + "," +
+                            t.getScoreAtTurnStart() + "," + ExpCsv.round(t.getInitialSequenceValue()) + "," +
+                            ExpCsv.round(t.getFinalSequenceValue()) + "," + t.getNodesVisited() + "," +
+                            t.getSequencesEvaluated() + "," + rec.finalScore);
+                }
             }
 
-            // Per-bridge-burn rows: the trajectory.
+            // Per-bridge-burn rows: the trajectory (all groups).
             Map<Integer, Integer> scoreAtTurn = new HashMap<>();
             Map<Integer, Integer> nodesAtTurn = new HashMap<>();
             Map<Integer, Integer> seqAtTurn = new HashMap<>();
@@ -184,8 +182,15 @@ public class Phase3Runner {
                 int nodesThisTurn = nodesAtTurn.getOrDefault(b.getTurnNumber(), -1);
                 int seqThisTurn = seqAtTurn.getOrDefault(b.getTurnNumber(), -1);
                 StringBuilder row = new StringBuilder();
-                row.append(name).append(",").append(ratioLabel).append(",").append(res.gameId).append(",")
-                   .append(b.getTurnNumber()).append(",").append(b.getBridgeBurningPhaseNumber()).append(",")
+                // Column order: the ratio-test CSVs put Ratio after AgentName; the family-trajectory
+                // CSVs put it after GameId (per the agreed schemas).
+                row.append(name).append(",");
+                if (group == Group.RATIO) {
+                    row.append(ratioLabel).append(",").append(res.gameId).append(",");
+                } else {
+                    row.append(res.gameId).append(",").append(ratioLabel).append(",");
+                }
+                row.append(b.getTurnNumber()).append(",").append(b.getBridgeBurningPhaseNumber()).append(",")
                    .append(ExpCsv.round(b.getBestSequenceValue())).append(",")
                    .append(b.getFmCallsElapsed()).append(",")
                    .append(b.getExpansionPhaseTimestamp()).append(",")
@@ -201,25 +206,33 @@ public class Phase3Runner {
             }
         }
 
-        ExpCsv.append(new File(dir, "Phase3_turns_" + level.name + ".csv"),
-                "AgentName,Ratio,GameId,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,NodesVisited,SequencesEvaluated,FinalScore",
-                turnRows);
-        if (isCrossoverBB) {
-            ExpCsv.append(new File(dir, "Phase3_crossoverBB_" + level.name + ".csv"),
-                    "AgentName,Ratio,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore,RawImprovement,PercentageImprovement",
-                    bbRows);
-        } else {
-            ExpCsv.append(new File(dir, "Phase3_standardBB_" + level.name + ".csv"),
-                    "AgentName,Ratio,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore",
-                    bbRows);
+        switch (group) {
+            case RATIO:
+                ExpCsv.append(new File(dir, "Phase3_ratio_turns_" + level.name + ".csv"),
+                        "AgentName,Ratio,GameId,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,NodesVisited,SequencesEvaluated,FinalScore",
+                        turnRows);
+                ExpCsv.append(new File(dir, "Phase3_ratio_trajectory_" + level.name + ".csv"),
+                        "AgentName,Ratio,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore",
+                        bbRows);
+                break;
+            case STANDARD_BB:
+                ExpCsv.append(new File(dir, "Phase3_standardBB_" + level.name + ".csv"),
+                        "AgentName,GameId,Ratio,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore",
+                        bbRows);
+                break;
+            case CROSSOVER_BB:
+                ExpCsv.append(new File(dir, "Phase3_crossoverBB_" + level.name + ".csv"),
+                        "AgentName,GameId,Ratio,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore,RawImprovement,PercentageImprovement",
+                        bbRows);
+                break;
         }
         ExpCsv.markCompleted(ckpt, key);
     }
 
     /**
-     * Reads the per-turn CSVs and picks, FOR EACH budget level, the CrossoverExpansion ratio with
-     * the best AVERAGE FinalSequenceValue at that level. Writes phase3_best_ratio.txt with the
-     * per-ratio averages and a machine-readable BEST_RATIO_<level>=<n> line per level.
+     * Reads the ratio-test per-turn CSVs and picks, FOR EACH budget level, the CrossoverExpansion
+     * ratio with the best AVERAGE FinalSequenceValue at that level. Writes phase3_best_ratio.txt
+     * with the per-ratio averages and a machine-readable BEST_RATIO_<level>=<n> line per level.
      */
     private static Map<String, Integer> computeBestRatioPerLevel(File dir, Budget[] levels, int[] ratios) {
         Map<String, Integer> bestByLevel = new LinkedHashMap<>();
@@ -230,7 +243,7 @@ public class Phase3Runner {
 
         for (Budget level : levels) {
             Map<Integer, double[]> perRatio = new TreeMap<>(); // ratio -> [sumFinalSeq, count]
-            File turns = new File(dir, "Phase3_turns_" + level.name + ".csv");
+            File turns = new File(dir, "Phase3_ratio_turns_" + level.name + ".csv");
             if (turns.exists()) {
                 try {
                     List<String> lines = Files.readAllLines(turns.toPath());
