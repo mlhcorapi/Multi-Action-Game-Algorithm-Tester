@@ -144,7 +144,6 @@ public class ExperimentalEMCTSAgent extends Agent {
 
         bestNode = root;
         fmCallsRun = 0;
-        int nodesVisited = 0;
 
         // Initialize PriorityQueue for tracking top nodes (min heap by value to keep the top K elements)
         topNodesQueue = new PriorityQueue<>((n1, n2) -> Double.compare(n1.getValue(), n2.getValue()));
@@ -209,7 +208,6 @@ public class ExperimentalEMCTSAgent extends Agent {
                 }
 
                 child.visited();
-                nodesVisited++;  // one node per search iteration
 
                 // Track top nodes for crossover bridge burning
                 topNodesQueue.offer(child);
@@ -312,10 +310,11 @@ public class ExperimentalEMCTSAgent extends Agent {
 
         // Telemetry for this single turn-planning episode:
         // Initial = greedy root (pre-search); Final = best node found (post-search);
-        // nodesVisited = number of search iterations this turn.
+        // nodesVisited = forward-model calls this turn (the computational-workload metric;
+        // dominated by sequence evaluations + greedy repair, in the thousands at real budgets).
         double finalValue = bestNode.getValue();
         turnDataList.add(new TurnData(
-                -1, gs.getTick(), initialValue, finalValue, nodesVisited, scoreAtTurnStart
+                -1, gs.getTick(), initialValue, finalValue, this.fmCallsCount, scoreAtTurnStart
         ));
 
         // Cache the best full action sequence; act() replays it over the turn.

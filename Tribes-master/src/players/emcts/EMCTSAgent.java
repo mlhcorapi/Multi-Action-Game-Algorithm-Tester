@@ -150,7 +150,6 @@ public class EMCTSAgent extends Agent {
                 // Standard MCTS iteration: select, mutate once, evaluate, backpropagate
                 EMCTSTreeNode toMutate = nodeToExpand();
                 EMCTSTreeNode child = mutate(toMutate, gs.copy());
-                this.totalNodesVisited++;  // one node per search iteration (mirrors experimental agents)
                 eval(gs.copy(), child);
 
                 if (child.getValue() > bestNode.getValue()) {
@@ -236,6 +235,9 @@ public class EMCTSAgent extends Agent {
         // Telemetry for this single turn-planning episode:
         // Initial = greedy root (pre-search); Final = best node found (post-search);
         // nodesVisited = number of search iterations this turn.
+        // nodesVisited = forward-model calls this turn (the computational-workload metric;
+        // dominated by sequence evaluations + greedy repair, in the thousands at real budgets).
+        this.totalNodesVisited = this.fmCallsCount;
         double finalValue = bestNode.getValue();
         turnDataLog.add(new TurnData(-1, gs.getTick(), initialValue, finalValue, totalNodesVisited, scoreAtTurnStart));
 

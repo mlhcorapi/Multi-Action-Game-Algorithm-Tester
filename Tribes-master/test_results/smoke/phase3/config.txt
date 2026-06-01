@@ -2,5 +2,5 @@ Phase 3 - Solo Trajectory Analysis
 mode=SCORE turnLimit=30 gamesPerAgent=2 threads=4
 tribe=IMPERIUS (solo)
 fixedLevelSeed=777777 fixedGameSeed=888888 agentSeed=100+gameIndex
-ratio(Expansion/Combo)=5
+ratio(Expansion/Combo)=20
 budgets(fmcalls)=b2000=2000
