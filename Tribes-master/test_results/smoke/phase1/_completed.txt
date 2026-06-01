@@ -1,0 +1,2 @@
+level=b2000;ratio=5
+level=b2000;ratio=20

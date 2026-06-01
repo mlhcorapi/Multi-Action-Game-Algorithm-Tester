@@ -1,0 +1,9 @@
+level=40ms;CrossoverBB_vs_MCTS
+level=40ms;CrossoverBB_vs_OEP
+level=40ms;CrossoverBB_vs_EMCTS
+level=40ms;CrossoverExpansion_r5_vs_MCTS
+level=40ms;CrossoverExpansion_r5_vs_OEP
+level=40ms;CrossoverExpansion_r5_vs_EMCTS
+level=40ms;CrossoverCombo_r5_vs_MCTS
+level=40ms;CrossoverCombo_r5_vs_OEP
+level=40ms;CrossoverCombo_r5_vs_EMCTS

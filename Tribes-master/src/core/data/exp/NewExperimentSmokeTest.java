@@ -24,10 +24,10 @@ public class NewExperimentSmokeTest {
         System.out.println("==================== PHASE 1 (smoke) ====================");
         Phase1Runner.run(games, turnLimit, tiny, new int[]{5, 20}, threads, base + "/phase1");
 
-        System.out.println("==================== PHASE 2 (smoke) ====================");
+        System.out.println("==================== PHASE 2 (smoke, TIME budget) ====================");
         int[] ratios = Phase2Runner.ratiosFromPhase1(base + "/phase1");
         System.out.println("  (ratios from Phase 1: " + java.util.Arrays.toString(ratios) + ")");
-        Phase2Runner.run(games, turnLimit, tiny, ratios, threads, base + "/phase2");
+        Phase2Runner.run(games, turnLimit, new int[]{40}, ratios, threads, base + "/phase2"); // 40ms/turn for a fast smoke
 
         System.out.println("==================== PHASE 3 (smoke, solo 1-tribe) ====================");
         Phase3Runner.run(games, tiny, ratios[0], threads, base + "/phase3");

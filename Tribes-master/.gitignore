@@ -14,7 +14,6 @@ py/venv/
 # test/
 map/
 map_elites_*
-# transient experiment outputs / build dirs
-test_results/smoke/
+# transient build dirs (smoke CSVs are intentionally NOT ignored so they're reviewable in the diff view)
 out_build/
 _*.tmp

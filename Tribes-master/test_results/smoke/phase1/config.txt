@@ -1,0 +1,6 @@
+Phase 1 - Ratio Analysis
+mode=CAPITALS turnLimit=10 gamesPerMatchup=2 threads=4
+tribes=IMPERIUS vs IMPERIUS2
+ratios=[5, 20]
+budgets(fmcalls)=b2000=2000
+agents=EMCTS vs CrossoverExpansion

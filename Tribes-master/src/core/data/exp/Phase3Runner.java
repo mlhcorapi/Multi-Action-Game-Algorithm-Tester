@@ -34,6 +34,9 @@ public class Phase3Runner {
     public static void run(int numGames, Budget[] levels, int ratio, int threads, String outDir) {
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
+        // fmcall-budgeted phase: ensure the engine does not impose any time cutoff.
+        Constants.TURN_TIME_LIMITED = false;
+        Constants.TURN_TIME_MILLIS = 10_000_000L;
         // SCORE mode uses Constants.MAX_TURNS (= 30, package-private; referenced as a literal below).
         final int scoreTurnLimit = 30;
         Types.TRIBE[] tribes = {Types.TRIBE.IMPERIUS};

@@ -31,6 +31,9 @@ public class Phase1Runner {
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
         Constants.MAX_TURNS_CAPITALS = turnLimit;
+        // fmcall-budgeted phase: ensure the engine does not impose any time cutoff.
+        Constants.TURN_TIME_LIMITED = false;
+        Constants.TURN_TIME_MILLIS = 10_000_000L;
         Types.TRIBE[] tribes = {Types.TRIBE.IMPERIUS, Types.TRIBE.IMPERIUS2};
 
         File dir = new File(outDir);

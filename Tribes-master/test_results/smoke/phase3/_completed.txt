@@ -1,0 +1,4 @@
+level=b2000;agent=EMCTS
+level=b2000;agent=CrossoverExpansion
+level=b2000;agent=CrossoverBB
+level=b2000;agent=CrossoverCombo
