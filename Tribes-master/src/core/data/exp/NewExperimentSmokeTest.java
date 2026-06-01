@@ -19,19 +19,21 @@ public class NewExperimentSmokeTest {
         int games = 2;
         int turnLimit = 10;  // short Capitals games so the smoke is fast
         int threads = 4;
-        // Use a representative (not micro) budget so node counts / fmcalls are meaningful.
-        Budget[] tiny = { new Budget("b2000", 2000) };
+        // Use a representative (not micro) budget so node counts / fmcalls are meaningful. Name it
+        // "40ms" so the level name matches Phase 2's 40ms time level below - this makes the smoke
+        // exercise the per-level ratio lookup (Phase 2 finds Phase 3's BEST_RATIO_40ms).
+        Budget[] tiny = { new Budget("40ms", 2000) };
 
         // Phase 3 runs first: it selects the crossover ratio (tiny sweep of 2 ratios) and records
         // trajectories in the isolated setup; Phase 2 then uses that ratio.
         System.out.println("==================== PHASE 3 (smoke: ratio sweep + trajectory) ====================");
         Phase3Runner.run(games, tiny, new int[]{5, 20}, threads, base + "/phase3");
 
-        int best = Phase3Runner.bestRatioFromPhase3(base + "/phase3");
-        System.out.println("  (best ratio from Phase 3: " + best + ")");
+        java.util.Map<String, Integer> bestByLevel = Phase3Runner.bestRatiosByLevel(base + "/phase3");
+        System.out.println("  (best ratios by level from Phase 3: " + bestByLevel + ")");
 
         System.out.println("==================== PHASE 2 (smoke, TIME budget) ====================");
-        Phase2Runner.run(games, turnLimit, new int[]{40}, new int[]{best}, threads, base + "/phase2"); // 40ms/turn for a fast smoke
+        Phase2Runner.run(games, turnLimit, new int[]{40}, bestByLevel, threads, base + "/phase2"); // 40ms/turn for a fast smoke
 
         System.out.println("\n==================== VERIFICATION ====================");
         verifyDir(new File(base + "/phase3"));

@@ -31,9 +31,12 @@ public class Phase2Runner {
         return new int[]{500, 1000};
     }
 
-    public static void run(int numGames, int turnLimit, int[] timesMs, int[] ratios, int threads, String outDir) {
+    public static void run(int numGames, int turnLimit, int[] timesMs, Map<String, Integer> bestRatioByLevel, int threads, String outDir) {
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
+        // Maps are water-free (LevelGenerator includeWater=false), so penalize the now-useless naval
+        // techs (FISHING/SAILING/WHALING/NAVIGATION/AQUATISM) in the SIMPLE heuristic.
+        Constants.REMOVE_FISHING = true;
         Constants.MAX_TURNS_CAPITALS = turnLimit;
         Types.TRIBE[] tribes = {Types.TRIBE.IMPERIUS, Types.TRIBE.IMPERIUS2};
 
@@ -42,16 +45,30 @@ public class Phase2Runner {
         File ckpt = new File(dir, "_completed.txt");
         Set<String> done = ExpCsv.readCompleted(ckpt);
 
+        // Per-level ratio set for Expansion/Combo: the fixed standard ratio 5, plus the per-budget
+        // best ratio chosen in Phase 3 (deduplicated). The best ratio can differ by budget level;
+        // a level maps by its name (e.g. "500ms") to the Phase 3 budget level of the same name.
+        Map<Integer, int[]> ratiosByMs = new LinkedHashMap<>();
+        StringBuilder ratioDesc = new StringBuilder();
+        for (int ms : timesMs) {
+            int best = bestRatioByLevel.getOrDefault(ms + "ms", 5);
+            int[] rs = (best == 5) ? new int[]{5} : new int[]{5, best};
+            ratiosByMs.put(ms, rs);
+            ratioDesc.append(ms).append("ms->").append(Arrays.toString(rs)).append(" ");
+        }
+
         ExpCsv.writeText(new File(dir, "config.txt"),
                 "Phase 2 - Final Win Rates\n" +
                 "mode=CAPITALS turnLimit=" + turnLimit + " gamesPerMatchup=" + numGames + " threads=" + threads + "\n" +
                 "tribes=IMPERIUS vs IMPERIUS2\n" +
                 "budget=TIME (STOP_TIME, shared per turn) timesMs=" + Arrays.toString(timesMs) + "\n" +
-                "ratios(for Expansion/Combo)=" + Arrays.toString(ratios) + "\n" +
+                "ratios(Expansion/Combo) per level {5, best-from-Phase3}: " + ratioDesc.toString().trim() + "\n" +
                 "baselines=MCTS,OEP,EMCTS  experimental=CrossoverExpansion,CrossoverBB,CrossoverCombo\n");
 
         String[] baselineNames = {"MCTS", "OEP", "EMCTS"};
-        int totalMatchups = timesMs.length * (1 + 2 * ratios.length) * baselineNames.length, matchupIdx = 0;
+        int totalMatchups = 0;
+        for (int ms : timesMs) totalMatchups += (1 + 2 * ratiosByMs.get(ms).length) * baselineNames.length;
+        int matchupIdx = 0;
 
         for (int ms : timesMs) {
             // TIME budget shared across each turn's actions; agents self-limit via STOP_TIME
@@ -61,10 +78,10 @@ public class Phase2Runner {
             String levelName = ms + "ms";
             File gamesCsv = new File(dir, "Phase2_games_" + levelName + ".csv");
 
-            // Experimental side: BB once (ratio-independent); Expansion & Combo per ratio.
+            // Experimental side: BB once (ratio-independent); Expansion & Combo at each ratio for this level.
             List<String[]> experimental = new ArrayList<>(); // {label, ratioLabel}
             experimental.add(new String[]{"CrossoverBB", "NA"});
-            for (int r : ratios) {
+            for (int r : ratiosByMs.get(ms)) {
                 experimental.add(new String[]{"CrossoverExpansion", String.valueOf(r)});
                 experimental.add(new String[]{"CrossoverCombo", String.valueOf(r)});
             }
@@ -152,9 +169,9 @@ public class Phase2Runner {
 
     public static void main(String[] args) {
         int threads = args.length > 0 ? Integer.parseInt(args[0]) : 4; // keep low: memory-bound (see ThreadBenchmark)
-        // The crossover ratio is selected in Phase 3 (low-variance isolated setup, by average
-        // FinalSequenceValue), so Phase 3 must run before Phase 2.
-        int[] ratios = { Phase3Runner.bestRatioFromPhase3("test_results/phase3") };
-        run(100, 50, defaultTimesMs(), ratios, threads, "test_results/phase2");
+        // The crossover ratio is selected per budget level in Phase 3 (low-variance isolated setup,
+        // by average FinalSequenceValue), so Phase 3 must run before Phase 2.
+        Map<String, Integer> bestByLevel = Phase3Runner.bestRatiosByLevel("test_results/phase3");
+        run(100, 50, defaultTimesMs(), bestByLevel, threads, "test_results/phase2");
     }
 }

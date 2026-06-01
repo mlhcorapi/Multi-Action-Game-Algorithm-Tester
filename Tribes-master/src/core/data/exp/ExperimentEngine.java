@@ -13,8 +13,19 @@ import java.util.function.IntToLongFunction;
  * Runs one matchup (a set of agents over N games) in parallel and returns per-game results.
  * Each game builds its own fresh agents, so games are independent and thread-safe.
  * There is NO per-game timeout: real games run to completion.
+ *
+ * Robustness: the underlying Tribes engine can throw (e.g. an occasional ClassCastException of a
+ * unit to City under deep search). Rather than silently losing that game, a crashed game is
+ * re-run with PERTURBED game/agent RNG seeds (the level seed is kept fixed, so e.g. Phase 3's map
+ * is unchanged), up to {@link #MAX_GAME_ATTEMPTS} attempts, so each matchup still yields its full
+ * N valid results. Games that still fail after all attempts are logged and dropped.
  */
 public class ExperimentEngine {
+
+    /** Initial run + up to (MAX_GAME_ATTEMPTS-1) perturbed retries per game that crashes. */
+    public static final int MAX_GAME_ATTEMPTS = 4;
+    /** Seed perturbation per retry attempt (large, to move well away from a deterministic crash). */
+    private static final long RETRY_SEED_OFFSET = 9_000_000L;
 
     public interface Progress {
         void onGame(int completed, int total, GameResult result);
@@ -45,40 +56,57 @@ public class ExperimentEngine {
             Progress progress) {
 
         ExecutorService executor = Executors.newFixedThreadPool(threads);
-        List<Future<GameResult>> futures = new ArrayList<>();
+        GameResult[] slots = new GameResult[numGames]; // slots[i] = result for game index i (null until a run succeeds)
+        int completed = 0;
 
-        for (int i = 0; i < numGames; i++) {
-            final int gameIndex = i;
-            final int gameId = startGameId + i;
-            final long levelSeed = levelSeedFn.applyAsLong(gameIndex);
-            final long gameSeed = gameSeedFn.applyAsLong(gameIndex);
-            final long agentSeed = agentSeedFn.applyAsLong(gameIndex);
-            futures.add(executor.submit(() ->
-                    runOneGame(specs, tribes, mode, gameId, levelSeed, gameSeed, agentSeed)));
+        // Attempt 0 uses the intended seeds; each later attempt re-runs only the games that crashed,
+        // perturbing the game/agent RNG seeds (level seed kept fixed) so a deterministic engine crash
+        // is not simply repeated. This refills the matchup to its full numGames of valid results.
+        for (int attempt = 0; attempt < MAX_GAME_ATTEMPTS; attempt++) {
+            List<Integer> pending = new ArrayList<>();
+            for (int i = 0; i < numGames; i++) if (slots[i] == null) pending.add(i);
+            if (pending.isEmpty()) break;
+            if (attempt > 0)
+                System.out.println("    [retry " + attempt + "] re-running " + pending.size()
+                        + " crashed game(s) with perturbed seeds");
+
+            List<Future<GameResult>> futures = new ArrayList<>();
+            for (int gameIndex : pending) {
+                final int gameId = startGameId + gameIndex;
+                final long levelSeed = levelSeedFn.applyAsLong(gameIndex); // fixed map (unchanged across attempts)
+                final long gameSeed = gameSeedFn.applyAsLong(gameIndex) + (long) attempt * RETRY_SEED_OFFSET;
+                final long agentSeed = agentSeedFn.applyAsLong(gameIndex) + (long) attempt * RETRY_SEED_OFFSET;
+                futures.add(executor.submit(() ->
+                        runOneGame(specs, tribes, mode, gameId, levelSeed, gameSeed, agentSeed)));
+            }
+
+            for (int p = 0; p < pending.size(); p++) {
+                try {
+                    GameResult r = futures.get(p).get(); // no timeout
+                    slots[pending.get(p)] = r;
+                    completed++;
+                    if (progress != null) progress.onGame(completed, numGames, r);
+                } catch (Throwable e) {
+                    // Catch Throwable (incl. OutOfMemoryError) so one bad game is retried/dropped
+                    // rather than killing the whole multi-hour run.
+                    System.err.println("Game simulation failed (gameIndex " + pending.get(p)
+                            + ", attempt " + attempt + "): " + e);
+                }
+            }
         }
         executor.shutdown();
-
-        List<GameResult> results = new ArrayList<>();
-        int completed = 0;
-        for (Future<GameResult> f : futures) {
-            try {
-                GameResult r = f.get(); // no timeout
-                results.add(r);
-            } catch (Throwable e) {
-                // Catch Throwable (incl. OutOfMemoryError) so one bad game is dropped and
-                // logged rather than killing the whole multi-hour run.
-                System.err.println("Game simulation failed (dropped): " + e);
-            }
-            completed++;
-            if (progress != null && !results.isEmpty()) {
-                progress.onGame(completed, numGames, results.get(results.size() - 1));
-            }
-        }
         try {
             executor.awaitTermination(1, TimeUnit.HOURS);
         } catch (InterruptedException e) {
             executor.shutdownNow();
         }
+
+        List<GameResult> results = new ArrayList<>();
+        for (GameResult r : slots) if (r != null) results.add(r);
+        int lost = numGames - results.size();
+        if (lost > 0)
+            System.err.println("    [warn] " + lost + " game(s) still failed after " + MAX_GAME_ATTEMPTS
+                    + " attempts; dropped (matchup has " + results.size() + "/" + numGames + ").");
         return results;
     }
 
