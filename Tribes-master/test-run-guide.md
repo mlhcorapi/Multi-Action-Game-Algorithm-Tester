@@ -162,20 +162,21 @@ The output is split by experiment into **four** CSVs per level — two for the r
 
 | File | Granularity | Columns |
 |---|---|---|
-| `Phase3_ratio_turns_<level>.csv` | **ratio test** — one row per turn (`CrossoverExpansion`, all swept ratios) | `AgentName, Ratio, GameId, TurnNumber, ScoreAtTurnStart, InitialSequenceValue, FinalSequenceValue, NodesVisited, SequencesEvaluated, FinalScore` |
-| `Phase3_ratio_trajectory_<level>.csv` | **ratio test** — one row per bridge-burn (`CrossoverExpansion`, all swept ratios) | `AgentName, Ratio, GameId, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp, ScoreAtTurnStart, NodesVisited, SequencesEvaluated, FinalScore` |
-| `Phase3_standardBB_<level>.csv` | **family trajectory** — the normal bridge burner (`EMCTS`) | `AgentName, GameId, Ratio, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp, ScoreAtTurnStart, NodesVisited, SequencesEvaluated, FinalScore` |
+| `Phase3_ratio_turns_<level>.csv` | **ratio test** — one row per turn (`CrossoverExpansion`, all swept ratios) | `AgentName, Ratio, GameId, TurnNumber, ScoreAtTurnStart, InitialSequenceValue, FinalSequenceValue, AvgNodeValue, FmCalls, NodesEvaluated, UniqueSequences, FinalScore` |
+| `Phase3_ratio_trajectory_<level>.csv` | **ratio test** — one row per bridge-burn (`CrossoverExpansion`, all swept ratios) | `AgentName, Ratio, GameId, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp, ScoreAtTurnStart, InitialSequenceValue, FinalSequenceValue, AvgNodeValue, FmCalls, NodesEvaluated, UniqueSequences, FinalScore` |
+| `Phase3_standardBB_<level>.csv` | **family trajectory** — the normal bridge burner (`EMCTS`) | `AgentName, GameId, Ratio, TurnNumber, BridgeBurningPhaseNumber, BestSequenceValue, FmCallsElapsed, Timestamp, ScoreAtTurnStart, InitialSequenceValue, FinalSequenceValue, AvgNodeValue, FmCalls, NodesEvaluated, UniqueSequences, FinalScore` |
 | `Phase3_crossoverBB_<level>.csv` | **family trajectory** — the crossover bridge burners (`CrossoverBB`, `CrossoverCombo`@{5,best}) | …same as standardBB… **plus** `RawImprovement, PercentageImprovement` |
 | `phase3_best_ratio.txt` | summary | per-ratio average `FinalSequenceValue` per level + a `BEST_RATIO_<level>=<n>` line per budget level (read automatically by Phase 2) |
 
 - The **ratio-test** CSVs contain only `CrossoverExpansion`, one block per swept ratio; use the
-  `Ratio` column for the ratio-vs-`FinalSequenceValue` / ratio-vs-`SequencesEvaluated` analysis.
-  (Note the `Ratio` column sits after `AgentName` here, but after `GameId` in the family-trajectory
-  CSVs — per the agreed schemas.)
+  `Ratio` column for the per-ratio efficiency analysis (`FinalSequenceValue`, `NodesEvaluated`,
+  `UniqueSequences` per ratio). (`Ratio` sits after `AgentName` here, but after `GameId` in the
+  family-trajectory CSVs — per the agreed schemas.)
 - The **family-trajectory** CSVs use `Ratio = NA` for `EMCTS` and `CrossoverBB`; `CrossoverCombo`
-  carries its ratio (it runs at {5, best}). There is no per-turn CSV for these — their per-turn
-  values (`ScoreAtTurnStart`, `NodesVisited`, `SequencesEvaluated`, `FinalScore`) ride on each
-  bridge-burn row, matching the old 3-phase Phase 3.
+  carries its ratio (it runs at {5, best}). The per-turn metrics (`InitialSequenceValue`,
+  `FinalSequenceValue`, `AvgNodeValue`, `FmCalls`, `NodesEvaluated`, `UniqueSequences`,
+  `ScoreAtTurnStart`, `FinalScore`) ride on each bridge-burn row, so a per-turn summary is a
+  group-by `(GameId, TurnNumber)`.
 - `BestSequenceValue` = best sequence value found so far at that bridge burn (monotonic within a turn).
 - `RawImprovement / PercentageImprovement` (crossover-BB only) = best-of-7-bred-children minus best-of-8-elite.
 
@@ -194,36 +195,37 @@ the 500 ms best, 1000 ms uses the 1000 ms best). When the best happens to be 5, 
 
 | File | Granularity | Columns |
 |---|---|---|
-| `Phase2_games_<level>.csv` | one row **per agent per game** | `Level, Matchup, GameId, AgentName, Ratio, Won, Winner, AvgInitialSeq, AvgFinalSeq, AvgNodesVisited, AvgSequencesEvaluated, EndTurn` |
+| `Phase2_games_<level>.csv` | one row **per agent per game** | `Level, Matchup, GameId, AgentName, Ratio, Won, Winner, AvgInitialSeq, AvgFinalSeq, AvgNodeValue, AvgFmCalls, AvgNodesEvaluated, AvgUniqueSequences, EndTurn` |
 
 - `Won` = 1 if this agent won that game, else 0. Win rate of an agent in a matchup = mean of `Won`.
-- `AvgInitialSeq / AvgFinalSeq / AvgNodesVisited / AvgSequencesEvaluated` are averaged over that
-  agent's turns in the game. (MCTS logs sequence values as `0`; OEP logs `NodesVisited = -1`;
-  both log `SequencesEvaluated = -1` — not applicable.)
+- The `Avg*` columns are averaged over that agent's turns in the game. Every agent (incl. the MCTS and
+  OEP baselines) now logs a final heuristic value (`AvgFinalSeq`) and `AvgFmCalls`/`AvgNodesEvaluated`,
+  so search effort and achieved value are comparable across all six agents. `AvgUniqueSequences` and
+  `AvgNodeValue` are `-1` for MCTS (a per-action tree search, no sequences).
 
 ---
 
 ## 5. Metric definitions (read this)
 
-- **`NodesVisited` = forward-model calls that turn** (the computational-workload metric). Under an
-  fmcall budget (Phase 3) it ≈ the budget for every agent, so the meaningful comparison there is
-  *value gained per node* = `(FinalSequenceValue − InitialSequenceValue) / NodesVisited`. Under Phase 2's
-  time budget it varies and indicates efficiency.
-- **`SequencesEvaluated` = number of distinct candidate full-turn sequences the search evaluated**
-  (one per search iteration). This is the count that *differs* between agents under a fixed FM budget:
-  the crossover-bridge-burning variants spend FM calls on their per-transition tournaments, so they
-  evaluate **fewer** distinct sequences than `EMCTS`/`Expansion` for the same `NodesVisited` (≈budget).
-  `-1` for MCTS (tree search) and OEP (not tracked). It has a structural **floor of 20 per turn**
-  (one forced iteration per burning phase) and otherwise ≈ `budget ÷ per-iteration cost`, so it
-  varies widely with game state — the floor is reached only at very small budgets (≈2% of turns at
-  15000 fmcalls, ≈0% at 30000+).
+The three workload metrics are kept distinct so algorithm efficiency can be compared properly:
+- **`FmCalls` = forward-model `advance()` calls that turn** — the COMPUTE-demand currency (and the
+  Phase-3 budget). Identical sequences are re-evaluated (no cross-node caching), so every node's
+  forward-model cost is counted.
+- **`NodesEvaluated` = candidate nodes scored that turn** (every `eval()`: the initial root, each
+  search iteration's child, and each bridge-burn tournament child) — **duplicates included**. For MCTS
+  this is the MCTS tree-node count; for OEP, the number of individual evaluations.
+- **`UniqueSequences` = distinct action sequences among those evaluated** (de-duplicated by a per-action
+  key). Independent of bridge burning (no floor). `-1` for MCTS (a per-action tree search, no sequences).
+- **`AvgNodeValue` = mean heuristic value over all nodes evaluated that turn** (search quality). `-1` for MCTS.
+- **Efficiency ratios** (computed in analysis): `NodesEvaluated / FmCalls`, `UniqueSequences / FmCalls`,
+  `UniqueSequences / NodesEvaluated`, value-per-node. The crossover-bridge-burning variants spend FM
+  calls on their per-transition tournaments, so for the same `FmCalls` they evaluate fewer nodes / fewer
+  unique sequences than `EMCTS`/`Expansion` — that is the efficiency cost under study.
 - **Bridge burns are fixed at 20 per turn for *every* agent** (`depth − 1`, `depth = 21`), so the
-  *number* of burns is never a confound between families. Each turn's search is split into 21 phases,
-  each given an equal **cumulative** slice of the budget, and a burn fires at each of the first 20
-  phase boundaries. A crossover tournament's forward-model calls are charged against the shared budget
-  and absorbed by later phases doing fewer iterations — so all agents spend the **same** total budget
-  *and* perform the **same** 20 burns. The crossover cost therefore shows up purely as a lower
-  `SequencesEvaluated`, not as fewer burns.
+  *number* of burns is never a confound between families (each turn's search is split into 21 phases,
+  a burn at each of the first 20 boundaries; a crossover tournament's FM calls are charged against the
+  shared budget and absorbed by later phases). The crossover cost shows up as lower `NodesEvaluated` /
+  `UniqueSequences`, not as fewer burns.
 - **`FmCallsElapsed`** is the deterministic search-progress axis for bridge-burn/crossover rows
   (prefer it over `Timestamp`, which is wall-clock and noisy under multithreading).
 - **`InitialSequenceValue` / `FinalSequenceValue`** = greedy-root (pre-search) vs best-node (post-search)
@@ -253,6 +255,56 @@ pipeline is healthy and the full run is safe to start.
 ```bash
 java -Xmx2g -cp "out;lib/*" core.data.exp.BurnBudgetCheck
 ```
-Prints, per agent at the 6000 and 30000 fmcall budgets, the average `NodesVisited`, `SequencesEvaluated`
+Prints, per agent at the 6000 and 30000 fmcall budgets, the average `FmCalls`, `UniqueSequences`
 and bridge-burn count per turn — used to confirm that every agent performs 20 burns and spends the same
 total budget (they converge at 30000; 6000 is shown to illustrate the small-budget floor).
+
+Experiment analysis:
+  - **(possibly) Change to make** Make nodes visited not "fm calls", but the unique number of nodes evaluated. Some of the nodes may be have the same sequence same as other nodes. Does the FM evaluate an identical sequence again or not? Or does it assign the node the same value as another node with the identical sequence? Are nodes with identical sequences currently included in the "nodes visited" count or not? They should be.
+
+  - **(possibly) Change to make** Sequences evaluated should not have floor at 20. It should be independent of a bridge burning phase. If the new root is a unique sequence, then of course it should be counted. How is this number derived? How is it counted?
+
+  - **Investigate and maybe change** How well do FMcalls really track computational use? What percentage of the algorithms computational use is due to FMcalls? A solid number from a properly run test should be used to justify using FM calls as the budget rather than something else, such as time. For example, if FM calls consist of 99.9 percent of the algorithms computational use, then it is justified.
+
+  - We need to be able to make a solid comparison of the efficiency of each algorithm and the modifications made to them. The basis of this will be fmcall use (or computational demand), vs number of nodes evaluated. 
+
+  - The relative efficiency of using different crossover expansion ratios will be tested by comparing the nodes evaluated between the different ratio using players. 
+  - The efficiency in finding new sequences will be used by comparing the number of unique sequences per FM call,the number of unique sequences per node evaluated.
+  - The overall efficiency of the algorithms will be the found by comparing the average value of the nodes they are able to evaluate
+    - Another measure will be comparing the average % value improvement from the initial to final sequence. 
+    - Another measure will be to compare the trajectory of searches: Best sequence over time. Differences between algorithms may show in how the value of the best node changes over time. There may be short/long term algorithm (and ratio) champions. 
+  - The baseline measures will be used just to see in-game performance and compare nodes visited by MCTS vs EMCTS vs the experimental agents. 
+  - **Change to be made:** Asess the final turn heuristic value of MCTS and OEP (OEP may even be done already, not sure). This will allow for a general search value comparison.
+  - **Change to be made:** The OEP parameters need to be tuned to the time settings. The starting population will need to change. Kill rate can remain the same. Tournament size I don't know what is, but will probably need to be tuned. 
+
+
+Graphs to make: 
+- For phase three: Average trajectory of sequence value per bridge burning phase (average across the 50 games for all the agents. Treat Crossover expansion with different ratios as seperate agents)
+- Average turn heuristic value vs score gained to justify heuristic value graph
+
+Statistics to derive:
+- FMCalls' percentage of EMCTS family total compute use
+
+Table to make:
+1:{ Phase 3 summary
+Columns: Agent, Average final sequence value, average sequence improvement, average final score, average nodes evaluated, average unique sequences found. The "average" means across the 50 test games played in the phase three environment. 
+
+Rows: Ratios, meaning 2,5,10,15 and 20. 
+Also add Crossover BB, CrossoverCombo at ratio 5.
+
+This will show which ratio was best and allow for full comparison between the experimental agents vs the baseline EMCTS.
+}
+
+2:{ Win rate matrix from Phase 2
+Columns: Experimental Agents CrossoverExpansion (at ratio 5 + best ratio), CrossoverBB and CrossoverCombo (at ratio 5)
+Rows: Baselines --> MCTS, OEP, EMCTS
+
+The cells in the middle will only display the experimental agent's win rate against the baseline. 
+
+Will be 2 copies (one for each time budget) --> Or maybe split each of the cells in 2?? -->split cells would be neater
+}
+
+3:{ Percentage improvement in the core performance metrics per crossover expansion ratio and crossoverBB. Uses EMCTS as a baseline. May not be displayed, but just used during discussion.
+Should use phase 3 data. 
+
+}

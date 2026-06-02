@@ -169,19 +169,27 @@ public class Phase3Runner {
                 for (TurnData t : rec.turns) {
                     turnRows.add(name + "," + ratioLabel + "," + res.gameId + "," + t.getTurnNumber() + "," +
                             t.getScoreAtTurnStart() + "," + ExpCsv.round(t.getInitialSequenceValue()) + "," +
-                            ExpCsv.round(t.getFinalSequenceValue()) + "," + t.getNodesVisited() + "," +
-                            t.getSequencesEvaluated() + "," + rec.finalScore);
+                            ExpCsv.round(t.getFinalSequenceValue()) + "," + ExpCsv.round(t.getAvgNodeValue()) + "," +
+                            t.getFmCalls() + "," + t.getNodesEvaluated() + "," + t.getUniqueSequences() + "," + rec.finalScore);
                 }
             }
 
             // Per-bridge-burn rows: the trajectory (all groups).
             Map<Integer, Integer> scoreAtTurn = new HashMap<>();
-            Map<Integer, Integer> nodesAtTurn = new HashMap<>();
-            Map<Integer, Integer> seqAtTurn = new HashMap<>();
+            Map<Integer, Double> initialAtTurn = new HashMap<>();
+            Map<Integer, Double> finalAtTurn = new HashMap<>();
+            Map<Integer, Integer> fmAtTurn = new HashMap<>();
+            Map<Integer, Integer> nodesEvalAtTurn = new HashMap<>();
+            Map<Integer, Integer> uniqueAtTurn = new HashMap<>();
+            Map<Integer, Double> avgValAtTurn = new HashMap<>();
             for (TurnData t : rec.turns) {
                 scoreAtTurn.put(t.getTurnNumber(), t.getScoreAtTurnStart());
-                nodesAtTurn.put(t.getTurnNumber(), t.getNodesVisited());
-                seqAtTurn.put(t.getTurnNumber(), t.getSequencesEvaluated());
+                initialAtTurn.put(t.getTurnNumber(), t.getInitialSequenceValue());
+                finalAtTurn.put(t.getTurnNumber(), t.getFinalSequenceValue());
+                fmAtTurn.put(t.getTurnNumber(), t.getFmCalls());
+                nodesEvalAtTurn.put(t.getTurnNumber(), t.getNodesEvaluated());
+                uniqueAtTurn.put(t.getTurnNumber(), t.getUniqueSequences());
+                avgValAtTurn.put(t.getTurnNumber(), t.getAvgNodeValue());
             }
             Map<String, CrossoverEventData> crossByTurnPhase = new HashMap<>();
             if (isCrossoverBB)
@@ -190,8 +198,12 @@ public class Phase3Runner {
 
             for (BridgeBurnEventData b : rec.bridgeBurns) {
                 int startScore = scoreAtTurn.getOrDefault(b.getTurnNumber(), -1);
-                int nodesThisTurn = nodesAtTurn.getOrDefault(b.getTurnNumber(), -1);
-                int seqThisTurn = seqAtTurn.getOrDefault(b.getTurnNumber(), -1);
+                double initialThisTurn = initialAtTurn.getOrDefault(b.getTurnNumber(), 0.0);
+                double finalThisTurn = finalAtTurn.getOrDefault(b.getTurnNumber(), 0.0);
+                int fmThisTurn = fmAtTurn.getOrDefault(b.getTurnNumber(), -1);
+                int nodesEvalThisTurn = nodesEvalAtTurn.getOrDefault(b.getTurnNumber(), -1);
+                int uniqueThisTurn = uniqueAtTurn.getOrDefault(b.getTurnNumber(), -1);
+                double avgValThisTurn = avgValAtTurn.getOrDefault(b.getTurnNumber(), -1.0);
                 StringBuilder row = new StringBuilder();
                 // Column order: the ratio-test CSVs put Ratio after AgentName; the family-trajectory
                 // CSVs put it after GameId (per the agreed schemas).
@@ -205,8 +217,11 @@ public class Phase3Runner {
                    .append(ExpCsv.round(b.getBestSequenceValue())).append(",")
                    .append(b.getFmCallsElapsed()).append(",")
                    .append(b.getExpansionPhaseTimestamp()).append(",")
-                   .append(startScore).append(",").append(nodesThisTurn).append(",")
-                   .append(seqThisTurn).append(",").append(rec.finalScore);
+                   .append(startScore).append(",")
+                   .append(ExpCsv.round(initialThisTurn)).append(",").append(ExpCsv.round(finalThisTurn)).append(",")
+                   .append(ExpCsv.round(avgValThisTurn)).append(",")
+                   .append(fmThisTurn).append(",").append(nodesEvalThisTurn).append(",")
+                   .append(uniqueThisTurn).append(",").append(rec.finalScore);
                 if (isCrossoverBB) {
                     CrossoverEventData c = crossByTurnPhase.get(b.getTurnNumber() + ":" + b.getBridgeBurningPhaseNumber());
                     double raw = (c != null) ? c.getRawImprovement() : 0.0;
@@ -220,20 +235,20 @@ public class Phase3Runner {
         switch (group) {
             case RATIO:
                 ExpCsv.append(new File(dir, "Phase3_ratio_turns_" + level.name + ".csv"),
-                        "AgentName,Ratio,GameId,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,NodesVisited,SequencesEvaluated,FinalScore",
+                        "AgentName,Ratio,GameId,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,AvgNodeValue,FmCalls,NodesEvaluated,UniqueSequences,FinalScore",
                         turnRows);
                 ExpCsv.append(new File(dir, "Phase3_ratio_trajectory_" + level.name + ".csv"),
-                        "AgentName,Ratio,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore",
+                        "AgentName,Ratio,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,AvgNodeValue,FmCalls,NodesEvaluated,UniqueSequences,FinalScore",
                         bbRows);
                 break;
             case STANDARD_BB:
                 ExpCsv.append(new File(dir, "Phase3_standardBB_" + level.name + ".csv"),
-                        "AgentName,GameId,Ratio,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore",
+                        "AgentName,GameId,Ratio,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,AvgNodeValue,FmCalls,NodesEvaluated,UniqueSequences,FinalScore",
                         bbRows);
                 break;
             case CROSSOVER_BB:
                 ExpCsv.append(new File(dir, "Phase3_crossoverBB_" + level.name + ".csv"),
-                        "AgentName,GameId,Ratio,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore,RawImprovement,PercentageImprovement",
+                        "AgentName,GameId,Ratio,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,AvgNodeValue,FmCalls,NodesEvaluated,UniqueSequences,FinalScore,RawImprovement,PercentageImprovement",
                         bbRows);
                 break;
         }

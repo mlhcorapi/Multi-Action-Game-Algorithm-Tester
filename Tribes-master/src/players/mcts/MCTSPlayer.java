@@ -21,8 +21,11 @@ public class MCTSPlayer extends Agent {
     private Random m_rnd;
     private MCTSParams params;
     private int turnNodesVisited = 0;
+    private int turnFmCalls = 0;
     private int turnStartTick = -1;
     private int turnStartScore = 0;
+    private GameState turnStartState = null;
+    private StateHeuristic heuristic;
 
     public MCTSPlayer(long seed)
     {
@@ -42,6 +45,8 @@ public class MCTSPlayer extends Agent {
         if (gs.getTick() != turnStartTick) {
             turnStartTick = gs.getTick();
             turnStartScore = gs.getScore(playerID);
+            turnStartState = gs.copy();
+            heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
         }
 
         //Gather all available actions:
@@ -60,15 +65,21 @@ public class MCTSPlayer extends Agent {
                 m_root.mctsSearch(ect);
                 bestAction = rootActions.get(m_root.mostVisitedAction());
                 turnNodesVisited += m_root.getNumNodes();
+                turnFmCalls += m_root.getNumFmCalls();
             }
         }
 
-        // MCTS selects a single action via tree search and has no evolved macro-sequence,
-        // so InitialSequenceValue / FinalSequenceValue are not applicable (logged as 0.0).
+        // At turn end, log the turn's telemetry. The "sequence" values are the SIMPLE-heuristic value
+        // of the board at turn start vs the state MCTS reached by turn end (its achieved search value),
+        // so MCTS is comparable on final value. MCTS is a per-action tree search, so uniqueSequences
+        // and avgNodeValue are N/A (-1); NodesEvaluated = MCTS tree nodes, FmCalls = forward-model calls.
         if (bestAction instanceof EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
-            // MCTS does tree search (no evolved sequences): sequencesEvaluated = -1 (N/A).
-            turnDataLog.add(new TurnData(-1, gs.getTick(), 0.0, 0.0, turnNodesVisited, turnStartScore, -1));
+            double initialValue = (heuristic != null && turnStartState != null) ? heuristic.evaluateState(turnStartState, turnStartState) : 0.0;
+            double finalValue = (heuristic != null && turnStartState != null) ? heuristic.evaluateState(turnStartState, gs) : 0.0;
+            turnDataLog.add(new TurnData(-1, gs.getTick(), turnStartScore, initialValue, finalValue, -1.0,
+                    turnFmCalls, turnNodesVisited, -1));
             turnNodesVisited = 0;
+            turnFmCalls = 0;
         }
 
         return bestAction;

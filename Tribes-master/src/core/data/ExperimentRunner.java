@@ -107,7 +107,7 @@ public class ExperimentRunner {
 
                 List<TurnData> newTurns = new ArrayList<>();
                 for (TurnData td : result.turns) {
-                    newTurns.add(new TurnData(gameId, td.getTurnNumber(), td.getInitialSequenceValue(), td.getFinalSequenceValue(), td.getNodesVisited(), td.getScoreAtTurnStart(), td.getSequencesEvaluated()));
+                    newTurns.add(new TurnData(gameId, td.getTurnNumber(), td.getScoreAtTurnStart(), td.getInitialSequenceValue(), td.getFinalSequenceValue(), td.getAvgNodeValue(), td.getFmCalls(), td.getNodesEvaluated(), td.getUniqueSequences()));
                 }
                 result.turns = newTurns;
 

@@ -67,6 +67,14 @@ class SingleTreeNode
         return m_numNodes;
     }
 
+    /** Forward-model advance() calls made during this search (tracked on the root, see advance()). */
+    public int getNumFmCalls() {
+        if (this.root != null && this.root != this) {
+            return this.root.fmCallsCount;
+        }
+        return fmCallsCount;
+    }
+
     void setRootGameState(SingleTreeNode root, GameState gs, ArrayList<Integer> allIDs)
     {
         this.state = gs;

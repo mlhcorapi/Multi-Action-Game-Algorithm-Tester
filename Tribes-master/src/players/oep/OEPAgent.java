@@ -35,6 +35,12 @@ public class OEPAgent extends Agent {
     private int turnStartTick = -1;
     private int turnStartScore = 0;
     private double turnPlanValue = 0.0;
+    // Turn-level telemetry accumulated across the turn's act() calls (OEP re-evolves per action;
+    // fmCallsCount is reset each act(), so it is accumulated into turnFmCalls).
+    private int turnFmCalls = 0;
+    private int turnNodesEvaluated = 0;
+    private double turnSumNodeValue = 0.0;
+    private final java.util.HashSet<String> turnUniqueSeqKeys = new java.util.HashSet<>();
 
 
     public OEPAgent(long seed, OEPParams params) {
@@ -60,6 +66,10 @@ public class OEPAgent extends Agent {
         if (firstActOfTurn) {
             turnStartTick = gs.getTick();
             turnStartScore = gs.getScore(playerID);
+            turnFmCalls = 0;
+            turnNodesEvaluated = 0;
+            turnSumNodeValue = 0.0;
+            turnUniqueSeqKeys.clear();
         }
 
         double initialSequenceValue = 0.0;
@@ -160,6 +170,7 @@ public class OEPAgent extends Agent {
 
         }
         //System.out.println(numIters);
+        turnFmCalls += fmCallsCount; // this act()'s forward-model calls (fmCallsCount is reset each act())
 
         Action bestAction = null;
         double finalSequenceValue = 0.0;
@@ -191,7 +202,9 @@ public class OEPAgent extends Agent {
         // Initial sequence value is not meaningful for OEP (pre-evolution random pop),
         // so it is logged as 0.0; Final = the value of the turn plan OEP commits to.
         if (bestAction instanceof core.actions.tribeactions.EndTurn || bestAction.getActionType() == core.Types.ACTION.END_TURN) {
-            turnDataLog.add(new TurnData(-1, gs.getTick(), 0.0, turnPlanValue, nodesVisited, turnStartScore, -1));
+            double avgNodeValue = turnNodesEvaluated > 0 ? turnSumNodeValue / turnNodesEvaluated : 0.0;
+            turnDataLog.add(new TurnData(-1, gs.getTick(), turnStartScore, 0.0, turnPlanValue, avgNodeValue,
+                    turnFmCalls, turnNodesEvaluated, turnUniqueSeqKeys.size()));
         }
 
         return bestAction;
@@ -496,8 +509,21 @@ public class OEPAgent extends Agent {
 
     public double eval( Individual actionSet){
         GameState gs = actionSet.getGs();
-        return heuristic.evaluateState(this.root, gs);
-        //return heuristic.evaluateState(gs.copy());
+        double v = heuristic.evaluateState(this.root, gs);
+        // Telemetry: each eval() scores one individual. Count it (duplicates included), accumulate its
+        // value (for the per-turn mean), and record its sequence key (distinct-sequence count).
+        turnNodesEvaluated++;
+        turnSumNodeValue += v;
+        turnUniqueSeqKeys.add(seqKey(actionSet.getActions()));
+        return v;
+    }
+
+    /** Canonical key for an action sequence (de-duplication), composed from each action's content toString(). */
+    private String seqKey(ArrayList<Action> seq) {
+        if (seq == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (Action a : seq) sb.append(a == null ? "_" : a.toString()).append('|');
+        return sb.toString();
     }
 
     private boolean checkActionFeasibility(Action a, GameState gs)

@@ -74,6 +74,10 @@ public class ExperimentalEMCTSAgent extends Agent {
 
     protected int fmCallsCount;
     protected int fmCallsRun;
+    // Per-turn search telemetry (reset each planTurn): nodes scored, value sum (mean), distinct keys.
+    protected int nodesEvaluated;
+    protected double sumNodeValue;
+    protected final java.util.HashSet<String> uniqueSeqKeys = new java.util.HashSet<>();
     protected PriorityQueue<ExperimentalEMCTSTreeNode> topNodesQueue;
     protected PriorityQueue<ExperimentalEMCTSTreeNode> globalTopNodesQueue;
     protected int crossoverExpansionCounter = 0;
@@ -129,6 +133,9 @@ public class ExperimentalEMCTSAgent extends Agent {
         turnStartTimeMillis = System.currentTimeMillis();
 
         this.fmCallsCount = 0;
+        this.nodesEvaluated = 0;
+        this.sumNodeValue = 0.0;
+        this.uniqueSeqKeys.clear();
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
         old_gs = gs.copy();
@@ -144,7 +151,6 @@ public class ExperimentalEMCTSAgent extends Agent {
 
         bestNode = root;
         fmCallsRun = 0;
-        int sequencesEvaluated = 0; // distinct candidate sequences evaluated this turn (one per search iteration)
 
         // Initialize PriorityQueue for tracking top nodes (min heap by value to keep the top K elements)
         topNodesQueue = new PriorityQueue<>((n1, n2) -> Double.compare(n1.getValue(), n2.getValue()));
@@ -236,7 +242,6 @@ public class ExperimentalEMCTSAgent extends Agent {
                 }
 
                 child.visited();
-                sequencesEvaluated++;
 
                 // Track top nodes for crossover bridge burning
                 topNodesQueue.offer(child);
@@ -297,8 +302,10 @@ public class ExperimentalEMCTSAgent extends Agent {
         // nodesVisited = forward-model calls this turn (the computational-workload metric;
         // dominated by sequence evaluations + greedy repair, in the thousands at real budgets).
         double finalValue = bestNode.getValue();
+        double avgNodeValue = nodesEvaluated > 0 ? sumNodeValue / nodesEvaluated : 0.0;
         turnDataList.add(new TurnData(
-                -1, gs.getTick(), initialValue, finalValue, this.fmCallsCount, scoreAtTurnStart, sequencesEvaluated
+                -1, gs.getTick(), scoreAtTurnStart, initialValue, finalValue, avgNodeValue,
+                this.fmCallsCount, nodesEvaluated, uniqueSeqKeys.size()
         ));
 
         // Cache the best full action sequence; act() replays it over the turn.
@@ -321,6 +328,21 @@ public class ExperimentalEMCTSAgent extends Agent {
         }else{
             node.setValue(heuristic.evaluateState(old_gs, node.getGs()));
         }
+        // Telemetry: each eval() scores one candidate node (main-loop children, the initial root,
+        // and bridge-burn tournament children). Count it (duplicates included), accumulate its value
+        // (for the per-turn mean), and record its sequence key (distinct-sequence count).
+        nodesEvaluated++;
+        sumNodeValue += node.getValue();
+        uniqueSeqKeys.add(seqKey(node.getSequence()));
+    }
+
+    /** Canonical key for an action sequence (for de-duplication), composed from each action's
+     *  content toString(). */
+    protected String seqKey(ArrayList<Action> seq) {
+        if (seq == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (Action a : seq) sb.append(a == null ? "_" : a.toString()).append('|');
+        return sb.toString();
     }
 
     protected ExperimentalEMCTSTreeNode nodeToExpand() {

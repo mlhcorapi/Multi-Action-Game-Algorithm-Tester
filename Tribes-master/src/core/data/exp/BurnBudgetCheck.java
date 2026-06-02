@@ -55,14 +55,14 @@ public class BurnBudgetCheck {
                     for (BridgeBurnEventData b : rec.bridgeBurns)
                         maxBurnByTurn.merge(b.getTurnNumber(), b.getBridgeBurningPhaseNumber(), Math::max);
                     for (TurnData td : rec.turns) {
-                        sumNodes += td.getNodesVisited();
-                        sumSeqs += td.getSequencesEvaluated();
+                        sumNodes += td.getFmCalls();
+                        sumSeqs += td.getUniqueSequences();
                         sumMaxBurn += maxBurnByTurn.getOrDefault(td.getTurnNumber(), 0);
                         turnCount++;
                     }
                 }
                 if (turnCount == 0) { System.out.printf("  %-20s (no turns)%n", name); continue; }
-                System.out.printf("  %-20s avgNodesVisited(FM)=%8.0f  avgSequencesEvaluated=%6.1f  avgMaxBurnPhase=%5.1f  (target FM=%d)%n",
+                System.out.printf("  %-20s avgFmCalls=%8.0f  avgUniqueSeq=%6.1f  avgMaxBurnPhase=%5.1f  (target FM=%d)%n",
                         name, sumNodes / turnCount, sumSeqs / turnCount, sumMaxBurn / turnCount, budget);
             }
             System.out.println();

@@ -42,7 +42,7 @@ public class CsvDataHarvester {
              PrintWriter pw = new PrintWriter(fw)) {
 
             if (isNew) {
-                pw.println("AgentName,GameId,GameDurationTurns,GameOutcomeScore,TurnNumber,InitialSequenceValue,FinalSequenceValue,NodesVisited,ScoreAtTurnStart,SequencesEvaluated");
+                pw.println("AgentName,GameId,GameDurationTurns,GameOutcomeScore,TurnNumber,InitialSequenceValue,FinalSequenceValue,AvgNodeValue,FmCalls,NodesEvaluated,UniqueSequences,ScoreAtTurnStart");
             }
 
             if (turns == null || turns.isEmpty()) {
@@ -50,7 +50,7 @@ public class CsvDataHarvester {
                         summary.getGameId() + "," +
                         summary.getGameDurationTurns() + "," +
                         summary.getGameOutcomeScore() + "," +
-                        "-1,0.0,0.0,0,-1,-1");
+                        "-1,0.0,0.0,-1.0,0,0,-1,-1");
             } else {
                 for (TurnData turn : turns) {
                     pw.println(summary.getAgentName() + "," +
@@ -60,9 +60,11 @@ public class CsvDataHarvester {
                             turn.getTurnNumber() + "," +
                             round(turn.getInitialSequenceValue()) + "," +
                             round(turn.getFinalSequenceValue()) + "," +
-                            turn.getNodesVisited() + "," +
-                            turn.getScoreAtTurnStart() + "," +
-                            turn.getSequencesEvaluated());
+                            round(turn.getAvgNodeValue()) + "," +
+                            turn.getFmCalls() + "," +
+                            turn.getNodesEvaluated() + "," +
+                            turn.getUniqueSequences() + "," +
+                            turn.getScoreAtTurnStart());
                 }
             }
         } catch (IOException e) {
