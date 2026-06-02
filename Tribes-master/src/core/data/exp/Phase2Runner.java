@@ -12,10 +12,10 @@ import java.util.*;
  * (9 matchups; experimental agents do NOT play each other), Capitals, 50-turn limit,
  * 100 random-map games per matchup, at 3 thinking-TIME budgets.
  *
- * Time budgets (not fmcalls) are used here so every agent gets an EQUAL per-turn budget:
+ * Time budgets (not compute-units) are used here so every agent gets an EQUAL per-turn budget:
  * the engine shares each turn's time across all of a turn's actions, so the per-action
- * baselines (MCTS/OEP) and the plan-once experimental agents are budgeted fairly. (Phase 1
- * and Phase 3 use fmcalls, where all participants are plan-once and fmcalls is already fair.)
+ * baselines (MCTS/OEP) and the plan-once experimental agents are budgeted fairly. (Phase 3 uses a
+ * deterministic compute-unit budget, where all participants are plan-once and the budget is already fair.)
  *
  * Output (per time level): one game-level CSV, long format (one row per agent per game)
  * with the winner and per-game AVERAGES of initial/final sequence value and nodes visited.
@@ -102,7 +102,7 @@ public class Phase2Runner {
                     System.out.println("[Phase2] (" + matchupIdx + "/" + totalMatchups + ") RUN " + key + " (" + numGames + " games, " + ms + "ms/turn)");
 
                     AgentSpec expSpec = buildExperimentalTime(expName, ratio);
-                    AgentSpec baseSpec = buildBaselineTime(baseName);
+                    AgentSpec baseSpec = buildBaselineTime(baseName, ms);
                     List<AgentSpec> specs = Arrays.asList(expSpec, baseSpec);
 
                     List<GameResult> results = ExperimentEngine.runMatchup(
@@ -122,11 +122,11 @@ public class Phase2Runner {
                                     ratioLabel + "," + (rec.name.equals(res.winnerName) ? 1 : 0) + "," +
                                     res.winnerName + "," +
                                     ExpCsv.round(avg[0]) + "," + ExpCsv.round(avg[1]) + "," + ExpCsv.round(avg[2]) + "," +
-                                    ExpCsv.round(avg[3]) + "," + res.endTurn);
+                                    ExpCsv.round(avg[3]) + "," + ExpCsv.round(avg[4]) + "," + ExpCsv.round(avg[5]) + "," + res.endTurn);
                         }
                     }
                     ExpCsv.append(gamesCsv,
-                            "Level,Matchup,GameId,AgentName,Ratio,Won,Winner,AvgInitialSeq,AvgFinalSeq,AvgNodesVisited,AvgSequencesEvaluated,EndTurn",
+                            "Level,Matchup,GameId,AgentName,Ratio,Won,Winner,AvgInitialSeq,AvgFinalSeq,AvgNodeValue,AvgFmCalls,AvgNodesEvaluated,AvgUniqueSequences,EndTurn",
                             rows);
                     ExpCsv.markCompleted(ckpt, key);
                 }
@@ -135,18 +135,21 @@ public class Phase2Runner {
         System.out.println("[Phase2] Complete. Output in " + dir.getPath());
     }
 
-    /** Per-game averages over an agent's turns: [avgInitial, avgFinal, avgNodes, avgSequences]. */
+    /** Per-game averages over an agent's turns:
+     *  [avgInitial, avgFinal, avgNodeValue, avgFmCalls, avgNodesEvaluated, avgUniqueSequences]. */
     private static double[] averages(GameResult.AgentRecord rec) {
-        if (rec.turns.isEmpty()) return new double[]{0, 0, 0, 0};
-        double si = 0, sf = 0, sn = 0, sq = 0;
+        if (rec.turns.isEmpty()) return new double[]{0, 0, 0, 0, 0, 0};
+        double si = 0, sf = 0, sav = 0, sfm = 0, sne = 0, suq = 0;
         for (TurnData t : rec.turns) {
             si += t.getInitialSequenceValue();
             sf += t.getFinalSequenceValue();
-            sn += t.getNodesVisited();
-            sq += t.getSequencesEvaluated();
+            sav += t.getAvgNodeValue();
+            sfm += t.getFmCalls();
+            sne += t.getNodesEvaluated();
+            suq += t.getUniqueSequences();
         }
         int n = rec.turns.size();
-        return new double[]{si / n, sf / n, sn / n, sq / n};
+        return new double[]{si / n, sf / n, sav / n, sfm / n, sne / n, suq / n};
     }
 
     private static AgentSpec buildExperimentalTime(String name, int ratio) {
@@ -158,10 +161,10 @@ public class Phase2Runner {
         }
     }
 
-    private static AgentSpec buildBaselineTime(String name) {
+    private static AgentSpec buildBaselineTime(String name, int ms) {
         switch (name) {
             case "MCTS":  return ExpAgents.mctsTime();
-            case "OEP":   return ExpAgents.oepTime();
+            case "OEP":   return ExpAgents.oepTime(ms); // population/tournament tuned per time budget
             case "EMCTS": return ExpAgents.emctsTime();
             default: throw new IllegalArgumentException("Unknown baseline agent: " + name);
         }

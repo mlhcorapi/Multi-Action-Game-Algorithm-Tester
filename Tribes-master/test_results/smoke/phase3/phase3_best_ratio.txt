@@ -1,0 +1,10 @@
+Phase 3 - CrossoverExpansion average FinalSequenceValue by ratio, per budget level.
+Best ratio per level = highest average FinalSequenceValue (search effectiveness).
+Phase 2 uses {5 (standard), best-for-that-level} at each shared budget level.
+
+  level 40ms:
+    ratio 20  avgFinalSeq=8483.15
+    ratio  5  avgFinalSeq=7220.88
+
+Selected best ratio per level (Phase 2 also always includes ratio 5):
+BEST_RATIO_40ms=20

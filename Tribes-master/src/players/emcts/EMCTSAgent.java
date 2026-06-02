@@ -36,6 +36,11 @@ public class EMCTSAgent extends Agent {
     private int fmCallsCount;
     private int fmCallsRun;
     private int totalNodesVisited;
+    // Per-turn search telemetry (reset each planTurn): nodes scored, value sum (for the mean),
+    // and distinct sequence keys (for the unique-sequence count).
+    private int nodesEvaluated;
+    private double sumNodeValue;
+    private final java.util.HashSet<String> uniqueSeqKeys = new java.util.HashSet<>();
     // Per-turn planning state: the engine calls act() once per action, so we plan the
     // entire turn once (a single phased search) and replay the cached best action
     // sequence across the turn's subsequent act() calls instead of re-searching.
@@ -107,6 +112,10 @@ public class EMCTSAgent extends Agent {
         turnStartTimeMillis = System.currentTimeMillis();
         this.fmCallsCount = 0;
         this.totalNodesVisited = 0;
+        this.nodesEvaluated = 0;
+        this.sumNodeValue = 0.0;
+        this.uniqueSeqKeys.clear();
+        core.game.ComputeMeter.reset(); // deterministic compute-unit budget (STOP_COMPUTE)
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
         old_gs = gs.copy();
@@ -122,7 +131,6 @@ public class EMCTSAgent extends Agent {
 
         bestNode = root;
         fmCallsRun = 0;
-        int sequencesEvaluated = 0; // distinct candidate sequences evaluated this turn (one per search iteration)
 
         // ---- Phase-based bridge burning (FIXED burn count for every agent) ----
         // Identical schedule to the experimental agents: the turn's search is split into
@@ -133,17 +141,19 @@ public class EMCTSAgent extends Agent {
         // search and performs all 20 burns.
         long turnBudgetTime = ect.remainingTimeMillis();
         ElapsedCpuTimer turnTimer = new ElapsedCpuTimer();
-        long fmPerPhase    = Math.max(1, params.num_fmcalls    / Math.max(1, params.depth));
-        long itersPerPhase = Math.max(1, params.num_iterations / Math.max(1, params.depth));
-        long timePerPhase  = Math.max(1, turnBudgetTime        / Math.max(1, params.depth));
+        long fmPerPhase      = Math.max(1, params.num_fmcalls      / Math.max(1, params.depth));
+        long computePerPhase = Math.max(1, params.num_computeUnits / Math.max(1, params.depth));
+        long itersPerPhase   = Math.max(1, params.num_iterations   / Math.max(1, params.depth));
+        long timePerPhase    = Math.max(1, turnBudgetTime          / Math.max(1, params.depth));
         final int MAX_ITERS_PER_PHASE = 1_000_000; // safety net against a no-progress stall
         int numIters = 0;
         int bridgeBurningPhaseNumber = 0;
 
         for (int currentPhase = 0; currentPhase < params.depth; currentPhase++) {
-            long fmCeiling   = (long) (currentPhase + 1) * fmPerPhase;
-            long iterCeiling = (long) (currentPhase + 1) * itersPerPhase;
-            long timeCeiling = (long) (currentPhase + 1) * timePerPhase;
+            long fmCeiling        = (long) (currentPhase + 1) * fmPerPhase;
+            double computeCeiling = (double) (currentPhase + 1) * computePerPhase;
+            long iterCeiling      = (long) (currentPhase + 1) * itersPerPhase;
+            long timeCeiling      = (long) (currentPhase + 1) * timePerPhase;
             int phaseStartIters = numIters;
 
             // Run iterations until this phase's cumulative budget ceiling is reached. We only
@@ -156,6 +166,8 @@ public class EMCTSAgent extends Agent {
                     ceilingReached = turnTimer.elapsedMillis() >= timeCeiling;
                 } else if (params.stop_type == params.STOP_ITERATIONS) {
                     ceilingReached = numIters >= iterCeiling;
+                } else if (params.stop_type == params.STOP_COMPUTE) {
+                    ceilingReached = core.game.ComputeMeter.computeUnits() >= computeCeiling;
                 } else { // STOP_FMCALLS (default)
                     ceilingReached = fmCallsCount >= fmCeiling;
                 }
@@ -176,7 +188,6 @@ public class EMCTSAgent extends Agent {
                 }
 
                 child.visited();
-                sequencesEvaluated++;
 
                 // Backpropagate score up the tree (standard UCB update)
                 EMCTSTreeNode current = child;
@@ -217,7 +228,9 @@ public class EMCTSAgent extends Agent {
         // dominated by sequence evaluations + greedy repair, in the thousands at real budgets).
         this.totalNodesVisited = this.fmCallsCount;
         double finalValue = bestNode.getValue();
-        turnDataLog.add(new TurnData(-1, gs.getTick(), initialValue, finalValue, totalNodesVisited, scoreAtTurnStart, sequencesEvaluated));
+        double avgNodeValue = nodesEvaluated > 0 ? sumNodeValue / nodesEvaluated : 0.0;
+        turnDataLog.add(new TurnData(-1, gs.getTick(), scoreAtTurnStart, initialValue, finalValue, avgNodeValue,
+                this.fmCallsCount, nodesEvaluated, uniqueSeqKeys.size()));
 
         // Cache the best full action sequence; act() replays it over the turn.
         ArrayList<Action> bestSeq = bestNode.getSequence();
@@ -239,6 +252,21 @@ public class EMCTSAgent extends Agent {
         }else{
             node.setValue(heuristic.evaluateState(old_gs, node.getGs()));
         }
+        // Telemetry: each eval() scores one candidate node. Count it (duplicates included),
+        // accumulate its value (for the per-turn mean), and record its sequence key (for the
+        // distinct-sequence count). Independent of bridge burning.
+        nodesEvaluated++;
+        sumNodeValue += node.getValue();
+        uniqueSeqKeys.add(seqKey(node.getSequence()));
+    }
+
+    /** Canonical key for an action sequence (for de-duplication), composed from each action's
+     *  content toString(). */
+    private String seqKey(ArrayList<Action> seq) {
+        if (seq == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (Action a : seq) sb.append(a == null ? "_" : a.toString()).append('|');
+        return sb.toString();
     }
 
     private EMCTSTreeNode nodeToExpand() {

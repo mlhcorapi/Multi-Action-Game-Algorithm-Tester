@@ -1,6 +1,8 @@
-Phase 3 - Trajectory Analysis (tracked agent vs fixed passive opponent)
-mode=SCORE turnLimit=30 gamesPerAgent=2 threads=4
+Phase 3 - Ratio selection + trajectory (tracked agent vs fixed passive opponent)
+mode=SCORE turnLimit=30 gamesPerConfig(per level)=40ms=2g threads=4
 tribes=IMPERIUS (tracked agent) vs IMPERIUS2 (DoNothing/passive opponent)
 fixedLevelSeed=777777 fixedGameSeed=888888 agentSeed=100+gameIndex
-ratio(Expansion/Combo)=20
-budgets(fmcalls)=b2000=2000
+ratioTest=CrossoverExpansion swept over [5, 20] (-> Phase3_ratio_turns/_trajectory)
+familyTrajectory=EMCTS (standardBB) + CrossoverBB,CrossoverCombo@{5,best} (crossoverBB)
+bestRatioPerLevel=argmax avg FinalSequenceValue; downstream uses {5, best} per level
+budgets(compute-units)=40ms=2000

@@ -48,16 +48,19 @@ public class Phase3Runner {
     /** Which experiment a configuration belongs to (decides which CSV(s) it is written to). */
     private enum Group { RATIO, STANDARD_BB, CROSSOVER_BB }
 
-    // Calibrated fmcall budgets ~500/1000/5000ms on the target machine (~30.8 fmcalls/ms; see Calibrate).
+    // Calibrated COMPUTE-UNIT budgets ~500/1000/5000ms on the target machine (~26.8 units/ms; see
+    // ComputeCalibrate). A compute-unit is a weighted advance+copy+eval count (see ComputeMeter), so the
+    // budget bounds total planning compute deterministically (machine-/thread-independent), not just fmcalls.
     // NB: the smallest level is 500ms (not 200ms): with bridge burns fixed at 20, the 20 mandatory
-    // crossover tournaments alone cost ~7000 fmcalls, so a 200ms (~6000) budget cannot fit them plus
-    // any search - the crossover agents would overshoot it and barely search. At 15000+ the 20 burns
-    // are a modest fraction of the budget, so every agent spends the same total fmcalls (see BurnBudgetCheck).
+    // crossover tournaments alone cost a large share of a small budget, so a 200ms-equivalent budget cannot
+    // fit them plus any search - the crossover agents would overshoot it and barely search. At the 500ms+
+    // levels the 20 burns are a modest fraction of the budget, so every agent spends the same total
+    // compute-units (see BurnBudgetCheck).
     public static Budget[] defaultLevels() {
         // The 5000ms level costs ~5x per game of 1000ms, so it runs fewer games (25 vs 50) to keep
         // total runtime manageable; its ratio choice only feeds this phase's own deep trajectory
         // (Phase 2 has no 5000ms level), so halving its sample does not affect the win-rate phase.
-        return new Budget[]{ new Budget("500ms", 15000, 50), new Budget("1000ms", 30000, 50), new Budget("5000ms", 154000, 25) };
+        return new Budget[]{ new Budget("500ms", 13400, 50), new Budget("1000ms", 26800, 50), new Budget("5000ms", 134000, 25) };
     }
 
     public static void run(int numGames, Budget[] levels, int[] ratios, int threads, String outDir) {
@@ -66,7 +69,7 @@ public class Phase3Runner {
         // Maps are water-free (LevelGenerator includeWater=false), so penalize the now-useless naval
         // techs (FISHING/SAILING/WHALING/NAVIGATION/AQUATISM) in the SIMPLE heuristic.
         Constants.REMOVE_FISHING = true;
-        // fmcall-budgeted phase: ensure the engine does not impose any time cutoff.
+        // compute-unit-budgeted phase: ensure the engine does not impose any time cutoff.
         Constants.TURN_TIME_LIMITED = false;
         Constants.TURN_TIME_MILLIS = 10_000_000L;
         // SCORE mode uses Constants.MAX_TURNS (= 30, package-private; referenced as a literal below).
@@ -92,7 +95,7 @@ public class Phase3Runner {
                 "ratioTest=CrossoverExpansion swept over " + Arrays.toString(ratios) + " (-> Phase3_ratio_turns/_trajectory)\n" +
                 "familyTrajectory=EMCTS (standardBB) + CrossoverBB,CrossoverCombo@{" + STANDARD_RATIO + ",best} (crossoverBB)\n" +
                 "bestRatioPerLevel=argmax avg FinalSequenceValue; downstream uses {" + STANDARD_RATIO + ", best} per level\n" +
-                "budgets(fmcalls)=" + budgetsStr(levels) + "\n");
+                "budgets(compute-units)=" + budgetsStr(levels) + "\n");
 
         // pass 1 = EMCTS + CrossoverBB + (#ratios) Expansion; pass 2 = Combo at {5,best} per level (<=2 each).
         int totalMatchups = levels.length * (2 + ratios.length) + levels.length * 2;
@@ -103,12 +106,12 @@ public class Phase3Runner {
         for (Budget level : levels) {
             int levelGames = (level.games > 0) ? level.games : numGames;
             runConfig(dir, ckpt, done, level, tribes, levelGames, threads, idx, totalMatchups,
-                    ExpAgents.emcts(level.fmcalls), "EMCTS", -1, Group.STANDARD_BB);
+                    ExpAgents.emcts(level.budget), "EMCTS", -1, Group.STANDARD_BB);
             runConfig(dir, ckpt, done, level, tribes, levelGames, threads, idx, totalMatchups,
-                    ExpAgents.crossoverBB(level.fmcalls), "CrossoverBB", -1, Group.CROSSOVER_BB);
+                    ExpAgents.crossoverBB(level.budget), "CrossoverBB", -1, Group.CROSSOVER_BB);
             for (int r : ratios) {
                 runConfig(dir, ckpt, done, level, tribes, levelGames, threads, idx, totalMatchups,
-                        ExpAgents.crossoverExpansion(level.fmcalls, r), "CrossoverExpansion", r, Group.RATIO);
+                        ExpAgents.crossoverExpansion(level.budget, r), "CrossoverExpansion", r, Group.RATIO);
             }
         }
 
@@ -120,7 +123,7 @@ public class Phase3Runner {
             int levelGames = (level.games > 0) ? level.games : numGames;
             for (int r : comboRatiosFor(bestByLevel.get(level.name))) {
                 runConfig(dir, ckpt, done, level, tribes, levelGames, threads, idx, totalMatchups,
-                        ExpAgents.crossoverCombo(level.fmcalls, r), "CrossoverCombo", r, Group.CROSSOVER_BB);
+                        ExpAgents.crossoverCombo(level.budget, r), "CrossoverCombo", r, Group.CROSSOVER_BB);
             }
         }
 
@@ -169,19 +172,27 @@ public class Phase3Runner {
                 for (TurnData t : rec.turns) {
                     turnRows.add(name + "," + ratioLabel + "," + res.gameId + "," + t.getTurnNumber() + "," +
                             t.getScoreAtTurnStart() + "," + ExpCsv.round(t.getInitialSequenceValue()) + "," +
-                            ExpCsv.round(t.getFinalSequenceValue()) + "," + t.getNodesVisited() + "," +
-                            t.getSequencesEvaluated() + "," + rec.finalScore);
+                            ExpCsv.round(t.getFinalSequenceValue()) + "," + ExpCsv.round(t.getAvgNodeValue()) + "," +
+                            t.getFmCalls() + "," + t.getNodesEvaluated() + "," + t.getUniqueSequences() + "," + rec.finalScore);
                 }
             }
 
             // Per-bridge-burn rows: the trajectory (all groups).
             Map<Integer, Integer> scoreAtTurn = new HashMap<>();
-            Map<Integer, Integer> nodesAtTurn = new HashMap<>();
-            Map<Integer, Integer> seqAtTurn = new HashMap<>();
+            Map<Integer, Double> initialAtTurn = new HashMap<>();
+            Map<Integer, Double> finalAtTurn = new HashMap<>();
+            Map<Integer, Integer> fmAtTurn = new HashMap<>();
+            Map<Integer, Integer> nodesEvalAtTurn = new HashMap<>();
+            Map<Integer, Integer> uniqueAtTurn = new HashMap<>();
+            Map<Integer, Double> avgValAtTurn = new HashMap<>();
             for (TurnData t : rec.turns) {
                 scoreAtTurn.put(t.getTurnNumber(), t.getScoreAtTurnStart());
-                nodesAtTurn.put(t.getTurnNumber(), t.getNodesVisited());
-                seqAtTurn.put(t.getTurnNumber(), t.getSequencesEvaluated());
+                initialAtTurn.put(t.getTurnNumber(), t.getInitialSequenceValue());
+                finalAtTurn.put(t.getTurnNumber(), t.getFinalSequenceValue());
+                fmAtTurn.put(t.getTurnNumber(), t.getFmCalls());
+                nodesEvalAtTurn.put(t.getTurnNumber(), t.getNodesEvaluated());
+                uniqueAtTurn.put(t.getTurnNumber(), t.getUniqueSequences());
+                avgValAtTurn.put(t.getTurnNumber(), t.getAvgNodeValue());
             }
             Map<String, CrossoverEventData> crossByTurnPhase = new HashMap<>();
             if (isCrossoverBB)
@@ -190,8 +201,12 @@ public class Phase3Runner {
 
             for (BridgeBurnEventData b : rec.bridgeBurns) {
                 int startScore = scoreAtTurn.getOrDefault(b.getTurnNumber(), -1);
-                int nodesThisTurn = nodesAtTurn.getOrDefault(b.getTurnNumber(), -1);
-                int seqThisTurn = seqAtTurn.getOrDefault(b.getTurnNumber(), -1);
+                double initialThisTurn = initialAtTurn.getOrDefault(b.getTurnNumber(), 0.0);
+                double finalThisTurn = finalAtTurn.getOrDefault(b.getTurnNumber(), 0.0);
+                int fmThisTurn = fmAtTurn.getOrDefault(b.getTurnNumber(), -1);
+                int nodesEvalThisTurn = nodesEvalAtTurn.getOrDefault(b.getTurnNumber(), -1);
+                int uniqueThisTurn = uniqueAtTurn.getOrDefault(b.getTurnNumber(), -1);
+                double avgValThisTurn = avgValAtTurn.getOrDefault(b.getTurnNumber(), -1.0);
                 StringBuilder row = new StringBuilder();
                 // Column order: the ratio-test CSVs put Ratio after AgentName; the family-trajectory
                 // CSVs put it after GameId (per the agreed schemas).
@@ -205,8 +220,11 @@ public class Phase3Runner {
                    .append(ExpCsv.round(b.getBestSequenceValue())).append(",")
                    .append(b.getFmCallsElapsed()).append(",")
                    .append(b.getExpansionPhaseTimestamp()).append(",")
-                   .append(startScore).append(",").append(nodesThisTurn).append(",")
-                   .append(seqThisTurn).append(",").append(rec.finalScore);
+                   .append(startScore).append(",")
+                   .append(ExpCsv.round(initialThisTurn)).append(",").append(ExpCsv.round(finalThisTurn)).append(",")
+                   .append(ExpCsv.round(avgValThisTurn)).append(",")
+                   .append(fmThisTurn).append(",").append(nodesEvalThisTurn).append(",")
+                   .append(uniqueThisTurn).append(",").append(rec.finalScore);
                 if (isCrossoverBB) {
                     CrossoverEventData c = crossByTurnPhase.get(b.getTurnNumber() + ":" + b.getBridgeBurningPhaseNumber());
                     double raw = (c != null) ? c.getRawImprovement() : 0.0;
@@ -220,20 +238,20 @@ public class Phase3Runner {
         switch (group) {
             case RATIO:
                 ExpCsv.append(new File(dir, "Phase3_ratio_turns_" + level.name + ".csv"),
-                        "AgentName,Ratio,GameId,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,NodesVisited,SequencesEvaluated,FinalScore",
+                        "AgentName,Ratio,GameId,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,AvgNodeValue,FmCalls,NodesEvaluated,UniqueSequences,FinalScore",
                         turnRows);
                 ExpCsv.append(new File(dir, "Phase3_ratio_trajectory_" + level.name + ".csv"),
-                        "AgentName,Ratio,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore",
+                        "AgentName,Ratio,GameId,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,AvgNodeValue,FmCalls,NodesEvaluated,UniqueSequences,FinalScore",
                         bbRows);
                 break;
             case STANDARD_BB:
                 ExpCsv.append(new File(dir, "Phase3_standardBB_" + level.name + ".csv"),
-                        "AgentName,GameId,Ratio,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore",
+                        "AgentName,GameId,Ratio,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,AvgNodeValue,FmCalls,NodesEvaluated,UniqueSequences,FinalScore",
                         bbRows);
                 break;
             case CROSSOVER_BB:
                 ExpCsv.append(new File(dir, "Phase3_crossoverBB_" + level.name + ".csv"),
-                        "AgentName,GameId,Ratio,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,NodesVisited,SequencesEvaluated,FinalScore,RawImprovement,PercentageImprovement",
+                        "AgentName,GameId,Ratio,TurnNumber,BridgeBurningPhaseNumber,BestSequenceValue,FmCallsElapsed,Timestamp,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,AvgNodeValue,FmCalls,NodesEvaluated,UniqueSequences,FinalScore,RawImprovement,PercentageImprovement",
                         bbRows);
                 break;
         }
@@ -333,7 +351,7 @@ public class Phase3Runner {
 
     private static String budgetsStr(Budget[] levels) {
         StringBuilder sb = new StringBuilder();
-        for (Budget b : levels) sb.append(b.name).append("=").append(b.fmcalls).append(" ");
+        for (Budget b : levels) sb.append(b.name).append("=").append(b.budget).append(" ");
         return sb.toString().trim();
     }
 

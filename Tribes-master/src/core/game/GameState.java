@@ -308,6 +308,7 @@ public class GameState {
      */
     public void advance(Action action, boolean computeActions)
     {
+        ComputeMeter.onAdvance();
         if(action != null)
         {
             boolean executed = false;
@@ -513,6 +514,13 @@ public class GameState {
      * @return a copy of the current game state.
      */
     public GameState copy() {
+        ComputeMeter.onCopy();
+        if (ComputeMeter.PROFILE) {
+            long __t0 = System.nanoTime();
+            GameState __r = copy(-1);
+            ComputeMeter.addCopyNanos(System.nanoTime() - __t0);
+            return __r;
+        }
         return copy(-1);  // No reduction happening if no index specified
     }
 

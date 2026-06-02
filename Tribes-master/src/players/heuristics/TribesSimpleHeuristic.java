@@ -30,6 +30,13 @@ public class TribesSimpleHeuristic implements StateHeuristic{
     @Override
     public double evaluateState(GameState oldState, GameState newState)
     {
+        core.game.ComputeMeter.onEval();
+        if (core.game.ComputeMeter.PROFILE) {
+            long __t0 = System.nanoTime();
+            double __v = evaluateState(newState);
+            core.game.ComputeMeter.addEvalNanos(System.nanoTime() - __t0);
+            return __v;
+        }
         return evaluateState(newState);
     }
 

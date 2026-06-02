@@ -74,6 +74,16 @@ public class ExperimentalEMCTSAgent extends Agent {
 
     protected int fmCallsCount;
     protected int fmCallsRun;
+    // Per-turn search telemetry (reset each planTurn): nodes scored, value sum (mean), distinct keys.
+    protected int nodesEvaluated;
+    protected double sumNodeValue;
+    protected final java.util.HashSet<String> uniqueSeqKeys = new java.util.HashSet<>();
+    // Opt-in forward-model profiling (default OFF => zero overhead in real runs). FmComputeProbe sets
+    // PROFILE_FM and reads these accumulators to measure what fraction of planning wall-clock is the
+    // forward model (gs.advance()) vs everything else (state copies, heuristic eval, bookkeeping).
+    public static volatile boolean PROFILE_FM = false;
+    public static long FM_NANOS = 0;
+    public static long PLAN_NANOS = 0;
     protected PriorityQueue<ExperimentalEMCTSTreeNode> topNodesQueue;
     protected PriorityQueue<ExperimentalEMCTSTreeNode> globalTopNodesQueue;
     protected int crossoverExpansionCounter = 0;
@@ -127,8 +137,13 @@ public class ExperimentalEMCTSAgent extends Agent {
      */
     protected void planTurn(GameState gs, ElapsedCpuTimer ect) {
         turnStartTimeMillis = System.currentTimeMillis();
+        long __planStart = PROFILE_FM ? System.nanoTime() : 0L;
 
         this.fmCallsCount = 0;
+        this.nodesEvaluated = 0;
+        this.sumNodeValue = 0.0;
+        this.uniqueSeqKeys.clear();
+        core.game.ComputeMeter.reset(); // deterministic compute-unit budget (STOP_COMPUTE)
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
         old_gs = gs.copy();
@@ -144,7 +159,6 @@ public class ExperimentalEMCTSAgent extends Agent {
 
         bestNode = root;
         fmCallsRun = 0;
-        int sequencesEvaluated = 0; // distinct candidate sequences evaluated this turn (one per search iteration)
 
         // Initialize PriorityQueue for tracking top nodes (min heap by value to keep the top K elements)
         topNodesQueue = new PriorityQueue<>((n1, n2) -> Double.compare(n1.getValue(), n2.getValue()));
@@ -170,17 +184,19 @@ public class ExperimentalEMCTSAgent extends Agent {
         // the amount of pruning.
         long turnBudgetTime = ect.remainingTimeMillis();
         ElapsedCpuTimer turnTimer = new ElapsedCpuTimer();
-        long fmPerPhase    = Math.max(1, params.num_fmcalls    / Math.max(1, params.depth));
-        long itersPerPhase = Math.max(1, params.num_iterations / Math.max(1, params.depth));
-        long timePerPhase  = Math.max(1, turnBudgetTime        / Math.max(1, params.depth));
+        long fmPerPhase      = Math.max(1, params.num_fmcalls      / Math.max(1, params.depth));
+        long computePerPhase = Math.max(1, params.num_computeUnits / Math.max(1, params.depth));
+        long itersPerPhase   = Math.max(1, params.num_iterations   / Math.max(1, params.depth));
+        long timePerPhase    = Math.max(1, turnBudgetTime          / Math.max(1, params.depth));
         final int MAX_ITERS_PER_PHASE = 1_000_000; // safety net against a no-progress stall
         int numIters = 0;
 
         for (int currentPhase = 0; currentPhase < params.depth; currentPhase++) {
             // Cumulative budget ceiling at the end of this phase's MCTS iterations.
-            long fmCeiling   = (long) (currentPhase + 1) * fmPerPhase;
-            long iterCeiling = (long) (currentPhase + 1) * itersPerPhase;
-            long timeCeiling = (long) (currentPhase + 1) * timePerPhase;
+            long fmCeiling        = (long) (currentPhase + 1) * fmPerPhase;
+            double computeCeiling = (double) (currentPhase + 1) * computePerPhase;
+            long iterCeiling      = (long) (currentPhase + 1) * itersPerPhase;
+            long timeCeiling      = (long) (currentPhase + 1) * timePerPhase;
             int phaseStartIters = numIters;
 
             // Run iterations until this phase's cumulative budget ceiling is reached. We only
@@ -194,6 +210,8 @@ public class ExperimentalEMCTSAgent extends Agent {
                     ceilingReached = turnTimer.elapsedMillis() >= timeCeiling;
                 } else if (params.stop_type == params.STOP_ITERATIONS) {
                     ceilingReached = numIters >= iterCeiling;
+                } else if (params.stop_type == params.STOP_COMPUTE) {
+                    ceilingReached = core.game.ComputeMeter.computeUnits() >= computeCeiling;
                 } else { // STOP_FMCALLS (default)
                     ceilingReached = fmCallsCount >= fmCeiling;
                 }
@@ -236,7 +254,6 @@ public class ExperimentalEMCTSAgent extends Agent {
                 }
 
                 child.visited();
-                sequencesEvaluated++;
 
                 // Track top nodes for crossover bridge burning
                 topNodesQueue.offer(child);
@@ -297,13 +314,16 @@ public class ExperimentalEMCTSAgent extends Agent {
         // nodesVisited = forward-model calls this turn (the computational-workload metric;
         // dominated by sequence evaluations + greedy repair, in the thousands at real budgets).
         double finalValue = bestNode.getValue();
+        double avgNodeValue = nodesEvaluated > 0 ? sumNodeValue / nodesEvaluated : 0.0;
         turnDataList.add(new TurnData(
-                -1, gs.getTick(), initialValue, finalValue, this.fmCallsCount, scoreAtTurnStart, sequencesEvaluated
+                -1, gs.getTick(), scoreAtTurnStart, initialValue, finalValue, avgNodeValue,
+                this.fmCallsCount, nodesEvaluated, uniqueSeqKeys.size()
         ));
 
         // Cache the best full action sequence; act() replays it over the turn.
         ArrayList<Action> bestSeq = bestNode.getSequence();
         turnPlan = (bestSeq != null) ? new ArrayList<>(bestSeq) : new ArrayList<>();
+        if (PROFILE_FM) PLAN_NANOS += System.nanoTime() - __planStart;
     }
 
     @Override
@@ -321,6 +341,21 @@ public class ExperimentalEMCTSAgent extends Agent {
         }else{
             node.setValue(heuristic.evaluateState(old_gs, node.getGs()));
         }
+        // Telemetry: each eval() scores one candidate node (main-loop children, the initial root,
+        // and bridge-burn tournament children). Count it (duplicates included), accumulate its value
+        // (for the per-turn mean), and record its sequence key (distinct-sequence count).
+        nodesEvaluated++;
+        sumNodeValue += node.getValue();
+        uniqueSeqKeys.add(seqKey(node.getSequence()));
+    }
+
+    /** Canonical key for an action sequence (for de-duplication), composed from each action's
+     *  content toString(). */
+    protected String seqKey(ArrayList<Action> seq) {
+        if (seq == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (Action a : seq) sb.append(a == null ? "_" : a.toString()).append('|');
+        return sb.toString();
     }
 
     protected ExperimentalEMCTSTreeNode nodeToExpand() {
@@ -450,7 +485,13 @@ public class ExperimentalEMCTSAgent extends Agent {
     protected void advance(GameState gs, Action move) {
         this.fmCallsCount++;
         this.fmCallsRun++;
-        gs.advance(move, true);
+        if (PROFILE_FM) {
+            long __t0 = System.nanoTime();
+            gs.advance(move, true);
+            FM_NANOS += System.nanoTime() - __t0;
+        } else {
+            gs.advance(move, true);
+        }
     }
 
     /**
