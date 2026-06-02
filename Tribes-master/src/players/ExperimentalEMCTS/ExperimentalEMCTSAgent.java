@@ -78,6 +78,12 @@ public class ExperimentalEMCTSAgent extends Agent {
     protected int nodesEvaluated;
     protected double sumNodeValue;
     protected final java.util.HashSet<String> uniqueSeqKeys = new java.util.HashSet<>();
+    // Opt-in forward-model profiling (default OFF => zero overhead in real runs). FmComputeProbe sets
+    // PROFILE_FM and reads these accumulators to measure what fraction of planning wall-clock is the
+    // forward model (gs.advance()) vs everything else (state copies, heuristic eval, bookkeeping).
+    public static volatile boolean PROFILE_FM = false;
+    public static long FM_NANOS = 0;
+    public static long PLAN_NANOS = 0;
     protected PriorityQueue<ExperimentalEMCTSTreeNode> topNodesQueue;
     protected PriorityQueue<ExperimentalEMCTSTreeNode> globalTopNodesQueue;
     protected int crossoverExpansionCounter = 0;
@@ -131,6 +137,7 @@ public class ExperimentalEMCTSAgent extends Agent {
      */
     protected void planTurn(GameState gs, ElapsedCpuTimer ect) {
         turnStartTimeMillis = System.currentTimeMillis();
+        long __planStart = PROFILE_FM ? System.nanoTime() : 0L;
 
         this.fmCallsCount = 0;
         this.nodesEvaluated = 0;
@@ -311,6 +318,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         // Cache the best full action sequence; act() replays it over the turn.
         ArrayList<Action> bestSeq = bestNode.getSequence();
         turnPlan = (bestSeq != null) ? new ArrayList<>(bestSeq) : new ArrayList<>();
+        if (PROFILE_FM) PLAN_NANOS += System.nanoTime() - __planStart;
     }
 
     @Override
@@ -472,7 +480,13 @@ public class ExperimentalEMCTSAgent extends Agent {
     protected void advance(GameState gs, Action move) {
         this.fmCallsCount++;
         this.fmCallsRun++;
-        gs.advance(move, true);
+        if (PROFILE_FM) {
+            long __t0 = System.nanoTime();
+            gs.advance(move, true);
+            FM_NANOS += System.nanoTime() - __t0;
+        } else {
+            gs.advance(move, true);
+        }
     }
 
     /**
