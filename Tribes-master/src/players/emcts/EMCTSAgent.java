@@ -115,6 +115,7 @@ public class EMCTSAgent extends Agent {
         this.nodesEvaluated = 0;
         this.sumNodeValue = 0.0;
         this.uniqueSeqKeys.clear();
+        core.game.ComputeMeter.reset(); // deterministic compute-unit budget (STOP_COMPUTE)
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
         old_gs = gs.copy();
@@ -140,17 +141,19 @@ public class EMCTSAgent extends Agent {
         // search and performs all 20 burns.
         long turnBudgetTime = ect.remainingTimeMillis();
         ElapsedCpuTimer turnTimer = new ElapsedCpuTimer();
-        long fmPerPhase    = Math.max(1, params.num_fmcalls    / Math.max(1, params.depth));
-        long itersPerPhase = Math.max(1, params.num_iterations / Math.max(1, params.depth));
-        long timePerPhase  = Math.max(1, turnBudgetTime        / Math.max(1, params.depth));
+        long fmPerPhase      = Math.max(1, params.num_fmcalls      / Math.max(1, params.depth));
+        long computePerPhase = Math.max(1, params.num_computeUnits / Math.max(1, params.depth));
+        long itersPerPhase   = Math.max(1, params.num_iterations   / Math.max(1, params.depth));
+        long timePerPhase    = Math.max(1, turnBudgetTime          / Math.max(1, params.depth));
         final int MAX_ITERS_PER_PHASE = 1_000_000; // safety net against a no-progress stall
         int numIters = 0;
         int bridgeBurningPhaseNumber = 0;
 
         for (int currentPhase = 0; currentPhase < params.depth; currentPhase++) {
-            long fmCeiling   = (long) (currentPhase + 1) * fmPerPhase;
-            long iterCeiling = (long) (currentPhase + 1) * itersPerPhase;
-            long timeCeiling = (long) (currentPhase + 1) * timePerPhase;
+            long fmCeiling        = (long) (currentPhase + 1) * fmPerPhase;
+            double computeCeiling = (double) (currentPhase + 1) * computePerPhase;
+            long iterCeiling      = (long) (currentPhase + 1) * itersPerPhase;
+            long timeCeiling      = (long) (currentPhase + 1) * timePerPhase;
             int phaseStartIters = numIters;
 
             // Run iterations until this phase's cumulative budget ceiling is reached. We only
@@ -163,6 +166,8 @@ public class EMCTSAgent extends Agent {
                     ceilingReached = turnTimer.elapsedMillis() >= timeCeiling;
                 } else if (params.stop_type == params.STOP_ITERATIONS) {
                     ceilingReached = numIters >= iterCeiling;
+                } else if (params.stop_type == params.STOP_COMPUTE) {
+                    ceilingReached = core.game.ComputeMeter.computeUnits() >= computeCeiling;
                 } else { // STOP_FMCALLS (default)
                     ceilingReached = fmCallsCount >= fmCeiling;
                 }

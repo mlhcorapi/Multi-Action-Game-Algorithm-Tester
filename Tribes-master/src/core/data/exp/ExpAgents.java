@@ -12,29 +12,30 @@ import players.oep.OEPAgent;
 import players.oep.OEPParams;
 
 /**
- * Factories that build each agent type configured for the experiments: STOP_FMCALLS with
- * the given budget, SIMPLE heuristic, and (for the EMCTS family) depth = DEPTH. A fresh
- * params object is built per agent so per-game state never leaks between games.
+ * Factories that build each agent type configured for the experiments. The EMCTS family in Phase 1/3
+ * uses the deterministic COMPUTE-UNIT budget (STOP_COMPUTE, see ComputeMeter); Phase 2 uses STOP_TIME.
+ * All use the SIMPLE heuristic and (for the EMCTS family) depth = DEPTH. A fresh params object is built
+ * per agent so per-game state never leaks between games.
  */
 public class ExpAgents {
 
     public static final int DEPTH = 21; // bridge burns = depth - 1 = 20
 
-    private static ExperimentalEMCTSParams expParams(int fmcalls, int ratio) {
+    private static ExperimentalEMCTSParams expParams(int budget, int ratio) {
         ExperimentalEMCTSParams p = new ExperimentalEMCTSParams();
-        p.stop_type = p.STOP_FMCALLS;
-        p.num_fmcalls = fmcalls;
+        p.stop_type = p.STOP_COMPUTE;          // deterministic compute-unit budget (Phase 1/3)
+        p.num_computeUnits = budget;
         p.heuristic_method = p.SIMPLE_HEURISTIC;
         p.depth = DEPTH;
         p.mutationExpansionRatio = ratio;
         return p;
     }
 
-    public static AgentSpec emcts(int fmcalls) {
+    public static AgentSpec emcts(int budget) {
         return new AgentSpec("EMCTS", seed -> {
             EMCTSParams p = new EMCTSParams();
-            p.stop_type = p.STOP_FMCALLS;
-            p.num_fmcalls = fmcalls;
+            p.stop_type = p.STOP_COMPUTE;          // deterministic compute-unit budget (Phase 1/3)
+            p.num_computeUnits = budget;
             p.heuristic_method = p.SIMPLE_HEURISTIC;
             p.depth = DEPTH;
             return new EMCTSAgent(seed, p);
@@ -61,20 +62,20 @@ public class ExpAgents {
         });
     }
 
-    public static AgentSpec crossoverExpansion(int fmcalls, int ratio) {
+    public static AgentSpec crossoverExpansion(int budget, int ratio) {
         return new AgentSpec("CrossoverExpansion",
-                seed -> new CrossoverExpansionAgent(seed, expParams(fmcalls, ratio)));
+                seed -> new CrossoverExpansionAgent(seed, expParams(budget, ratio)));
     }
 
-    public static AgentSpec crossoverBB(int fmcalls) {
+    public static AgentSpec crossoverBB(int budget) {
         // Bridge-burning variant; the expansion ratio is irrelevant (no crossover expansion).
         return new AgentSpec("CrossoverBB",
-                seed -> new CrossoverBBAgent(seed, expParams(fmcalls, 5)));
+                seed -> new CrossoverBBAgent(seed, expParams(budget, 5)));
     }
 
-    public static AgentSpec crossoverCombo(int fmcalls, int ratio) {
+    public static AgentSpec crossoverCombo(int budget, int ratio) {
         return new AgentSpec("CrossoverCombo",
-                seed -> new CrossoverComboAgent(seed, expParams(fmcalls, ratio)));
+                seed -> new CrossoverComboAgent(seed, expParams(budget, ratio)));
     }
 
     /**
@@ -119,11 +120,15 @@ public class ExpAgents {
         });
     }
 
-    public static AgentSpec oepTime() {
+    public static AgentSpec oepTime(int ms) {
         return new AgentSpec("OEP", seed -> {
             OEPParams p = new OEPParams();
             p.stop_type = p.STOP_TIME;
             p.heuristic_method = p.SIMPLE_HEURISTIC;
+            p.KILL_RATE = 0.5;
+            // Population + tournament size tuned per time budget (OepTuning sweep): kill rate fixed 0.5.
+            if (ms <= 500) { p.POP_SIZE = 100; p.TOURNAMENT_SIZE = 3; }   // 500ms-equivalent
+            else           { p.POP_SIZE = 50;  p.TOURNAMENT_SIZE = 10; }  // 1000ms+ (best at 1000ms)
             return new OEPAgent(seed, p);
         });
     }

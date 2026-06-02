@@ -12,10 +12,10 @@ import java.util.*;
  * (9 matchups; experimental agents do NOT play each other), Capitals, 50-turn limit,
  * 100 random-map games per matchup, at 3 thinking-TIME budgets.
  *
- * Time budgets (not fmcalls) are used here so every agent gets an EQUAL per-turn budget:
+ * Time budgets (not compute-units) are used here so every agent gets an EQUAL per-turn budget:
  * the engine shares each turn's time across all of a turn's actions, so the per-action
- * baselines (MCTS/OEP) and the plan-once experimental agents are budgeted fairly. (Phase 1
- * and Phase 3 use fmcalls, where all participants are plan-once and fmcalls is already fair.)
+ * baselines (MCTS/OEP) and the plan-once experimental agents are budgeted fairly. (Phase 3 uses a
+ * deterministic compute-unit budget, where all participants are plan-once and the budget is already fair.)
  *
  * Output (per time level): one game-level CSV, long format (one row per agent per game)
  * with the winner and per-game AVERAGES of initial/final sequence value and nodes visited.
@@ -102,7 +102,7 @@ public class Phase2Runner {
                     System.out.println("[Phase2] (" + matchupIdx + "/" + totalMatchups + ") RUN " + key + " (" + numGames + " games, " + ms + "ms/turn)");
 
                     AgentSpec expSpec = buildExperimentalTime(expName, ratio);
-                    AgentSpec baseSpec = buildBaselineTime(baseName);
+                    AgentSpec baseSpec = buildBaselineTime(baseName, ms);
                     List<AgentSpec> specs = Arrays.asList(expSpec, baseSpec);
 
                     List<GameResult> results = ExperimentEngine.runMatchup(
@@ -161,10 +161,10 @@ public class Phase2Runner {
         }
     }
 
-    private static AgentSpec buildBaselineTime(String name) {
+    private static AgentSpec buildBaselineTime(String name, int ms) {
         switch (name) {
             case "MCTS":  return ExpAgents.mctsTime();
-            case "OEP":   return ExpAgents.oepTime();
+            case "OEP":   return ExpAgents.oepTime(ms); // population/tournament tuned per time budget
             case "EMCTS": return ExpAgents.emctsTime();
             default: throw new IllegalArgumentException("Unknown baseline agent: " + name);
         }

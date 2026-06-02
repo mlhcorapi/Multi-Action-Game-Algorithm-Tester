@@ -24,7 +24,7 @@ public class FmComputeProbe {
         Constants.REMOVE_FISHING = true;
         Types.TRIBE[] tribes = {Types.TRIBE.IMPERIUS, Types.TRIBE.IMPERIUS2};
 
-        int budget = 30000; // a real Phase-3 budget (1000ms-equivalent)
+        int budget = 26800; // a real Phase-3 compute-unit budget (1000ms-equivalent)
         Object[][] agents = {
                 {"CrossoverExpansion@5", ExpAgents.crossoverExpansion(budget, 5)},
                 {"CrossoverBB", ExpAgents.crossoverBB(budget)},
@@ -32,7 +32,7 @@ public class FmComputeProbe {
         };
 
         ExperimentalEMCTSAgent.PROFILE_FM = true;
-        System.out.println("==================== Forward-model share of compute (budget=" + budget + " fmcalls) ====================");
+        System.out.println("==================== Forward-model share of compute (budget=" + budget + " compute-units) ====================");
         double totFm = 0, totPlan = 0;
         for (Object[] a : agents) {
             String name = (String) a[0];

@@ -1,0 +1,5 @@
+OEP tuning - best (population, tournament) per time budget, by average final heuristic
+value (kill rate fixed 0.5; isolated SCORE setup vs passive opponent, 10 games/combo).
+
+500ms: BEST_POP=100 BEST_TOURNAMENT=3  (avgFinalValue=6200.19)
+1000ms: BEST_POP=50 BEST_TOURNAMENT=10  (avgFinalValue=6778.09)

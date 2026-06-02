@@ -8,10 +8,12 @@ import core.data.dto.TurnData;
 import java.util.*;
 
 /**
- * Diagnostic (not part of the experiment): verifies that after fixing bridge burns at 20,
- * every agent (a) performs ~20 burns per turn and (b) consumes ~the same total FM budget
- * (NodesVisited approaches num_fmcalls) at REAL budget levels. Prints per-agent per-turn
- * averages of NodesVisited, SequencesEvaluated, and max bridge-burn phase number.
+ * Diagnostic (not part of the experiment): verifies that after fixing bridge burns at 20, every agent
+ * performs ~20 burns per turn at the REAL compute-unit budget levels (STOP_COMPUTE; see ComputeMeter).
+ * The equalised quantity is now COMPUTE-UNITS, not fmcalls, so the per-turn `FmCalls` it prints is
+ * expected to DIFFER across agents (the crossover variants spend their units with a different
+ * advance/copy/eval mix) - that demand gap is the efficiency cost under study, not a fairness bug.
+ * Prints per-agent per-turn averages of FmCalls, UniqueSequences, and max bridge-burn phase number.
  */
 public class BurnBudgetCheck {
 
@@ -26,12 +28,12 @@ public class BurnBudgetCheck {
         Constants.TURN_TIME_MILLIS = 10_000_000L;
         Types.TRIBE[] tribes = {Types.TRIBE.IMPERIUS, Types.TRIBE.IMPERIUS2};
 
-        int[] budgets = {6000, 30000};   // smallest + middle real Phase-3 budgets
+        int[] budgets = {13400, 26800};   // real Phase-3 compute-unit budgets (500ms, 1000ms)
         int numGames = 2;
         int ratio = 5;
 
         for (int budget : budgets) {
-            System.out.println("==================== budget = " + budget + " fmcalls (target) ====================");
+            System.out.println("==================== budget = " + budget + " compute-units (target) ====================");
             List<Object[]> agents = Arrays.asList(
                     new Object[]{"EMCTS",              ExpAgents.emcts(budget)},
                     new Object[]{"CrossoverExpansion", ExpAgents.crossoverExpansion(budget, ratio)},
@@ -62,7 +64,7 @@ public class BurnBudgetCheck {
                     }
                 }
                 if (turnCount == 0) { System.out.printf("  %-20s (no turns)%n", name); continue; }
-                System.out.printf("  %-20s avgFmCalls=%8.0f  avgUniqueSeq=%6.1f  avgMaxBurnPhase=%5.1f  (target FM=%d)%n",
+                System.out.printf("  %-20s avgFmCalls=%8.0f  avgUniqueSeq=%6.1f  avgMaxBurnPhase=%5.1f  (budget=%d units)%n",
                         name, sumNodes / turnCount, sumSeqs / turnCount, sumMaxBurn / turnCount, budget);
             }
             System.out.println();

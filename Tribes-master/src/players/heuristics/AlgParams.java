@@ -11,6 +11,7 @@ public class AlgParams
     public final int STOP_TIME = 0;
     public final int STOP_ITERATIONS = 1;
     public final int STOP_FMCALLS = 2;
+    public final int STOP_COMPUTE = 3; // deterministic compute-unit budget (ComputeMeter); used by the EMCTS family in Phase 1/3
 
     public final int ENTROPY_HEURISTIC = 0;
     public final int SIMPLE_HEURISTIC = 1;
@@ -23,6 +24,7 @@ public class AlgParams
     public int stop_type = STOP_TIME;
     public int num_iterations = 200;
     public int num_fmcalls = 2000;
+    public int num_computeUnits = 13400; // budget when stop_type == STOP_COMPUTE (compute-units; see ComputeMeter)
     public int num_time = 40;
     public int FORCE_TURN_END = 5;
     public boolean PRIORITIZE_ROOT = false;

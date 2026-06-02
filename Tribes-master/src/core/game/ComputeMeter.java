@@ -19,10 +19,12 @@ package core.game;
 public final class ComputeMeter {
     private ComputeMeter() {}
 
-    // Calibrated relative op costs (advance = 1.0). Measured on the dev machine by ComputeCalibrate.
+    // Calibrated relative op costs (advance = 1.0). Measured on the dev machine by ComputeCalibrate
+    // (per-op ~37us advance / ~6us copy / ~3us eval => compute share 85% / 11% / 4%). Re-run
+    // ComputeCalibrate on a new machine and update these.
     public static volatile double W_ADVANCE = 1.0;
-    public static volatile double W_COPY = 1.0;   // updated after calibration
-    public static volatile double W_EVAL = 1.0;   // updated after calibration
+    public static volatile double W_COPY = 0.16;
+    public static volatile double W_EVAL = 0.077;
 
     // Opt-in nanosecond profiling for calibration only (default OFF => just cheap counting).
     public static volatile boolean PROFILE = false;
