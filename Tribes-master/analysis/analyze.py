@@ -20,10 +20,32 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-BASE   = Path('test_results/full')
+# Result roots: the original run plus the v2 top-up (if present). CSVs are concatenated across roots.
+# Phase-3 gameIds do not collide (v1 = 1..50/1..25, v2 = offset 51..100/26..100), so the merge yields the
+# combined 100-game sample. Works whether or not test_results/v2 exists yet.
+RESULT_ROOTS = [r for r in [Path('test_results/full'), Path('test_results/v2')] if r.exists()] \
+               or [Path('test_results/full')]
 FIGS   = Path('analysis/figures'); FIGS.mkdir(parents=True, exist_ok=True)
 TABLES = Path('analysis/tables');  TABLES.mkdir(parents=True, exist_ok=True)
 LEVELS = ['500ms', '1000ms', '5000ms']
+
+def read_multi(relpath):
+    """Concatenate a CSV (relative path under each result root) across all roots that contain it."""
+    frames = [pd.read_csv(r/relpath) for r in RESULT_ROOTS if (r/relpath).exists()]
+    if not frames:
+        raise FileNotFoundError(f'{relpath} not found under {[str(r) for r in RESULT_ROOTS]}')
+    return pd.concat(frames, ignore_index=True)
+
+def read_p3(name): return read_multi('phase3/' + name)   # Phase-3 CSV merged across roots
+def read_p2(name): return read_multi('phase2/' + name)   # Phase-2 CSV merged across roots
+
+def phase2_levels():
+    """Time levels present in Phase 2 across all roots (e.g. 500ms,1000ms from v1 plus 5000ms from v2)."""
+    found = set()
+    for r in RESULT_ROOTS:
+        for f in (r/'phase2').glob('Phase2_games_*.csv'):
+            found.add(f.stem.replace('Phase2_games_', ''))
+    return sorted(found, key=lambda s: int(s.replace('ms', ''))) or ['500ms', '1000ms']
 
 # Consistent colors: EMCTS baseline = grey/black, the two mods + combo = distinct hues.
 C = {'EMCTS':'#555555', 'CrossoverExpansion':'#1f77b4', 'CrossoverBB':'#ff7f0e',
@@ -42,9 +64,9 @@ def per_turn(df):
 def load_phase3_turns(level):
     """Per-turn table for all four family agents at a level, with a clean 'Config' label.
     Expansion comes from the ratio CSV (filtered to ratio 5); Combo from the family CSV."""
-    std = per_turn(pd.read_csv(BASE/f'phase3/Phase3_standardBB_{level}.csv'))
-    cbb = per_turn(pd.read_csv(BASE/f'phase3/Phase3_crossoverBB_{level}.csv'))
-    rt  = pd.read_csv(BASE/f'phase3/Phase3_ratio_turns_{level}.csv')   # already per-turn
+    std = per_turn(read_p3(f'Phase3_standardBB_{level}.csv'))
+    cbb = per_turn(read_p3(f'Phase3_crossoverBB_{level}.csv'))
+    rt  = read_p3(f'Phase3_ratio_turns_{level}.csv')   # already per-turn
     cbb['RatioNum'] = pd.to_numeric(cbb['Ratio'], errors='coerce')
     rt['RatioNum']  = pd.to_numeric(rt['Ratio'],  errors='coerce')
     emcts = std[std.AgentName=='EMCTS'].copy()
@@ -59,14 +81,14 @@ def load_phase3_turns(level):
     return out
 
 def load_ratio_sweep(level):
-    rt = pd.read_csv(BASE/f'phase3/Phase3_ratio_turns_{level}.csv')
+    rt = read_p3(f'Phase3_ratio_turns_{level}.csv')
     rt = rt[rt.AgentName=='CrossoverExpansion'].copy()
     rt['Ratio'] = pd.to_numeric(rt['Ratio'], errors='coerce').astype(int)
     rt['Level'] = level
     return rt
 
 def load_phase2(level):
-    p2 = pd.read_csv(BASE/f'phase2/Phase2_games_{level}.csv')
+    p2 = read_p2(f'Phase2_games_{level}.csv')
     exp = p2[~p2.AgentName.isin(['MCTS','OEP','EMCTS'])].copy()
     exp['RatioNum'] = pd.to_numeric(exp['Ratio'], errors='coerce')
     exp['Config'] = exp.apply(lambda r: r.AgentName + ('' if pd.isna(r.RatioNum) else f'@r{int(r.RatioNum)}'), axis=1)
@@ -75,9 +97,14 @@ def load_phase2(level):
     return exp
 
 def best_ratios():
-    """Parse BEST_RATIO_<level>=<n> from phase3_best_ratio.txt (per-level best CrossoverExpansion ratio)."""
+    """Parse BEST_RATIO_<level>=<n> (per-level best CrossoverExpansion ratio). Prefer the last root's
+    file (v2's, computed over the combined 100-game sample) and fall back to the original."""
+    txt = None
+    for r in reversed(RESULT_ROOTS):
+        f = r/'phase3/phase3_best_ratio.txt'
+        if f.exists(): txt = f.read_text(); break
     out = {}
-    for line in (BASE/'phase3/phase3_best_ratio.txt').read_text().splitlines():
+    for line in (txt or '').splitlines():
         line = line.strip()
         if line.startswith('BEST_RATIO_'):
             k, v = line.split('='); out[k.replace('BEST_RATIO_','')] = int(v)
@@ -130,7 +157,7 @@ def t2_ratio_sweep():
 
 def t3_winrates():
     frames=[]
-    for lv in ['500ms','1000ms']:
+    for lv in phase2_levels():
         exp = load_phase2(lv)
         wr = exp.groupby(['Config','Base'])['Won'].mean().reset_index()
         wr['Level']=lv; frames.append(wr)
@@ -154,7 +181,7 @@ def t4_improvement_vs_emcts():
     t = pd.DataFrame(rows)
     # attach Phase-2 win rate vs EMCTS (ratio-5 configs where available)
     wr=[]
-    for lv in ['500ms','1000ms']:
+    for lv in phase2_levels():
         exp = load_phase2(lv)
         e = exp[exp.Base=='EMCTS'].groupby('Config')['Won'].mean()
         for cfg_full,val in e.items(): wr.append((lv,cfg_full,val))
@@ -196,9 +223,9 @@ def family_frames(lv):
     """The four family trajectories, with CrossoverExpansion AND CrossoverCombo both at the standard
     ratio 5 — so the only difference between them is the bridge-burn-crossover mechanism (the ratio is
     held fixed, not mixed in). Returns [(label, color, burn_rows_df), ...]."""
-    std = pd.read_csv(BASE/f'phase3/Phase3_standardBB_{lv}.csv')
-    cbb = pd.read_csv(BASE/f'phase3/Phase3_crossoverBB_{lv}.csv')
-    rtj = pd.read_csv(BASE/f'phase3/Phase3_ratio_trajectory_{lv}.csv')
+    std = read_p3(f'Phase3_standardBB_{lv}.csv')
+    cbb = read_p3(f'Phase3_crossoverBB_{lv}.csv')
+    rtj = read_p3(f'Phase3_ratio_trajectory_{lv}.csv')
     cbb['RatioNum'] = pd.to_numeric(cbb['Ratio'], errors='coerce')
     rtj['RatioNum'] = pd.to_numeric(rtj['Ratio'], errors='coerce')
     return [
@@ -269,7 +296,7 @@ def fig_expansion_ratio_diff():
     cmap = plt.cm.viridis(np.linspace(0, 0.92, len(ratios)))
     fig, axes = plt.subplots(1, 3, figsize=(15,4.5), sharey=True)
     for ax,lv in zip(axes,LEVELS):
-        rtj = pd.read_csv(BASE/f'phase3/Phase3_ratio_trajectory_{lv}.csv')
+        rtj = read_p3(f'Phase3_ratio_trajectory_{lv}.csv')
         rtj['RatioNum'] = pd.to_numeric(rtj['Ratio'], errors='coerce')
         for r,col in zip(ratios, cmap):
             m = burn_diff_trajectory(rtj[(rtj.AgentName=='CrossoverExpansion') & (rtj.RatioNum==r)])
@@ -308,7 +335,7 @@ def fig_expansion_ratio_trajectory():
     cmap = plt.cm.viridis(np.linspace(0, 0.92, len(ratios)))
     fig, axes = plt.subplots(1, 3, figsize=(15,4.5), sharey=True)
     for ax,lv in zip(axes,LEVELS):
-        rtj = pd.read_csv(BASE/f'phase3/Phase3_ratio_trajectory_{lv}.csv')
+        rtj = read_p3(f'Phase3_ratio_trajectory_{lv}.csv')
         rtj['RatioNum'] = pd.to_numeric(rtj['Ratio'], errors='coerce')
         for r,col in zip(ratios, cmap):
             m = burn_pct_trajectory(rtj[(rtj.AgentName=='CrossoverExpansion') & (rtj.RatioNum==r)])
@@ -336,7 +363,7 @@ def fig_expansion_ratio_value():
     cmap = plt.cm.viridis(np.linspace(0, 0.92, len(ratios)))
     fig, axes = plt.subplots(1, 3, figsize=(15,4.5))   # not sharey: per-level value ranges differ
     for ax,lv in zip(axes,LEVELS):
-        rtj = pd.read_csv(BASE/f'phase3/Phase3_ratio_trajectory_{lv}.csv')
+        rtj = read_p3(f'Phase3_ratio_trajectory_{lv}.csv')
         rtj['RatioNum'] = pd.to_numeric(rtj['Ratio'], errors='coerce')
         for r,col in zip(ratios, cmap):
             m = burn_abs_trajectory(rtj[(rtj.AgentName=='CrossoverExpansion') & (rtj.RatioNum==r)])
@@ -357,7 +384,7 @@ def fig_burn_crossover_benefit():
     width=0.13; xb=np.arange(len(cats))
     series=[]
     for lv in LEVELS:
-        cbb = pd.read_csv(BASE/f'phase3/Phase3_crossoverBB_{lv}.csv')
+        cbb = read_p3(f'Phase3_crossoverBB_{lv}.csv')
         cbb['RatioNum']=pd.to_numeric(cbb['Ratio'],errors='coerce')
         for ag in ['CrossoverBB','CrossoverCombo']:
             d = cbb[cbb.AgentName==ag]
@@ -372,7 +399,7 @@ def fig_burn_crossover_benefit():
     axes[0].set_title('Outcome of the burn-time crossover'); axes[0].legend(fontsize=7, ncol=2)
     # mean % improvement per burn phase
     for lv in LEVELS:
-        cbb = pd.read_csv(BASE/f'phase3/Phase3_crossoverBB_{lv}.csv')
+        cbb = read_p3(f'Phase3_crossoverBB_{lv}.csv')
         cbb['RatioNum']=pd.to_numeric(cbb['Ratio'],errors='coerce')
         for ag,ls in [('CrossoverBB','-'),('CrossoverCombo','--')]:
             d = cbb[cbb.AgentName==ag]
@@ -390,8 +417,10 @@ def fig_winrates():
     """Phase-2 win rate of each modification vs each baseline, per level. The EMCTS column is
     the key 'did the modification beat vanilla EMCTS' test (0.5 = tie; n=100, SE~0.05)."""
     bases=['EMCTS','OEP','MCTS']
-    fig, axes = plt.subplots(1, 2, figsize=(13,4.8), sharey=True)
-    for ax,lv in zip(axes,['500ms','1000ms']):
+    p2levels = phase2_levels()
+    fig, axes = plt.subplots(1, len(p2levels), figsize=(6.5*len(p2levels),4.8), sharey=True, squeeze=False)
+    axes = axes[0]
+    for ax,lv in zip(axes,p2levels):
         exp=load_phase2(lv)
         agg = exp.groupby(['Config','Base'])['Won'].agg(['mean','count'])
         wr = agg['mean'].unstack('Base'); n = agg['count'].unstack('Base')

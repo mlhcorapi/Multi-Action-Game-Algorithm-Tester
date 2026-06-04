@@ -127,8 +127,9 @@ public class ExpAgents {
             p.heuristic_method = p.SIMPLE_HEURISTIC;
             p.KILL_RATE = 0.5;
             // Population + tournament size tuned per time budget (OepTuning sweep): kill rate fixed 0.5.
-            if (ms <= 500) { p.POP_SIZE = 100; p.TOURNAMENT_SIZE = 3; }   // 500ms-equivalent
-            else           { p.POP_SIZE = 50;  p.TOURNAMENT_SIZE = 10; }  // 1000ms+ (best at 1000ms)
+            if (ms <= 500)       { p.POP_SIZE = 100; p.TOURNAMENT_SIZE = 3; }   // 500ms  (OepTuning)
+            else if (ms <= 1000) { p.POP_SIZE = 50;  p.TOURNAMENT_SIZE = 10; }  // 1000ms (OepTuning)
+            else                 { p.POP_SIZE = 100; p.TOURNAMENT_SIZE = 10; }  // 5000ms PLACEHOLDER - update from the v2 5000ms sweep (test_results/v2/oep_tuning)
             return new OEPAgent(seed, p);
         });
     }
