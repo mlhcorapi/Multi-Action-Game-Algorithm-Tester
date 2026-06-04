@@ -241,6 +241,33 @@ def fig_expansion_ratio_trajectory():
     fig.suptitle('CrossoverExpansion within-turn trajectory by crossover ratio (Phase 3)', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS/'fig8_expansion_ratio_trajectory.png'); plt.close(fig)
 
+def burn_abs_trajectory(df):
+    """Mean ABSOLUTE BestSequenceValue per bridge-burn phase (averaged over all turns & games).
+    Un-normalised, so it reflects the overall sequence value each ratio actually reaches."""
+    return df.pivot_table(index=['GameId','TurnNumber'], columns='BridgeBurningPhaseNumber',
+                          values='BestSequenceValue').mean()
+
+def fig_expansion_ratio_value():
+    """Like fig 8 but reflecting the OVERALL (absolute) sequence value, not % gain. The ratios
+    separate into bands here (the cumulative-board-strength signal that normalisation divides out);
+    the within-turn rise across burns is the small slope on each band."""
+    ratios = [2, 5, 10, 15, 20]
+    cmap = plt.cm.viridis(np.linspace(0, 0.92, len(ratios)))
+    fig, axes = plt.subplots(1, 3, figsize=(15,4.5))   # not sharey: per-level value ranges differ
+    for ax,lv in zip(axes,LEVELS):
+        rtj = pd.read_csv(BASE/f'phase3/Phase3_ratio_trajectory_{lv}.csv')
+        rtj['RatioNum'] = pd.to_numeric(rtj['Ratio'], errors='coerce')
+        for r,col in zip(ratios, cmap):
+            m = burn_abs_trajectory(rtj[(rtj.AgentName=='CrossoverExpansion') & (rtj.RatioNum==r)])
+            lab = f'ratio {r}' + (' (best)' if r==BEST_RATIO[lv] else '')
+            ax.plot(m.index, m.values, marker='.', color=col,
+                    lw=2.4 if r==BEST_RATIO[lv] else 1.3, label=lab)
+        ax.set_title(lv); ax.set_xlabel('bridge-burn phase (1..20)')
+    axes[0].set_ylabel('mean BestSequenceValue\n(absolute, averaged over all turns)')
+    axes[0].legend(title='mutationExpansionRatio\n(higher = less crossover)', fontsize=8)
+    fig.suptitle('CrossoverExpansion overall sequence value by crossover ratio (Phase 3)', fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS/'fig9_expansion_ratio_value.png'); plt.close(fig)
+
 def fig_burn_crossover_benefit():
     """Did the burn-time crossover beat the incumbent root? Fraction of burns improved /
     unchanged / worsened, and mean % improvement, for the two burn-crossover agents."""
@@ -355,6 +382,6 @@ if __name__ == '__main__':
     print(t4.to_string(index=False)); print(); print(wr.to_string(index=False))
     print('\nWriting figures...')
     fig_ratio_sweep(); fig_within_turn_trajectory(); fig_expansion_ratio_trajectory()
-    fig_burn_crossover_benefit(); fig_winrates(); fig_value_vs_score()
-    fig_efficiency(); fig_final_score_outcome()
+    fig_expansion_ratio_value(); fig_burn_crossover_benefit(); fig_winrates()
+    fig_value_vs_score(); fig_efficiency(); fig_final_score_outcome()
     print('Done. Tables -> analysis/tables/  Figures -> analysis/figures/')

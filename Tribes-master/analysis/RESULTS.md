@@ -140,14 +140,28 @@ At 500 ms the crossover variants (Expansion@10 and Combo) climb fastest; at 1000
 early; at 5000 ms Combo leads. CrossoverBB is flattest at small budgets. The relative trajectory thus
 favours the crossover variants, while the *burn-step* crossover itself adds little (see #4).
 
-### 5b. Trajectory by crossover-expansion ratio — `fig8_expansion_ratio_trajectory.png`
-The same normalised trajectory for **CrossoverExpansion alone, one line per ratio**. Note the contrast
-with the ratio sweep (#1): the *steepest relative* trajectory belongs to **ratio 2 (the most crossover)**,
-even though ratio 2 has the *worst absolute* FinalSequenceValue. The normalisation explains it — heavy
-crossover starts each turn from a lower burn-1 value and so has more proportional room to recover, but
-it never reaches the absolute quality of the moderate ratios. The selected best ratio (bold) sits mid-pack
-in relative-progress terms, confirming that the ratio should be chosen on absolute value, not trajectory
-shape.
+### 5b. Trajectory by crossover-expansion ratio — `fig8` (% gain) vs `fig9` (absolute value)
+Two views of **CrossoverExpansion alone, one line per ratio**:
+
+- **`fig8_expansion_ratio_trajectory.png` (% gain over burn-1):** the ratios nearly overlap and the small
+  ordering is *inverse to quality* — ratio 2 (the most crossover) looks "best" despite having the worst
+  absolute value. This is an artefact of the normalisation, not a real effect (see below).
+- **`fig9_expansion_ratio_value.png` (absolute BestSequenceValue):** the ratios separate into clear bands,
+  the best ratio (bold) is on top in every panel, and at 5000 ms the inverted-U is unmistakable
+  (ratio 5 > 10 > 15 > {2, 20}). This matches the sweep (#1).
+
+**Why the %-over-baseline view is misleading for ranking ratios.** One might expect the greedy initial
+sequence value to be identical across ratios (greedy init is ratio-independent *for a fixed board*).
+Empirically it is **not** — it varies 4–8 % per level (e.g. 5000 ms: ratio 2 = 7113 vs ratio 5 = 7727) —
+because each ratio plays its **own game** and reaches a different board by turn *t*; a stronger-searching
+ratio builds a richer board, which raises its greedy starting value too (the initial is *endogenous*).
+Meanwhile the **absolute within-turn search gain over that initial is nearly constant across ratios**
+(≈ 85 / 110 / 170 units at 500 / 1000 / 5000 ms). So a per-turn % graph divides a ~constant numerator by
+a ratio-dependent denominator and **cancels the very signal that distinguishes the ratios**, leaving only
+inverse-baseline noise. The ratio's real benefit is a slow, **compounding effect on board development**
+(it shows up in the cumulative value level), not a larger per-turn search jump — which is exactly why the
+ratio is selected on absolute `FinalSequenceValue` (#1) and why `fig9`, not `fig8`, is the right tool for
+comparing ratios.
 
 ### 6. Search efficiency at equal compute — `fig6_efficiency.png`, `T1`
 At a fixed compute budget EMCTS evaluates the **most unique sequences** (e.g. 5000 ms: EMCTS 2161,
