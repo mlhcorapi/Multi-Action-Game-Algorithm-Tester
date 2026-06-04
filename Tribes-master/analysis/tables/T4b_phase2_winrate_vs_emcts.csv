@@ -1,0 +1,9 @@
+Level,ConfigFull,WinRate_vs_EMCTS
+500ms,CrossoverBB,0.51
+500ms,CrossoverCombo@r10,0.54
+500ms,CrossoverCombo@r5,0.56
+500ms,CrossoverExpansion@r10,0.45
+500ms,CrossoverExpansion@r5,0.51
+1000ms,CrossoverBB,0.51
+1000ms,CrossoverCombo@r5,0.59
+1000ms,CrossoverExpansion@r5,0.64
