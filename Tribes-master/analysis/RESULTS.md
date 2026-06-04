@@ -132,13 +132,21 @@ root **unchanged in 56–90 %** of burns, **improves it in only 2–9 %**, and i
 already had, so it mostly converts budget into wasted recombinations. (Interestingly it is *less*
 harmful under Combo — green — because the expansion crossover has already enriched the candidate pool.)
 
-### 5. Within-turn search trajectory — `fig2_within_turn_trajectory.png`
-Best-sequence value vs bridge-burn phase, normalised to each turn's burn-1 value (EMCTS, the two
-burn-crossover agents, and **CrossoverExpansion at the per-level best ratio**). All variants make most
-of their gain in the first few burns and the total within-turn improvement is small (~1.2–2.5 %).
-At 500 ms the crossover variants (Expansion@10 and Combo) climb fastest; at 1000 ms Expansion@5 leads
-early; at 5000 ms Combo leads. CrossoverBB is flattest at small budgets. The relative trajectory thus
-favours the crossover variants, while the *burn-step* crossover itself adds little (see #4).
+### 5. Within-turn search trajectory — `fig2` (% gain) and `fig10` (absolute value)
+Best-sequence value vs bridge-burn phase for the four family agents, with **CrossoverExpansion and
+CrossoverCombo both held at ratio 5** so the only difference between Expansion and Combo is the
+bridge-burn-crossover mechanism (the ratio is fixed, not mixed into the comparison).
+
+- **`fig2_within_turn_trajectory.png` (% gain over burn-1):** all variants make most of their gain in the
+  first few burns; total within-turn improvement is small (~1.2–2.1 %). Expansion@5 and Combo@5 climb a
+  little faster than EMCTS and CrossoverBB is flattest at small budgets — the relative trajectory mildly
+  favours the expansion-crossover, while the burn-step crossover itself adds little (see #4).
+- **`fig10_family_value_trajectory.png` (absolute value — the same transform fig 9 applies to fig 8):**
+  the band *levels* here reflect each agent's cumulative board strength, which is **endogenous** (each
+  agent plays its own game), so the ordering shifts with budget and is **not** a clean search-quality
+  ranking — e.g. CrossoverBB sits highest at 500 ms but lowest at 5000 ms. The comparable quantity is the
+  *slope* (within-turn search gain), which is ~constant across agents (≈ 85 / 110 / 170 units), again
+  showing the agents differ mainly in cumulative board value, not in per-turn search gain.
 
 ### 5b. Trajectory by crossover-expansion ratio — `fig8` (% gain) vs `fig9` (absolute value)
 Two views of **CrossoverExpansion alone, one line per ratio**:

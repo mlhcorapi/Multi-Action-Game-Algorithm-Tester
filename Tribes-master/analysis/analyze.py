@@ -192,33 +192,50 @@ def burn_pct_trajectory(df):
     piv = piv[base > 0]; base = base[base > 0]
     return piv.div(base, axis=0).sub(1).mul(100).mean()
 
+def family_frames(lv):
+    """The four family trajectories, with CrossoverExpansion AND CrossoverCombo both at the standard
+    ratio 5 — so the only difference between them is the bridge-burn-crossover mechanism (the ratio is
+    held fixed, not mixed in). Returns [(label, color, burn_rows_df), ...]."""
+    std = pd.read_csv(BASE/f'phase3/Phase3_standardBB_{lv}.csv')
+    cbb = pd.read_csv(BASE/f'phase3/Phase3_crossoverBB_{lv}.csv')
+    rtj = pd.read_csv(BASE/f'phase3/Phase3_ratio_trajectory_{lv}.csv')
+    cbb['RatioNum'] = pd.to_numeric(cbb['Ratio'], errors='coerce')
+    rtj['RatioNum'] = pd.to_numeric(rtj['Ratio'], errors='coerce')
+    return [
+        ('EMCTS', C['EMCTS'], std[std.AgentName=='EMCTS']),
+        ('CrossoverExpansion@5', C['CrossoverExpansion'], rtj[(rtj.AgentName=='CrossoverExpansion') & (rtj.RatioNum==5)]),
+        ('CrossoverBB', C['CrossoverBB'], cbb[cbb.AgentName=='CrossoverBB']),
+        ('CrossoverCombo@5', C['CrossoverCombo'], cbb[(cbb.AgentName=='CrossoverCombo') & (cbb.RatioNum==5)]),
+    ]
+
 def fig_within_turn_trajectory():
-    """Within-turn bridge-burn trajectory per family agent, including CrossoverExpansion at the
-    per-level best ratio. Mean % gain of BestSequenceValue over its burn-1 value, vs burn phase."""
+    """Within-turn bridge-burn trajectory per family agent (Expansion and Combo both at ratio 5, so
+    only the BB mechanism differs). Mean % gain of BestSequenceValue over its burn-1 value vs phase."""
     fig, axes = plt.subplots(1, 3, figsize=(15,4.5), sharey=True)
     for ax,lv in zip(axes,LEVELS):
-        std = pd.read_csv(BASE/f'phase3/Phase3_standardBB_{lv}.csv')
-        cbb = pd.read_csv(BASE/f'phase3/Phase3_crossoverBB_{lv}.csv')
-        rtj = pd.read_csv(BASE/f'phase3/Phase3_ratio_trajectory_{lv}.csv')
-        cbb['RatioNum'] = pd.to_numeric(cbb['Ratio'], errors='coerce')
-        rtj['RatioNum'] = pd.to_numeric(rtj['Ratio'], errors='coerce')
-        best = BEST_RATIO[lv]
-        frames = [
-            ('EMCTS', C['EMCTS'], std[std.AgentName=='EMCTS']),
-            (f'CrossoverExpansion@{best} (best)', C['CrossoverExpansion'],
-                rtj[(rtj.AgentName=='CrossoverExpansion') & (rtj.RatioNum==best)]),
-            ('CrossoverBB', C['CrossoverBB'], cbb[cbb.AgentName=='CrossoverBB']),
-            ('CrossoverCombo@5', C['CrossoverCombo'], cbb[(cbb.AgentName=='CrossoverCombo') & (cbb.RatioNum==5)]),
-        ]
-        for nm,col,d in frames:
+        for nm,col,d in family_frames(lv):
             m = burn_pct_trajectory(d)
             if m is not None:
                 ax.plot(m.index, m.values, marker='.', color=col, label=nm)
         ax.set_title(lv); ax.set_xlabel('bridge-burn phase (1..20)')
     axes[0].set_ylabel('% gain in BestSequenceValue\nover burn-1 value (mean over turns)')
     axes[0].legend(fontsize=8)
-    fig.suptitle('Within-turn search progress across the 20 bridge burns (Phase 3)', fontweight='bold')
+    fig.suptitle('Within-turn search progress across the 20 bridge burns (Phase 3, ratio 5)', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS/'fig2_within_turn_trajectory.png'); plt.close(fig)
+
+def fig_family_value_trajectory():
+    """Absolute companion to fig 2 (the same modification fig 9 is to fig 8): mean ABSOLUTE
+    BestSequenceValue per family agent (Expansion/Combo at ratio 5) vs bridge-burn phase."""
+    fig, axes = plt.subplots(1, 3, figsize=(15,4.5))   # not sharey: per-level value ranges differ
+    for ax,lv in zip(axes,LEVELS):
+        for nm,col,d in family_frames(lv):
+            m = burn_abs_trajectory(d)
+            ax.plot(m.index, m.values, marker='.', color=col, label=nm)
+        ax.set_title(lv); ax.set_xlabel('bridge-burn phase (1..20)')
+    axes[0].set_ylabel('mean BestSequenceValue\n(absolute, averaged over all turns)')
+    axes[0].legend(fontsize=8)
+    fig.suptitle('Overall sequence value across the 20 bridge burns (Phase 3, ratio 5)', fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS/'fig10_family_value_trajectory.png'); plt.close(fig)
 
 def fig_expansion_ratio_trajectory():
     """Within-turn bridge-burn trajectory of CrossoverExpansion alone, one line per tested ratio.
@@ -381,7 +398,7 @@ if __name__ == '__main__':
     t4,wr = t4_improvement_vs_emcts()
     print(t4.to_string(index=False)); print(); print(wr.to_string(index=False))
     print('\nWriting figures...')
-    fig_ratio_sweep(); fig_within_turn_trajectory(); fig_expansion_ratio_trajectory()
-    fig_expansion_ratio_value(); fig_burn_crossover_benefit(); fig_winrates()
-    fig_value_vs_score(); fig_efficiency(); fig_final_score_outcome()
+    fig_ratio_sweep(); fig_within_turn_trajectory(); fig_family_value_trajectory()
+    fig_expansion_ratio_trajectory(); fig_expansion_ratio_value(); fig_burn_crossover_benefit()
+    fig_winrates(); fig_value_vs_score(); fig_efficiency(); fig_final_score_outcome()
     print('Done. Tables -> analysis/tables/  Figures -> analysis/figures/')
