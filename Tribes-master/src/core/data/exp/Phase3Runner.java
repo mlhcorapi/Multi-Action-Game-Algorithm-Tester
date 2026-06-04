@@ -64,6 +64,16 @@ public class Phase3Runner {
     }
 
     public static void run(int numGames, Budget[] levels, int[] ratios, int threads, String outDir) {
+        run(numGames, levels, ratios, threads, outDir, null);
+    }
+
+    /**
+     * @param extraRatioDir optional path to a PRIOR Phase-3 output dir (e.g. test_results/full/phase3) whose
+     *     CrossoverExpansion ratio-test rows are MERGED with this run's when selecting the best ratio per
+     *     level. Use it for additive follow-up runs so the ratio is chosen over the combined sample
+     *     (e.g. 25 prior + 75 new = 100 games) rather than only this run's delta. Null = this run only.
+     */
+    public static void run(int numGames, Budget[] levels, int[] ratios, int threads, String outDir, String extraRatioDir) {
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
         // Maps are water-free (LevelGenerator includeWater=false), so penalize the now-useless naval
@@ -116,7 +126,9 @@ public class Phase3Runner {
         }
 
         // ---- Select the best ratio PER budget level by average FinalSequenceValue (ratio test) ----
-        Map<String, Integer> bestByLevel = computeBestRatioPerLevel(dir, levels, ratios);
+        // Merge an optional prior dir so an additive run chooses over the COMBINED sample.
+        File extraDir = (extraRatioDir == null) ? null : new File(extraRatioDir);
+        Map<String, Integer> bestByLevel = computeBestRatioPerLevel(dir, levels, ratios, extraDir);
 
         // ---- Pass 2: CrossoverCombo at {5 (standard), best-for-this-level} per level ----
         for (Budget level : levels) {
@@ -150,11 +162,15 @@ public class Phase3Runner {
             System.out.println("[Phase3] (" + idx[0] + "/" + totalMatchups + ") SKIP (done): " + key);
             return;
         }
-        System.out.println("[Phase3] (" + idx[0] + "/" + totalMatchups + ") RUN " + key + " (" + numGames + " games)");
+        // Offset seeds/gameIds by firstGameIndex so a follow-up (additive) run yields fresh, independent
+        // samples that combine with the earlier batch (same fixed map) rather than duplicating it.
+        final int off = level.firstGameIndex;
+        System.out.println("[Phase3] (" + idx[0] + "/" + totalMatchups + ") RUN " + key
+                + " (" + numGames + " games" + (off > 0 ? ", gameIds " + (off + 1) + ".." + (off + numGames) : "") + ")");
 
         List<GameResult> results = ExperimentEngine.runMatchup(
-                Arrays.asList(spec, ExpAgents.passiveOpponent()), tribes, Types.GAME_MODE.SCORE, numGames, 1,
-                g -> FIXED_LEVEL_SEED, g -> FIXED_GAME_SEED, g -> AGENT_SEED_BASE + g,
+                Arrays.asList(spec, ExpAgents.passiveOpponent()), tribes, Types.GAME_MODE.SCORE, numGames, off + 1,
+                g -> FIXED_LEVEL_SEED, g -> FIXED_GAME_SEED, g -> AGENT_SEED_BASE + off + g,
                 threads,
                 (completed, total, r) -> {
                     if (completed % 20 == 0 || completed == total)
@@ -263,7 +279,7 @@ public class Phase3Runner {
      * ratio with the best AVERAGE FinalSequenceValue at that level. Writes phase3_best_ratio.txt
      * with the per-ratio averages and a machine-readable BEST_RATIO_<level>=<n> line per level.
      */
-    private static Map<String, Integer> computeBestRatioPerLevel(File dir, Budget[] levels, int[] ratios) {
+    private static Map<String, Integer> computeBestRatioPerLevel(File dir, Budget[] levels, int[] ratios, File extraDir) {
         Map<String, Integer> bestByLevel = new LinkedHashMap<>();
         StringBuilder sb = new StringBuilder();
         sb.append("Phase 3 - CrossoverExpansion average FinalSequenceValue by ratio, per budget level.\n");
@@ -272,8 +288,11 @@ public class Phase3Runner {
 
         for (Budget level : levels) {
             Map<Integer, double[]> perRatio = new TreeMap<>(); // ratio -> [sumFinalSeq, count]
-            File turns = new File(dir, "Phase3_ratio_turns_" + level.name + ".csv");
-            if (turns.exists()) {
+            // Merge this run's ratio-test rows with the optional prior dir's, so the best ratio is
+            // chosen over the COMBINED sample (additive follow-up runs).
+            for (File d : (extraDir == null) ? new File[]{dir} : new File[]{dir, extraDir}) {
+                File turns = new File(d, "Phase3_ratio_turns_" + level.name + ".csv");
+                if (!turns.exists()) continue;
                 try {
                     List<String> lines = Files.readAllLines(turns.toPath());
                     // header: AgentName,Ratio,GameId,TurnNumber,ScoreAtTurnStart,InitialSequenceValue,FinalSequenceValue,...
