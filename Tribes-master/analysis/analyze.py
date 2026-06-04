@@ -237,6 +237,70 @@ def fig_family_value_trajectory():
     fig.suptitle('Overall sequence value across the 20 bridge burns (Phase 3, ratio 5)', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS/'fig10_family_value_trajectory.png'); plt.close(fig)
 
+def burn_diff_trajectory(df):
+    """Mean RAW heuristic-value gain over the turn's greedy initial sequence, per bridge-burn phase:
+    mean over turns of (BestSequenceValue@phase - InitialSequenceValue). In absolute heuristic units,
+    so a weak agent's small gain is not inflated the way a %-over-initial would inflate it."""
+    piv  = df.pivot_table(index=['GameId','TurnNumber'], columns='BridgeBurningPhaseNumber',
+                          values='BestSequenceValue')
+    init = df.drop_duplicates(['GameId','TurnNumber']).set_index(['GameId','TurnNumber'])['InitialSequenceValue']
+    return piv.sub(init.reindex(piv.index), axis=0).mean()
+
+def fig_family_diff_trajectory():
+    """Family trajectory as RAW gain over the greedy initial (companion to fig 2/fig 10). Fairer than
+    the %-view: it does not divide by the (agent-dependent) baseline, so a low-value agent's small
+    absolute gain is not over-represented."""
+    fig, axes = plt.subplots(1, 3, figsize=(15,4.5), sharey=True)
+    for ax,lv in zip(axes,LEVELS):
+        for nm,col,d in family_frames(lv):
+            m = burn_diff_trajectory(d)
+            ax.plot(m.index, m.values, marker='.', color=col, label=nm)
+        ax.set_title(lv); ax.set_xlabel('bridge-burn phase (1..20)')
+    axes[0].set_ylabel('mean (BestSequenceValue - InitialSequenceValue)\n(raw heuristic units, over all turns)')
+    axes[0].legend(fontsize=8)
+    fig.suptitle('Within-turn value gained over the greedy initial (Phase 3, ratio 5)', fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS/'fig11_family_gain_over_initial.png'); plt.close(fig)
+
+def fig_expansion_ratio_diff():
+    """Ratio trajectory as RAW gain over the greedy initial (companion to fig 8/fig 9). Shows that the
+    within-turn search gain is nearly identical across ratios - the ratios differ in baseline level
+    (cumulative board value), not in how much a single turn's search improves over greedy."""
+    ratios = [2, 5, 10, 15, 20]
+    cmap = plt.cm.viridis(np.linspace(0, 0.92, len(ratios)))
+    fig, axes = plt.subplots(1, 3, figsize=(15,4.5), sharey=True)
+    for ax,lv in zip(axes,LEVELS):
+        rtj = pd.read_csv(BASE/f'phase3/Phase3_ratio_trajectory_{lv}.csv')
+        rtj['RatioNum'] = pd.to_numeric(rtj['Ratio'], errors='coerce')
+        for r,col in zip(ratios, cmap):
+            m = burn_diff_trajectory(rtj[(rtj.AgentName=='CrossoverExpansion') & (rtj.RatioNum==r)])
+            lab = f'ratio {r}' + (' (best)' if r==BEST_RATIO[lv] else '')
+            ax.plot(m.index, m.values, marker='.', color=col,
+                    lw=2.4 if r==BEST_RATIO[lv] else 1.3, label=lab)
+        ax.set_title(lv); ax.set_xlabel('bridge-burn phase (1..20)')
+    axes[0].set_ylabel('mean (BestSequenceValue - InitialSequenceValue)\n(raw heuristic units, over all turns)')
+    axes[0].legend(title='mutationExpansionRatio\n(higher = less crossover)', fontsize=8)
+    fig.suptitle('Within-turn value gained over the greedy initial, by crossover ratio (Phase 3)', fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS/'fig12_expansion_ratio_gain_over_initial.png'); plt.close(fig)
+
+def fig_score_over_turns():
+    """In-game score over the game RELATIVE to EMCTS (mean agent score / mean EMCTS score at each game
+    turn). Amplifies the small score gaps and shows WHEN each modification pulls ahead; this is a Phase-3
+    in-game-outcome view, so it should track the Phase-2 ranking (Expansion up, BB flat/down)."""
+    fig, axes = plt.subplots(1, 3, figsize=(15,4.5), sharey=True)
+    for ax,lv in zip(axes,LEVELS):
+        fr = family_frames(lv)
+        base = fr[0][2].drop_duplicates(['GameId','TurnNumber']).groupby('TurnNumber')['ScoreAtTurnStart'].mean()
+        for nm,col,d in fr:
+            m = d.drop_duplicates(['GameId','TurnNumber']).groupby('TurnNumber')['ScoreAtTurnStart'].mean()
+            rel = m / base.reindex(m.index)
+            ax.plot(rel.index, rel.values, color=col, label=nm, lw=1.8)
+        ax.axhline(1.0, color='k', lw=0.8, ls=':')
+        ax.set_title(lv); ax.set_xlabel('game turn')
+    axes[0].set_ylabel('mean in-game score relative to EMCTS')
+    axes[0].legend(fontsize=8)
+    fig.suptitle('In-game score over the game, relative to EMCTS (Phase 3, ratio 5)', fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS/'fig13_score_over_turns.png'); plt.close(fig)
+
 def fig_expansion_ratio_trajectory():
     """Within-turn bridge-burn trajectory of CrossoverExpansion alone, one line per tested ratio.
     Higher ratio = less crossover. Shows whether the crossover rate changes search-progress shape."""
@@ -329,14 +393,17 @@ def fig_winrates():
     fig, axes = plt.subplots(1, 2, figsize=(13,4.8), sharey=True)
     for ax,lv in zip(axes,['500ms','1000ms']):
         exp=load_phase2(lv)
-        wr = exp.groupby(['Config','Base'])['Won'].mean().unstack('Base')
+        agg = exp.groupby(['Config','Base'])['Won'].agg(['mean','count'])
+        wr = agg['mean'].unstack('Base'); n = agg['count'].unstack('Base')
+        se = (wr*(1-wr)/n)**0.5                       # binomial SE of the win rate
         cfgs=list(wr.index); x=np.arange(len(cfgs)); w=0.25
         for j,b in enumerate(bases):
-            ax.bar(x+(j-1)*w, wr[b].values, w, label=f'vs {b}', color=C[b])
+            ax.bar(x+(j-1)*w, wr[b].values, w, yerr=1.96*se[b].values, capsize=2,
+                   error_kw=dict(lw=0.8), label=f'vs {b}', color=C[b])
         ax.axhline(0.5, color='k', lw=0.8, ls=':')
         ax.set_xticks(x); ax.set_xticklabels(cfgs, rotation=30, ha='right', fontsize=8)
         ax.set_title(lv); ax.set_ylim(0,1.05)
-    axes[0].set_ylabel('win rate (experimental agent)'); axes[0].legend()
+    axes[0].set_ylabel('win rate (experimental agent, +/-95% CI)'); axes[0].legend()
     fig.suptitle('Phase 2 win rates: crossover modifications vs baselines (CAPITALS, 100 games)', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS/'fig4_winrates.png'); plt.close(fig)
 
@@ -399,6 +466,7 @@ if __name__ == '__main__':
     print(t4.to_string(index=False)); print(); print(wr.to_string(index=False))
     print('\nWriting figures...')
     fig_ratio_sweep(); fig_within_turn_trajectory(); fig_family_value_trajectory()
-    fig_expansion_ratio_trajectory(); fig_expansion_ratio_value(); fig_burn_crossover_benefit()
+    fig_family_diff_trajectory(); fig_expansion_ratio_trajectory(); fig_expansion_ratio_value()
+    fig_expansion_ratio_diff(); fig_score_over_turns(); fig_burn_crossover_benefit()
     fig_winrates(); fig_value_vs_score(); fig_efficiency(); fig_final_score_outcome()
     print('Done. Tables -> analysis/tables/  Figures -> analysis/figures/')

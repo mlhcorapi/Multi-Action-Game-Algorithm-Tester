@@ -147,6 +147,12 @@ bridge-burn-crossover mechanism (the ratio is fixed, not mixed into the comparis
   ranking — e.g. CrossoverBB sits highest at 500 ms but lowest at 5000 ms. The comparable quantity is the
   *slope* (within-turn search gain), which is ~constant across agents (≈ 85 / 110 / 170 units), again
   showing the agents differ mainly in cumulative board value, not in per-turn search gain.
+- **`fig11_family_gain_over_initial.png` (raw gain over the greedy initial):** the fairest of the three
+  views — it plots `BestSequenceValue − InitialSequenceValue` in raw heuristic units, so it neither
+  divides by an agent-dependent baseline (the %-view's flaw, which over-represents a weak agent's small
+  gain) nor mixes in the endogenous baseline level (the absolute view). It shows the agents **bunched** at
+  500 ms (no real hierarchy) and only separating at 5000 ms, where **Combo > Expansion > EMCTS ≈ BB** —
+  i.e. the crossover-expansion's within-turn search edge over greedy emerges only with a large budget.
 
 ### 5b. Trajectory by crossover-expansion ratio — `fig8` (% gain) vs `fig9` (absolute value)
 Two views of **CrossoverExpansion alone, one line per ratio**:
@@ -157,6 +163,12 @@ Two views of **CrossoverExpansion alone, one line per ratio**:
 - **`fig9_expansion_ratio_value.png` (absolute BestSequenceValue):** the ratios separate into clear bands,
   the best ratio (bold) is on top in every panel, and at 5000 ms the inverted-U is unmistakable
   (ratio 5 > 10 > 15 > {2, 20}). This matches the sweep (#1).
+
+A third view, **`fig12_expansion_ratio_gain_over_initial.png` (raw gain over the greedy initial)**, makes
+the mechanism explicit: the within-turn gain curves for all five ratios nearly **coincide** (≈ 85 / 110 /
+170 units by budget, with only a small high-budget edge for the more-crossover ratios). The ratios differ
+in *baseline level*, not in how much a single turn's search improves on greedy — which is the cleanest
+statement of why a %-over-baseline plot cannot rank them.
 
 **Why the %-over-baseline view is misleading for ranking ratios.** One might expect the greedy initial
 sequence value to be identical across ratios (greedy init is ratio-independent *for a fixed board*).
@@ -187,6 +199,61 @@ efficiently heuristic value converts to score. This validates the SIMPLE heurist
 proxy and justifies selecting the ratio on `FinalSequenceValue`.
 
 ---
+
+## Why the ranking is not monotone across graphs — and which representation to trust
+
+A fair question is why CrossoverBB looks best on one graph, Expansion on another, and Combo on a third,
+with no single hierarchy holding everywhere. The reason is that **the graphs measure different quantities,
+and most Phase-3 search-internal metrics are confounded.** Concretely:
+
+1. **The graphs answer different questions.** Within-turn trajectories (figs 2, 8, 11, 12) measure how much
+   one turn's search improves; the sweep / absolute-value graphs (figs 1, 9, 10) measure the cumulative
+   board value an agent reaches; the win-rate (fig 4) measures adversarial outcome. These are correlated
+   but not identical, so their rankings need not coincide.
+
+2. **Normalisation flips the order.** Because the within-turn search gain is ~constant across agents/ratios
+   while the baseline (greedy initial / burn-1 value) varies and tracks board strength, a %-over-baseline
+   plot divides out the signal and can *invert* the ranking (ratio 2 "wins" fig 8 but loses fig 9). The
+   raw-gain view (figs 11, 12) is the honest middle ground and shows the within-turn gain barely
+   discriminates at all.
+
+3. **Absolute value is endogenous.** A stronger agent builds a richer board, which raises both its greedy
+   initial and its final value — so absolute heuristic-value comparisons across agents partly measure
+   "who already had the better board," not "who searches better."
+
+4. **There is no clean board-controlled turn in Phase 3.** The map seed is fixed, so turn 0 is identical
+   for everyone — but it is **degenerate**: every agent and RNG seed finds the same sequence (130 → 271,
+   zero variance), and turns 1–2 stay degenerate too. By turn 3, when search outcomes finally differ, the
+   boards have *already* diverged (initial-value spread ≈ 100). So the only board-controlled turns carry no
+   signal, and every discriminating turn is confounded. This is the core reason Phase-3 internals cannot
+   cleanly rank the agents.
+
+5. **Phase 3 is unpaired and high-variance.** Each agent plays its own game vs a passive opponent, so the
+   per-game `FinalScore` carries ±540–1270 (95% CI) — wide enough that the agent means overlap. An
+   isolated, high-variance, unpaired design simply cannot resolve a few-percent gap.
+
+**The representation that is clean *by construction* is the Phase-2 head-to-head win rate (fig 4).** There
+the two agents share a single board and compete directly, so win/loss controls for board variance, and 100
+paired games give it the power Phase 3 lacks. That is why it shows a clear, significant result
+(Expansion@5 beats EMCTS 0.64 at 1000 ms, CI excludes 0.5) where the Phase-3 graphs cannot.
+
+**What is consistent across the trustworthy representations.** Reading only the views that aren't
+confounded — Phase-2 win rate (fig 4), and the Phase-3 *in-game outcome* views (FinalScore fig 7, the
+relative-score trajectory **`fig13_score_over_turns.png`**, and the raw within-turn gain fig 11 at the
+largest budget) — they agree directionally:
+
+> **Expansion ≳ Combo > EMCTS ≈ BB, with the gap widening as the budget grows.**
+
+fig 13 shows this emerging: at 5000 ms Expansion and Combo climb to ~1.05–1.10× EMCTS's score over the
+game while BB sits at/below 1.0; at 500 ms everything is noise around 1.0 (matching fig 4's coin-flips).
+The link between the search-internal and outcome views is fig 5: heuristic value converts to score
+agent-independently, so a modification helps by accruing *more value over the game*, which the small,
+~constant per-turn search deltas under-detect — but the cumulative win rate captures.
+
+**Practical takeaway for the thesis:** rank the agents on the **Phase-2 win rate** (clean, paired,
+significant); use the Phase-3 graphs to explain the *mechanism* (recombination quality, ratio sweet spot,
+burn-crossover being inert), not to rank. Avoid %-over-baseline trajectories for ranking; prefer raw-gain
+(fig 11/12) or absolute (fig 9/10) with the endogeneity caveat stated.
 
 ## Conclusions on the two modifications
 
