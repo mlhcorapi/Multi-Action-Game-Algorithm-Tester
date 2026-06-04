@@ -1,0 +1,6 @@
+Phase 2 - Final Win Rates
+mode=CAPITALS turnLimit=50 gamesPerMatchup=100 threads=8
+tribes=IMPERIUS vs IMPERIUS2
+budget=TIME (STOP_TIME, shared per turn) timesMs=[500, 1000]
+ratios(Expansion/Combo) per level {5, best-from-Phase3}: 500ms->[5, 10] 1000ms->[5]
+baselines=MCTS,OEP,EMCTS  experimental=CrossoverExpansion,CrossoverBB,CrossoverCombo
