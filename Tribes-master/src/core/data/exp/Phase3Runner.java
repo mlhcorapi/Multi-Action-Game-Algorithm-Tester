@@ -74,6 +74,17 @@ public class Phase3Runner {
      *     (e.g. 25 prior + 75 new = 100 games) rather than only this run's delta. Null = this run only.
      */
     public static void run(int numGames, Budget[] levels, int[] ratios, int threads, String outDir, String extraRatioDir) {
+        run(numGames, levels, ratios, threads, outDir, extraRatioDir, null);
+    }
+
+    /**
+     * @param startState optional fixed start position (e.g. a captured turn-3 board, see
+     *     {@link core.game.Game#captureAtTick}). When non-null, every Phase-3 game begins from a fresh
+     *     copy of it instead of from turn 0, skipping the degenerate opening turns; the tracked agent's
+     *     logged turns then start at the captured tick. Null = the usual from-turn-0 run.
+     */
+    public static void run(int numGames, Budget[] levels, int[] ratios, int threads, String outDir,
+                           String extraRatioDir, core.game.GameState startState) {
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
         // Maps are water-free (LevelGenerator includeWater=false), so penalize the now-useless naval
@@ -105,7 +116,9 @@ public class Phase3Runner {
                 "ratioTest=CrossoverExpansion swept over " + Arrays.toString(ratios) + " (-> Phase3_ratio_turns/_trajectory)\n" +
                 "familyTrajectory=EMCTS (standardBB) + CrossoverBB,CrossoverCombo@{" + STANDARD_RATIO + ",best} (crossoverBB)\n" +
                 "bestRatioPerLevel=argmax avg FinalSequenceValue; downstream uses {" + STANDARD_RATIO + ", best} per level\n" +
-                "budgets(compute-units)=" + budgetsStr(levels) + "\n");
+                "budgets(compute-units)=" + budgetsStr(levels) + "\n" +
+                (startState != null ? "startState=FIXED captured board at turn " + startState.getTick()
+                        + " (degenerate opening skipped; logged turns begin here)\n" : ""));
 
         // pass 1 = EMCTS + CrossoverBB + (#ratios) Expansion; pass 2 = Combo at {5,best} per level (<=2 each).
         int totalMatchups = levels.length * (2 + ratios.length) + levels.length * 2;
@@ -116,12 +129,12 @@ public class Phase3Runner {
         for (Budget level : levels) {
             int levelGames = (level.games > 0) ? level.games : numGames;
             runConfig(dir, ckpt, done, level, tribes, levelGames, threads, idx, totalMatchups,
-                    ExpAgents.emcts(level.budget), "EMCTS", -1, Group.STANDARD_BB);
+                    ExpAgents.emcts(level.budget), "EMCTS", -1, Group.STANDARD_BB, startState);
             runConfig(dir, ckpt, done, level, tribes, levelGames, threads, idx, totalMatchups,
-                    ExpAgents.crossoverBB(level.budget), "CrossoverBB", -1, Group.CROSSOVER_BB);
+                    ExpAgents.crossoverBB(level.budget), "CrossoverBB", -1, Group.CROSSOVER_BB, startState);
             for (int r : ratios) {
                 runConfig(dir, ckpt, done, level, tribes, levelGames, threads, idx, totalMatchups,
-                        ExpAgents.crossoverExpansion(level.budget, r), "CrossoverExpansion", r, Group.RATIO);
+                        ExpAgents.crossoverExpansion(level.budget, r), "CrossoverExpansion", r, Group.RATIO, startState);
             }
         }
 
@@ -135,7 +148,7 @@ public class Phase3Runner {
             int levelGames = (level.games > 0) ? level.games : numGames;
             for (int r : comboRatiosFor(bestByLevel.get(level.name))) {
                 runConfig(dir, ckpt, done, level, tribes, levelGames, threads, idx, totalMatchups,
-                        ExpAgents.crossoverCombo(level.budget, r), "CrossoverCombo", r, Group.CROSSOVER_BB);
+                        ExpAgents.crossoverCombo(level.budget, r), "CrossoverCombo", r, Group.CROSSOVER_BB, startState);
             }
         }
 
@@ -153,7 +166,7 @@ public class Phase3Runner {
      *  CSV(s) for its experiment group. Resumable via the per-config checkpoint key. */
     private static void runConfig(File dir, File ckpt, Set<String> done, Budget level, Types.TRIBE[] tribes,
                                   int numGames, int threads, int[] idx, int totalMatchups,
-                                  AgentSpec spec, String name, int ratio, Group group) {
+                                  AgentSpec spec, String name, int ratio, Group group, core.game.GameState startState) {
         idx[0]++;
         String ratioLabel = (ratio < 0) ? "NA" : String.valueOf(ratio);
         String label = name + (ratio < 0 ? "" : "@r" + ratio);
@@ -175,7 +188,8 @@ public class Phase3Runner {
                 (completed, total, r) -> {
                     if (completed % 20 == 0 || completed == total)
                         System.out.println("    " + label + ": " + completed + "/" + total);
-                });
+                },
+                startState);
 
         boolean isCrossoverBB = (group == Group.CROSSOVER_BB);
         List<String> turnRows = new ArrayList<>();

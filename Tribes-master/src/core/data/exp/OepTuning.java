@@ -20,7 +20,12 @@ import java.util.*;
  * recomputed from the CSV (so skipped combos still count).
  *
  * Args: [threads] [times(csv)] [pops(csv)] [tours(csv)] [games] [outDir]
- *   e.g. retune ONLY 5000ms with larger populations:  4  5000  50,100,200  5,10,20  10  test_results/v2/oep_tuning
+ *   e.g. retune ONLY 5000ms:  4  5000  20,50,100  3,5,10  10  test_results/v2/oep_tuning
+ *
+ * NOTE: keep POP_SIZE &lt;= 100. Much larger populations (e.g. 200) can stall OEP when its population
+ * converges to fewer distinct individuals than TOURNAMENT_SIZE in the early game. This is also where the
+ * optimum lives - tuning has found SMALLER populations better at larger budgets (500ms->100, 1000ms->50) -
+ * so pops {20,50,100} cover the useful range.
  *
  * Output: <outDir>/OepTuning.csv (per-combo averages) + <outDir>/oep_best_params.txt.
  */
