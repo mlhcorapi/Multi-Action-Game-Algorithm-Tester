@@ -292,17 +292,22 @@ public class OEPAgent extends Agent {
             Collections.sort(pop);
             return new Individual[]{pop.get(0), pop.get(1)};
         }
+        // Sample TOURNAMENT_SIZE distinct individuals. BOUNDED: if the population has converged to fewer
+        // than TOURNAMENT_SIZE distinct individuals (common with a large population on a small early-game
+        // action space), insisting on distinctness would spin forever - so after enough failed attempts we
+        // allow duplicates. In the normal case (>= TOURNAMENT_SIZE distinct) this fills in the first few
+        // tries and behaves exactly as before.
         ArrayList<Individual> tournament1  =  new ArrayList<>();
-        while(tournament1.size() < params.TOURNAMENT_SIZE){
+        for(int tries = 0; tournament1.size() < params.TOURNAMENT_SIZE; tries++){
             Individual temp = pop.get(m_rnd.nextInt(pop.size()));
-            if(!(tournament1.contains(temp))){tournament1.add(temp);}
+            if(!(tournament1.contains(temp)) || tries >= 10 * params.TOURNAMENT_SIZE){tournament1.add(temp);}
         }
         Collections.sort(tournament1);
 
         ArrayList<Individual> tournament2  =  new ArrayList<>();
-        while(tournament2.size() < params.TOURNAMENT_SIZE){
+        for(int tries = 0; tournament2.size() < params.TOURNAMENT_SIZE; tries++){
             Individual temp = pop.get(m_rnd.nextInt(pop.size()));
-            if(!(tournament2.contains(temp))){tournament2.add(temp);}
+            if(!(tournament2.contains(temp)) || tries >= 10 * params.TOURNAMENT_SIZE){tournament2.add(temp);}
         }
         Collections.sort(tournament2);
 

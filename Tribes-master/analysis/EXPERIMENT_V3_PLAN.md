@@ -42,7 +42,10 @@ limitation, at least for the opening.
 ```
 # compile (Windows: -cp "lib/*" and ; separators; see project build notes)
 # 1. (optional) retune OEP at 5000ms, then update ExpAgents.oepTime()'s 5000ms branch and recompile:
-java -Xmx8g -cp "out;lib/*" core.data.exp.OepTuning 4 5000 50,100,200 5,10,20 10 test_results/v3/oep_tuning
+java -Xmx8g -cp "out;lib/*" core.data.exp.OepTuning 4 5000 20,50,100 3,5,10 10 test_results/v3/oep_tuning
+# NOTE: keep pop <= 100. Larger populations (e.g. 200) can stall OEP when the population converges to
+# fewer distinct individuals than the tournament size; and the optimum is small anyway (500ms->100,
+# 1000ms->50), so {20,50,100} covers the useful range.
 # 2. run v3:
 java -Xmx8g -cp "out;lib/*" core.data.exp.RunExperimentV3 4
 # 3. analyse (separate output dir analysis/figures_v3, analysis/tables_v3):

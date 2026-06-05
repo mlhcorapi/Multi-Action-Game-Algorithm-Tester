@@ -33,7 +33,8 @@ opponent) had three weaknesses:
 #    (compile as usual into out/)
 
 # 1. retune OEP at 5000ms with larger populations (writes test_results/v2/oep_tuning/oep_best_params.txt)
-java -Xmx8g -cp "out;lib/*" core.data.exp.OepTuning 4 5000 50,100,200 5,10,20 10 test_results/v2/oep_tuning
+java -Xmx8g -cp "out;lib/*" core.data.exp.OepTuning 4 5000 20,50,100 3,5,10 10 test_results/v2/oep_tuning
+#    NOTE: keep pop <= 100 (larger can stall OEP; the optimum is small anyway - 500ms->100, 1000ms->50).
 #    -> then edit ExpAgents.oepTime()'s 5000ms branch with BEST_POP / BEST_TOURNAMENT and rebuild.
 
 # 2. run v2 (Phase 3 top-up to 100 games + Phase 2 at 5000ms)
