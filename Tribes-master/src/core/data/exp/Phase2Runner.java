@@ -32,6 +32,19 @@ public class Phase2Runner {
     }
 
     public static void run(int numGames, int turnLimit, int[] timesMs, Map<String, Integer> bestRatioByLevel, int threads, String outDir) {
+        run(numGames, turnLimit, timesMs, bestRatioByLevel, threads, outDir,
+                new String[]{"MCTS", "OEP", "EMCTS"}, null, null);
+    }
+
+    /**
+     * @param baselines      baseline opponents to test against (e.g. {"OEP","EMCTS"} to drop the weak MCTS).
+     * @param ratiosOverride optional ms -> ratio set for Expansion/Combo (e.g. ALL ratios at 1000ms);
+     *                       null or a missing key falls back to the default {5, best-from-Phase3}.
+     * @param gamesOverride  optional ms -> games-per-matchup (e.g. 300 at 1000ms); null/missing = numGames.
+     */
+    public static void run(int numGames, int turnLimit, int[] timesMs, Map<String, Integer> bestRatioByLevel,
+                           int threads, String outDir, String[] baselines,
+                           Map<Integer, int[]> ratiosOverride, Map<Integer, Integer> gamesOverride) {
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
         // Maps are water-free (LevelGenerator includeWater=false), so penalize the now-useless naval
@@ -49,23 +62,30 @@ public class Phase2Runner {
         // best ratio chosen in Phase 3 (deduplicated). The best ratio can differ by budget level;
         // a level maps by its name (e.g. "500ms") to the Phase 3 budget level of the same name.
         Map<Integer, int[]> ratiosByMs = new LinkedHashMap<>();
-        StringBuilder ratioDesc = new StringBuilder();
+        StringBuilder ratioDesc = new StringBuilder(), gamesDesc = new StringBuilder();
         for (int ms : timesMs) {
-            int best = bestRatioByLevel.getOrDefault(ms + "ms", 5);
-            int[] rs = (best == 5) ? new int[]{5} : new int[]{5, best};
+            int[] rs;
+            if (ratiosOverride != null && ratiosOverride.containsKey(ms)) {
+                rs = ratiosOverride.get(ms);                       // e.g. all ratios at 1000ms
+            } else {
+                int best = bestRatioByLevel.getOrDefault(ms + "ms", 5);
+                rs = (best == 5) ? new int[]{5} : new int[]{5, best};
+            }
             ratiosByMs.put(ms, rs);
             ratioDesc.append(ms).append("ms->").append(Arrays.toString(rs)).append(" ");
+            int g = (gamesOverride != null && gamesOverride.containsKey(ms)) ? gamesOverride.get(ms) : numGames;
+            gamesDesc.append(ms).append("ms->").append(g).append("g ");
         }
 
         ExpCsv.writeText(new File(dir, "config.txt"),
                 "Phase 2 - Final Win Rates\n" +
-                "mode=CAPITALS turnLimit=" + turnLimit + " gamesPerMatchup=" + numGames + " threads=" + threads + "\n" +
+                "mode=CAPITALS turnLimit=" + turnLimit + " gamesPerMatchup=" + gamesDesc.toString().trim() + " threads=" + threads + "\n" +
                 "tribes=IMPERIUS vs IMPERIUS2\n" +
                 "budget=TIME (STOP_TIME, shared per turn) timesMs=" + Arrays.toString(timesMs) + "\n" +
-                "ratios(Expansion/Combo) per level {5, best-from-Phase3}: " + ratioDesc.toString().trim() + "\n" +
-                "baselines=MCTS,OEP,EMCTS  experimental=CrossoverExpansion,CrossoverBB,CrossoverCombo\n");
+                "ratios(Expansion/Combo) per level: " + ratioDesc.toString().trim() + "\n" +
+                "baselines=" + String.join(",", baselines) + "  experimental=CrossoverExpansion,CrossoverBB,CrossoverCombo\n");
 
-        String[] baselineNames = {"MCTS", "OEP", "EMCTS"};
+        String[] baselineNames = baselines;
         int totalMatchups = 0;
         for (int ms : timesMs) totalMatchups += (1 + 2 * ratiosByMs.get(ms).length) * baselineNames.length;
         int matchupIdx = 0;
@@ -75,6 +95,7 @@ public class Phase2Runner {
             // on the per-turn timer (the engine carries the remaining time across actions).
             Constants.TURN_TIME_MILLIS = ms;
             Constants.TURN_TIME_LIMITED = false;
+            int levelGames = (gamesOverride != null && gamesOverride.containsKey(ms)) ? gamesOverride.get(ms) : numGames;
             String levelName = ms + "ms";
             File gamesCsv = new File(dir, "Phase2_games_" + levelName + ".csv");
 
@@ -99,14 +120,14 @@ public class Phase2Runner {
                         System.out.println("[Phase2] (" + matchupIdx + "/" + totalMatchups + ") SKIP (done): " + key);
                         continue;
                     }
-                    System.out.println("[Phase2] (" + matchupIdx + "/" + totalMatchups + ") RUN " + key + " (" + numGames + " games, " + ms + "ms/turn)");
+                    System.out.println("[Phase2] (" + matchupIdx + "/" + totalMatchups + ") RUN " + key + " (" + levelGames + " games, " + ms + "ms/turn)");
 
                     AgentSpec expSpec = buildExperimentalTime(expName, ratio);
                     AgentSpec baseSpec = buildBaselineTime(baseName, ms);
                     List<AgentSpec> specs = Arrays.asList(expSpec, baseSpec);
 
                     List<GameResult> results = ExperimentEngine.runMatchup(
-                            specs, tribes, Types.GAME_MODE.CAPITALS, numGames, 1,
+                            specs, tribes, Types.GAME_MODE.CAPITALS, levelGames, 1,
                             g -> 1_000_000L + g, g -> 2_000_000L + g, g -> 3_000_000L + g,
                             threads,
                             (completed, total, r) -> {

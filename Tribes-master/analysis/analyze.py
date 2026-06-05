@@ -13,6 +13,7 @@ Reads test_results/full/{phase2,phase3}, writes:
 
 Run:  python analysis/analyze.py
 """
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -20,13 +21,20 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# Result roots: the original run plus the v2 top-up (if present). CSVs are concatenated across roots.
-# Phase-3 gameIds do not collide (v1 = 1..50/1..25, v2 = offset 51..100/26..100), so the merge yields the
-# combined 100-game sample. Works whether or not test_results/v2 exists yet.
-RESULT_ROOTS = [r for r in [Path('test_results/full'), Path('test_results/v2')] if r.exists()] \
-               or [Path('test_results/full')]
-FIGS   = Path('analysis/figures'); FIGS.mkdir(parents=True, exist_ok=True)
-TABLES = Path('analysis/tables');  TABLES.mkdir(parents=True, exist_ok=True)
+# Result roots. Default: the original run + the v2 top-up (merged; Phase-3 gameIds don't collide).
+# Override on the command line to analyse a different/standalone run, e.g. the v3 session (separate
+# conditions - fixed turn-3 start, no MCTS): `python analysis/analyze.py test_results/v3`. When a root is
+# given, output goes to analysis/figures_<name> + analysis/tables_<name> so it doesn't clobber the default.
+_args = [a for a in sys.argv[1:] if not a.startswith('-')]
+if _args:
+    RESULT_ROOTS = [Path(a) for a in _args]
+    _tag = '_' + RESULT_ROOTS[0].name
+else:
+    RESULT_ROOTS = [r for r in [Path('test_results/full'), Path('test_results/v2')] if r.exists()] \
+                   or [Path('test_results/full')]
+    _tag = ''
+FIGS   = Path('analysis/figures' + _tag); FIGS.mkdir(parents=True, exist_ok=True)
+TABLES = Path('analysis/tables' + _tag);  TABLES.mkdir(parents=True, exist_ok=True)
 LEVELS = ['500ms', '1000ms', '5000ms']
 
 def read_multi(relpath):
@@ -416,8 +424,12 @@ def fig_burn_crossover_benefit():
 def fig_winrates():
     """Phase-2 win rate of each modification vs each baseline, per level. The EMCTS column is
     the key 'did the modification beat vanilla EMCTS' test (0.5 = tie; n=100, SE~0.05)."""
-    bases=['EMCTS','OEP','MCTS']
     p2levels = phase2_levels()
+    # Baselines actually present (v3 drops MCTS), in a fixed display order.
+    present = set()
+    for lv in p2levels: present |= set(load_phase2(lv).Base.unique())
+    bases = [b for b in ['EMCTS','OEP','MCTS'] if b in present]
+    nb = max(1, len(bases))
     fig, axes = plt.subplots(1, len(p2levels), figsize=(6.5*len(p2levels),4.8), sharey=True, squeeze=False)
     axes = axes[0]
     for ax,lv in zip(axes,p2levels):
@@ -425,15 +437,16 @@ def fig_winrates():
         agg = exp.groupby(['Config','Base'])['Won'].agg(['mean','count'])
         wr = agg['mean'].unstack('Base'); n = agg['count'].unstack('Base')
         se = (wr*(1-wr)/n)**0.5                       # binomial SE of the win rate
-        cfgs=list(wr.index); x=np.arange(len(cfgs)); w=0.25
+        cfgs=list(wr.index); x=np.arange(len(cfgs)); w=0.8/nb
         for j,b in enumerate(bases):
-            ax.bar(x+(j-1)*w, wr[b].values, w, yerr=1.96*se[b].values, capsize=2,
+            if b not in wr.columns: continue
+            ax.bar(x+(j-(nb-1)/2)*w, wr[b].values, w, yerr=1.96*se[b].values, capsize=2,
                    error_kw=dict(lw=0.8), label=f'vs {b}', color=C[b])
         ax.axhline(0.5, color='k', lw=0.8, ls=':')
-        ax.set_xticks(x); ax.set_xticklabels(cfgs, rotation=30, ha='right', fontsize=8)
+        ax.set_xticks(x); ax.set_xticklabels(cfgs, rotation=40, ha='right', fontsize=7)
         ax.set_title(lv); ax.set_ylim(0,1.05)
     axes[0].set_ylabel('win rate (experimental agent, +/-95% CI)'); axes[0].legend()
-    fig.suptitle('Phase 2 win rates: crossover modifications vs baselines (CAPITALS, 100 games)', fontweight='bold')
+    fig.suptitle('Phase 2 win rates: crossover modifications vs baselines (CAPITALS)', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS/'fig4_winrates.png'); plt.close(fig)
 
 def fig_value_vs_score():

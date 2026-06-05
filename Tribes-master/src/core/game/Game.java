@@ -126,6 +126,36 @@ public class Game {
     }
 
     /**
+     * Initializes the game from an already-constructed GameState (a captured "start position"), instead
+     * of generating a fresh board from a seed. Mirrors {@link #init(ArrayList, String)} but takes the
+     * state in memory rather than loading from disk, so a game can begin from a fixed mid-game position
+     * (see {@link #captureAtTick}). The caller owns isolation across parallel games: pass a fresh
+     * {@code startState.copy()} per game. Game-level randomness lives inside the GameState, so {@code seed}
+     * here is only a placeholder (unused once the board exists).
+     */
+    public void initFromState(ArrayList<Agent> players, GameState startState) {
+        this.seed = 0;
+        this.rnd = new Random(0);
+        this.gs = startState;
+        initGameStructures(players, this.gs.getTribes().length);
+        updateAssignedGameStates();
+    }
+
+    /**
+     * Plays the game forward HEADLESS until the start of tick {@code stopTick} (i.e. after ticks
+     * 0..stopTick-1 have been fully played, before any tribe acts in stopTick), then returns a deep copy
+     * of the full game state. Used to capture a fixed "start position" once - e.g. the turn-3 board, past
+     * the degenerate opening where every agent plays identically - so all Phase-3 games can begin from the
+     * same non-trivial position. Players must already be set (call an init(...) first).
+     */
+    public GameState captureAtTick(int stopTick) {
+        while (gs.getTick() < stopTick && !gameOver()) {
+            tick(null);
+        }
+        return gs.copy();
+    }
+
+    /**
      * Initializes game structures depending on number of players and tribes
      *
      * @param players Players to play this game

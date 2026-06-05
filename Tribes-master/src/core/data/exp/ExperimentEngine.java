@@ -2,6 +2,7 @@ package core.data.exp;
 
 import core.Types;
 import core.game.Game;
+import core.game.GameState;
 import players.Agent;
 
 import java.util.ArrayList;
@@ -44,6 +45,22 @@ public class ExperimentEngine {
      * @param progress     per-game callback (called on the main thread), may be null
      */
     public static List<GameResult> runMatchup(
+            List<AgentSpec> specs, Types.TRIBE[] tribes, Types.GAME_MODE mode,
+            int numGames, int startGameId,
+            IntToLongFunction levelSeedFn, IntToLongFunction gameSeedFn, IntToLongFunction agentSeedFn,
+            int threads, Progress progress) {
+        return runMatchup(specs, tribes, mode, numGames, startGameId,
+                levelSeedFn, gameSeedFn, agentSeedFn, threads, progress, null);
+    }
+
+    /**
+     * @param startState optional fixed "start position". When non-null, every game begins from a fresh
+     *   copy of this state (via {@link Game#initFromState}) instead of generating a fresh board from
+     *   levelSeed - so all games share an identical non-trivial starting board (e.g. the turn-3 state),
+     *   and the only variation across games is the agent RNG (agentSeedFn). levelSeed/gameSeed are then
+     *   unused for board generation. Null = generate a fresh board from seeds (the normal path).
+     */
+    public static List<GameResult> runMatchup(
             List<AgentSpec> specs,
             Types.TRIBE[] tribes,
             Types.GAME_MODE mode,
@@ -53,7 +70,8 @@ public class ExperimentEngine {
             IntToLongFunction gameSeedFn,
             IntToLongFunction agentSeedFn,
             int threads,
-            Progress progress) {
+            Progress progress,
+            GameState startState) {
 
         ExecutorService executor = Executors.newFixedThreadPool(threads);
         GameResult[] slots = new GameResult[numGames]; // slots[i] = result for game index i (null until a run succeeds)
@@ -77,7 +95,7 @@ public class ExperimentEngine {
                 final long gameSeed = gameSeedFn.applyAsLong(gameIndex) + (long) attempt * RETRY_SEED_OFFSET;
                 final long agentSeed = agentSeedFn.applyAsLong(gameIndex) + (long) attempt * RETRY_SEED_OFFSET;
                 futures.add(executor.submit(() ->
-                        runOneGame(specs, tribes, mode, gameId, levelSeed, gameSeed, agentSeed)));
+                        runOneGame(specs, tribes, mode, gameId, levelSeed, gameSeed, agentSeed, startState)));
             }
 
             for (int p = 0; p < pending.size(); p++) {
@@ -112,14 +130,20 @@ public class ExperimentEngine {
 
     private static GameResult runOneGame(List<AgentSpec> specs, Types.TRIBE[] tribes,
                                          Types.GAME_MODE mode, int gameId,
-                                         long levelSeed, long gameSeed, long agentSeed) {
+                                         long levelSeed, long gameSeed, long agentSeed,
+                                         GameState startState) {
         ArrayList<Agent> players = new ArrayList<>();
         for (AgentSpec spec : specs) {
             players.add(spec.create(agentSeed));
         }
 
         Game game = new Game();
-        game.init(players, levelSeed, tribes, gameSeed, mode);
+        if (startState != null) {
+            // Begin from a fixed captured position (e.g. turn 3); each game gets its own deep copy.
+            game.initFromState(players, startState.copy());
+        } else {
+            game.init(players, levelSeed, tribes, gameSeed, mode);
+        }
         game.run(null, null);
 
         Agent[] seated = game.getPlayers();
