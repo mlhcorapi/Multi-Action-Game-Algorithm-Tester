@@ -156,6 +156,36 @@ public class Game {
     }
 
     /**
+     * Like {@link #captureAtTick} but additionally prepares the snapshot so {@code tribes[0]} is the
+     * active tribe at {@code stopTick} — mirroring what {@code processTurn} would do as it begins
+     * tribes[0]'s turn. Use this for portfolio captures where the captured state is consumed by a single
+     * {@code agent.act()} call rather than fed back into {@code Game.run}: at the end of {@link #tick},
+     * {@code activeTribeID} is left pointing at the LAST tribe to have acted in the previous tick
+     * (e.g. tribe 1 / IMPERIUS2). For single-player source games (EMCTS vs DoNothing) that "last tribe"
+     * is the passive opponent — which has no cities/units, so an experiment agent reading
+     * {@code gs.getActiveTribeID()} would silently take the role of the wrong player.
+     *
+     * <p>v3's {@link core.data.exp.Phase3Runner} still uses the plain {@link #captureAtTick} because it
+     * calls {@code Game.run} on the captured state — which itself runs {@code initTurn} on tribes[0] in
+     * the first iteration, so calling it here too would double-process the turn.
+     */
+    public GameState captureAtTickAsTurnStart(int stopTick) {
+        while (gs.getTick() < stopTick && !gameOver()) {
+            tick(null);
+        }
+        // Snapshot FIRST so the initTurn fixup is applied only to the returned state; subsequent
+        // captures of later ticks (e.g. BuildV4Portfolio iterating ticks 21..30) continue from the live
+        // game without the extra initTurn rolling resource/star/unit-status counters twice.
+        GameState snap = gs.copy();
+        Tribe[] tribes = snap.getTribes();
+        if (tribes.length > 0 && !snap.isGameOver()) {
+            snap.initTurn(tribes[0]);
+            snap.computePlayerActions(tribes[0]);
+        }
+        return snap;
+    }
+
+    /**
      * Initializes game structures depending on number of players and tribes
      *
      * @param players Players to play this game

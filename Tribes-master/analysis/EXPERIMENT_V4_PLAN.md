@@ -174,14 +174,43 @@ enough to surface meaningful effects.
 
 ## Validation
 
-`NewExperimentSmokeTestV4` is a pipeline-correctness test (not a result):
-1. `FastGameStateIO` round-trip preserves `tick`, `activeTribeId`, board size, action count.
-2. **Shared random initial sequence**: given identical visit seeds, EMCTS / CrossoverBB / Expansion@5
-   produce the *same* `InitialSequenceValue` — the paired-comparison guarantee.
-3. Folder layout exactly matches the spec.
-4. Burn-crossover agents have `RawImprovement` / `PercentageImprovement` columns; others don't.
+### Portfolio: every scenario must start up properly
+- `BuildV4Portfolio` validates **each captured scenario inline**: rejects (and re-tries from the next
+  capture position) any scenario whose active tribe has zero cities or zero units, or where a tiny
+  EMCTS planTurn throws. The combination guards against persisting:
+  - States where the passive opponent is active (would have happened to single-source captures before
+    the `captureAtTickAsTurnStart` fix below).
+  - Engine-edge states that NPE under planning.
+- `VerifyV4Portfolio` walks the entire persisted portfolio and re-runs the same check, with a per-
+  scenario PASS/FAIL line and a summary. `RunExperimentV4` calls it after `BuildV4Portfolio` and
+  ABORTS the run if any scenario fails — failing in seconds instead of after hours of silently bad
+  isolation-phase output.
 
-All four pass.
+### `Game.captureAtTickAsTurnStart` — the active-tribe fix
+After `Game.tick()` runs its `for i in [0..numPlayers)` loop and then `gs.incTick()`, the captured
+state's `activeTribeID` is left pointing at the LAST tribe to act in the previous tick — tribe 1.
+For two-player EMCTS-vs-EMCTS source games that's fine (both tribes are developed). For
+single-player EMCTS-vs-DoNothing sources, tribe 1 is the **passive opponent** — which has no cities
+and no units. A v4 agent reading `gs.getActiveTribeID()` would silently take that role and produce
+garbage. The fix: `Game.captureAtTickAsTurnStart(stopTick)` snapshots first, then `initTurn`s
+`tribes[0]` so the EMCTS-developed player is the active tribe at `stopTick`. (Plain
+`Game.captureAtTick` is untouched — `Game.run` is its only caller besides v4 and it already runs
+`initTurn` on the first iteration, so a fixup there would double-process.)
+
+### Pipeline smoke
+`NewExperimentSmokeTestV4` runs in ~70 s and asserts:
+1. `FastGameStateIO` round-trip preserves `tick`, `activeTribeId`, board size, action count.
+2. **Per-scenario startup validation**: each captured tiny scenario has an EMCTS-developed active
+   tribe (cities > 0 AND units > 0) AND a planTurn that doesn't throw.
+3. **Shared random initial sequence**: given identical visit seeds, EMCTS / CrossoverBB / Expansion@5
+   produce the *same* literal action sequence (compared via `getInitialRootSequenceForV4()`, not by
+   one float).
+4. **Invariance across thinking times**: for one (scenario, visit), all 12 configs × all 3 thinking
+   times produce the identical initial sequence (36 / 36 match).
+5. Folder layout exactly matches the spec; burn-crossover agents have the extra
+   `RawImprovement` / `PercentageImprovement` columns.
+
+All five pass.
 
 ## What v4 will resolve
 

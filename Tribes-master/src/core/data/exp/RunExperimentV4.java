@@ -53,6 +53,20 @@ public class RunExperimentV4 {
         banner("PORTFOLIO build", t0);
         BuildV4Portfolio.main(new String[]{ BASE + "/_portfolio" });
 
+        // 1b. Walk the entire persisted portfolio and verify each scenario starts up properly. Failing
+        // EARLY here (before any 60k-task isolation pass) saves hours of silently-bad output if a
+        // scenario was persisted with the passive opponent as the active tribe or any other engine-edge
+        // state. Throws + exits if any scenario fails validation.
+        banner("PORTFOLIO verify", t0);
+        VerifyV4Portfolio.Report rep = VerifyV4Portfolio.verify(new File(BASE + "/_portfolio"));
+        if (!rep.allPass()) {
+            System.err.println("[v4] ABORT: " + rep.failed.size() + " scenario(s) failed verification: "
+                    + rep.failed);
+            System.err.println("Delete the failing scenario_NNN.bin + remove their _completed.txt entries");
+            System.err.println("then re-run RunExperimentV4 to regenerate them.");
+            System.exit(1);
+        }
+
         // 2. Load portfolio into memory ONCE.
         banner("PORTFOLIO load", t0);
         List<Scenario> portfolio = IsolationPhaseRunner.loadPortfolio(new File(BASE + "/_portfolio"));

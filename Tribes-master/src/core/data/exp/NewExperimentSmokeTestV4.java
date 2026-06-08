@@ -57,6 +57,26 @@ public class NewExperimentSmokeTestV4 {
         }
         System.out.println("FastGameStateIO round-trip: " + (roundTripOk ? "PASS" : "FAIL"));
 
+        System.out.println("\n==================== 1b. Per-scenario startup validation (no passive base player; no NPE) ====================");
+        boolean allValid = true;
+        for (Scenario sc : portfolio) {
+            int aid = sc.state.getActiveTribeID();
+            int cities = sc.state.getTribes()[aid].getNumCities();
+            int units = 0;
+            if (sc.state.getTribes()[aid].getCitiesID() != null) {
+                for (Integer cId : sc.state.getTribes()[aid].getCitiesID()) {
+                    core.actors.City c = (core.actors.City) sc.state.getActor(cId);
+                    if (c != null && c.getUnitsID() != null) units += c.getUnitsID().size();
+                }
+            }
+            boolean valid = BuildV4Portfolio.validateScenario(sc.state, sc.id);
+            System.out.println("  scenario " + BuildV4Portfolio.sid(sc.id) + " tick=" + sc.state.getTick()
+                    + " activeTribe=" + aid + " cities=" + cities + " units=" + units
+                    + " -> " + (valid ? "PASS" : "FAIL"));
+            allValid &= valid;
+        }
+        System.out.println("Per-scenario startup validation: " + (allValid ? "PASS" : "FAIL"));
+
         System.out.println("\n==================== 2. SHARED random initial sequence across agents ====================");
         boolean sharedInitOk = verifySharedInitialSequence(portfolio.get(0));
         System.out.println("Shared random initial sequence (EMCTS == BB == Expansion@5): " + (sharedInitOk ? "PASS" : "FAIL"));
@@ -80,7 +100,7 @@ public class NewExperimentSmokeTestV4 {
                 && checkLeaf(new File(base + "/CrossoverExpansion/ratio_5/50ms/results.csv"), false);
         System.out.println("Folder layout + schema: " + (layoutOk ? "PASS" : "FAIL"));
 
-        boolean allOk = roundTripOk && sharedInitOk && acrossMsOk && layoutOk;
+        boolean allOk = roundTripOk && allValid && sharedInitOk && acrossMsOk && layoutOk;
         System.out.println("\nTotal smoke_v4 time: " + (System.currentTimeMillis() - t0) / 1000.0 + "s");
         System.out.println(allOk ? "PASS: v4 pipeline sound." : "FAIL: see checks above.");
     }
@@ -107,7 +127,11 @@ public class NewExperimentSmokeTestV4 {
         List<Scenario> result = new ArrayList<>();
         for (int s = 1; s <= 3; s++) {
             int tick = 2 + s;
-            GameState gs = game.captureAtTick(tick);
+            // captureAtTickAsTurnStart: snapshot with tribe 0 (the EMCTS-developed player) as active —
+            // matches what BuildV4Portfolio now does. Plain captureAtTick would leave activeTribeID at
+            // tribe 1 (the passive DoNothing opponent) for single-source games, breaking the smoke's
+            // shared-initial-sequence check below.
+            GameState gs = game.captureAtTickAsTurnStart(tick);
             File bin = new File(scenariosDir, "scenario_" + BuildV4Portfolio.sid(s) + ".bin");
             FastGameStateIO.save(gs, bin);
             String row = s + ",single," + s + ",555555,666666," + tick + "," + gs.getActiveTribeID()
