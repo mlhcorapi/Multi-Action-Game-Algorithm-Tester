@@ -1,0 +1,584 @@
+"""
+analyze_v4_full.py — comprehensive v4 analysis (the "full" companion to analyze_v4.py).
+
+Produces every table and figure the user requested in the v4 follow-up:
+  1. Per-scenario × agent FinalSequenceValue tables — raw + Δ vs EMCTS + % vs EMCTS — one per ms.
+  2. The same averaged across ms.
+  3. Best-agent-per-scenario bar chart (wins) — per ms + averaged.
+  4. Ranking-point bar chart (last=1 … best=12, summed) — per ms + averaged.
+  5. Trajectory of BestSequenceValue per burn phase — per ms × per agent and averaged.
+  6. Trajectory as % improvement over initial sequence — same layout as 5.
+  7. Branching-factor vs improvement scatter — per agent per ms + per agent averaged. Raw + %.
+  8. Bar chart of mean % improvement over initial sequence — per ms + averaged.
+
+Plus a handful of analysis-driven extras the data invites:
+  E1. Paired delta vs EMCTS with 95% CIs (n≈5000 per cell — small effects are detectable).
+  E2. Best-ratio-per-budget table for Expansion + Combo (the v3-style sweep).
+  E3. Single-vs-dual portfolio split: does the ranking change?
+  E4. Convergence speed — burn phase at which each agent reaches 95% of its final gain.
+
+Run:  python analysis/analyze_v4_full.py [test_results/v4]
+Output: analysis/figures_v4_full/*.png  +  analysis/tables_v4_full/*.csv
+"""
+import os, sys, glob, re
+import numpy as np
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from matplotlib.colors import to_rgba
+from pathlib import Path
+
+ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('test_results/v4')
+FIGS = Path('analysis/figures_v4_full'); FIGS.mkdir(parents=True, exist_ok=True)
+TABLES = Path('analysis/tables_v4_full'); TABLES.mkdir(parents=True, exist_ok=True)
+
+MS_LEVELS = [500, 1000, 5000]
+RATIOS = [2, 5, 10, 15, 20]
+
+# 12 configs, fixed display order: baseline → BB → Expansion × ratios → Combo × ratios.
+ORDER = ['EMCTS', 'CrossoverBB']
+for r in RATIOS: ORDER.append(f'CrossoverExpansion@{r}')
+for r in RATIOS: ORDER.append(f'CrossoverCombo@{r}')
+
+# Consistent colors. Black = EMCTS baseline; orange = BB; blue palette = Expansion ratios; green palette = Combo ratios.
+def _shades(base_color, n):
+    rgba = np.array(to_rgba(base_color))
+    return [tuple(rgba * (0.55 + 0.45 * i/(n-1))) for i in range(n)]
+
+COLORS = {'EMCTS': '#222222', 'CrossoverBB': '#ff7f0e'}
+for cfg, c in zip([f'CrossoverExpansion@{r}' for r in RATIOS], _shades('#1f77b4', 5)): COLORS[cfg] = c
+for cfg, c in zip([f'CrossoverCombo@{r}'     for r in RATIOS], _shades('#2ca02c', 5)): COLORS[cfg] = c
+
+plt.rcParams.update({'figure.dpi': 110, 'font.size': 9, 'axes.grid': True, 'grid.alpha': 0.3})
+
+LEAF_RE = re.compile(r'(?P<agent>EMCTS|CrossoverBB|CrossoverExpansion|CrossoverCombo)'
+                     r'(?:/ratio_(?P<ratio>\d+))?'
+                     r'/(?P<ms>\d+)ms/results\.csv$')
+
+
+# -------------------------------------------------- loaders ------
+def _config_label(agent, ratio):
+    if agent in ('EMCTS', 'CrossoverBB'):
+        return agent
+    return f'{agent}@{int(ratio)}'
+
+def load_all():
+    """Load every results.csv with provenance columns added. Returns a single DataFrame with one row
+    per (config, scenario, visit, burn). Memory: ~3.5 GB at full v4 size — fine on 32 GB."""
+    frames = []
+    for f in sorted(glob.glob(str(ROOT) + '/**/results.csv', recursive=True)):
+        rel = f.replace(os.sep, '/').split(str(ROOT).replace(os.sep, '/') + '/', 1)[-1]
+        m = LEAF_RE.search(rel)
+        if not m: continue
+        df = pd.read_csv(f)
+        df['Config'] = _config_label(m.group('agent'), m.group('ratio')) if m.group('ratio') \
+                        else m.group('agent')
+        df['ThinkingMs'] = int(m.group('ms'))
+        frames.append(df)
+    if not frames:
+        raise FileNotFoundError(f'No results.csv under {ROOT}')
+    return pd.concat(frames, ignore_index=True)
+
+def per_turn(df_burn):
+    """One row per (Config, ms, scenario, visit) — turn-level columns are identical across all 20 burn
+    rows so 'first' picks the right value. Drops per-burn columns to prevent later silent
+    averaging-burn-1-values bugs."""
+    keys = ['Config', 'ThinkingMs', 'ScenarioId', 'VisitId']
+    out = df_burn.drop_duplicates(subset=keys, keep='first').copy()
+    return out.drop(columns=['BridgeBurningPhaseNumber', 'BestSequenceValue', 'FmCallsElapsed',
+                              'Timestamp', 'RawImprovement', 'PercentageImprovement'], errors='ignore')
+
+def load_portfolio():
+    p = ROOT / '_portfolio' / 'portfolio.csv'
+    return pd.read_csv(p) if p.exists() else pd.DataFrame()
+
+
+# -------------------------------------------------- request 1+2: scenario × agent tables --
+def scenario_agent_table(turn_df, ms_or_avg):
+    """Mean FinalSequenceValue per (scenario, config). For 'avg', average over ms BEFORE
+    aggregating so each scenario × visit × ms × config contributes equally."""
+    if ms_or_avg == 'avg':
+        sub = turn_df
+    else:
+        sub = turn_df[turn_df.ThinkingMs == ms_or_avg]
+    # Mean over visits per (scenario, config). For 'avg' this also averages over ms.
+    means = sub.groupby(['ScenarioId', 'Config'])['FinalSequenceValue'].mean().unstack('Config')
+    # Reorder columns to the canonical order so EMCTS is first
+    cols = [c for c in ORDER if c in means.columns]
+    means = means[cols]
+    return means
+
+def add_improvement_columns(means, baseline='EMCTS', save_name=None):
+    """Take a scenario × Config means table; return a wider table with raw Δ and % Δ vs the baseline,
+    plus a summary footer (mean / std / 95% CI per column)."""
+    raw = means.subtract(means[baseline], axis=0)
+    pct = raw.div(means[baseline].abs(), axis=0) * 100.0
+    # Compose final wide table
+    wide = pd.concat({'meanFinal': means.round(2),
+                      'rawDeltaVsEMCTS': raw.round(2),
+                      'pctDeltaVsEMCTS': pct.round(3)}, axis=1)
+    wide.columns = [f'{lev0}__{lev1}' for lev0, lev1 in wide.columns]
+    # Summary footer
+    summary = pd.DataFrame({
+        'meanFinal_mean': means.mean(),
+        'meanFinal_std':  means.std(),
+        'rawDelta_mean':  raw.mean(),
+        'rawDelta_std':   raw.std(),
+        'rawDelta_CI95':  1.96 * raw.std() / np.sqrt(len(raw)),
+        'pctDelta_mean':  pct.mean(),
+        'pctDelta_CI95':  1.96 * pct.std() / np.sqrt(len(pct)),
+        'wins_vs_emcts':  (raw > 0).sum(),
+    }).round(3)
+    if save_name:
+        wide.to_csv(TABLES / f'{save_name}_per_scenario.csv')
+        summary.to_csv(TABLES / f'{save_name}_summary.csv')
+    return wide, summary
+
+
+# -------------------------------------------------- request 3: best agent per scenario --
+def best_agent_counts(turn_df, ms_or_avg):
+    """For each scenario, which config has the highest mean FinalSequenceValue? Return counts."""
+    means = scenario_agent_table(turn_df, ms_or_avg)
+    winners = means.idxmax(axis=1)
+    return winners.value_counts().reindex([c for c in ORDER if c in means.columns]).fillna(0).astype(int)
+
+def fig_best_per_scenario(turn_df):
+    panels = [(ms, f'{ms} ms') for ms in MS_LEVELS] + [('avg', 'avg across ms')]
+    fig, axes2 = plt.subplots(2, 2, figsize=(11, 8), squeeze=False)
+    axes = axes2.flatten()
+    for ax, (key, title) in zip(axes, panels):
+        counts = best_agent_counts(turn_df, key)
+        colors = [COLORS[c] for c in counts.index]
+        ax.bar(range(len(counts)), counts.values, color=colors, edgecolor='black', linewidth=0.4)
+        ax.set_xticks(range(len(counts)))
+        ax.set_xticklabels(counts.index, rotation=60, ha='right', fontsize=7)
+        ax.set_title(title); ax.set_ylabel('scenarios won')
+        for i, v in enumerate(counts.values):
+            if v: ax.text(i, v + 0.4, str(v), ha='center', fontsize=8)
+    fig.suptitle('Best-agent-per-scenario count (argmax of mean FinalSequenceValue)',
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'fig3_best_agent_per_scenario.png'); plt.close(fig)
+    # also save the tables
+    for key, title in panels:
+        c = best_agent_counts(turn_df, key)
+        c.to_csv(TABLES / f'T3_best_agent_count_{key}.csv')
+
+
+# -------------------------------------------------- request 4: ranking points --
+def ranking_points(turn_df, ms_or_avg):
+    """For each scenario, rank configs by mean FinalSequenceValue. last=1, best=K. Sum per config."""
+    means = scenario_agent_table(turn_df, ms_or_avg)
+    ranks = means.rank(axis=1, method='average', ascending=True)
+    return ranks.sum().reindex([c for c in ORDER if c in means.columns])
+
+def fig_ranking_points(turn_df):
+    panels = [(ms, f'{ms} ms') for ms in MS_LEVELS] + [('avg', 'avg across ms')]
+    fig, axes2 = plt.subplots(2, 2, figsize=(11, 8), squeeze=False)
+    axes = axes2.flatten()
+    n_configs = 12
+    for ax, (key, title) in zip(axes, panels):
+        pts = ranking_points(turn_df, key)
+        avg_pt = pts / 100   # 100 scenarios; mean rank per scenario
+        colors = [COLORS[c] for c in pts.index]
+        ax.bar(range(len(pts)), pts.values, color=colors, edgecolor='black', linewidth=0.4)
+        ax.set_xticks(range(len(pts)))
+        ax.set_xticklabels(pts.index, rotation=60, ha='right', fontsize=7)
+        # Reference line at "chance" (mean rank * 100 scenarios)
+        ax.axhline(100 * (n_configs+1) / 2, color='red', ls=':', lw=1, label='chance')
+        ax.set_title(f'{title}  (chance: {100*(n_configs+1)/2:.0f})'); ax.set_ylabel('total ranking points')
+        for i, (v, a) in enumerate(zip(pts.values, avg_pt.values)):
+            ax.text(i, v + 5, f'{a:.1f}', ha='center', fontsize=7)
+    fig.suptitle('Ranking points (last=1 … best=12 per scenario, summed over 100 scenarios)',
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'fig4_ranking_points.png'); plt.close(fig)
+    for key, title in panels:
+        ranking_points(turn_df, key).to_csv(TABLES / f'T4_ranking_points_{key}.csv', header=['points'])
+
+
+# -------------------------------------------------- request 5+6: trajectories --
+def trajectory_data(df_burn, kind='raw'):
+    """Returns a DataFrame indexed by (Config, ThinkingMs, BridgeBurningPhaseNumber) with the mean
+    BSV (kind=raw) or mean %-over-initial (kind=pct) across all (scenario, visit)."""
+    if kind == 'raw':
+        return df_burn.groupby(['Config','ThinkingMs','BridgeBurningPhaseNumber'])['BestSequenceValue'].mean()
+    elif kind == 'pct':
+        # %-over-initial per (scenario, visit, burn). Initial is constant within (scenario, visit) but
+        # we compute per-row to avoid edge cases.
+        m = df_burn.copy()
+        m['pct'] = (m.BestSequenceValue - m.InitialSequenceValue) / m.InitialSequenceValue.abs() * 100
+        return m.groupby(['Config','ThinkingMs','BridgeBurningPhaseNumber'])['pct'].mean()
+    else:
+        raise ValueError(kind)
+
+def _set_tight_ylim(ax, ys, pad_frac=0.06):
+    ys = np.asarray(ys); ys = ys[np.isfinite(ys)]
+    if ys.size == 0: return
+    lo, hi = ys.min(), ys.max()
+    span = max(1e-9, hi - lo)
+    ax.set_ylim(lo - span*pad_frac, hi + span*pad_frac)
+
+def fig_trajectories(df_burn, kind='raw', name_prefix='fig5'):
+    """Trajectory of BSV (raw) or %-over-initial (pct) across burn phases.
+    Layout: 4 panels (3 ms + 1 averaged), all 12 configs on each — the most useful comparison view."""
+    traj = trajectory_data(df_burn, kind)
+    panels = [(ms, f'{ms} ms') for ms in MS_LEVELS] + [('avg', 'avg across ms')]
+    fig, axes2 = plt.subplots(2, 2, figsize=(13, 9), squeeze=False)
+    axes = axes2.flatten()
+    ylabel = 'mean BestSequenceValue' if kind == 'raw' \
+             else 'mean % improvement over initial sequence'
+    for ax, (key, title) in zip(axes, panels):
+        all_y = []
+        for cfg in ORDER:
+            if cfg not in traj.index.get_level_values('Config'): continue
+            if key == 'avg':
+                series = traj.loc[cfg].groupby('BridgeBurningPhaseNumber').mean()
+            else:
+                if (cfg, key) not in traj.index.droplevel(2): continue
+                series = traj.loc[(cfg, key)]
+            ax.plot(series.index, series.values, color=COLORS[cfg], label=cfg, lw=1.7,
+                    marker='o', markersize=3)
+            all_y.extend(series.values.tolist())
+        # Tight ylim so lines are distinguishable — the user's clarity request.
+        _set_tight_ylim(ax, all_y)
+        ax.set_xlabel('bridge-burn phase (1..20)'); ax.set_title(title)
+        ax.set_ylabel(ylabel)
+    # Global legend below the figure
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(h, l, loc='lower center', bbox_to_anchor=(0.5, -0.02), ncol=4, fontsize=8, frameon=False)
+    fig.suptitle(('Within-turn trajectory (raw value)' if kind == 'raw'
+                  else 'Within-turn trajectory (% improvement over initial)'),
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / f'{name_prefix}_trajectory_{kind}.png', bbox_inches='tight')
+    plt.close(fig)
+
+def fig_trajectories_per_agent(df_burn, kind='raw', name_prefix='fig5b'):
+    """Per-agent layout: 3×4 grid (3 ms + 1 avg cols × 4-row sub-grids of agents). For each agent shows
+    its trajectory at every ms with adjusted ylim. Use this when you want to see one agent in detail."""
+    traj = trajectory_data(df_burn, kind)
+    configs = [c for c in ORDER if c in traj.index.get_level_values('Config')]
+    fig, axes = plt.subplots(3, 4, figsize=(14, 9), squeeze=False)
+    # Pick 12 representatives — all 12 configs
+    for i, cfg in enumerate(configs[:12]):
+        ax = axes[i // 4][i % 4]
+        all_y = []
+        for ms in MS_LEVELS:
+            if (cfg, ms) not in traj.index.droplevel(2): continue
+            s = traj.loc[(cfg, ms)]
+            ax.plot(s.index, s.values, label=f'{ms} ms', lw=1.7, marker='o', markersize=3,
+                    alpha=0.5 + 0.5 * (MS_LEVELS.index(ms) / (len(MS_LEVELS)-1)))
+            all_y.extend(s.values.tolist())
+        ax.set_title(cfg, fontsize=10, color=COLORS[cfg], fontweight='bold')
+        _set_tight_ylim(ax, all_y, pad_frac=0.08)
+        if i % 4 == 0:
+            ax.set_ylabel('BSV' if kind == 'raw' else '% over init')
+        if i // 4 == 2:
+            ax.set_xlabel('burn phase')
+        if i == 0: ax.legend(fontsize=7, loc='lower right')
+    fig.suptitle(('Within-turn trajectory per agent — raw' if kind == 'raw'
+                  else 'Within-turn trajectory per agent — % over initial'), fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / f'{name_prefix}_trajectory_per_agent_{kind}.png',
+                                      bbox_inches='tight')
+    plt.close(fig)
+
+
+# -------------------------------------------------- request 7: branching scatter --
+def fig_branching_scatter(turn_df, portfolio, kind='raw'):
+    """Branching-factor (per scenario, from manifest) vs mean improvement (per scenario × config).
+    Grid: 12 agents × 4 (3 ms + avg) = 48 subplots. Trendline added for clarity."""
+    if portfolio.empty:
+        print('  WARN: no portfolio — skipping branching scatter'); return
+    # Per (config, ms, scenario) improvement
+    if kind == 'raw':
+        m = turn_df.groupby(['Config', 'ThinkingMs', 'ScenarioId']).apply(
+            lambda d: (d.FinalSequenceValue - d.InitialSequenceValue).mean(), include_groups=False).reset_index()
+        m.columns = ['Config', 'ThinkingMs', 'ScenarioId', 'value']
+        ylabel = 'raw improvement over initial'
+    else:
+        m = turn_df.groupby(['Config', 'ThinkingMs', 'ScenarioId']).apply(
+            lambda d: ((d.FinalSequenceValue - d.InitialSequenceValue) / d.InitialSequenceValue.abs() * 100).mean(),
+            include_groups=False).reset_index()
+        m.columns = ['Config', 'ThinkingMs', 'ScenarioId', 'value']
+        ylabel = '% improvement over initial'
+    m = m.merge(portfolio[['ScenarioId', 'BranchingFactor', 'Source']], on='ScenarioId')
+
+    configs = [c for c in ORDER if c in m.Config.unique()]
+    panels = MS_LEVELS + ['avg']
+    fig, axes = plt.subplots(len(configs), len(panels),
+                             figsize=(2.6 * len(panels), 1.8 * len(configs)),
+                             squeeze=False, sharex=True)
+    for i, cfg in enumerate(configs):
+        for j, key in enumerate(panels):
+            ax = axes[i][j]
+            if key == 'avg':
+                sub = m[m.Config == cfg].groupby('ScenarioId').agg({'value':'mean',
+                                                                     'BranchingFactor':'first',
+                                                                     'Source':'first'}).reset_index()
+            else:
+                sub = m[(m.Config == cfg) & (m.ThinkingMs == key)]
+            xs = sub.BranchingFactor.values; ys = sub.value.values
+            # Color by source so single (cooler) vs dual (warmer) is visible
+            mask_single = sub.Source.values == 'single'
+            ax.scatter(xs[mask_single], ys[mask_single], s=10, alpha=0.6,
+                       color='#1f78b4', label='single' if (i==0 and j==0) else None)
+            ax.scatter(xs[~mask_single], ys[~mask_single], s=10, alpha=0.6,
+                       color='#e31a1c', label='dual' if (i==0 and j==0) else None)
+            if xs.size >= 5:
+                # Fit a simple linear trend
+                p = np.polyfit(xs, ys, 1)
+                xx = np.linspace(xs.min(), xs.max(), 50)
+                ax.plot(xx, p[0]*xx + p[1], color='black', lw=1.0, alpha=0.6)
+                r = np.corrcoef(xs, ys)[0, 1]
+                ax.text(0.02, 0.95, f'r={r:.2f}', transform=ax.transAxes, fontsize=7,
+                        va='top', bbox=dict(boxstyle='round,pad=0.1', fc='white', ec='none', alpha=0.7))
+            if j == 0:
+                ax.set_ylabel(cfg, fontsize=8, color=COLORS[cfg], fontweight='bold')
+            if i == 0:
+                ax.set_title(f'{key}' + (' ms' if key != 'avg' else ''), fontsize=10)
+            if i == len(configs)-1:
+                ax.set_xlabel('branching factor', fontsize=8)
+            ax.tick_params(labelsize=7)
+    if axes[0][0].get_legend_handles_labels()[1]:
+        axes[0][0].legend(fontsize=7, loc='lower right')
+    fig.suptitle(f'Branching factor vs {ylabel} (per scenario)', fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / f'fig7_branching_scatter_{kind}.png',
+                                     bbox_inches='tight', dpi=110)
+    plt.close(fig)
+
+
+# -------------------------------------------------- request 8: % imp over initial bars --
+def fig_pct_improvement_bars(turn_df):
+    """Bar chart of mean % improvement over initial sequence, per agent. 4 panels (per ms + avg)."""
+    turn_df = turn_df.copy()
+    turn_df['pctImp'] = (turn_df.FinalSequenceValue - turn_df.InitialSequenceValue) \
+                       / turn_df.InitialSequenceValue.abs() * 100
+    panels = [(ms, f'{ms} ms') for ms in MS_LEVELS] + [('avg', 'avg across ms')]
+    fig, axes2 = plt.subplots(2, 2, figsize=(11, 8), squeeze=False, sharey=True)
+    axes = axes2.flatten()
+    for ax, (key, title) in zip(axes, panels):
+        sub = turn_df if key == 'avg' else turn_df[turn_df.ThinkingMs == key]
+        means = sub.groupby('Config')['pctImp'].mean().reindex([c for c in ORDER if c in sub.Config.unique()])
+        cis = sub.groupby('Config')['pctImp'].apply(lambda s: 1.96*s.std()/np.sqrt(len(s)))\
+                 .reindex(means.index)
+        colors = [COLORS[c] for c in means.index]
+        ax.bar(range(len(means)), means.values, yerr=cis.values, capsize=2,
+               error_kw=dict(lw=0.8), color=colors, edgecolor='black', linewidth=0.4)
+        ax.set_xticks(range(len(means)))
+        ax.set_xticklabels(means.index, rotation=60, ha='right', fontsize=7)
+        ax.set_title(title)
+        ax.set_ylabel('mean % improvement over initial sequence (±95% CI)')
+    fig.suptitle('% improvement over initial sequence — per agent per ms',
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'fig8_pct_improvement_bars.png'); plt.close(fig)
+    # save table
+    for key, _ in panels:
+        sub = turn_df if key == 'avg' else turn_df[turn_df.ThinkingMs == key]
+        sub.groupby('Config')['pctImp'].agg(['mean','std','count']).to_csv(
+            TABLES / f'T8_pct_imp_over_init_{key}.csv')
+
+
+# -------------------------------------------------- extras --
+def extra_paired_delta_with_ci(turn_df):
+    """E1. Paired delta vs EMCTS with 95% CIs. With n≈5000 paired samples per cell, even small effects
+    surface. The honest reading of the data."""
+    emcts = turn_df[turn_df.Config == 'EMCTS'][['ThinkingMs','ScenarioId','VisitId','FinalSequenceValue']]\
+                .rename(columns={'FinalSequenceValue':'emcts_final'})\
+                .drop_duplicates(['ThinkingMs','ScenarioId','VisitId'])
+    j = turn_df.merge(emcts, on=['ThinkingMs','ScenarioId','VisitId'], how='left', validate='m:1')
+    j['delta'] = j.FinalSequenceValue - j.emcts_final
+    fig, axes2 = plt.subplots(2, 2, figsize=(13, 9), squeeze=False, sharey=True)
+    axes = axes2.flatten()
+    # per ms + avg
+    keys = [*MS_LEVELS, 'avg']
+    for ax, key in zip(axes, keys):
+        sub = j if key == 'avg' else j[j.ThinkingMs == key]
+        sub = sub[sub.Config != 'EMCTS']
+        agg = sub.groupby('Config')['delta'].agg(['mean','std','count']).reindex(
+            [c for c in ORDER if c in sub.Config.unique()])
+        agg['ci95'] = 1.96 * agg['std'] / np.sqrt(agg['count'])
+        agg = agg.sort_values('mean')
+        ys = np.arange(len(agg))
+        colors = [COLORS[c] for c in agg.index]
+        ax.barh(ys, agg['mean'].values, xerr=agg['ci95'].values, capsize=2,
+                error_kw=dict(lw=0.8), color=colors, edgecolor='black', linewidth=0.4)
+        ax.set_yticks(ys); ax.set_yticklabels(agg.index, fontsize=8)
+        ax.axvline(0, color='black', lw=0.8)
+        ax.set_title(f'{key}' + (' ms' if key != 'avg' else ''))
+        ax.set_xlabel('paired Δ vs EMCTS (FinalSequenceValue, ±95% CI)')
+    fig.suptitle('E1: Paired Δ vs EMCTS (same scenario × visit, with 95% CI). Bars right of zero beat EMCTS.',
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E1_paired_delta_with_ci.png'); plt.close(fig)
+    # table
+    for key in keys:
+        sub = j if key == 'avg' else j[j.ThinkingMs == key]
+        sub = sub[sub.Config != 'EMCTS']
+        agg = sub.groupby('Config')['delta'].agg(['mean','std','count'])
+        agg['ci95'] = 1.96 * agg['std'] / np.sqrt(agg['count'])
+        agg.round(3).to_csv(TABLES / f'E1_paired_delta_{key}.csv')
+
+
+def extra_best_ratio_per_budget(turn_df):
+    """E2. Best ratio per budget for Expansion + Combo (the v3-style sweep view).
+    Mean FinalSequenceValue per (ratio, ms), reported as both raw and paired Δ vs EMCTS."""
+    rows = []
+    emcts = turn_df[turn_df.Config == 'EMCTS'][['ThinkingMs','ScenarioId','VisitId','FinalSequenceValue']]\
+              .rename(columns={'FinalSequenceValue':'emcts_final'})\
+              .drop_duplicates(['ThinkingMs','ScenarioId','VisitId'])
+    for agent_base in ('CrossoverExpansion','CrossoverCombo'):
+        for r in RATIOS:
+            cfg = f'{agent_base}@{r}'
+            for ms in MS_LEVELS:
+                sub = turn_df[(turn_df.Config==cfg) & (turn_df.ThinkingMs==ms)]
+                if sub.empty: continue
+                m = sub.merge(emcts, on=['ThinkingMs','ScenarioId','VisitId'])
+                rows.append(dict(Agent=agent_base, Ratio=r, ms=ms,
+                                 meanFinal=m.FinalSequenceValue.mean(),
+                                 deltaVsEMCTS=(m.FinalSequenceValue - m.emcts_final).mean(),
+                                 n=len(m)))
+    t = pd.DataFrame(rows).round(3)
+    t.to_csv(TABLES / 'E2_best_ratio_per_budget.csv', index=False)
+    # Companion figure: ratio sweep per ms per agent_base
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5), squeeze=False)
+    axes = axes[0]
+    for ax, agent_base in zip(axes, ('CrossoverExpansion','CrossoverCombo')):
+        for ms in MS_LEVELS:
+            sub = t[(t.Agent==agent_base) & (t.ms==ms)].sort_values('Ratio')
+            ax.plot(sub.Ratio, sub.deltaVsEMCTS, marker='o', label=f'{ms} ms', lw=1.8)
+        ax.axhline(0, color='black', lw=0.8, ls=':')
+        ax.set_xticks(RATIOS); ax.set_xlabel('mutationExpansionRatio (higher = less crossover)')
+        ax.set_ylabel('paired Δ vs EMCTS')
+        ax.set_title(agent_base); ax.legend(fontsize=8)
+    fig.suptitle('E2: Best ratio per budget — Crossover{Expansion,Combo} (paired Δ vs EMCTS)',
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E2_best_ratio_per_budget.png'); plt.close(fig)
+
+
+def extra_single_vs_dual(turn_df, portfolio):
+    """E3. Single (vs passive) vs Dual (vs EMCTS) portfolio split. Does the ranking change between
+    'developed solo' and 'competitive mid-game' scenarios?"""
+    if portfolio.empty: return
+    m = turn_df.merge(portfolio[['ScenarioId','Source']], on='ScenarioId')
+    rows = []
+    for src in ('single', 'dual'):
+        sub = m[m.Source == src]
+        e = sub[sub.Config=='EMCTS'][['ThinkingMs','ScenarioId','VisitId','FinalSequenceValue']]\
+              .rename(columns={'FinalSequenceValue':'emcts_final'})\
+              .drop_duplicates(['ThinkingMs','ScenarioId','VisitId'])
+        joined = sub.merge(e, on=['ThinkingMs','ScenarioId','VisitId'])
+        joined['delta'] = joined.FinalSequenceValue - joined.emcts_final
+        for cfg in [c for c in ORDER if c != 'EMCTS']:
+            for ms in MS_LEVELS:
+                z = joined[(joined.Config==cfg) & (joined.ThinkingMs==ms)]
+                if z.empty: continue
+                rows.append(dict(Source=src, Config=cfg, ms=ms,
+                                 deltaVsEMCTS=z.delta.mean(), n=len(z)))
+    t = pd.DataFrame(rows).round(3)
+    t.to_csv(TABLES / 'E3_single_vs_dual.csv', index=False)
+    # Plot: per ms, side-by-side single vs dual paired Δ
+    fig, axes = plt.subplots(1, len(MS_LEVELS), figsize=(6*len(MS_LEVELS), 5.5),
+                             squeeze=False, sharey=True)
+    axes = axes[0]
+    for ax, ms in zip(axes, MS_LEVELS):
+        sub = t[t.ms == ms]
+        configs_present = [c for c in ORDER if c != 'EMCTS' and c in sub.Config.unique()]
+        x = np.arange(len(configs_present))
+        s = sub[sub.Source=='single'].set_index('Config').reindex(configs_present)['deltaVsEMCTS']
+        d = sub[sub.Source=='dual'  ].set_index('Config').reindex(configs_present)['deltaVsEMCTS']
+        ax.bar(x - 0.2, s.values, 0.4, color='#1f78b4', label='single')
+        ax.bar(x + 0.2, d.values, 0.4, color='#e31a1c', label='dual')
+        ax.axhline(0, color='black', lw=0.8)
+        ax.set_xticks(x); ax.set_xticklabels(configs_present, rotation=60, ha='right', fontsize=7)
+        ax.set_title(f'{ms} ms'); ax.set_ylabel('paired Δ vs EMCTS')
+    axes[0].legend(fontsize=8)
+    fig.suptitle('E3: Single vs Dual portfolio split — paired Δ vs EMCTS',
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E3_single_vs_dual.png'); plt.close(fig)
+
+
+def extra_convergence_speed(df_burn):
+    """E4. Convergence speed: which agents reach 95% of their final gain earliest? Per agent per ms."""
+    traj = trajectory_data(df_burn, kind='raw')
+    rows = []
+    for cfg in ORDER:
+        if cfg not in traj.index.get_level_values('Config'): continue
+        for ms in MS_LEVELS:
+            if (cfg, ms) not in traj.index.droplevel(2): continue
+            s = traj.loc[(cfg, ms)]
+            start = s.iloc[0]; end = s.iloc[-1]
+            if end - start <= 0:
+                rows.append(dict(Config=cfg, ms=ms, burn_at_95=np.nan,
+                                 start=start, end=end))
+                continue
+            thresh = start + 0.95 * (end - start)
+            # first burn at which value exceeds threshold
+            burn_at_95 = int(s[s >= thresh].index.min())
+            rows.append(dict(Config=cfg, ms=ms, burn_at_95=burn_at_95,
+                             start=start, end=end))
+    t = pd.DataFrame(rows).round(3)
+    t.to_csv(TABLES / 'E4_convergence_burn_at_95pct.csv', index=False)
+    pivot = t.pivot_table(index='Config', columns='ms', values='burn_at_95')
+    pivot = pivot.reindex([c for c in ORDER if c in pivot.index])
+    fig, ax = plt.subplots(figsize=(9, 5))
+    im = ax.imshow(pivot.values, aspect='auto', cmap='RdYlGn_r',
+                   vmin=1, vmax=20)
+    ax.set_xticks(range(pivot.shape[1])); ax.set_xticklabels([f'{c} ms' for c in pivot.columns])
+    ax.set_yticks(range(pivot.shape[0])); ax.set_yticklabels(pivot.index, fontsize=8)
+    for (i, j), v in np.ndenumerate(pivot.values):
+        if np.isfinite(v):
+            ax.text(j, i, int(v), ha='center', va='center',
+                    color='white' if v < 6 else 'black', fontsize=9)
+    fig.colorbar(im, ax=ax).set_label('burn phase at which 95% of final gain is reached')
+    ax.set_title('E4: Convergence speed — earlier (greener) = faster to peak', fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E4_convergence_speed.png'); plt.close(fig)
+
+
+# -------------------------------------------------- main --
+def main():
+    print(f'Loading from {ROOT} ...')
+    df_burn = load_all()
+    turn_df = per_turn(df_burn)
+    portfolio = load_portfolio()
+    print(f'  loaded {len(df_burn):,} burn rows; {len(turn_df):,} (config, scenario, visit) tuples')
+
+    # --- 1+2: scenario × agent tables (raw + Δ vs EMCTS + %), per ms and averaged
+    print('\nTABLES 1+2: scenario × agent tables')
+    for ms in MS_LEVELS:
+        means = scenario_agent_table(turn_df, ms)
+        wide, summary = add_improvement_columns(means, save_name=f'T1_scenario_agent_{ms}ms')
+        print(f'\n  -- {ms} ms summary --')
+        print(summary[['meanFinal_mean','rawDelta_mean','rawDelta_CI95','pctDelta_mean','wins_vs_emcts']]
+              .round(3).to_string())
+    means_avg = scenario_agent_table(turn_df, 'avg')
+    wide_avg, summary_avg = add_improvement_columns(means_avg, save_name='T2_scenario_agent_avg')
+    print(f'\n  -- averaged across ms --')
+    print(summary_avg[['meanFinal_mean','rawDelta_mean','rawDelta_CI95','pctDelta_mean','wins_vs_emcts']]
+          .round(3).to_string())
+
+    # --- 3: best per scenario
+    print('\nFIGURE 3: best agent per scenario'); fig_best_per_scenario(turn_df)
+    # --- 4: ranking points
+    print('FIGURE 4: ranking points');           fig_ranking_points(turn_df)
+    # --- 5: trajectory (raw)
+    print('FIGURE 5: trajectory (raw)');         fig_trajectories(df_burn, kind='raw', name_prefix='fig5')
+    print('FIGURE 5b: trajectory per agent (raw)'); fig_trajectories_per_agent(df_burn, kind='raw', name_prefix='fig5b')
+    # --- 6: trajectory (% over initial)
+    print('FIGURE 6: trajectory (% over init)'); fig_trajectories(df_burn, kind='pct', name_prefix='fig6')
+    print('FIGURE 6b: trajectory per agent (% over init)'); fig_trajectories_per_agent(df_burn, kind='pct', name_prefix='fig6b')
+    # --- 7: branching scatter (raw + %)
+    print('FIGURE 7: branching scatter (raw)'); fig_branching_scatter(turn_df, portfolio, kind='raw')
+    print('FIGURE 7: branching scatter (%)');   fig_branching_scatter(turn_df, portfolio, kind='pct')
+    # --- 8: pct improvement bars
+    print('FIGURE 8: % improvement bars');       fig_pct_improvement_bars(turn_df)
+
+    # --- extras
+    print('\nEXTRAS:')
+    print('E1: paired delta with CI');           extra_paired_delta_with_ci(turn_df)
+    print('E2: best ratio per budget');          extra_best_ratio_per_budget(turn_df)
+    print('E3: single vs dual portfolio split'); extra_single_vs_dual(turn_df, portfolio)
+    print('E4: convergence speed');              extra_convergence_speed(df_burn)
+
+    print(f'\nDone. tables -> {TABLES}/  figures -> {FIGS}/')
+
+
+if __name__ == '__main__':
+    main()
