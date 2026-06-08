@@ -23,13 +23,21 @@ The Isolation Phase eliminates the confound by **paired-by-scenario** measuremen
 ### 100 starting scenarios — the "testing portfolio"
 A one-time-built portfolio of well-developed mid/late-game `GameState`s used by every agent:
 
-- **50 single-player scenarios** — for each of 5 distinct level seeds, play one EMCTS-vs-passive game
-  (SCORE mode, 30-turn limit) and capture the start-of-turn state at ticks 21..30 (the last 10 turns).
-- **50 two-player scenarios** — 50 distinct level seeds, each one EMCTS-vs-EMCTS game (CAPITALS, 50-turn
-  limit), captured at the start of tick 25.
+- **50 single-player scenarios** — play EMCTS-vs-passive games (SCORE mode, 30-turn limit) at successive
+  level seeds and capture the start-of-turn state at ticks 21..30 (the last 10 turns) of each game.
+- **50 two-player scenarios** — play EMCTS-vs-EMCTS games (CAPITALS, 50-turn limit) at successive level
+  seeds, capture at the start of tick 25 of each game.
 - All scenarios are on the standard 11×11 water-free board, IMPERIUS vs IMPERIUS2.
 - Source EMCTS uses 26 800 compute-units / turn (≈ 1000 ms-equivalent, deterministic — reproducible across
   machines/threads). The portfolio is regenerable by re-running `BuildV4Portfolio` at the same fixed seeds.
+
+**Dynamic seed extension.** Some level seeds produce "stuck" games — an EMCTS pinned to its spawn tile
+that never expands, with its score frozen at the starting value (~390) across all captured ticks. The
+generator detects this on the first captured tick (cities/units/score thresholds + a tiny EMCTS planTurn
+sanity-act) and ABORTS the whole game so the next seed is tried. The seed pool extends dynamically until
+the target 50 valid scenarios per category is hit (cap: 15 attempts for single, 150 for dual). Captured
+scenarios are also vetted by `Game.captureAtTickAsTurnStart` so the active tribe is always the EMCTS-
+developed player, never the passive opponent.
 
 A manifest (`portfolio.csv`) records full provenance for each scenario, with these columns (header
 must match `BuildV4Portfolio.MANIFEST_HEADER`):
@@ -73,7 +81,9 @@ small mean deltas with tight 95 % CIs.
 | CrossoverExpansion | ratios 2 / 5 / 10 / 15 / 20                                  |
 | CrossoverCombo     | ratios 2 / 5 / 10 / 15 / 20                                  |
 
-Thinking times: **50 / 500 / 5000 ms** (wall clock, STOP_TIME). 20 bridge burns per turn at every level.
+Thinking times: **500 / 1000 / 5000 ms** (wall clock, STOP_TIME). 20 bridge burns per turn at every level.
+(50 ms was removed — CrossoverBB at 50 ms spends its entire budget on the 20 mandatory bridge-burn
+tournaments with no time left for actual search, the same reason v3 ruled out 200 ms.)
 
 ### Folder layout (output)
 ```
@@ -84,17 +94,17 @@ test_results/v4/
     ...
     scenarios/scenario_100.bin
   EMCTS/
-    50ms/results.csv
     500ms/results.csv
+    1000ms/results.csv
     5000ms/results.csv
   CrossoverBB/
-    50ms/results.csv  500ms/results.csv  5000ms/results.csv
+    500ms/results.csv  1000ms/results.csv  5000ms/results.csv
   CrossoverExpansion/
-    ratio_2/{50ms,500ms,5000ms}/results.csv
-    ratio_5/{50ms,500ms,5000ms}/results.csv
-    ratio_10/{50ms,500ms,5000ms}/results.csv
-    ratio_15/{50ms,500ms,5000ms}/results.csv
-    ratio_20/{50ms,500ms,5000ms}/results.csv
+    ratio_2/{500ms,1000ms,5000ms}/results.csv
+    ratio_5/{500ms,1000ms,5000ms}/results.csv
+    ratio_10/{500ms,1000ms,5000ms}/results.csv
+    ratio_15/{500ms,1000ms,5000ms}/results.csv
+    ratio_20/{500ms,1000ms,5000ms}/results.csv
   CrossoverCombo/   (same ratio_*/ms/ layout)
 ```
 

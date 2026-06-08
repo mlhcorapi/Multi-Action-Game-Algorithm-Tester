@@ -41,15 +41,34 @@ import java.util.Locale;
  *       ActiveTribeScore, BranchingFactor</li>
  * </ul>
  *
- * <p>Resumable: if {@code _completed.txt} marks a scenario done, it is skipped on re-run.
+ * <p>Not resumable — always regenerates a fresh portfolio. The scenarios dir, manifest, and
+ * {@code _completed.txt} are wiped on entry. Re-running is cheap (~10 minutes).
+ *
+ * <p>The generator EXTENDS its source-game pool dynamically: it keeps trying additional level seeds
+ * until {@link #NUM_SINGLE_SCENARIOS} valid singles and {@link #NUM_DUAL_SCENARIOS} valid duals are
+ * collected, capped at {@link #MAX_SINGLE_GAME_ATTEMPTS} and {@link #MAX_DUAL_GAME_ATTEMPTS}. Some
+ * level seeds produce "stuck" games (e.g. an EMCTS confined to its spawn tile that never develops);
+ * those are detected by {@link #validateScenario} and the whole game is aborted on first-tick fail.
  */
 public class BuildV4Portfolio {
 
-    public static final int    NUM_SINGLE_GAMES = 5;
+    /** Target number of single-source scenarios (last 10 turn-start states across some 1-tribe games). */
+    public static final int    NUM_SINGLE_SCENARIOS    = 50;
+    /** Target number of dual-source scenarios (tick 25 of 2-tribe games). */
+    public static final int    NUM_DUAL_SCENARIOS      = 50;
+    /** Cap on level-seed attempts before giving up on a category. Roughly 3× the base 5/50 we'd expect
+     *  to succeed first try; well-developed source games are the common case so the cap is rarely hit. */
+    public static final int    MAX_SINGLE_GAME_ATTEMPTS = 15;
+    public static final int    MAX_DUAL_GAME_ATTEMPTS   = 150;
+
     public static final int    SINGLE_FIRST_TICK = 21;       // last 10 turn-start states (ticks 21..30)
     public static final int    SINGLE_LAST_TICK  = 30;
-    public static final int    NUM_DUAL_GAMES   = 50;
     public static final int    DUAL_CAPTURE_TICK = 25;
+
+    /** Minimum active-tribe score for validateScenario to accept the position. A "stuck" EMCTS confined
+     *  to its spawn tile stays at the starting score (~390) across all ticks — well below 500. A
+     *  healthy game by tick 21 has scored thousands. */
+    public static final int    MIN_VALID_SCORE = 500;
 
     public static final int    SOURCE_BUDGET_UNITS = 26_800; // 1000ms-equivalent (reproducible, compute-unit)
     public static final long   SINGLE_LEVEL_SEED_BASE = 4_000_000L;
@@ -68,18 +87,26 @@ public class BuildV4Portfolio {
         String outDir = args.length > 0 ? args[0] : "test_results/v4/_portfolio";
         File dir = new File(outDir);
         File scenariosDir = new File(dir, "scenarios");
-        ExpCsv.ensureDir(scenariosDir);
-        File ckpt = new File(dir, "_completed.txt");
-        java.util.Set<String> done = ExpCsv.readCompleted(ckpt);
+        // Always start fresh: a prior run may have persisted scenarios under the old (broken
+        // active-tribe / loose validation) behaviour, and a partial portfolio is a corruption hazard.
+        deleteDir(scenariosDir);
         File manifest = new File(dir, "portfolio.csv");
+        if (manifest.exists()) manifest.delete();
+        File ckpt = new File(dir, "_completed.txt");
+        if (ckpt.exists()) ckpt.delete();
+        ExpCsv.ensureDir(scenariosDir);
 
         ExpCsv.writeText(new File(dir, "config.txt"),
                 "v4 Isolation Phase - Portfolio Generator\n" +
-                "singlePlayer=" + NUM_SINGLE_GAMES + " games of EMCTS vs DoNothing (SCORE/30); capture ticks "
-                        + SINGLE_FIRST_TICK + ".." + SINGLE_LAST_TICK + " (50 scenarios)\n" +
-                "twoPlayer=" + NUM_DUAL_GAMES + " games of EMCTS vs EMCTS (CAPITALS/50); capture tick "
-                        + DUAL_CAPTURE_TICK + " (50 scenarios)\n" +
+                "singlePlayer=" + NUM_SINGLE_SCENARIOS + " scenarios from EMCTS vs DoNothing (SCORE/30); capture ticks "
+                        + SINGLE_FIRST_TICK + ".." + SINGLE_LAST_TICK + "; level-seed attempts capped at "
+                        + MAX_SINGLE_GAME_ATTEMPTS + "\n" +
+                "twoPlayer=" + NUM_DUAL_SCENARIOS + " scenarios from EMCTS vs EMCTS (CAPITALS/50); capture tick "
+                        + DUAL_CAPTURE_TICK + "; level-seed attempts capped at " + MAX_DUAL_GAME_ATTEMPTS + "\n" +
                 "sourceBudget=" + SOURCE_BUDGET_UNITS + " compute-units (1000ms-equiv, reproducible)\n" +
+                "validation=activeTribe cities>=1 AND units>=1 AND score>=" + MIN_VALID_SCORE
+                        + " AND a tiny EMCTS planTurn does not throw\n" +
+                "stuck-game guard=if FIRST captured tick of a source game fails validation the whole game is aborted (no more ticks tried)\n" +
                 "tribes=IMPERIUS vs IMPERIUS2 on 11x11 water-free board\n");
 
         Constants.VISUALS = false;
@@ -91,61 +118,70 @@ public class BuildV4Portfolio {
         int scenarioId = 0;
         long t0 = System.currentTimeMillis();
 
-        // ---- 50 single-player scenarios (5 games × last 10 ticks) ----
-        for (int g = 1; g <= NUM_SINGLE_GAMES; g++) {
-            long levelSeed = SINGLE_LEVEL_SEED_BASE + g;
-            System.out.println("[Portfolio] SINGLE game " + g + "/" + NUM_SINGLE_GAMES
-                    + " (levelSeed=" + levelSeed + ")");
+        // ---- SINGLE-source scenarios — extend the level-seed pool until NUM_SINGLE_SCENARIOS valid
+        // captures are collected (or the safety cap is reached). Some level seeds produce stuck games
+        // (EMCTS pinned to its spawn tile, score never rising above ~390) — those are detected on the
+        // first captured tick and the whole game is aborted so the next seed is tried.
+        Constants.MAX_TURNS_CAPITALS = 30;
+        int validSingles = 0;
+        int singleGamesTried = 0;
+        for (int gameAttempt = 1;
+             validSingles < NUM_SINGLE_SCENARIOS && gameAttempt <= MAX_SINGLE_GAME_ATTEMPTS;
+             gameAttempt++) {
+            long levelSeed = SINGLE_LEVEL_SEED_BASE + gameAttempt;
+            singleGamesTried = gameAttempt;
+            System.out.println("[Portfolio] SINGLE attempt " + gameAttempt + " (levelSeed=" + levelSeed
+                    + "); valid so far " + validSingles + "/" + NUM_SINGLE_SCENARIOS);
             ArrayList<Agent> players = new ArrayList<>();
             players.add(buildEmctsSourceAgent());
             players.add(new players.DoNothingAgent(SOURCE_AGENT_SEED));
             Game game = new Game();
-            Constants.MAX_TURNS_CAPITALS = 30;       // unused in SCORE but set anyway
             game.init(players, levelSeed, TRIBES, FIXED_GAME_SEED, Types.GAME_MODE.SCORE);
 
-            // Step turn by turn from tick 0 to SINGLE_LAST_TICK; capture at the start of each tick in
-            // [SINGLE_FIRST_TICK, SINGLE_LAST_TICK]. We use captureAtTickAsTurnStart for the snapshot —
-            // captureAtTick alone leaves activeTribeID pointing at the LAST tribe to act in the previous
-            // tick (the passive opponent in single-player source games), which is the wrong player to
-            // resume. The "skip if done" path keeps the plain captureAtTick because it only needs to
-            // advance the LIVE state by one tick (no snapshot consumed).
+            int collectedThisGame = 0;
             for (int tick = SINGLE_FIRST_TICK; tick <= SINGLE_LAST_TICK; tick++) {
-                scenarioId++;
-                String key = "scenario=" + sid(scenarioId);
-                if (done.contains(key)) {
-                    System.out.println("  SKIP (done) " + key);
-                    game.captureAtTick(tick + 1);    // still need to step forward to keep loop coherent
-                    continue;
-                }
+                if (validSingles >= NUM_SINGLE_SCENARIOS) break;
                 GameState gs = game.captureAtTickAsTurnStart(tick);
                 if (gs.isGameOver()) {
-                    System.out.println("  game ended early at tick " + gs.getTick() + " — stopping");
-                    // pad remaining ticks for this game with later games (don't count this scenario)
-                    scenarioId--;
+                    System.out.println("  game ended early at tick " + gs.getTick());
                     break;
                 }
-                if (!validateScenario(gs, scenarioId)) {
-                    scenarioId--;
+                if (!validateScenario(gs, scenarioId + 1)) {
+                    // Stuck-game guard: a healthy EMCTS has DEFINITELY developed by tick 21 (cities>=2,
+                    // hundreds of stars earned). If the very first captured tick is degenerate the
+                    // remaining ticks of the same game will be too — abort and try the next seed.
+                    if (tick == SINGLE_FIRST_TICK) {
+                        System.out.println("  ABORT game " + gameAttempt
+                                + " (stuck position at first captured tick — next seed)");
+                        break;
+                    }
                     continue;
                 }
-                persistAndManifest(scenarioId, "single", g, levelSeed, FIXED_GAME_SEED, tick, gs,
+                scenarioId++;
+                persistAndManifest(scenarioId, "single", gameAttempt, levelSeed, FIXED_GAME_SEED, tick, gs,
                         scenariosDir, manifest);
-                ExpCsv.markCompleted(ckpt, key);
+                validSingles++;
+                collectedThisGame++;
             }
+            System.out.println("  collected " + collectedThisGame + " valid scenarios from game " + gameAttempt);
+        }
+        if (validSingles < NUM_SINGLE_SCENARIOS) {
+            System.out.println("  WARN: only " + validSingles + "/" + NUM_SINGLE_SCENARIOS
+                    + " valid single scenarios after " + singleGamesTried + " attempts (cap "
+                    + MAX_SINGLE_GAME_ATTEMPTS + ").");
         }
 
-        // ---- 50 two-player scenarios (50 games × tick 25) ----
+        // ---- DUAL-source scenarios — same extension model, one capture per source game at tick 25.
         Constants.MAX_TURNS_CAPITALS = 50;
-        for (int g = 1; g <= NUM_DUAL_GAMES; g++) {
-            scenarioId++;
-            String key = "scenario=" + sid(scenarioId);
-            long levelSeed = DUAL_LEVEL_SEED_BASE + g;
-            if (done.contains(key)) {
-                System.out.println("[Portfolio] DUAL game " + g + " SKIP (done) " + key);
-                continue;
-            }
-            System.out.println("[Portfolio] DUAL game " + g + "/" + NUM_DUAL_GAMES
-                    + " (levelSeed=" + levelSeed + ")");
+        int validDuals = 0;
+        int dualGamesTried = 0;
+        for (int gameAttempt = 1;
+             validDuals < NUM_DUAL_SCENARIOS && gameAttempt <= MAX_DUAL_GAME_ATTEMPTS;
+             gameAttempt++) {
+            long levelSeed = DUAL_LEVEL_SEED_BASE + gameAttempt;
+            dualGamesTried = gameAttempt;
+            System.out.println("[Portfolio] DUAL attempt " + gameAttempt + " (levelSeed=" + levelSeed
+                    + "); valid so far " + validDuals + "/" + NUM_DUAL_SCENARIOS);
             ArrayList<Agent> players = new ArrayList<>();
             players.add(buildEmctsSourceAgent());
             players.add(buildEmctsSourceAgent());
@@ -154,18 +190,21 @@ public class BuildV4Portfolio {
 
             GameState gs = game.captureAtTickAsTurnStart(DUAL_CAPTURE_TICK);
             if (gs.isGameOver()) {
-                System.out.println("  game ended early at tick " + gs.getTick() + " — dropping scenario "
-                        + sid(scenarioId));
-                scenarioId--;   // keep IDs contiguous
+                System.out.println("  game ended early at tick " + gs.getTick() + " — skipping");
                 continue;
             }
-            if (!validateScenario(gs, scenarioId)) {
-                scenarioId--;
+            if (!validateScenario(gs, scenarioId + 1)) {
                 continue;
             }
-            persistAndManifest(scenarioId, "dual", g, levelSeed, FIXED_GAME_SEED, DUAL_CAPTURE_TICK, gs,
+            scenarioId++;
+            persistAndManifest(scenarioId, "dual", gameAttempt, levelSeed, FIXED_GAME_SEED, DUAL_CAPTURE_TICK, gs,
                     scenariosDir, manifest);
-            ExpCsv.markCompleted(ckpt, key);
+            validDuals++;
+        }
+        if (validDuals < NUM_DUAL_SCENARIOS) {
+            System.out.println("  WARN: only " + validDuals + "/" + NUM_DUAL_SCENARIOS
+                    + " valid dual scenarios after " + dualGamesTried + " attempts (cap "
+                    + MAX_DUAL_GAME_ATTEMPTS + ").");
         }
 
         System.out.println(String.format(Locale.ROOT,
@@ -231,9 +270,19 @@ public class BuildV4Portfolio {
                 if (c != null && c.getUnitsID() != null) numUnits += c.getUnitsID().size();
             }
         }
+        int score = at.getScore();
         if (numCities == 0 || numUnits == 0) {
             System.out.println("  REJECT " + sid(scenarioId) + ": activeTribe " + aid
                     + " has cities=" + numCities + " units=" + numUnits + " (passive/empty position)");
+            return false;
+        }
+        // "Stuck game" guard: a tribe pinned to its spawn tile (no expansion / no tech / no income)
+        // stays at the starting score (~390 IIRC) across all ticks. A healthy EMCTS source at the
+        // first captured tick (21+) has scored thousands. The 500 threshold separates clearly.
+        if (score < MIN_VALID_SCORE) {
+            System.out.println("  REJECT " + sid(scenarioId) + ": activeTribe " + aid
+                    + " has cities=" + numCities + " units=" + numUnits + " score=" + score
+                    + " (< " + MIN_VALID_SCORE + " — stuck game)");
             return false;
         }
         // Smoke-act with a tiny EMCTS: catches NPE / IllegalState from edge-case states.
@@ -265,4 +314,14 @@ public class BuildV4Portfolio {
 
     /** Zero-padded 3-digit scenario id (e.g. 007, 042, 100). */
     public static String sid(int id) { return String.format(Locale.ROOT, "%03d", id); }
+
+    /** Recursively remove a directory (cleanup before fresh portfolio generation). */
+    private static void deleteDir(File dir) {
+        if (!dir.exists()) return;
+        File[] files = dir.listFiles();
+        if (files != null) for (File f : files) {
+            if (f.isDirectory()) deleteDir(f); else f.delete();
+        }
+        dir.delete();
+    }
 }

@@ -83,21 +83,21 @@ public class NewExperimentSmokeTestV4 {
 
         System.out.println("\n==================== 2b. INVARIANCE across thinking times AND all 12 configs ====================");
         boolean acrossMsOk = verifyInitialSequenceInvariantAcrossMsAndConfigs(portfolio.get(0));
-        System.out.println("Invariance across {50,500,5000} ms × all 12 configs (per scenario × visit): "
+        System.out.println("Invariance across {500,1000,5000} ms × all 12 configs (per scenario × visit): "
                 + (acrossMsOk ? "PASS" : "FAIL"));
 
-        System.out.println("\n==================== 3. Tiny isolation pass (3 agents, ms=50, 2 visits) ====================");
+        System.out.println("\n==================== 3. Tiny isolation pass (3 agents, ms=500, 2 visits) ====================");
         File baseDir = new File(base);
         File ckpt = new File(baseDir, "_completed.txt");
         Set<String> done = ExpCsv.readCompleted(ckpt);
         // Reduce VISITS, RATIOS for the smoke — we drive a custom small runForTime via reflection-free means:
         // we just inline a 3-agent run instead of the full 12-agent runForTime.
-        runTinyIsolation(50, threads, portfolio, baseDir);
+        runTinyIsolation(500, threads, portfolio, baseDir);
 
         System.out.println("\n==================== 4. Folder + schema verification ====================");
-        boolean layoutOk = checkLeaf(new File(base + "/EMCTS/50ms/results.csv"), false)
-                && checkLeaf(new File(base + "/CrossoverBB/50ms/results.csv"),    true)
-                && checkLeaf(new File(base + "/CrossoverExpansion/ratio_5/50ms/results.csv"), false);
+        boolean layoutOk = checkLeaf(new File(base + "/EMCTS/500ms/results.csv"), false)
+                && checkLeaf(new File(base + "/CrossoverBB/500ms/results.csv"),    true)
+                && checkLeaf(new File(base + "/CrossoverExpansion/ratio_5/500ms/results.csv"), false);
         System.out.println("Folder layout + schema: " + (layoutOk ? "PASS" : "FAIL"));
 
         boolean allOk = roundTripOk && allValid && sharedInitOk && acrossMsOk && layoutOk;
@@ -105,7 +105,10 @@ public class NewExperimentSmokeTestV4 {
         System.out.println(allOk ? "PASS: v4 pipeline sound." : "FAIL: see checks above.");
     }
 
-    /** Build 3 scenarios from a single short EMCTS game (turns 3,4,5) into a tiny portfolio. */
+    /** Build 3 scenarios from a single short EMCTS game (turns 10/11/12) into a tiny portfolio.
+     *  The source EMCTS uses 13_400 compute-units / turn (500ms-equivalent) — enough that by tick 10
+     *  the active tribe has scored well above {@code BuildV4Portfolio.MIN_VALID_SCORE} so the
+     *  smoke's per-scenario validation check is a true test, not a soft-pass. */
     private static List<Scenario> captureTinyPortfolio(String portfolioDir) throws Exception {
         File dir = new File(portfolioDir);
         File scenariosDir = new File(dir, "scenarios");
@@ -118,7 +121,7 @@ public class NewExperimentSmokeTestV4 {
 
         ArrayList<Agent> players = new ArrayList<>();
         EMCTSParams p = new EMCTSParams();
-        p.stop_type = p.STOP_COMPUTE; p.num_computeUnits = 2000; p.heuristic_method = p.SIMPLE_HEURISTIC; p.depth = 21;
+        p.stop_type = p.STOP_COMPUTE; p.num_computeUnits = 13_400; p.heuristic_method = p.SIMPLE_HEURISTIC; p.depth = 21;
         players.add(new EMCTSAgent(100L, p));
         players.add(new players.DoNothingAgent(100L));
         Game game = new Game();
@@ -126,7 +129,7 @@ public class NewExperimentSmokeTestV4 {
 
         List<Scenario> result = new ArrayList<>();
         for (int s = 1; s <= 3; s++) {
-            int tick = 2 + s;
+            int tick = 9 + s;   // capture ticks 10/11/12 → by tick 10 the EMCTS has scored well above MIN_VALID_SCORE
             // captureAtTickAsTurnStart: snapshot with tribe 0 (the EMCTS-developed player) as active —
             // matches what BuildV4Portfolio now does. Plain captureAtTick would leave activeTribeID at
             // tribe 1 (the passive DoNothing opponent) for single-source games, breaking the smoke's
@@ -149,7 +152,7 @@ public class NewExperimentSmokeTestV4 {
      */
     private static boolean verifySharedInitialSequence(Scenario sc) {
         long seed = IsolationPhaseRunner.visitSeed(sc.id, 0);
-        Constants.TURN_TIME_MILLIS = 50;
+        Constants.TURN_TIME_MILLIS = 500;
         AgentSpec[] specs = { ExpAgents.emctsV4(), ExpAgents.crossoverBBV4(), ExpAgents.crossoverExpansionV4(5) };
         String[] seqStrings = new String[specs.length];
         double[] initialValues = new double[specs.length];
@@ -208,7 +211,7 @@ public class NewExperimentSmokeTestV4 {
     private static boolean verifyInitialSequenceInvariantAcrossMsAndConfigs(Scenario sc) {
         int visitId = 0;
         long seed = IsolationPhaseRunner.visitSeed(sc.id, visitId);
-        int[] msLevels = {50, 500, 5000};
+        int[] msLevels = {500, 1000, 5000};
         // Build the full 12-config matrix used by RunExperimentV4.
         java.util.List<Object[]> configs = new java.util.ArrayList<>();
         configs.add(new Object[]{"EMCTS",              -1, ExpAgents.emctsV4()});

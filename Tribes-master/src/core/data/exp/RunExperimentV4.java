@@ -29,7 +29,11 @@ import java.util.Set;
 public class RunExperimentV4 {
 
     public static final String BASE              = "test_results/v4";
-    public static final int[]  DEFAULT_THINKING_MS_LEVELS = {50, 500, 5000};
+    /** v4 wall-clock thinking times. 50 ms removed: CrossoverBB at 50 ms spends its entire budget on
+     *  the 20 mandatory bridge-burn tournaments with no time left for actual search (the same reason
+     *  v3 ruled out 200 ms). 500 ms is the smallest level at which every config still gets meaningful
+     *  search beyond the burns. */
+    public static final int[]  DEFAULT_THINKING_MS_LEVELS = {500, 1000, 5000};
 
     public static void main(String[] args) throws Exception {
         int threads  = args.length > 0 ? Integer.parseInt(args[0]) : 8;
