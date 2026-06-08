@@ -16,9 +16,13 @@ import core.levelgen.LevelGenerator;
 import utils.file.IO;
 import utils.Vector2d;
 
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.Serializable;
 import java.util.*;
 
-public class GameState {
+public class GameState implements Serializable {
+    private static final long serialVersionUID = 1L;
 
     //Game mode
     private Types.GAME_MODE gameMode;
@@ -35,10 +39,12 @@ public class GameState {
     //Indicates if this tribe can end its turn.
     private boolean[] canEndTurn;
 
-    //Actions per city, unit and tribe. These are computed when computePlayerActions() is called
-    private HashMap<Integer, ArrayList<Action>> cityActions;
-    private HashMap<Integer, ArrayList<Action>> unitActions;
-    private ArrayList<Action> tribeActions;
+    //Actions per city, unit and tribe. These are computed when computePlayerActions() is called.
+    //TRANSIENT: not serialized — re-derived via computePlayerActions() on load (same pattern as the
+    //existing GameLoader path) so the 30+ Action subclasses don't need to implement Serializable.
+    private transient HashMap<Integer, ArrayList<Action>> cityActions;
+    private transient HashMap<Integer, ArrayList<Action>> unitActions;
+    private transient ArrayList<Action> tribeActions;
 
     //Flags the state to indicate that the turn must end
     private boolean turnMustEnd;
@@ -510,6 +516,30 @@ public class GameState {
 
 
     /**
+     * Custom deserialization hook. The {@code cityActions}/{@code unitActions}/{@code tribeActions}
+     * caches are marked {@code transient} (so the 30+ {@link core.actions.Action} subclasses don't need
+     * to implement {@link Serializable}); on load we recreate the empty containers and recompute the
+     * action lists for the active tribe — mirroring the existing post-load behaviour of
+     * {@link GameState#GameState(Random, Types.GAME_MODE, core.actors.Tribe[], Board, int)}.
+     */
+    private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+        in.defaultReadObject();
+        this.cityActions = new HashMap<>();
+        this.unitActions = new HashMap<>();
+        this.tribeActions = new ArrayList<>();
+        this.computedActionTribeIdFlag = -1;
+        if (board == null || board.getTribes() == null) {
+            throw new IOException("deserialized GameState has null board/tribes — corrupted .bin?");
+        }
+        int aid = board.getActiveTribeID();
+        if (aid < 0 || aid >= board.getTribes().length) {
+            throw new IOException("deserialized GameState has invalid activeTribeID=" + aid
+                    + " (tribes.length=" + board.getTribes().length + ")");
+        }
+        computePlayerActions(board.getTribes()[aid]);
+    }
+
+    /**
      * Public accessor to the copy() functionality of this state.
      * @return a copy of the current game state.
      */
@@ -533,7 +563,14 @@ public class GameState {
     GameState copy(int playerIdx)
     {
 //        GameState copy = new GameState(this.rnd, this.gameMode); //use this for a 100% repetition of the game based on random seed and game seed.
-        GameState copy = new GameState(new Random(), this.gameMode); //copies of the game state can't have the same random generator.
+        // Deterministic-cascade: the child rnd is independent of the parent's (same separation goal as
+        // before — the parent's randomness is not shared) but its SEED is derived from the parent rather
+        // than from System.currentTimeMillis() via no-arg Random(). This makes a fully-seeded GameState
+        // reproducible through any depth of copy chain — required for the v4 isolation-phase paired
+        // guarantee (otherwise gs.rnd-consuming ActionCommands like Examine and LevelUp(EXPLORER) diverge
+        // across agents on the same visit seed). Behaviour for code paths that don't seed the root rnd is
+        // unaffected: System.nanoTime-derived parent → still non-reproducible child.
+        GameState copy = new GameState(new Random(this.rnd.nextLong()), this.gameMode);
         copy.board = board.copy(playerIdx!=-1, playerIdx);
         copy.tick = this.tick;
         copy.turnMustEnd = turnMustEnd;
@@ -764,6 +801,17 @@ public class GameState {
 
     public Random getRandomGenerator() {
         return rnd;
+    }
+
+    /** v4 Isolation Phase hook: deterministically replace the game-state {@link Random}. Used by
+     *  {@link core.data.exp.IsolationPhaseRunner} to pin the engine's randomness across all agents
+     *  evaluating the same (scenario, visit) — without this, ActionCommands that consult
+     *  {@code gs.getRandomGenerator()} (Examine, LevelUp(EXPLORER)) produce different outcomes across
+     *  agents on the same visit seed and the paired-comparison guarantee breaks.
+     *  {@link GameState#copy} mints a fresh-time-seeded {@link Random} on purpose for normal play;
+     *  v4 calls this method immediately after {@code copy()} to override that for paired evaluation. */
+    public void setRandomGenerator(Random r) {
+        this.rnd = r;
     }
 
     boolean isNative() {

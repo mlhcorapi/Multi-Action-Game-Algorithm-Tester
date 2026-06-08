@@ -14,11 +14,13 @@ import org.json.JSONObject;
 import utils.Vector2d;
 import utils.graph.*;
 
+import java.io.Serializable;
 import java.util.*;
 
 import static core.Types.TERRAIN.*;
 
-public class Board {
+public class Board implements Serializable {
+    private static final long serialVersionUID = 1L;
 
     // Array for the type of terrain that each tile of board will have
     private Types.TERRAIN[][] terrains;

@@ -145,4 +145,38 @@ public class ExpAgents {
     public static AgentSpec crossoverComboTime(int ratio) {
         return new AgentSpec("CrossoverCombo", seed -> new CrossoverComboAgent(seed, expParamsTime(ratio)));
     }
+
+    // ---- v4 Isolation Phase variants ----
+    // STOP_TIME plus randomInitialSequence=true: every agent's root starts from the same uniformly-random
+    // valid sequence (seeded shared across all agents per scenario × visit), so the search has more room
+    // to improve over its initial. The greedy in-search REPAIR mechanism is unchanged.
+
+    private static ExperimentalEMCTSParams expParamsV4(int ratio) {
+        ExperimentalEMCTSParams p = expParamsTime(ratio);
+        p.randomInitialSequence = true;
+        return p;
+    }
+
+    public static AgentSpec emctsV4() {
+        return new AgentSpec("EMCTS", seed -> {
+            EMCTSParams p = new EMCTSParams();
+            p.stop_type = p.STOP_TIME;
+            p.heuristic_method = p.SIMPLE_HEURISTIC;
+            p.depth = DEPTH;
+            p.randomInitialSequence = true;
+            return new EMCTSAgent(seed, p);
+        });
+    }
+
+    public static AgentSpec crossoverExpansionV4(int ratio) {
+        return new AgentSpec("CrossoverExpansion", seed -> new CrossoverExpansionAgent(seed, expParamsV4(ratio)));
+    }
+
+    public static AgentSpec crossoverBBV4() {
+        return new AgentSpec("CrossoverBB", seed -> new CrossoverBBAgent(seed, expParamsV4(5)));
+    }
+
+    public static AgentSpec crossoverComboV4(int ratio) {
+        return new AgentSpec("CrossoverCombo", seed -> new CrossoverComboAgent(seed, expParamsV4(ratio)));
+    }
 }
