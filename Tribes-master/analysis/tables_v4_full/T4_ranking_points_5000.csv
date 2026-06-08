@@ -1,0 +1,13 @@
+Config,points
+EMCTS,792.5
+CrossoverBB,483.0
+CrossoverExpansion@2,628.0
+CrossoverExpansion@5,760.0
+CrossoverExpansion@10,814.0
+CrossoverExpansion@15,862.0
+CrossoverExpansion@20,842.0
+CrossoverCombo@2,401.5
+CrossoverCombo@5,583.0
+CrossoverCombo@10,521.0
+CrossoverCombo@15,572.5
+CrossoverCombo@20,540.5
