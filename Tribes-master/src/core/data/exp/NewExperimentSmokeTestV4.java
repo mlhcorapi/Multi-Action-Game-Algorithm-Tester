@@ -61,6 +61,11 @@ public class NewExperimentSmokeTestV4 {
         boolean sharedInitOk = verifySharedInitialSequence(portfolio.get(0));
         System.out.println("Shared random initial sequence (EMCTS == BB == Expansion@5): " + (sharedInitOk ? "PASS" : "FAIL"));
 
+        System.out.println("\n==================== 2b. INVARIANCE across thinking times AND all 12 configs ====================");
+        boolean acrossMsOk = verifyInitialSequenceInvariantAcrossMsAndConfigs(portfolio.get(0));
+        System.out.println("Invariance across {50,500,5000} ms × all 12 configs (per scenario × visit): "
+                + (acrossMsOk ? "PASS" : "FAIL"));
+
         System.out.println("\n==================== 3. Tiny isolation pass (3 agents, ms=50, 2 visits) ====================");
         File baseDir = new File(base);
         File ckpt = new File(baseDir, "_completed.txt");
@@ -75,7 +80,7 @@ public class NewExperimentSmokeTestV4 {
                 && checkLeaf(new File(base + "/CrossoverExpansion/ratio_5/50ms/results.csv"), false);
         System.out.println("Folder layout + schema: " + (layoutOk ? "PASS" : "FAIL"));
 
-        boolean allOk = roundTripOk && sharedInitOk && layoutOk;
+        boolean allOk = roundTripOk && sharedInitOk && acrossMsOk && layoutOk;
         System.out.println("\nTotal smoke_v4 time: " + (System.currentTimeMillis() - t0) / 1000.0 + "s");
         System.out.println(allOk ? "PASS: v4 pipeline sound." : "FAIL: see checks above.");
     }
@@ -164,6 +169,81 @@ public class NewExperimentSmokeTestV4 {
     }
 
     private static String truncate(String s, int n) { return s.length() <= n ? s : s.substring(0, n) + "..."; }
+
+    /**
+     * The strongest form of the v4 paired guarantee: for a SINGLE (scenario, visit), the literal random
+     * initial action sequence must be byte-identical across:
+     *   - all 12 agent configs (EMCTS + CrossoverBB + CrossoverExpansion×5 + CrossoverCombo×5), AND
+     *   - all 3 thinking times (50 / 500 / 5000 ms).
+     *
+     * By construction the seed `visitSeed(scenarioId, visitId)` does NOT depend on the thinking time, and
+     * the thinking time only kicks in during the search loop AFTER randomActions() returns — so the
+     * initial sequence is expected to be invariant. This test proves it: any code change that
+     * accidentally couples the initial-generation path to Constants.TURN_TIME_MILLIS will be caught here.
+     */
+    private static boolean verifyInitialSequenceInvariantAcrossMsAndConfigs(Scenario sc) {
+        int visitId = 0;
+        long seed = IsolationPhaseRunner.visitSeed(sc.id, visitId);
+        int[] msLevels = {50, 500, 5000};
+        // Build the full 12-config matrix used by RunExperimentV4.
+        java.util.List<Object[]> configs = new java.util.ArrayList<>();
+        configs.add(new Object[]{"EMCTS",              -1, ExpAgents.emctsV4()});
+        configs.add(new Object[]{"CrossoverBB",        -1, ExpAgents.crossoverBBV4()});
+        for (int r : IsolationPhaseRunner.RATIOS)
+            configs.add(new Object[]{"CrossoverExpansion", r, ExpAgents.crossoverExpansionV4(r)});
+        for (int r : IsolationPhaseRunner.RATIOS)
+            configs.add(new Object[]{"CrossoverCombo",     r, ExpAgents.crossoverComboV4(r)});
+
+        String reference = null;
+        String referenceLabel = null;
+        int total = 0, matches = 0;
+        for (int ms : msLevels) {
+            Constants.TURN_TIME_MILLIS = ms;
+            for (Object[] cfg : configs) {
+                String agentName = (String) cfg[0];
+                int ratio = (Integer) cfg[1];
+                AgentSpec spec = (AgentSpec) cfg[2];
+                String label = agentName + (ratio < 0 ? "" : "@r" + ratio) + "/" + ms + "ms";
+
+                Agent a = spec.create(seed);
+                ArrayList<Integer> allIds = new ArrayList<>();
+                for (int k = 0; k < sc.state.getTribes().length; k++) allIds.add(k);
+                a.setPlayerIDs(sc.state.getActiveTribeID(), allIds);
+                utils.ElapsedCpuTimer ect = new utils.ElapsedCpuTimer();
+                ect.setMaxTimeMillis(ms);
+                core.game.GameState gs = sc.state.copy();
+                gs.setRandomGenerator(new java.util.Random(seed));
+                try { a.act(gs, ect); } catch (Throwable t) {
+                    System.out.println("    " + label + " threw " + t + " — skipping");
+                    continue;
+                }
+                List<String> seq;
+                if (a instanceof players.emcts.EMCTSAgent)
+                    seq = ((players.emcts.EMCTSAgent) a).getInitialRootSequenceForV4();
+                else if (a instanceof players.ExperimentalEMCTS.ExperimentalEMCTSAgent)
+                    seq = ((players.ExperimentalEMCTS.ExperimentalEMCTSAgent) a).getInitialRootSequenceForV4();
+                else
+                    seq = Collections.emptyList();
+                String packed = String.join("|", seq);
+                total++;
+                if (reference == null) {
+                    reference = packed;
+                    referenceLabel = label;
+                    System.out.println("  reference [" + label + "] len=" + seq.size()
+                            + " seq=" + truncate(packed, 100));
+                    matches++;
+                } else if (reference.equals(packed)) {
+                    matches++;
+                } else {
+                    System.out.println("  MISMATCH [" + label + "] vs reference [" + referenceLabel + "]:");
+                    System.out.println("    ref: " + truncate(reference, 120));
+                    System.out.println("    got: " + truncate(packed, 120));
+                }
+            }
+        }
+        System.out.println("  matched " + matches + "/" + total + " (config × ms) initial sequences");
+        return matches == total && total == configs.size() * msLevels.length;
+    }
 
     /** Run a 3-agent isolation pass at ms=50 over the 3 scenarios × 2 visits. */
     private static void runTinyIsolation(int ms, int threads, List<Scenario> portfolio, File baseDir) throws Exception {
