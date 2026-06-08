@@ -136,32 +136,41 @@ public class BuildV4Portfolio {
             players.add(buildEmctsSourceAgent());
             players.add(new players.DoNothingAgent(SOURCE_AGENT_SEED));
             Game game = new Game();
-            game.init(players, levelSeed, TRIBES, FIXED_GAME_SEED, Types.GAME_MODE.SCORE);
-
             int collectedThisGame = 0;
-            for (int tick = SINGLE_FIRST_TICK; tick <= SINGLE_LAST_TICK; tick++) {
-                if (validSingles >= NUM_SINGLE_SCENARIOS) break;
-                GameState gs = game.captureAtTickAsTurnStart(tick);
-                if (gs.isGameOver()) {
-                    System.out.println("  game ended early at tick " + gs.getTick());
-                    break;
-                }
-                if (!validateScenario(gs, scenarioId + 1)) {
-                    // Stuck-game guard: a healthy EMCTS has DEFINITELY developed by tick 21 (cities>=2,
-                    // hundreds of stars earned). If the very first captured tick is degenerate the
-                    // remaining ticks of the same game will be too — abort and try the next seed.
-                    if (tick == SINGLE_FIRST_TICK) {
-                        System.out.println("  ABORT game " + gameAttempt
-                                + " (stuck position at first captured tick — next seed)");
+            try {
+                game.init(players, levelSeed, TRIBES, FIXED_GAME_SEED, Types.GAME_MODE.SCORE);
+
+                for (int tick = SINGLE_FIRST_TICK; tick <= SINGLE_LAST_TICK; tick++) {
+                    if (validSingles >= NUM_SINGLE_SCENARIOS) break;
+                    GameState gs = game.captureAtTickAsTurnStart(tick);
+                    if (gs.isGameOver()) {
+                        System.out.println("  game ended early at tick " + gs.getTick());
                         break;
                     }
-                    continue;
+                    if (!validateScenario(gs, scenarioId + 1)) {
+                        // Stuck-game guard: a healthy EMCTS has DEFINITELY developed by tick 21 (cities>=2,
+                        // hundreds of stars earned). If the very first captured tick is degenerate the
+                        // remaining ticks of the same game will be too — abort and try the next seed.
+                        if (tick == SINGLE_FIRST_TICK) {
+                            System.out.println("  ABORT game " + gameAttempt
+                                    + " (stuck position at first captured tick — next seed)");
+                            break;
+                        }
+                        continue;
+                    }
+                    scenarioId++;
+                    persistAndManifest(scenarioId, "single", gameAttempt, levelSeed, FIXED_GAME_SEED, tick, gs,
+                            scenariosDir, manifest);
+                    validSingles++;
+                    collectedThisGame++;
                 }
-                scenarioId++;
-                persistAndManifest(scenarioId, "single", gameAttempt, levelSeed, FIXED_GAME_SEED, tick, gs,
-                        scenariosDir, manifest);
-                validSingles++;
-                collectedThisGame++;
+            } catch (Throwable t) {
+                // Tribes engine has a known ClassCastException (and occasional other throws) under
+                // deep search — same root cause that ExperimentEngine.runMatchup retries with perturbed
+                // seeds for the full-game phases. For the portfolio build the cheap fix is: skip this
+                // level seed entirely; the dynamic-extension loop just tries the next one.
+                System.out.println("  ABORT game " + gameAttempt + ": engine threw "
+                        + t.getClass().getSimpleName() + " — next seed");
             }
             System.out.println("  collected " + collectedThisGame + " valid scenarios from game " + gameAttempt);
         }
@@ -186,9 +195,19 @@ public class BuildV4Portfolio {
             players.add(buildEmctsSourceAgent());
             players.add(buildEmctsSourceAgent());
             Game game = new Game();
-            game.init(players, levelSeed, TRIBES, FIXED_GAME_SEED, Types.GAME_MODE.CAPITALS);
-
-            GameState gs = game.captureAtTickAsTurnStart(DUAL_CAPTURE_TICK);
+            GameState gs;
+            try {
+                game.init(players, levelSeed, TRIBES, FIXED_GAME_SEED, Types.GAME_MODE.CAPITALS);
+                gs = game.captureAtTickAsTurnStart(DUAL_CAPTURE_TICK);
+            } catch (Throwable t) {
+                // Engine ClassCastException (or similar) during one of the source players' planning —
+                // same root cause that ExperimentEngine handles via perturbed-seed retries elsewhere.
+                // For the portfolio: skip this seed; the next attempt's distinct level/agent state is
+                // a different deep-search trajectory and most likely won't trigger it again.
+                System.out.println("  ABORT game " + gameAttempt + ": engine threw "
+                        + t.getClass().getSimpleName() + " — next seed");
+                continue;
+            }
             if (gs.isGameOver()) {
                 System.out.println("  game ended early at tick " + gs.getTick() + " — skipping");
                 continue;
