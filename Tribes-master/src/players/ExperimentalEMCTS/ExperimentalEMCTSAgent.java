@@ -69,6 +69,16 @@ public class ExperimentalEMCTSAgent extends Agent {
     protected ExperimentalEMCTSParams params;
 
     protected ExperimentalEMCTSTreeNode root;
+
+    /** v4 hook: snapshot of the INITIAL root sequence, captured exactly when the root is first built
+     *  by randomActions() (before any search / bridge-burn promotion mutates it). Used by the v4 smoke
+     *  test to verify all agents produced identical random initial sequences for the same (scenario,
+     *  visit) seed — the paired-comparison guarantee. */
+    private java.util.List<String> initialRootSequenceForV4 = java.util.Collections.emptyList();
+
+    public java.util.List<String> getInitialRootSequenceForV4() {
+        return initialRootSequenceForV4;
+    }
     protected ExperimentalEMCTSTreeNode bestNode;
     protected GameState old_gs;
 
@@ -153,6 +163,14 @@ public class ExperimentalEMCTSAgent extends Agent {
 
         // Initialize root with 1-ply greedy initialization
         root = randomActions(gs.copy());
+        // v4 paired-guarantee verification hook: snapshot the initial root sequence as toString()s
+        // BEFORE search modifies it. Cheap (one ArrayList allocation + toString per action).
+        {
+            java.util.ArrayList<String> snap = new java.util.ArrayList<>(root.getSequence() == null ? 0 : root.getSequence().size());
+            if (root.getSequence() != null)
+                for (core.actions.Action a : root.getSequence()) snap.add(a == null ? "_" : a.toString());
+            this.initialRootSequenceForV4 = java.util.Collections.unmodifiableList(snap);
+        }
         eval(gs.copy(), root);
 
         double initialValue = root.getValue();
@@ -421,28 +439,44 @@ public class ExperimentalEMCTSAgent extends Agent {
             GameState bestState = null;
             int numTies = 0;
 
-            // Greedy evaluation: try each action and pick the highest-scoring one
-            for (Action candidateAction : allAvailableActions) {
-                // Skip END_TURN unless it's the only option
-                if (candidateAction.getActionType() == Types.ACTION.END_TURN && 
-                    allAvailableActions.size() > 1) {
-                    continue;
+            if (params.randomInitialSequence) {
+                // v4 random-initial mode: pick uniformly at random from the non-END_TURN actions
+                // (or END_TURN if it's the only option), so all agents starting from the same
+                // (scenario, visit) seed produce the same — and intentionally worse-than-greedy —
+                // starting sequence. This widens the room-for-improvement during search.
+                ArrayList<Action> picks = new ArrayList<>();
+                for (Action a : allAvailableActions) {
+                    if (a.getActionType() != Types.ACTION.END_TURN || allAvailableActions.size() == 1) {
+                        picks.add(a);
+                    }
                 }
+                if (!picks.isEmpty()) {
+                    bestAction = picks.get(m_rnd.nextInt(picks.size()));
+                }
+            } else {
+                // Greedy evaluation: try each action and pick the highest-scoring one
+                for (Action candidateAction : allAvailableActions) {
+                    // Skip END_TURN unless it's the only option
+                    if (candidateAction.getActionType() == Types.ACTION.END_TURN &&
+                        allAvailableActions.size() > 1) {
+                        continue;
+                    }
 
-                GameState testGs = gs.copy();
-                advance(testGs, candidateAction);
-                double score = heuristic.evaluateState(old_gs, testGs);
+                    GameState testGs = gs.copy();
+                    advance(testGs, candidateAction);
+                    double score = heuristic.evaluateState(old_gs, testGs);
 
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestAction = candidateAction;
-                    bestState = testGs;
-                    numTies = 1;
-                } else if (score == bestScore) {
-                    numTies++;
-                    if (m_rnd.nextInt(numTies) == 0) {
+                    if (score > bestScore) {
+                        bestScore = score;
                         bestAction = candidateAction;
                         bestState = testGs;
+                        numTies = 1;
+                    } else if (score == bestScore) {
+                        numTies++;
+                        if (m_rnd.nextInt(numTies) == 0) {
+                            bestAction = candidateAction;
+                            bestState = testGs;
+                        }
                     }
                 }
             }

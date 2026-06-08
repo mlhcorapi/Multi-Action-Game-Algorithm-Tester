@@ -10,4 +10,9 @@ public class ExperimentalEMCTSParams extends AlgParams {
     public boolean useCrossoverExpansion = false;
     public int crossoverExpansionRatio = 1;
     public int mutationExpansionRatio = 5;
+    /** v4 Isolation Phase: when true, the root's INITIAL action sequence is built by sampling
+     *  uniformly at random from valid actions instead of the default 1-ply greedy. The greedy
+     *  REPAIR mechanism used in-search (mutate/crossover) is unaffected. Same {@code m_rnd} seed
+     *  across all agents in a (scenario, visit) yields the same starting sequence. */
+    public boolean randomInitialSequence = false;
 }
