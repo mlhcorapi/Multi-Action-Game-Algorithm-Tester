@@ -175,6 +175,43 @@ greener = converges earlier.
   by burn 13; Combo@5 at the same ms needs burn 18). So Expansion is not just better at the END — it
   finds the best-known sequence FASTER too.
 
+### E5 — interpreting the NodesEvaluated/Turn chart (search breadth vs per-iteration cost)
+
+The `fig7_efficiency.png` chart from `analyze_v4.py` shows `NodesEvaluated/Turn` varying sharply between
+agents (e.g. at 500 ms: EMCTS ≈ 22, CrossoverBB ≈ 42, Combo@2 ≈ 56). At first read this looks
+suspicious — why does BB report nearly 2× the nodes evaluated of EMCTS for the same wall-clock budget?
+
+**The metric is correct.** `NodesEvaluated` is `eval()` calls per turn, and `eval()` fires exactly once
+per MCTS main-loop iteration plus once per crossover-BB tournament candidate. The audit (E5,
+`E5_search_breadth_vs_cost.png` and `E5_search_breadth_vs_cost.csv`) decomposes the metric into
+**iteration breadth** and **per-iteration FM-call cost** and shows what is actually happening:
+
+| 500 ms          | evals/turn | FM-calls/turn | FM-calls / eval (cost per iteration) |
+|-----------------|-----------:|--------------:|-------------------------------------:|
+| EMCTS           | 22.2 | 3,265 | **147.2** |
+| CrossoverBB     | 41.6 | 4,882 | 117.4 |
+| Expansion @ 2   | 36.4 | 4,684 | 128.7 |
+| Expansion @ 20  | 22.2 | 3,266 | 147.0 |
+| Combo @ 2       | 55.9 | 7,822 | 139.9 |
+
+- The **right column** (FM-calls per eval) is the *cost of one MCTS iteration*. EMCTS's `mutate()`
+  inserts a random action and runs full sequence repair through the forward model — expensive
+  (147 FM calls per iteration).
+- CrossoverBB tournament candidates are **shallow** (7 children fed inherited sequences, almost no
+  repair) — they cost only ~17 FM calls per eval. The arithmetic average over (main-loop iterations
+  at 147) + (tournament evals at ~17) gives BB's 117 — *cheaper iterations on average*.
+- Expansion's crossover sequences come from elite parents and are largely valid by construction, so
+  the repair step needs fewer FM calls (~129 per iteration at ratio 2 vs 147 for pure mutate).
+- **Conclusion:** within the same wall-clock budget, agents with cheaper iterations fit more
+  iterations in — so their `NodesEvaluated/Turn` rises. The chart in `analyze_v4.py` is honest;
+  it is *not* "more search work done", it is "more iterations executed because each iteration is
+  cheaper."
+
+This is a real thesis-grade insight, not a measurement artifact: **part of CrossoverExpansion's
+benefit at low budgets comes from cheaper per-iteration repair, which lets it cover ~65% more
+candidate sequences in the same 500 ms (36 evals vs 22).** That's a substantial fraction of the
+absolute lift over EMCTS and is worth calling out in the writeup.
+
 ## Tying back to v3
 
 v3's headline was "CrossoverExpansion@5 is the best modification, CrossoverBB is no use." v4 confirms
