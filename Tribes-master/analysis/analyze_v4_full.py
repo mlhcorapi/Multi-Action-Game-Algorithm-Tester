@@ -386,7 +386,10 @@ def extra_paired_delta_with_ci(turn_df):
                 .drop_duplicates(['ThinkingMs','ScenarioId','VisitId'])
     j = turn_df.merge(emcts, on=['ThinkingMs','ScenarioId','VisitId'], how='left', validate='m:1')
     j['delta'] = j.FinalSequenceValue - j.emcts_final
-    fig, axes2 = plt.subplots(2, 2, figsize=(13, 9), squeeze=False, sharey=True)
+    # Independent y-axes: each panel sorts bars by its own mean, so each panel needs its own labels
+    # in the matching order. With sharey=True matplotlib lets the last-set y-tick labels win for ALL
+    # panels, which was the cause of the label/bar mismatch in the previous version.
+    fig, axes2 = plt.subplots(2, 2, figsize=(13, 9), squeeze=False, sharey=False)
     axes = axes2.flatten()
     # per ms + avg
     keys = [*MS_LEVELS, 'avg']
@@ -484,15 +487,60 @@ def extra_single_vs_dual(turn_df, portfolio):
         x = np.arange(len(configs_present))
         s = sub[sub.Source=='single'].set_index('Config').reindex(configs_present)['deltaVsEMCTS']
         d = sub[sub.Source=='dual'  ].set_index('Config').reindex(configs_present)['deltaVsEMCTS']
-        ax.bar(x - 0.2, s.values, 0.4, color='#1f78b4', label='single')
-        ax.bar(x + 0.2, d.values, 0.4, color='#e31a1c', label='dual')
+        ax.bar(x - 0.2, s.values, 0.4, color='#1f78b4', label='single-player scenarios (n=50)')
+        ax.bar(x + 0.2, d.values, 0.4, color='#e31a1c', label='dual-player scenarios (n=50)')
         ax.axhline(0, color='black', lw=0.8)
         ax.set_xticks(x); ax.set_xticklabels(configs_present, rotation=60, ha='right', fontsize=7)
-        ax.set_title(f'{ms} ms'); ax.set_ylabel('paired Δ vs EMCTS')
-    axes[0].legend(fontsize=8)
-    fig.suptitle('E3: Single vs Dual portfolio split — paired Δ vs EMCTS',
+        ax.set_title(f'{ms} ms thinking time')
+        ax.set_ylabel('mean FinalSequenceValue advantage over EMCTS\n(positive = agent beats EMCTS on same scenarios)')
+    axes[0].legend(fontsize=8, loc='lower left')
+    fig.suptitle('E3: Single-player vs dual-player portfolio split — paired advantage over EMCTS '
+                 '(same scenario × visit pairs)',
                  fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E3_single_vs_dual.png'); plt.close(fig)
+
+
+def extra_search_breadth_vs_cost(turn_df):
+    """E5. Iteration breadth vs per-iteration cost — what the NodesEvaluated/Turn chart in analyze_v4
+    actually means. Each MCTS iteration calls eval() exactly once (nodesEvaluated++), but the FmCalls
+    each iteration consumes varies sharply by agent:
+        - mutate-then-repair (EMCTS): full sequence repair after a random action insertion
+        - crossover-expansion: parents are elite/valid, so repair touches fewer actions
+        - BB tournaments: 7 shallow eval()s per burn, each fed an inherited sequence (cheap)
+    Net effect: agents with cheaper iterations fit MORE iterations into the same wall-clock budget,
+    so their NodesEvaluated/Turn is higher even though no extra work is done per iteration. This view
+    decomposes the chart into (i) iteration breadth, (ii) FM-call cost per iteration."""
+    rows = []
+    for cfg in [c for c in ORDER if c in turn_df.Config.unique()]:
+        for ms in MS_LEVELS:
+            sub = turn_df[(turn_df.Config == cfg) & (turn_df.ThinkingMs == ms)]
+            if sub.empty: continue
+            n_iter = sub.NodesEvaluated.mean()
+            fm = sub.FmCalls.mean()
+            rows.append(dict(Config=cfg, ms=ms,
+                             evals_per_turn=n_iter,
+                             fmCalls_per_turn=fm,
+                             fmCalls_per_eval=fm/n_iter if n_iter else np.nan))
+    t = pd.DataFrame(rows).round(2)
+    t.to_csv(TABLES / 'E5_search_breadth_vs_cost.csv', index=False)
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.5), squeeze=False)
+    axes = axes[0]
+    metrics = [('evals_per_turn', 'eval() calls per turn\n(= MCTS iterations)'),
+               ('fmCalls_per_turn', 'forward-model calls per turn\n(actual compute budget used)'),
+               ('fmCalls_per_eval', 'FM calls per eval\n(cost per iteration — lower = cheaper iter)')]
+    cfgs_present = [c for c in ORDER if c in t.Config.unique()]
+    x = np.arange(len(cfgs_present))
+    for ax, (col, ylab) in zip(axes, metrics):
+        for i, ms in enumerate(MS_LEVELS):
+            sub = t[t.ms == ms].set_index('Config').reindex(cfgs_present)
+            ax.plot(x, sub[col].values, marker='o', label=f'{ms} ms', lw=1.5)
+        ax.set_xticks(x); ax.set_xticklabels(cfgs_present, rotation=60, ha='right', fontsize=7)
+        ax.set_ylabel(ylab); ax.legend(fontsize=8)
+    fig.suptitle('E5: Per-iteration cost decomposition (clarifies the NodesEvaluated/Turn chart). '
+                 'Cheaper iterations → more iterations in the same wall-clock budget.',
+                 fontweight='bold', fontsize=10)
+    fig.tight_layout(); fig.savefig(FIGS / 'E5_search_breadth_vs_cost.png',
+                                     bbox_inches='tight'); plt.close(fig)
 
 
 def extra_convergence_speed(df_burn):
@@ -576,6 +624,7 @@ def main():
     print('E2: best ratio per budget');          extra_best_ratio_per_budget(turn_df)
     print('E3: single vs dual portfolio split'); extra_single_vs_dual(turn_df, portfolio)
     print('E4: convergence speed');              extra_convergence_speed(df_burn)
+    print('E5: search breadth vs per-iter cost'); extra_search_breadth_vs_cost(turn_df)
 
     print(f'\nDone. tables -> {TABLES}/  figures -> {FIGS}/')
 
