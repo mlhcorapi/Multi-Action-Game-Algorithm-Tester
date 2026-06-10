@@ -1,0 +1,12 @@
+Config,Low BF,Mid BF,High BF
+CrossoverBB,-16.24,-10.36,-30.2
+CrossoverExpansion@2,6.78,-6.35,-11.91
+CrossoverExpansion@5,-0.1,-3.11,-23.72
+CrossoverExpansion@10,4.87,-1.33,-11.06
+CrossoverExpansion@15,3.12,4.39,-7.19
+CrossoverExpansion@20,-1.13,-0.38,0.62
+CrossoverCombo@2,-7.55,-0.18,-16.71
+CrossoverCombo@5,-10.95,-14.0,-16.3
+CrossoverCombo@10,-11.21,-7.53,-30.45
+CrossoverCombo@15,-10.58,-10.16,-23.33
+CrossoverCombo@20,-13.6,-11.19,-29.46

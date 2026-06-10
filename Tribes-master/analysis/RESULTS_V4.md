@@ -190,30 +190,41 @@ the effect.
 | dual (n=50) | **274** | 227–355 |
 
 Single-player scenarios have **~1.7× the median branching factor of dual** — they are biased
-toward late-game, high-development snapshots with many cities and units. The two BF distributions
-overlap only modestly between Q3 (350–399) and Q4 (399–484). This is a real confound: any agent
-whose performance depends on BF will *appear* to differ between single and dual even if its
-behavior is identical at the same BF.
+toward late-game, high-development snapshots with many cities and units. The two distributions
+overlap only in the 330–510 band. This is a real confound: any agent whose performance depends on
+BF will *appear* to differ between single and dual even if its behavior is identical at the same BF.
 
-**E7: BF-quintile × source heatmap (`E7_bf_quintile_source_heatmap.png`).**
+**E7: BF-tertile × source heatmap (`E7_bf_tier_source_heatmap.png`).**
 
-Reading the heatmap *column-by-column* (same BF, different source) shows the source effect after
-controlling for BF:
+*Binning note.* Bins are computed **within each source** (tertiles, ~17 scenarios per cell). The
+dual portfolio is almost entirely low-BF and single almost entirely high-BF, so a *global*-quintile
+binning left the dual-high-BF and single-low-BF cells resting on just 1–5 scenarios — which produced
+large, eye-catching, but statistically meaningless values (an earlier draft of this figure showed
+spurious +30…+42 cells there that wrongly suggested crossover bridge-burning *won* in high-BF duals).
+The per-source re-binning removes that artifact. The cost: columns no longer share an absolute BF
+scale — single's "Low BF" tertile (222–415) actually overlaps dual's "High BF" tertile (329–583). So
+read this figure **within each panel** (how an agent's advantage moves as BF rises *within its own
+source*); for the strict "same absolute BF, different source" control, use E8/ANCOVA, which handle BF
+continuously.
 
-- **At low BF (Q1, BF 76–256):** single and dual cells are mostly positive for both panels — Exp@10
-  is +20 (single) vs +24 (dual); Combo@10 is +14 (single) vs −1 (dual). Source barely matters at
-  low BF.
-- **At mid BF (Q3, BF 350–399):** the panels start to diverge — Exp@5 is +1 (single) vs +20
-  (dual), a ~20-unit gap at the same BF.
-- **At high BF (Q4, BF 399–484):** the divergence is dramatic — Exp@5 is −1 (single) vs **+49**
-  (dual); BB is −11 (single) vs **+33** (dual); Combo@2 is +2 (single) vs **+42** (dual).
-- **At highest BF (Q5, BF 484–619):** every crossover agent is negative in single (−6 to −28) but
-  positive in dual (+5 to +21). Five out of six dual Q5 cells are GREEN; five out of six single Q5
-  cells are BLUE.
+Two clean, reliable readings:
 
-So **the source effect is small at low BF and large at high BF.** That is exactly what the user's
-intuition predicted: crossover does poorly in high-BF singles, but does well in (lower-BF) duals.
-The heatmap also shows the same is true at the *same* BF — so this is not purely a BF artifact.
+- **Within single (economic) scenarios, crossover deteriorates as BF rises.** Every column goes more
+  negative Low→High: Exp@5 = −0 → −3 → **−24**; BB = −16 → −10 → **−30**; Combo@10 = −11 → −8 →
+  **−30**. The single High-BF column is almost solid blue.
+- **Within dual (combat) scenarios, Expansion stays strongly positive across the whole BF range:**
+  Exp@5 = +25 → +15 → +26; Exp@2 = +19 → +10 → +8; Exp@10 = +26 → +5 → +3. The dual panel is mostly
+  red for the Expansion family.
+
+Crucially, the re-binned figure now **agrees with E3 on the bridge-burners**: CrossoverBB is negative
+in every single cell and only neutral-to-+2 in dual; CrossoverCombo trails its Expansion@r
+counterpart in nearly every cell. The earlier "crossover-BB wins in high-BF duals" impression was
+entirely the 1- and 5-scenario global-quintile cells, and it disappears once every cell holds ~17
+scenarios.
+
+So the corrected statement is: **the source axis dominates — Expansion helps in dual and hurts in
+high-BF single — and within each source the crossover benefit falls as BF rises.** BB and Combo stay
+net-negative everywhere they are reliably measured, consistent with E1/E3.
 
 **E8: per-source regression scatter (`E8_bf_source_regression.png`).**
 
