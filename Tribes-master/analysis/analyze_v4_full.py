@@ -408,7 +408,7 @@ def extra_paired_delta_with_ci(turn_df):
         ax.axvline(0, color='black', lw=0.8)
         ax.set_title(f'{key}' + (' ms' if key != 'avg' else ''))
         ax.set_xlabel('paired Δ vs EMCTS (FinalSequenceValue, ±95% CI)')
-    fig.suptitle('E1: Paired Δ vs EMCTS (same scenario × visit, with 95% CI). Bars right of zero beat EMCTS.',
+    fig.suptitle('E1: Paired Δ vs EMCTS (same scenario × visit pair, ±95% CI)',
                  fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E1_paired_delta_with_ci.png'); plt.close(fig)
     # table
@@ -491,11 +491,10 @@ def extra_single_vs_dual(turn_df, portfolio):
         ax.bar(x + 0.2, d.values, 0.4, color='#e31a1c', label='dual-player scenarios (n=50)')
         ax.axhline(0, color='black', lw=0.8)
         ax.set_xticks(x); ax.set_xticklabels(configs_present, rotation=60, ha='right', fontsize=7)
-        ax.set_title(f'{ms} ms thinking time')
-        ax.set_ylabel('mean FinalSequenceValue advantage over EMCTS\n(positive = agent beats EMCTS on same scenarios)')
+        ax.set_title(f'{ms} ms')
+        ax.set_ylabel('mean FinalSequenceValue advantage over EMCTS')
     axes[0].legend(fontsize=8, loc='lower left')
-    fig.suptitle('E3: Single-player vs dual-player portfolio split — paired advantage over EMCTS '
-                 '(same scenario × visit pairs)',
+    fig.suptitle('E3: Single-player vs dual-player portfolio split — paired Δ vs EMCTS',
                  fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E3_single_vs_dual.png'); plt.close(fig)
 
@@ -559,18 +558,11 @@ def extra_branching_source_diagnostics(turn_df, portfolio):
             edgecolor='black', linewidth=0.4)
     ax.axvline(s_bf.median(), color='#1f78b4', linestyle='--', lw=1.5)
     ax.axvline(d_bf.median(), color='#e31a1c', linestyle='--', lw=1.5)
-    # Per-source tertile boundaries (the 2 internal cuts each) in each source's colour — these are
-    # the columns used in E7. Shows how differently the two sources are sliced.
-    for e in tier_edges['single'][1:-1]:
-        ax.axvline(e, color='#1f78b4', lw=1.0, ls=':', alpha=0.9)
-    for e in tier_edges['dual'][1:-1]:
-        ax.axvline(e, color='#e31a1c', lw=1.0, ls=':', alpha=0.9)
     ax.set_xlabel('Branching factor (per scenario)')
     ax.set_ylabel('scenario count')
     ax.legend(fontsize=9, loc='upper right')
-    ax.set_title('E6: Branching-factor distribution per source. Dotted lines = per-source BF tertile '
-                 'boundaries used in E7 (blue = single, red = dual).',
-                 fontweight='bold', fontsize=9.5)
+    ax.set_title('E6: Branching-factor distribution per source',
+                 fontweight='bold', fontsize=10)
     fig.tight_layout(); fig.savefig(FIGS / 'E6_bf_dist_per_source.png'); plt.close(fig)
     # Mann-Whitney for "are the two distributions different?"
     try:
@@ -608,22 +600,20 @@ def extra_branching_source_diagnostics(turn_df, portfolio):
                                      ['single', 'dual'], ['single-player', 'dual-player']):
         im = ax.imshow(pivot.values, cmap='RdBu_r', vmin=-vmax, vmax=vmax, aspect='auto')
         # ^ RdBu_r: red = positive (beats EMCTS), blue = negative (loses to EMCTS)
-        edges, cnts = tier_edges[src], tier_counts[src]
+        edges = tier_edges[src]
         ax.set_xticks(range(len(TIER_LABELS))); ax.set_xticklabels(
-            [f'{TIER_LABELS[i]}\n{edges[i]:.0f}–{edges[i+1]:.0f}\n(n={int(cnts.iloc[i])})'
+            [f'{TIER_LABELS[i]}\n{edges[i]:.0f}–{edges[i+1]:.0f}'
              for i in range(len(TIER_LABELS))], fontsize=8)
         ax.set_yticks(range(len(configs))); ax.set_yticklabels(configs, fontsize=8)
-        ax.set_xlabel(f"{label}'s own BF range (~{int(cnts.iloc[0])} scenarios/cell)")
+        ax.set_xlabel('Branching factor')
         ax.set_title(f'{label} scenarios')
         for (i, k), v in np.ndenumerate(pivot.values):
             if np.isfinite(v):
                 ax.text(k, i, f'{v:+.0f}', ha='center', va='center', fontsize=8,
                         color='white' if abs(v) > vmax * 0.55 else 'black')
         fig.colorbar(im, ax=ax, shrink=0.85).set_label('paired Δ vs EMCTS')
-    fig.suptitle('E7: BF-tertile × source heatmap — paired Δ vs EMCTS (averaged over ms and visits). '
-                 'Bins are per-source (~17 scenarios/cell), so columns reflect each source\'s OWN BF '
-                 'range (labelled), not a shared scale.',
-                 fontweight='bold', fontsize=9.5)
+    fig.suptitle('E7: BF-tertile × source heatmap — paired Δ vs EMCTS (averaged over ms and visits)',
+                 fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E7_bf_tier_source_heatmap.png'); plt.close(fig)
     pivot_single.round(2).to_csv(TABLES / 'E7_bf_tier_single.csv')
     pivot_dual.round(2).to_csv(TABLES / 'E7_bf_tier_dual.csv')
@@ -652,12 +642,11 @@ def extra_branching_source_diagnostics(turn_df, portfolio):
                         bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.85))
         ax.axhline(0, color='black', lw=0.6, linestyle=':')
         ax.set_title(cfg, fontsize=10, color=COLORS.get(cfg, 'black'), fontweight='bold')
-        ax.set_xlabel('Branching factor (per scenario)')
-        ax.set_ylabel('paired Δ vs EMCTS (avg over visits & ms)')
+        ax.set_xlabel('Branching factor')
+        ax.set_ylabel('paired Δ vs EMCTS')
         ax.legend(fontsize=8, loc='lower right')
-    fig.suptitle('E8: Branching factor vs paired Δ — per-source regression lines, four representative agents. '
-                 'Parallel lines ⇒ source effect independent of BF; converging lines ⇒ BF moderates source.',
-                 fontweight='bold', fontsize=10)
+    fig.suptitle('E8: Branching factor vs paired Δ vs EMCTS — per-source regression lines',
+                 fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E8_bf_source_regression.png'); plt.close(fig)
 
     # ----------------------------------------------------- ANCOVA: source effect, controlling for BF ----
@@ -739,9 +728,9 @@ def extra_search_breadth_vs_cost(turn_df):
     t.to_csv(TABLES / 'E5_search_breadth_vs_cost.csv', index=False)
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.5), squeeze=False)
     axes = axes[0]
-    metrics = [('evals_per_turn', 'eval() calls per turn\n(= MCTS iterations)'),
-               ('fmCalls_per_turn', 'forward-model calls per turn\n(actual compute budget used)'),
-               ('fmCalls_per_eval', 'FM calls per eval\n(cost per iteration — lower = cheaper iter)')]
+    metrics = [('evals_per_turn',   'eval() calls per turn'),
+               ('fmCalls_per_turn', 'forward-model calls per turn'),
+               ('fmCalls_per_eval', 'FM calls per eval')]
     cfgs_present = [c for c in ORDER if c in t.Config.unique()]
     x = np.arange(len(cfgs_present))
     for ax, (col, ylab) in zip(axes, metrics):
@@ -750,9 +739,7 @@ def extra_search_breadth_vs_cost(turn_df):
             ax.plot(x, sub[col].values, marker='o', label=f'{ms} ms', lw=1.5)
         ax.set_xticks(x); ax.set_xticklabels(cfgs_present, rotation=60, ha='right', fontsize=7)
         ax.set_ylabel(ylab); ax.legend(fontsize=8)
-    fig.suptitle('E5: Per-iteration cost decomposition (clarifies the NodesEvaluated/Turn chart). '
-                 'Cheaper iterations → more iterations in the same wall-clock budget.',
-                 fontweight='bold', fontsize=10)
+    fig.suptitle('E5: Per-iteration cost decomposition', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E5_search_breadth_vs_cost.png',
                                      bbox_inches='tight'); plt.close(fig)
 
@@ -790,7 +777,7 @@ def extra_convergence_speed(df_burn):
             ax.text(j, i, int(v), ha='center', va='center',
                     color='white' if v < 6 else 'black', fontsize=9)
     fig.colorbar(im, ax=ax).set_label('burn phase at which 95% of final gain is reached')
-    ax.set_title('E4: Convergence speed — earlier (greener) = faster to peak', fontweight='bold')
+    ax.set_title('E4: Convergence speed — burn phase at 95% of final gain', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E4_convergence_speed.png'); plt.close(fig)
 
 
@@ -847,11 +834,8 @@ def extra_inbreeding(turn_df):
         axA.plot(MS_LEVELS, ys, marker='o', color=COLORS[cfg], lw=1.8, label=cfg)
     axA.set_xscale('log'); axA.set_xticks(MS_LEVELS); axA.set_xticklabels([str(m) for m in MS_LEVELS])
     axA.set_xlabel('thinking time (ms, log scale)')
-    axA.set_ylabel('unique-sequence fraction  (UniqueSequences / NodesEvaluated)')
-    axA.set_title('A. Fraction of evaluations that are NEW\n'
-                  'Expansion (blues): falls with budget = main-loop inbreeding.\n'
-                  'BB/Combo (orange/green): rises = fixed tournaments diluted (artifact).',
-                  fontsize=8.5)
+    axA.set_ylabel('unique-sequence fraction')
+    axA.set_title('A. Unique-sequence fraction (all configs)', fontsize=10)
     axA.legend(fontsize=6, ncol=2, loc='center left')
     # Panel B — absolute unique sequences/turn, EMCTS vs Expansion family: the crossover point.
     axB = axes[1]
@@ -863,12 +847,9 @@ def extra_inbreeding(turn_df):
     axB.set_xscale('log'); axB.set_xticks(MS_LEVELS); axB.set_xticklabels([str(m) for m in MS_LEVELS])
     axB.set_xlabel('thinking time (ms, log scale)')
     axB.set_ylabel('unique sequences found per turn')
-    axB.set_title('B. New sequences per turn (Expansion family)\n'
-                  'heavy crossover (@2) leads at 500 ms, mutation (EMCTS) overtakes by 5000 ms',
-                  fontsize=8.5)
+    axB.set_title('B. Unique sequences per turn (Expansion family)', fontsize=10)
     axB.legend(fontsize=7, loc='upper left')
-    fig.suptitle('E9: Crossover inbreeding — diversity collapse as the per-turn budget grows',
-                 fontweight='bold')
+    fig.suptitle('E9: Diversity of evaluated sequences vs thinking time', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E9_inbreeding.png'); plt.close(fig)
     print('\n  E9 unique-sequence fraction (config × ms):')
     print(frac.round(3).to_string())
@@ -908,9 +889,8 @@ def extra_expansion_bf_time(turn_df, portfolio):
             if row == 1: ax.set_xlabel('branching factor')
             ax.legend(fontsize=6.5, loc='upper right')
     axes[0][0].set_ylim(-60, 60)  # clip to the central bulk so slope lines stay readable
-    fig.suptitle('E10: CrossoverExpansion — branching factor × source × thinking time. '
-                 'Lines flatten as budget grows (BF matters less); single slopes negative, dual flat/positive.',
-                 fontweight='bold', fontsize=10)
+    fig.suptitle('E10: CrossoverExpansion — branching factor × source × thinking time',
+                 fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E10_expansion_bf_source_time.png'); plt.close(fig)
 
 
@@ -942,11 +922,8 @@ def extra_source_effect_vs_time(turn_df, portfolio):
     ax.set_xscale('log'); ax.set_xticks(MS_LEVELS); ax.set_xticklabels([str(m) for m in MS_LEVELS])
     ax.set_xlabel('thinking time (ms, log scale)')
     ax.set_ylabel('dual advantage  =  mean(dual paired Δ) − mean(single paired Δ)')
-    ax.set_title('E11: Dual-vs-single advantage vs thinking time — heavy crossover (@2, BB) ERODES with '
-                 'budget,\nlight crossover (@15, @20) GROWS; the most-inbreeding agents lose their dual '
-                 'edge fastest.\n(positive = agent beats EMCTS more in dual than single scenarios)',
-                 fontweight='bold', fontsize=9.5)
-    ax.legend(fontsize=7, ncol=2, title='emphasised agents')
+    ax.set_title('E11: Dual-vs-single advantage vs thinking time', fontweight='bold')
+    ax.legend(fontsize=8, ncol=2)
     fig.tight_layout(); fig.savefig(FIGS / 'E11_source_advantage_vs_time.png'); plt.close(fig)
     print('\n  E11 dual-minus-single advantage by ms (positive = stronger in dual):')
     print(t.pivot(index='Config', columns='ms', values='dual_minus_single')
