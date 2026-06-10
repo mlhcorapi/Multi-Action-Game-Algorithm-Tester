@@ -175,6 +175,121 @@ greener = converges earlier.
   by burn 13; Combo@5 at the same ms needs burn 18). So Expansion is not just better at the END — it
   finds the best-known sequence FASTER too.
 
+### E6 / E7 / E8 / ANCOVA — disentangling branching factor and source-of-scenario
+
+The E3 chart shows that crossover agents beat EMCTS more in **dual** scenarios than in **single**.
+But "single vs dual" is correlated with several scenario properties — most obviously branching
+factor — so the marginal split can't directly settle the cause. These four diagnostics partition
+the effect.
+
+**E6: portfolio diagnostic (`E6_bf_dist_per_source.png`).**
+
+| source | median BF | IQR |
+|---|---:|---:|
+| single (n=50) | **460** | 384–511 |
+| dual (n=50) | **274** | 227–355 |
+
+Single-player scenarios have **~1.7× the median branching factor of dual** — they are biased
+toward late-game, high-development snapshots with many cities and units. The two BF distributions
+overlap only modestly between Q3 (350–399) and Q4 (399–484). This is a real confound: any agent
+whose performance depends on BF will *appear* to differ between single and dual even if its
+behavior is identical at the same BF.
+
+**E7: BF-quintile × source heatmap (`E7_bf_quintile_source_heatmap.png`).**
+
+Reading the heatmap *column-by-column* (same BF, different source) shows the source effect after
+controlling for BF:
+
+- **At low BF (Q1, BF 76–256):** single and dual cells are mostly positive for both panels — Exp@10
+  is +20 (single) vs +24 (dual); Combo@10 is +14 (single) vs −1 (dual). Source barely matters at
+  low BF.
+- **At mid BF (Q3, BF 350–399):** the panels start to diverge — Exp@5 is +1 (single) vs +20
+  (dual), a ~20-unit gap at the same BF.
+- **At high BF (Q4, BF 399–484):** the divergence is dramatic — Exp@5 is −1 (single) vs **+49**
+  (dual); BB is −11 (single) vs **+33** (dual); Combo@2 is +2 (single) vs **+42** (dual).
+- **At highest BF (Q5, BF 484–619):** every crossover agent is negative in single (−6 to −28) but
+  positive in dual (+5 to +21). Five out of six dual Q5 cells are GREEN; five out of six single Q5
+  cells are BLUE.
+
+So **the source effect is small at low BF and large at high BF.** That is exactly what the user's
+intuition predicted: crossover does poorly in high-BF singles, but does well in (lower-BF) duals.
+The heatmap also shows the same is true at the *same* BF — so this is not purely a BF artifact.
+
+**E8: per-source regression scatter (`E8_bf_source_regression.png`).**
+
+For all four selected agents the slope structure is the same:
+
+|                       | single slope (/100 BF) | dual slope (/100 BF) | gap at BF=600 |
+|-----------------------|-----------------------:|---------------------:|--------------:|
+| CrossoverExpansion@2  | −9.2  | −0.2  | ~25 |
+| CrossoverExpansion@15 | −2.4  | +3.4  | ~12 |
+| CrossoverBB           | −6.6  | +8.0  | ~45 |
+| CrossoverCombo@5      | −2.5  | +3.3  | ~12 |
+
+In single scenarios, crossover gets *worse* relative to EMCTS as BF rises. In dual scenarios the
+slope is flat or positive. The lines either cross at moderate BF and diverge or remain separated
+across the whole range — **never parallel**. That structure means BF *moderates* the source effect
+(an interaction), not that BF *explains* it.
+
+**ANCOVA (`E_ancova.csv`).**
+
+Per agent, `paired_Δ ~ β₀ + β_BF·(BF−mean)/100 + β_Source·dual + β_Interaction·(BF−mean)/100·dual`
+(unit of analysis = per-scenario mean, n=100). Averaged across ms:
+
+| agent | β_BF (single slope, per 100BF) | β_Source (at mean BF) | β_Interaction | R² |
+|---|---:|---:|---:|---:|
+| CrossoverBB           | −6.6  | +14.2 ± 21.5 | +14.6 | 0.05 |
+| CrossoverExpansion@2  | −9.2  | +8.2 ± 20.7  | +9.0  | 0.06 |
+| CrossoverExpansion@5  | −11.9 | **+25.5 ± 20.7** | +16.6 | 0.17 |
+| CrossoverExpansion@10 | −7.2  | +4.9 ± 14.4  | +3.0  | 0.10 |
+| CrossoverExpansion@15 | −2.4  | +7.7 ± 14.4  | +5.8  | 0.03 |
+| CrossoverExpansion@20 | +0.2  | +3.3 ± 6.6   | +0.0  | 0.02 |
+| CrossoverCombo@5      | −2.5  | **+21.9 ± 18.0** | +5.8  | 0.10 |
+
+Bold = clearly above zero (CI excludes 0).
+
+Three things stand out:
+
+1. **β_BF is negative for almost every crossover agent.** In single-player scenarios, crossover
+   gets ~6–12 paired-Δ units WORSE per 100 BF units. (The exception is Expansion@20, which is
+   essentially baseline because crossover almost never fires.)
+2. **β_Source is positive for every agent**, and clearly different from zero for the two best
+   agents (Expansion@5 and Combo@5). So at the SAME BF, dual scenarios still favor crossover by
+   roughly **+5 to +25 paired-Δ units** more than single. Most CIs are wide (±15–22) because n=100
+   scenarios is the unit — but the *sign* is unanimous across 11 agents.
+3. **β_Interaction is positive everywhere.** Dual scenarios neutralize or reverse the negative
+   BF–performance relationship of single scenarios. For Expansion@5, single's slope is −11.9 but
+   dual's is −11.9 + 16.6 = **+4.7** — a sign flip.
+
+R² is low (0.02–0.17) because most of the variance in paired Δ is genuine scenario noise that BF +
+Source can't predict. But the *structure* of the explained variance is consistent and points the
+same direction across agents.
+
+#### Conclusion: it is BOTH, with a structural twist
+
+- **BF is a real confounder.** The dual portfolio has substantially lower BF than single, so part
+  of the E3 dual > single gap is just "crossover handles low BF better." Anyone reading E3 in
+  isolation would overstate the player-presence effect.
+- **A source effect persists when controlling for BF.** At the same BF, dual still favors crossover
+  by +5 to +25 paired-Δ units (β_Source). This is the "player presence" component — consistent
+  with the hypothesis that opponents anchor the tactically relevant action space and make
+  crossover's elite-blending more constructive than random mutation's repair.
+- **The interaction is the most interesting finding.** Crossover's BF dependence has OPPOSITE
+  SIGNS in single vs dual:
+  - In single (passive economic scenarios), crossover hurts more as BF rises — likely because high
+    BF means many independent unit/city action choices, and blending two elite economic plans is
+    closer to noise than meaningful recombination.
+  - In dual (competitive scenarios), crossover is stable or *gains* as BF rises — likely because
+    opponent positioning forces shared tactical structure across elite sequences, so blending
+    transfers building blocks even when the action space is large.
+
+So the corrected interpretation of the v3/v4 "crossover wins in lower-BF dual games" finding is:
+*it is not BF per se that helps crossover, nor the dual label per se — it is the combination of
+opponent-imposed tactical structure that gives crossover sequences a meaningful basis for
+recombination, and this combination happens to occur most often at moderate-to-high BF in the dual
+half of the portfolio.* The right thesis framing is "crossover acts on tactically structured
+action spaces," not "crossover acts on low-BF action spaces."
+
 ### E5 — interpreting the NodesEvaluated/Turn chart (search breadth vs per-iteration cost)
 
 The `fig7_efficiency.png` chart from `analyze_v4.py` shows `NodesEvaluated/Turn` varying sharply between

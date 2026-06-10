@@ -500,6 +500,197 @@ def extra_single_vs_dual(turn_df, portfolio):
     fig.tight_layout(); fig.savefig(FIGS / 'E3_single_vs_dual.png'); plt.close(fig)
 
 
+def extra_branching_source_diagnostics(turn_df, portfolio):
+    """E6/E7/E8 + ANCOVA: disentangle whether the single/dual gap in E3 is driven by
+    branching factor (BF) or by an independent source-of-scenario effect (player presence,
+    combat density, etc.).
+
+    The strategy:
+        E6 — diagnostic: are single and dual portfolios drawn from the same BF distribution?
+        E7 — heatmap: paired Δ vs EMCTS, sliced by BF quintile × source × agent.
+        E8 — scatter: per-source regression lines of paired Δ vs BF for selected agents.
+        ANCOVA — per (agent, ms): paired Δ ~ BF + Source + BF×Source. β_Source is the
+                  source effect AFTER controlling for BF — the answer to the central question.
+    """
+    if portfolio.empty:
+        print('  E6/E7/E8/ANCOVA: portfolio missing, skipping'); return
+
+    # Build a per (Config, ms, scenario, visit) paired-delta table, joined with portfolio metadata.
+    emcts = (turn_df[turn_df.Config == 'EMCTS']
+             [['ThinkingMs','ScenarioId','VisitId','FinalSequenceValue']]
+             .drop_duplicates(['ThinkingMs','ScenarioId','VisitId'])
+             .rename(columns={'FinalSequenceValue':'emcts_final'}))
+    j = turn_df.merge(emcts, on=['ThinkingMs','ScenarioId','VisitId'], how='left', validate='m:1')
+    j = j.merge(portfolio[['ScenarioId','Source','BranchingFactor']], on='ScenarioId')
+    j['delta'] = j.FinalSequenceValue - j.emcts_final
+    j = j[j.Config != 'EMCTS'].copy()
+
+    # Common BF quintiles computed across all 100 portfolio scenarios so single/dual share bins.
+    portfolio = portfolio.copy()
+    portfolio['BF_quintile'] = pd.qcut(portfolio.BranchingFactor, 5,
+                                       labels=[f'Q{i+1}' for i in range(5)])
+    bin_edges = pd.qcut(portfolio.BranchingFactor, 5, retbins=True)[1]
+    j = j.merge(portfolio[['ScenarioId','BF_quintile']], on='ScenarioId')
+
+    # ----------------------------------------------------- E6: BF distribution per source ----
+    fig, ax = plt.subplots(figsize=(9, 4.2))
+    s_bf = portfolio[portfolio.Source == 'single'].BranchingFactor
+    d_bf = portfolio[portfolio.Source == 'dual'].BranchingFactor
+    bins = np.linspace(portfolio.BranchingFactor.min(), portfolio.BranchingFactor.max(), 22)
+    ax.hist(s_bf, bins=bins, alpha=0.55, color='#1f78b4',
+            label=f'single (n={len(s_bf)}; median={s_bf.median():.0f}, IQR {s_bf.quantile(0.25):.0f}–{s_bf.quantile(0.75):.0f})',
+            edgecolor='black', linewidth=0.4)
+    ax.hist(d_bf, bins=bins, alpha=0.55, color='#e31a1c',
+            label=f'dual (n={len(d_bf)}; median={d_bf.median():.0f}, IQR {d_bf.quantile(0.25):.0f}–{d_bf.quantile(0.75):.0f})',
+            edgecolor='black', linewidth=0.4)
+    ax.axvline(s_bf.median(), color='#1f78b4', linestyle='--', lw=1.5)
+    ax.axvline(d_bf.median(), color='#e31a1c', linestyle='--', lw=1.5)
+    for e in bin_edges:
+        ax.axvline(e, color='gray', lw=0.4, alpha=0.5)
+    ax.set_xlabel('Branching factor (per scenario)')
+    ax.set_ylabel('scenario count')
+    ax.legend(fontsize=9, loc='upper right')
+    ax.set_title('E6: Branching-factor distribution per source. Vertical gray lines = global quintile boundaries used in E7.',
+                 fontweight='bold', fontsize=10)
+    fig.tight_layout(); fig.savefig(FIGS / 'E6_bf_dist_per_source.png'); plt.close(fig)
+    # Mann-Whitney for "are the two distributions different?"
+    try:
+        from scipy.stats import mannwhitneyu
+        mw = mannwhitneyu(s_bf, d_bf, alternative='two-sided')
+        print(f'  E6: single BF median={s_bf.median():.0f} (IQR {s_bf.quantile(0.25):.0f}-{s_bf.quantile(0.75):.0f}); '
+              f'dual BF median={d_bf.median():.0f} (IQR {d_bf.quantile(0.25):.0f}-{d_bf.quantile(0.75):.0f}); '
+              f'Mann-Whitney U={mw.statistic:.0f}, p={mw.pvalue:.3g}')
+    except Exception:
+        print(f'  E6: single BF median={s_bf.median():.0f}; dual BF median={d_bf.median():.0f}')
+    # Persist the diagnostic summary
+    diag = pd.DataFrame({
+        'source': ['single','dual'],
+        'n_scenarios': [len(s_bf), len(d_bf)],
+        'BF_mean': [s_bf.mean(), d_bf.mean()],
+        'BF_median': [s_bf.median(), d_bf.median()],
+        'BF_q25': [s_bf.quantile(0.25), d_bf.quantile(0.25)],
+        'BF_q75': [s_bf.quantile(0.25), d_bf.quantile(0.75)],
+        'BF_min': [s_bf.min(), d_bf.min()],
+        'BF_max': [s_bf.max(), d_bf.max()],
+    }).round(2)
+    diag.to_csv(TABLES / 'E6_bf_dist_per_source.csv', index=False)
+
+    # ----------------------------------------------------- E7: BF-quintile × source heatmap ----
+    configs = [c for c in ORDER if c != 'EMCTS' and c in j.Config.unique()]
+    pivot_single = (j[j.Source == 'single'].groupby(['Config','BF_quintile'], observed=True)['delta']
+                    .mean().unstack('BF_quintile').reindex(configs))
+    pivot_dual = (j[j.Source == 'dual'].groupby(['Config','BF_quintile'], observed=True)['delta']
+                  .mean().unstack('BF_quintile').reindex(configs))
+    vmax = max(abs(np.nanmax(pivot_single.values)), abs(np.nanmin(pivot_single.values)),
+               abs(np.nanmax(pivot_dual.values)), abs(np.nanmin(pivot_dual.values)))
+    fig, axes = plt.subplots(1, 2, figsize=(13, 6), squeeze=False)
+    axes = axes[0]
+    for ax, pivot, label in zip(axes, [pivot_single, pivot_dual], ['single-player', 'dual-player']):
+        im = ax.imshow(pivot.values, cmap='RdBu_r', vmin=-vmax, vmax=vmax, aspect='auto')
+        # ^ RdBu_r: red = positive (beats EMCTS), blue = negative (loses to EMCTS)
+        ax.set_xticks(range(5)); ax.set_xticklabels(
+            [f'Q{i+1}\n{bin_edges[i]:.0f}–{bin_edges[i+1]:.0f}' for i in range(5)], fontsize=7)
+        ax.set_yticks(range(len(configs))); ax.set_yticklabels(configs, fontsize=8)
+        ax.set_xlabel('Branching-factor quintile (Q1=lowest BF, Q5=highest)')
+        ax.set_title(f'{label} scenarios')
+        for (i, k), v in np.ndenumerate(pivot.values):
+            if np.isfinite(v):
+                ax.text(k, i, f'{v:+.0f}', ha='center', va='center', fontsize=7,
+                        color='white' if abs(v) > vmax * 0.55 else 'black')
+        fig.colorbar(im, ax=ax, shrink=0.85).set_label('paired Δ vs EMCTS')
+    fig.suptitle('E7: BF-quintile × source heatmap — paired Δ vs EMCTS (averaged over ms and visits). '
+                 'Compare cells at the SAME column to see the source effect at the SAME BF.',
+                 fontweight='bold', fontsize=10)
+    fig.tight_layout(); fig.savefig(FIGS / 'E7_bf_quintile_source_heatmap.png'); plt.close(fig)
+    pivot_single.round(2).to_csv(TABLES / 'E7_bf_quintile_single.csv')
+    pivot_dual.round(2).to_csv(TABLES / 'E7_bf_quintile_dual.csv')
+
+    # ----------------------------------------------------- E8: BF scatter with regression lines ----
+    select_agents = ['CrossoverExpansion@2', 'CrossoverExpansion@15', 'CrossoverBB', 'CrossoverCombo@5']
+    # Per-scenario delta means (averaged over visits and ms) so each scenario is one data point.
+    per_scen = (j.groupby(['Config','ScenarioId','BranchingFactor','Source'], observed=True)['delta']
+                  .mean().reset_index())
+    fig, axes2 = plt.subplots(2, 2, figsize=(12, 8.5), squeeze=False)
+    axes = axes2.flatten()
+    for ax, cfg in zip(axes, select_agents):
+        sub = per_scen[per_scen.Config == cfg]
+        for src, color in [('single', '#1f78b4'), ('dual', '#e31a1c')]:
+            s = sub[sub.Source == src]
+            ax.scatter(s.BranchingFactor, s['delta'], s=22, alpha=0.55, color=color,
+                       edgecolor='black', linewidth=0.3, label=f'{src} (n={len(s)})')
+            if len(s) >= 3:
+                p = np.polyfit(s.BranchingFactor, s['delta'], 1)
+                xx = np.linspace(s.BranchingFactor.min(), s.BranchingFactor.max(), 50)
+                ax.plot(xx, p[0]*xx + p[1], color=color, lw=2.2)
+                r = np.corrcoef(s.BranchingFactor, s['delta'])[0, 1]
+                ax.text(0.02, 0.93 if src == 'single' else 0.86,
+                        f'{src}: slope={p[0]*100:+.2f}/100BF  r={r:+.2f}',
+                        transform=ax.transAxes, fontsize=8, color=color,
+                        bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.85))
+        ax.axhline(0, color='black', lw=0.6, linestyle=':')
+        ax.set_title(cfg, fontsize=10, color=COLORS.get(cfg, 'black'), fontweight='bold')
+        ax.set_xlabel('Branching factor (per scenario)')
+        ax.set_ylabel('paired Δ vs EMCTS (avg over visits & ms)')
+        ax.legend(fontsize=8, loc='lower right')
+    fig.suptitle('E8: Branching factor vs paired Δ — per-source regression lines, four representative agents. '
+                 'Parallel lines ⇒ source effect independent of BF; converging lines ⇒ BF moderates source.',
+                 fontweight='bold', fontsize=10)
+    fig.tight_layout(); fig.savefig(FIGS / 'E8_bf_source_regression.png'); plt.close(fig)
+
+    # ----------------------------------------------------- ANCOVA: source effect, controlling for BF ----
+    # Per (Config, ms): paired_delta ~ BF_centered + Source_dual + BF_centered * Source_dual.
+    # Unit of analysis = per-scenario mean delta (so BF is one value per row, not repeated). This
+    # avoids inflating n by treating 50 visits per scenario as independent.
+    rows = []
+    bf_mean = portfolio.BranchingFactor.mean()
+    for cfg in [c for c in ORDER if c != 'EMCTS']:
+        for ms in [*MS_LEVELS, 'avg']:
+            if ms == 'avg':
+                sub = (j[j.Config == cfg]
+                       .groupby(['ScenarioId','BranchingFactor','Source'], observed=True)['delta']
+                       .mean().reset_index())
+            else:
+                sub = (j[(j.Config == cfg) & (j.ThinkingMs == ms)]
+                       .groupby(['ScenarioId','BranchingFactor','Source'], observed=True)['delta']
+                       .mean().reset_index())
+            if len(sub) < 6: continue
+            bf_c = sub.BranchingFactor.values - bf_mean
+            src_d = (sub.Source.values == 'dual').astype(float)
+            X = np.column_stack([np.ones(len(sub)), bf_c, src_d, bf_c * src_d])
+            y = sub.delta.values
+            beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+            yhat = X @ beta
+            resid = y - yhat
+            dof = max(1, len(y) - X.shape[1])
+            sigma2 = (resid ** 2).sum() / dof
+            try:
+                cov = sigma2 * np.linalg.inv(X.T @ X)
+                se = np.sqrt(np.diag(cov))
+            except np.linalg.LinAlgError:
+                se = np.full(4, np.nan)
+            ci = 1.96 * se
+            ss_res = (resid ** 2).sum()
+            ss_tot = ((y - y.mean()) ** 2).sum()
+            r2 = 1 - ss_res / ss_tot if ss_tot > 0 else np.nan
+            # Rescale BF coefficients to "per 100 BF units" for readability (raw BF spans ~80-620)
+            rows.append(dict(
+                Config=cfg, ms=ms, n_scenarios=len(sub),
+                Intercept=round(beta[0], 2),               Intercept_CI95=round(ci[0], 2),
+                beta_BF_per100=round(beta[1] * 100, 3),    beta_BF_CI95=round(ci[1] * 100, 3),
+                beta_SourceDual=round(beta[2], 2),         beta_Source_CI95=round(ci[2], 2),
+                beta_BFxSrc_per100=round(beta[3] * 100, 3),beta_BFxSrc_CI95=round(ci[3] * 100, 3),
+                R2=round(r2, 4),
+            ))
+    t = pd.DataFrame(rows)
+    t.to_csv(TABLES / 'E_ancova.csv', index=False)
+    # Print just the 'avg' rows for at-a-glance reading
+    print('\n  ANCOVA (avg across ms): paired_delta = intercept + beta_BF*(BF-mean)/100 '
+          '+ beta_Source*DualDummy + beta_Interaction*(centered BF)*DualDummy')
+    print(t[t.ms == 'avg'][['Config','beta_BF_per100','beta_SourceDual','beta_Source_CI95',
+                            'beta_BFxSrc_per100','R2','n_scenarios']]
+                            .to_string(index=False))
+
+
 def extra_search_breadth_vs_cost(turn_df):
     """E5. Iteration breadth vs per-iteration cost — what the NodesEvaluated/Turn chart in analyze_v4
     actually means. Each MCTS iteration calls eval() exactly once (nodesEvaluated++), but the FmCalls
@@ -625,6 +816,7 @@ def main():
     print('E3: single vs dual portfolio split'); extra_single_vs_dual(turn_df, portfolio)
     print('E4: convergence speed');              extra_convergence_speed(df_burn)
     print('E5: search breadth vs per-iter cost'); extra_search_breadth_vs_cost(turn_df)
+    print('E6/E7/E8/ANCOVA: BF vs source diagnostics'); extra_branching_source_diagnostics(turn_df, portfolio)
 
     print(f'\nDone. tables -> {TABLES}/  figures -> {FIGS}/')
 
