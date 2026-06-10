@@ -525,12 +525,26 @@ def extra_branching_source_diagnostics(turn_df, portfolio):
     j['delta'] = j.FinalSequenceValue - j.emcts_final
     j = j[j.Config != 'EMCTS'].copy()
 
-    # Common BF quintiles computed across all 100 portfolio scenarios so single/dual share bins.
+    # BF tertiles computed WITHIN each source. Global quintiles put dual almost entirely in low-BF
+    # bins (19/17/8/5/1 scenarios) and single in high-BF bins (1/3/12/15/19), so the off-diagonal
+    # cells rested on 1–5 scenarios and were visually dominant but statistically meaningless.
+    # Per-source tertiles give ~17 scenarios per cell — every cell is reliable. Trade-off: columns
+    # no longer align on absolute BF across the two panels, so each column is labelled with its own
+    # source's BF range and scenario count.
     portfolio = portfolio.copy()
-    portfolio['BF_quintile'] = pd.qcut(portfolio.BranchingFactor, 5,
-                                       labels=[f'Q{i+1}' for i in range(5)])
-    bin_edges = pd.qcut(portfolio.BranchingFactor, 5, retbins=True)[1]
-    j = j.merge(portfolio[['ScenarioId','BF_quintile']], on='ScenarioId')
+    TIER_LABELS = ['Low BF', 'Mid BF', 'High BF']
+    tier_edges = {}     # source -> bin-edge array (len 4)
+    tier_counts = {}    # source -> scenario count per tier
+    portfolio['BF_tier'] = pd.Series(index=portfolio.index, dtype=object)
+    for src in ('single', 'dual'):
+        mask = portfolio.Source == src
+        cats, edges = pd.qcut(portfolio.loc[mask, 'BranchingFactor'], 3,
+                              labels=TIER_LABELS, retbins=True)
+        portfolio.loc[mask, 'BF_tier'] = cats.astype(str)
+        tier_edges[src] = edges
+        tier_counts[src] = cats.value_counts().reindex(TIER_LABELS)
+    portfolio['BF_tier'] = pd.Categorical(portfolio['BF_tier'], categories=TIER_LABELS, ordered=True)
+    j = j.merge(portfolio[['ScenarioId','BF_tier']], on='ScenarioId')
 
     # ----------------------------------------------------- E6: BF distribution per source ----
     fig, ax = plt.subplots(figsize=(9, 4.2))
@@ -545,13 +559,18 @@ def extra_branching_source_diagnostics(turn_df, portfolio):
             edgecolor='black', linewidth=0.4)
     ax.axvline(s_bf.median(), color='#1f78b4', linestyle='--', lw=1.5)
     ax.axvline(d_bf.median(), color='#e31a1c', linestyle='--', lw=1.5)
-    for e in bin_edges:
-        ax.axvline(e, color='gray', lw=0.4, alpha=0.5)
+    # Per-source tertile boundaries (the 2 internal cuts each) in each source's colour — these are
+    # the columns used in E7. Shows how differently the two sources are sliced.
+    for e in tier_edges['single'][1:-1]:
+        ax.axvline(e, color='#1f78b4', lw=1.0, ls=':', alpha=0.9)
+    for e in tier_edges['dual'][1:-1]:
+        ax.axvline(e, color='#e31a1c', lw=1.0, ls=':', alpha=0.9)
     ax.set_xlabel('Branching factor (per scenario)')
     ax.set_ylabel('scenario count')
     ax.legend(fontsize=9, loc='upper right')
-    ax.set_title('E6: Branching-factor distribution per source. Vertical gray lines = global quintile boundaries used in E7.',
-                 fontweight='bold', fontsize=10)
+    ax.set_title('E6: Branching-factor distribution per source. Dotted lines = per-source BF tertile '
+                 'boundaries used in E7 (blue = single, red = dual).',
+                 fontweight='bold', fontsize=9.5)
     fig.tight_layout(); fig.savefig(FIGS / 'E6_bf_dist_per_source.png'); plt.close(fig)
     # Mann-Whitney for "are the two distributions different?"
     try:
@@ -575,35 +594,39 @@ def extra_branching_source_diagnostics(turn_df, portfolio):
     }).round(2)
     diag.to_csv(TABLES / 'E6_bf_dist_per_source.csv', index=False)
 
-    # ----------------------------------------------------- E7: BF-quintile × source heatmap ----
+    # ----------------------------------------------------- E7: BF-tertile × source heatmap ----
     configs = [c for c in ORDER if c != 'EMCTS' and c in j.Config.unique()]
-    pivot_single = (j[j.Source == 'single'].groupby(['Config','BF_quintile'], observed=True)['delta']
-                    .mean().unstack('BF_quintile').reindex(configs))
-    pivot_dual = (j[j.Source == 'dual'].groupby(['Config','BF_quintile'], observed=True)['delta']
-                  .mean().unstack('BF_quintile').reindex(configs))
+    pivot_single = (j[j.Source == 'single'].groupby(['Config','BF_tier'], observed=True)['delta']
+                    .mean().unstack('BF_tier').reindex(index=configs, columns=TIER_LABELS))
+    pivot_dual = (j[j.Source == 'dual'].groupby(['Config','BF_tier'], observed=True)['delta']
+                  .mean().unstack('BF_tier').reindex(index=configs, columns=TIER_LABELS))
     vmax = max(abs(np.nanmax(pivot_single.values)), abs(np.nanmin(pivot_single.values)),
                abs(np.nanmax(pivot_dual.values)), abs(np.nanmin(pivot_dual.values)))
-    fig, axes = plt.subplots(1, 2, figsize=(13, 6), squeeze=False)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6), squeeze=False)
     axes = axes[0]
-    for ax, pivot, label in zip(axes, [pivot_single, pivot_dual], ['single-player', 'dual-player']):
+    for ax, pivot, src, label in zip(axes, [pivot_single, pivot_dual],
+                                     ['single', 'dual'], ['single-player', 'dual-player']):
         im = ax.imshow(pivot.values, cmap='RdBu_r', vmin=-vmax, vmax=vmax, aspect='auto')
         # ^ RdBu_r: red = positive (beats EMCTS), blue = negative (loses to EMCTS)
-        ax.set_xticks(range(5)); ax.set_xticklabels(
-            [f'Q{i+1}\n{bin_edges[i]:.0f}–{bin_edges[i+1]:.0f}' for i in range(5)], fontsize=7)
+        edges, cnts = tier_edges[src], tier_counts[src]
+        ax.set_xticks(range(len(TIER_LABELS))); ax.set_xticklabels(
+            [f'{TIER_LABELS[i]}\n{edges[i]:.0f}–{edges[i+1]:.0f}\n(n={int(cnts.iloc[i])})'
+             for i in range(len(TIER_LABELS))], fontsize=8)
         ax.set_yticks(range(len(configs))); ax.set_yticklabels(configs, fontsize=8)
-        ax.set_xlabel('Branching-factor quintile (Q1=lowest BF, Q5=highest)')
+        ax.set_xlabel(f"{label}'s own BF range (~{int(cnts.iloc[0])} scenarios/cell)")
         ax.set_title(f'{label} scenarios')
         for (i, k), v in np.ndenumerate(pivot.values):
             if np.isfinite(v):
-                ax.text(k, i, f'{v:+.0f}', ha='center', va='center', fontsize=7,
+                ax.text(k, i, f'{v:+.0f}', ha='center', va='center', fontsize=8,
                         color='white' if abs(v) > vmax * 0.55 else 'black')
         fig.colorbar(im, ax=ax, shrink=0.85).set_label('paired Δ vs EMCTS')
-    fig.suptitle('E7: BF-quintile × source heatmap — paired Δ vs EMCTS (averaged over ms and visits). '
-                 'Compare cells at the SAME column to see the source effect at the SAME BF.',
-                 fontweight='bold', fontsize=10)
-    fig.tight_layout(); fig.savefig(FIGS / 'E7_bf_quintile_source_heatmap.png'); plt.close(fig)
-    pivot_single.round(2).to_csv(TABLES / 'E7_bf_quintile_single.csv')
-    pivot_dual.round(2).to_csv(TABLES / 'E7_bf_quintile_dual.csv')
+    fig.suptitle('E7: BF-tertile × source heatmap — paired Δ vs EMCTS (averaged over ms and visits). '
+                 'Bins are per-source (~17 scenarios/cell), so columns reflect each source\'s OWN BF '
+                 'range (labelled), not a shared scale.',
+                 fontweight='bold', fontsize=9.5)
+    fig.tight_layout(); fig.savefig(FIGS / 'E7_bf_tier_source_heatmap.png'); plt.close(fig)
+    pivot_single.round(2).to_csv(TABLES / 'E7_bf_tier_single.csv')
+    pivot_dual.round(2).to_csv(TABLES / 'E7_bf_tier_dual.csv')
 
     # ----------------------------------------------------- E8: BF scatter with regression lines ----
     select_agents = ['CrossoverExpansion@2', 'CrossoverExpansion@15', 'CrossoverBB', 'CrossoverCombo@5']
