@@ -771,6 +771,165 @@ def extra_convergence_speed(df_burn):
     fig.tight_layout(); fig.savefig(FIGS / 'E4_convergence_speed.png'); plt.close(fig)
 
 
+def _paired_delta_table(turn_df, portfolio):
+    """Helper: per (Config, ms, scenario, visit) paired Δ vs EMCTS, joined with Source + BranchingFactor.
+    Shared by E10/E11 so the merge logic lives in one place."""
+    emcts = (turn_df[turn_df.Config == 'EMCTS']
+             [['ThinkingMs','ScenarioId','VisitId','FinalSequenceValue']]
+             .drop_duplicates(['ThinkingMs','ScenarioId','VisitId'])
+             .rename(columns={'FinalSequenceValue':'emcts_final'}))
+    j = turn_df.merge(emcts, on=['ThinkingMs','ScenarioId','VisitId'], how='left', validate='m:1')
+    if not portfolio.empty:
+        j = j.merge(portfolio[['ScenarioId','Source','BranchingFactor']], on='ScenarioId')
+    j['delta'] = j.FinalSequenceValue - j.emcts_final
+    return j[j.Config != 'EMCTS'].copy()
+
+
+def extra_inbreeding(turn_df):
+    """E9. The 'inbreeding' / diversity-collapse evidence. As the per-turn budget grows, crossover
+    increasingly RE-GENERATES sequences it has already evaluated (the top-2 elite parents converge to
+    near-copies of the current optimum, so uniform crossover of them produces no new material), while
+    mutation injects a fresh random action every iteration regardless of convergence. Probe metric:
+        unique-sequence fraction = UniqueSequences / NodesEvaluated  (share of evals that are NEW).
+    Produces the three tables used in the write-up + a compact 2-panel figure."""
+    g = (turn_df.groupby(['Config','ThinkingMs'])
+                .agg(evals=('NodesEvaluated','mean'),
+                     unique=('UniqueSequences','mean'),
+                     fmcalls=('FmCalls','mean'))
+                .reset_index())
+    g['uniq_frac'] = g['unique'] / g['evals']
+    g['redundant'] = g['evals'] - g['unique']
+    configs = [c for c in ORDER if c in turn_df.Config.unique()]
+    frac = g.pivot(index='Config', columns='ThinkingMs', values='uniq_frac').reindex(configs)
+    cnt  = g.pivot(index='Config', columns='ThinkingMs', values='unique').reindex(configs)
+    red  = g.pivot(index='Config', columns='ThinkingMs', values='redundant').reindex(configs)
+    frac.round(4).to_csv(TABLES / 'E9_unique_fraction.csv')
+    cnt.round(2).to_csv(TABLES / 'E9_unique_count.csv')
+    red.round(2).to_csv(TABLES / 'E9_redundant_evals.csv')
+    # Δ(500→5000) summary column — the headline "more inbreeding at high budget" number.
+    summary = pd.DataFrame({
+        'uniq_frac_500': frac[500], 'uniq_frac_5000': frac[5000],
+        'delta_uniq_frac_500_to_5000': (frac[5000] - frac[500]),
+        'unique_500': cnt[500], 'unique_5000': cnt[5000],
+        'redundant_500': red[500], 'redundant_5000': red[5000],
+    }).round(4)
+    summary.to_csv(TABLES / 'E9_inbreeding_summary.csv')
+
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5.2), squeeze=False)
+    axes = axes[0]
+    # Panel A — unique fraction vs ms, ALL configs (reveals the two opposite mechanisms by family).
+    axA = axes[0]
+    for cfg in configs:
+        ys = [frac.loc[cfg, ms] for ms in MS_LEVELS]
+        axA.plot(MS_LEVELS, ys, marker='o', color=COLORS[cfg], lw=1.8, label=cfg)
+    axA.set_xscale('log'); axA.set_xticks(MS_LEVELS); axA.set_xticklabels([str(m) for m in MS_LEVELS])
+    axA.set_xlabel('thinking time (ms, log scale)')
+    axA.set_ylabel('unique-sequence fraction  (UniqueSequences / NodesEvaluated)')
+    axA.set_title('A. Fraction of evaluations that are NEW\n'
+                  'Expansion (blues): falls with budget = main-loop inbreeding.\n'
+                  'BB/Combo (orange/green): rises = fixed tournaments diluted (artifact).',
+                  fontsize=8.5)
+    axA.legend(fontsize=6, ncol=2, loc='center left')
+    # Panel B — absolute unique sequences/turn, EMCTS vs Expansion family: the crossover point.
+    axB = axes[1]
+    focus = ['EMCTS'] + [f'CrossoverExpansion@{r}' for r in RATIOS]
+    for cfg in focus:
+        ys = [cnt.loc[cfg, ms] for ms in MS_LEVELS]
+        lw = 2.8 if cfg in ('EMCTS','CrossoverExpansion@2') else 1.4
+        axB.plot(MS_LEVELS, ys, marker='o', color=COLORS[cfg], lw=lw, label=cfg)
+    axB.set_xscale('log'); axB.set_xticks(MS_LEVELS); axB.set_xticklabels([str(m) for m in MS_LEVELS])
+    axB.set_xlabel('thinking time (ms, log scale)')
+    axB.set_ylabel('unique sequences found per turn')
+    axB.set_title('B. New sequences per turn (Expansion family)\n'
+                  'heavy crossover (@2) leads at 500 ms, mutation (EMCTS) overtakes by 5000 ms',
+                  fontsize=8.5)
+    axB.legend(fontsize=7, loc='upper left')
+    fig.suptitle('E9: Crossover inbreeding — diversity collapse as the per-turn budget grows',
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E9_inbreeding.png'); plt.close(fig)
+    print('\n  E9 unique-sequence fraction (config × ms):')
+    print(frac.round(3).to_string())
+    print('\n  E9 absolute unique sequences / turn (config × ms):')
+    print(cnt.round(1).to_string())
+
+
+def extra_expansion_bf_time(turn_df, portfolio):
+    """E10. For the Expansion family specifically (the user's BF question): how does the
+    BF→performance relationship depend on BOTH source and thinking time? Regression lines of paired Δ
+    vs BF, one per ms, in a (source × ratio) grid. Flatter lines at high ms ⇒ BF dependence weakens
+    with budget; single slopes negative vs dual flat/positive ⇒ the source interaction."""
+    if portfolio.empty:
+        print('  E10: portfolio missing, skipping'); return
+    j = _paired_delta_table(turn_df, portfolio)
+    ratios_show = [2, 5, 15]
+    ms_colors = dict(zip(MS_LEVELS, ['#fdae6b', '#e6550d', '#7f2704']))  # light→dark by ms
+    fig, axes = plt.subplots(2, len(ratios_show), figsize=(4.7*len(ratios_show), 8.4),
+                             squeeze=False, sharex=True, sharey=True)
+    for col, r in enumerate(ratios_show):
+        cfg = f'CrossoverExpansion@{r}'
+        for row, src in enumerate(['single','dual']):
+            ax = axes[row][col]
+            sub_all = j[(j.Config == cfg) & (j.Source == src)]
+            for ms in MS_LEVELS:
+                s = (sub_all[sub_all.ThinkingMs == ms]
+                     .groupby(['ScenarioId','BranchingFactor'])['delta'].mean().reset_index())
+                if len(s) < 3: continue
+                ax.scatter(s.BranchingFactor, s['delta'], s=9, alpha=0.25, color=ms_colors[ms])
+                p = np.polyfit(s.BranchingFactor, s['delta'], 1)
+                xx = np.linspace(s.BranchingFactor.min(), s.BranchingFactor.max(), 50)
+                ax.plot(xx, p[0]*xx + p[1], color=ms_colors[ms], lw=2.4,
+                        label=f'{ms} ms (slope {p[0]*100:+.1f}/100BF)')
+            ax.axhline(0, color='black', lw=0.6, ls=':')
+            ax.set_title(f'{cfg} — {src}', fontsize=9, fontweight='bold')
+            if col == 0: ax.set_ylabel(f'{src} scenarios\npaired Δ vs EMCTS')
+            if row == 1: ax.set_xlabel('branching factor')
+            ax.legend(fontsize=6.5, loc='upper right')
+    axes[0][0].set_ylim(-60, 60)  # clip to the central bulk so slope lines stay readable
+    fig.suptitle('E10: CrossoverExpansion — branching factor × source × thinking time. '
+                 'Lines flatten as budget grows (BF matters less); single slopes negative, dual flat/positive.',
+                 fontweight='bold', fontsize=10)
+    fig.tight_layout(); fig.savefig(FIGS / 'E10_expansion_bf_source_time.png'); plt.close(fig)
+
+
+def extra_source_effect_vs_time(turn_df, portfolio):
+    """E11. The clean summary of the time-dependence we discussed: each agent's dual-vs-single
+    advantage SHRINKS as the per-turn budget grows — the BF/source structure is a low-budget
+    phenomenon. dual_advantage = mean(dual paired Δ) − mean(single paired Δ)."""
+    if portfolio.empty:
+        print('  E11: portfolio missing, skipping'); return
+    j = _paired_delta_table(turn_df, portfolio)
+    rows = []
+    for cfg in [c for c in ORDER if c != 'EMCTS']:
+        for ms in MS_LEVELS:
+            sub = j[(j.Config == cfg) & (j.ThinkingMs == ms)]
+            single = sub[sub.Source == 'single']['delta'].mean()
+            dual = sub[sub.Source == 'dual']['delta'].mean()
+            rows.append(dict(Config=cfg, ms=ms, single_delta=single, dual_delta=dual,
+                             dual_minus_single=dual - single))
+    t = pd.DataFrame(rows)
+    t.round(2).to_csv(TABLES / 'E11_source_advantage_by_ms.csv', index=False)
+    fig, ax = plt.subplots(figsize=(9.5, 5.6))
+    for cfg in [c for c in ORDER if c != 'EMCTS']:
+        sub = t[t.Config == cfg].set_index('ms').reindex(MS_LEVELS)
+        emphasize = cfg.startswith('CrossoverExpansion') or cfg == 'CrossoverBB'
+        ax.plot(MS_LEVELS, sub['dual_minus_single'].values, marker='o', color=COLORS[cfg],
+                lw=2.4 if emphasize else 1.0, alpha=1.0 if emphasize else 0.35,
+                label=cfg if emphasize else None, zorder=3 if emphasize else 1)
+    ax.axhline(0, color='black', lw=0.8)
+    ax.set_xscale('log'); ax.set_xticks(MS_LEVELS); ax.set_xticklabels([str(m) for m in MS_LEVELS])
+    ax.set_xlabel('thinking time (ms, log scale)')
+    ax.set_ylabel('dual advantage  =  mean(dual paired Δ) − mean(single paired Δ)')
+    ax.set_title('E11: Dual-vs-single advantage vs thinking time — heavy crossover (@2, BB) ERODES with '
+                 'budget,\nlight crossover (@15, @20) GROWS; the most-inbreeding agents lose their dual '
+                 'edge fastest.\n(positive = agent beats EMCTS more in dual than single scenarios)',
+                 fontweight='bold', fontsize=9.5)
+    ax.legend(fontsize=7, ncol=2, title='emphasised agents')
+    fig.tight_layout(); fig.savefig(FIGS / 'E11_source_advantage_vs_time.png'); plt.close(fig)
+    print('\n  E11 dual-minus-single advantage by ms (positive = stronger in dual):')
+    print(t.pivot(index='Config', columns='ms', values='dual_minus_single')
+            .reindex([c for c in ORDER if c != 'EMCTS']).round(2).to_string())
+
+
 # -------------------------------------------------- main --
 def main():
     print(f'Loading from {ROOT} ...')
@@ -817,6 +976,9 @@ def main():
     print('E4: convergence speed');              extra_convergence_speed(df_burn)
     print('E5: search breadth vs per-iter cost'); extra_search_breadth_vs_cost(turn_df)
     print('E6/E7/E8/ANCOVA: BF vs source diagnostics'); extra_branching_source_diagnostics(turn_df, portfolio)
+    print('E9: crossover inbreeding / diversity collapse'); extra_inbreeding(turn_df)
+    print('E10: Expansion BF × source × time');          extra_expansion_bf_time(turn_df, portfolio)
+    print('E11: source advantage vs thinking time');     extra_source_effect_vs_time(turn_df, portfolio)
 
     print(f'\nDone. tables -> {TABLES}/  figures -> {FIGS}/')
 

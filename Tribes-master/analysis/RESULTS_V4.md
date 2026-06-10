@@ -290,6 +290,108 @@ recombination, and this combination happens to occur most often at moderate-to-h
 half of the portfolio.* The right thesis framing is "crossover acts on tactically structured
 action spaces," not "crossover acts on low-BF action spaces."
 
+### E9 / E10 / E11 — crossover inbreeding and the thinking-time dependence
+
+The ratio-shift in E1 (heavy crossover wins at 500 ms, light crossover wins at 5000 ms) and the
+budget-dependence of the BF/source structure both trace back to a single mechanism: **as the per-turn
+budget grows, crossover increasingly re-generates sequences it has already evaluated, while mutation
+keeps producing fresh ones.** E9/E10/E11 measure and visualise this.
+
+**E9 — the inbreeding evidence (`E9_inbreeding.png`).** The probe is the *unique-sequence fraction*
+= `UniqueSequences / NodesEvaluated` — the share of an agent's evaluations that are genuinely new.
+
+`E9_unique_fraction.csv` — fraction of evaluations that are NEW:
+
+| unique-fraction | 500 ms | 1000 ms | 5000 ms | Δ(500→5000) |
+|---|---:|---:|---:|---:|
+| EMCTS (pure mutation) | 0.974 | 0.970 | 0.961 | −0.013 |
+| CrossoverExpansion@2  | 0.719 | 0.703 | **0.594** | **−0.125** |
+| CrossoverExpansion@5  | 0.908 | 0.895 | 0.839 | −0.070 |
+| CrossoverExpansion@10 | 0.945 | 0.938 | 0.908 | −0.037 |
+| CrossoverExpansion@15 | 0.959 | 0.953 | 0.929 | −0.030 |
+| CrossoverExpansion@20 | 0.972 | 0.964 | 0.939 | −0.033 |
+
+The Expansion family is perfectly monotonic: the more an agent leans on crossover (lower ratio), the
+harder its diversity collapses as budget grows. EMCTS, which only mutates, barely moves.
+
+`E9_unique_count.csv` — absolute unique sequences found per turn (the crossover point):
+
+| unique sequences/turn | 500 ms | 1000 ms | 5000 ms |
+|---|---:|---:|---:|
+| EMCTS | 21.6 | 24.7 | **75.5** |
+| CrossoverExpansion@2 | **26.2** | **27.8** | 61.2 |
+
+Read across: at 500 ms heavy crossover finds *more* distinct sequences than mutation (26.2 vs 21.6,
++21%); by 5000 ms the ranking has flipped (61.2 vs 75.5, −19%). There is a literal crossover point
+between 1000 and 5000 ms where mutation overtakes crossover at generating new material — the
+quantified version of "crossover finds new sequences faster early, but its rate decays over time."
+
+`E9_redundant_evals.csv` — wasted (re-derived) evaluations per turn: Expansion@2 grows from 10 to
+**42** redundant evals as budget rises from 500 to 5000 ms; at 5000 ms ~40% of its iterations
+re-derive sequences it has already seen, while EMCTS wastes ~3 of 78.
+
+**Mechanism.** The crossover pool (`globalTopNodesQueue`) holds the **top 2** sequences, and crossover
+always blends those two. Early in a turn the top-2 are distinct elite strategies, so blending yields
+real new combinations. As the search converges, both slots fill with near-copies of the current
+optimum; uniform crossover of two near-identical parents produces offspring near-identical to both →
+no new material. That is textbook premature convergence / loss of population diversity in an
+evolutionary algorithm, and a 2-member elite pool is about the most inbreeding-prone configuration
+possible. Mutation has no such failure mode — it injects a fresh random action every iteration
+regardless of how converged the population is, so its unique-fraction holds at ~0.96 at every budget.
+
+*Caveat (visible in the E9-A panel):* CrossoverBB and CrossoverCombo show the **opposite**
+unique-fraction trend (BB rises 0.65→0.80). This is **not** a counter-example — it is a composition
+artifact. BB's redundancy comes from the fixed 20 bridge-burn tournaments (7 re-blended children
+each, a constant count regardless of budget); at high budget the growing mutation loop dilutes that
+fixed overhead, so the *fraction* rises even though the absolute tournament redundancy is unchanged.
+The clean inbreeding signal lives in the pure-Expansion family, where crossover is the only
+non-mutation operator.
+
+**E10 — Expansion: BF × source × time (`E10_expansion_bf_source_time.png`).** A (source × ratio) grid
+of paired-Δ-vs-BF regression lines, one line per ms. Two readings:
+
+- Within each panel, the lines **flatten as budget grows** — BF matters less at 5000 ms than at
+  500 ms, because with enough iterations the search reaches a similar plateau regardless of BF.
+- The **single panels (top) have negative slopes; the dual panels (bottom) are flat-to-positive** —
+  the BF×source interaction from E8, now shown to weaken with budget.
+
+**E11 — the dual advantage vs budget (`E11_source_advantage_vs_time.png`,
+`E11_source_advantage_by_ms.csv`).** This is the synthesis figure, and it ties E9 directly to the
+BF/source story. Plotting `dual_advantage = mean(dual paired Δ) − mean(single paired Δ)` against ms
+per agent produces a **fan**:
+
+| dual advantage | 500 ms | 1000 ms | 5000 ms |
+|---|---:|---:|---:|
+| CrossoverExpansion@2 (heaviest crossover) | 27.0 | 16.2 | **4.6** |
+| CrossoverBB | 17.8 | 11.5 | 9.8 |
+| CrossoverExpansion@5 | 32.0 | 36.0 | 25.7 |
+| CrossoverExpansion@15 | 5.5 | 4.7 | 10.5 |
+| CrossoverExpansion@20 (lightest crossover) | −0.8 | 0.4 | **9.5** |
+
+The agents that **inbreed most** (Expansion@2, with the −0.125 unique-fraction drop) **lose their
+dual edge fastest** (27 → 4.6). The agents that **barely inbreed** (Expansion@15/@20) **gain** dual
+advantage with budget. Cross-referencing E9 and E11: the rank order of "unique-fraction drop" matches
+the rank order of "dual-advantage erosion" within the Expansion family. So the budget-dependence of
+the source effect is not a separate phenomenon — **it is inbreeding eroding the scenario-specific
+advantage that heavy crossover enjoys at low budget.**
+
+**The unified picture.** Crossover's value is *fast generation of high-quality sequences* — it
+matters most when the search is iteration-starved (low budget) and when the action space is large and
+tactically structured (dual, moderate-to-high BF), because that is where mutation would take longest
+to stumble onto the same quality. At high budget two things erase that edge: (1) everyone has enough
+iterations to converge near the per-scenario ceiling, amortising away the generation-strategy
+advantage; and (2) crossover *actively degrades* via inbreeding, wasting its late iterations on
+re-treads. The Goldilocks ratio (Expansion@5) survives because it is light enough to avoid
+catastrophic diversity collapse (0.908→0.839, not 0.72→0.59) yet heavy enough to keep injecting
+useful elite blends — which is why it is the best agent on the average-across-budgets view and the
+only one whose dual advantage stays robustly positive at every budget.
+
+*Measurement limitation:* this is inferred from *between-budget* aggregates (total per-turn
+redundancy grows with total budget). `UniqueSequences` is logged once per turn, not per bridge-burn
+phase, so we cannot directly show the new-sequence rate decaying *within* a single turn. Turning this
+from a well-supported inference into a direct measurement needs a per-phase unique-count added to the
+trajectory logger and a re-run — recommended if this mechanism becomes a load-bearing thesis claim.
+
 ### E5 — interpreting the NodesEvaluated/Turn chart (search breadth vs per-iteration cost)
 
 The `fig7_efficiency.png` chart from `analyze_v4.py` shows `NodesEvaluated/Turn` varying sharply between

@@ -1,0 +1,13 @@
+Config,500,1000,5000
+EMCTS,0.57,0.77,3.08
+CrossoverBB,14.6,14.56,18.24
+CrossoverExpansion@2,10.21,11.77,41.79
+CrossoverExpansion@5,2.35,3.02,13.23
+CrossoverExpansion@10,1.3,1.66,7.24
+CrossoverExpansion@15,0.94,1.22,5.56
+CrossoverExpansion@20,0.61,0.93,4.71
+CrossoverCombo@2,18.43,19.45,43.65
+CrossoverCombo@5,15.1,15.44,24.02
+CrossoverCombo@10,14.76,14.86,20.73
+CrossoverCombo@15,14.59,14.62,19.29
+CrossoverCombo@20,14.6,14.64,18.82
