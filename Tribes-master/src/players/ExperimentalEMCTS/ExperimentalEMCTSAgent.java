@@ -98,6 +98,18 @@ public class ExperimentalEMCTSAgent extends Agent {
     protected PriorityQueue<ExperimentalEMCTSTreeNode> globalTopNodesQueue;
     protected int crossoverExpansionCounter = 0;
 
+    // ---- v5 operator telemetry (reset each planTurn). Observation-only: collecting these performs
+    // NO advance/copy/eval, so the ComputeMeter budget and the search itself are unaffected.
+    protected int mutEvents, mutBestGains, mutChildDuplicates, mutRepairKept, mutRepairReplaced;
+    protected double mutBestGainSum;
+    protected int xoEvents, xoBestGains, xoChildBeatsBestParent, xoChildWorseThanBothParents,
+                  xoChildDuplicates, xoRepairKept, xoRepairReplaced;
+    protected double xoBestGainSum, xoChildVsBestParentSum, xoChildVsMeanParentSum, xoParentSimilaritySum;
+    // Per-call repair counters, written by repair() (mutation path) and by crossover()'s inline
+    // repair (crossover path); the main-loop call sites fold them into the turn totals above.
+    protected int lastRepairKept, lastRepairReplaced;       // repair()  — mutation children
+    protected int lastXoRepairKept, lastXoRepairReplaced;   // crossover() inline repair
+
 
     public ExperimentalEMCTSAgent(long seed, ExperimentalEMCTSParams params) {
         super(seed);
@@ -153,6 +165,12 @@ public class ExperimentalEMCTSAgent extends Agent {
         this.nodesEvaluated = 0;
         this.sumNodeValue = 0.0;
         this.uniqueSeqKeys.clear();
+        // v5 operator telemetry — fresh per planning episode.
+        mutEvents = mutBestGains = mutChildDuplicates = mutRepairKept = mutRepairReplaced = 0;
+        mutBestGainSum = 0.0;
+        xoEvents = xoBestGains = xoChildBeatsBestParent = xoChildWorseThanBothParents = 0;
+        xoChildDuplicates = xoRepairKept = xoRepairReplaced = 0;
+        xoBestGainSum = xoChildVsBestParentSum = xoChildVsMeanParentSum = xoParentSimilaritySum = 0.0;
         core.game.ComputeMeter.reset(); // deterministic compute-unit budget (STOP_COMPUTE)
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
@@ -243,6 +261,9 @@ public class ExperimentalEMCTSAgent extends Agent {
                 // Standard MCTS iteration: select, mutate once (or crossover-expand), evaluate, backpropagate.
                 ExperimentalEMCTSTreeNode toMutate = nodeToExpand();
                 ExperimentalEMCTSTreeNode child = null;
+                // v5 telemetry: which operator generated this child + the crossover parents' stats.
+                boolean usedCrossover = false;
+                double xoP1 = 0.0, xoP2 = 0.0;
 
                 if (params.useCrossoverExpansion && globalTopNodesQueue.size() >= 2) {
                     crossoverExpansionCounter++;
@@ -253,21 +274,48 @@ public class ExperimentalEMCTSAgent extends Agent {
                         ExperimentalEMCTSTreeNode p1 = topNodesList.get(0);
                         ExperimentalEMCTSTreeNode p2 = topNodesList.get(1);
 
+                        usedCrossover = true;
+                        xoP1 = p1.getValue(); xoP2 = p2.getValue();
+                        xoParentSimilaritySum += sequenceSimilarity(p1.getSequence(), p2.getSequence());
+
                         ArrayList<Action> crossoverSeq = crossover(p1, p2, gs.copy());
 
                         ExperimentalEMCTSTreeNode strongerParent = (p1.getValue() > p2.getValue()) ? p1 : p2;
                         child = new ExperimentalEMCTSTreeNode(crossoverSeq, strongerParent);
                         strongerParent.addChild(child);
+                        xoEvents++;
+                        xoRepairKept += lastXoRepairKept; xoRepairReplaced += lastXoRepairReplaced;
                     } else {
                         child = mutate(toMutate, gs.copy());
+                        mutEvents++;
+                        mutRepairKept += lastRepairKept; mutRepairReplaced += lastRepairReplaced;
                     }
                 } else {
                     child = mutate(toMutate, gs.copy());
+                    mutEvents++;
+                    mutRepairKept += lastRepairKept; mutRepairReplaced += lastRepairReplaced;
                 }
 
+                // Duplicate check BEFORE eval (eval registers the child's key in uniqueSeqKeys).
+                boolean childDuplicate = uniqueSeqKeys.contains(seqKey(child.getSequence()));
+                double prevBest = bestNode.getValue();
                 eval(gs.copy(), child);
 
-                if (child.getValue() > bestNode.getValue()) {
+                if (usedCrossover) {
+                    double cv = child.getValue();
+                    double pBest = Math.max(xoP1, xoP2), pMean = 0.5 * (xoP1 + xoP2);
+                    xoChildVsBestParentSum += cv - pBest;
+                    xoChildVsMeanParentSum += cv - pMean;
+                    if (cv > pBest) xoChildBeatsBestParent++;
+                    if (cv < Math.min(xoP1, xoP2)) xoChildWorseThanBothParents++;
+                    if (childDuplicate) xoChildDuplicates++;
+                } else if (childDuplicate) {
+                    mutChildDuplicates++;
+                }
+
+                if (child.getValue() > prevBest) {
+                    if (usedCrossover) { xoBestGains++;  xoBestGainSum  += child.getValue() - prevBest; }
+                    else               { mutBestGains++; mutBestGainSum += child.getValue() - prevBest; }
                     bestNode = child;
                 }
 
@@ -374,6 +422,34 @@ public class ExperimentalEMCTSAgent extends Agent {
         StringBuilder sb = new StringBuilder();
         for (Action a : seq) sb.append(a == null ? "_" : a.toString()).append('|');
         return sb.toString();
+    }
+
+    /** Fraction of aligned positions (up to the shorter length) where both sequences hold the same
+     *  action (by content toString). 1.0 = the shorter parent is a positional prefix-clone of the
+     *  longer. Observation-only v5 telemetry: no forward-model calls, no ComputeMeter impact. */
+    protected double sequenceSimilarity(ArrayList<Action> a, ArrayList<Action> b) {
+        if (a == null || b == null) return 0.0;
+        int m = Math.min(a.size(), b.size());
+        if (m == 0) return 0.0;
+        int same = 0;
+        for (int i = 0; i < m; i++) {
+            Action x = a.get(i), y = b.get(i);
+            String sx = (x == null) ? "_" : x.toString();
+            String sy = (y == null) ? "_" : y.toString();
+            if (sx.equals(sy)) same++;
+        }
+        return same / (double) m;
+    }
+
+    @Override
+    public core.data.dto.OperatorTelemetryData getOperatorTelemetry() {
+        return new core.data.dto.OperatorTelemetryData(
+                mutEvents, mutBestGains, mutBestGainSum, mutChildDuplicates,
+                mutRepairKept, mutRepairReplaced,
+                xoEvents, xoBestGains, xoBestGainSum,
+                xoChildVsBestParentSum, xoChildVsMeanParentSum,
+                xoChildBeatsBestParent, xoChildWorseThanBothParents,
+                xoParentSimilaritySum, xoChildDuplicates, xoRepairKept, xoRepairReplaced);
     }
 
     protected ExperimentalEMCTSTreeNode nodeToExpand() {
@@ -577,6 +653,7 @@ public class ExperimentalEMCTSAgent extends Agent {
      */
     protected ArrayList<Action> repair(ArrayList<Action> child, GameState gs) {
         ArrayList<Action> repairedChild = new ArrayList<>();
+        lastRepairKept = 0; lastRepairReplaced = 0;   // v5 telemetry (per-call; folded in by caller)
 
         for (int a = 0; a < child.size(); a++) {
             if (!(gs.getActiveTribeID() == getPlayerID())) {
@@ -584,11 +661,14 @@ public class ExperimentalEMCTSAgent extends Agent {
             }
 
             try {
-                boolean done = checkActionFeasibility(child.get(a), gs.copy());
+                // Feasibility is a read-only predicate (isFeasible has no side effects — allGoodActions
+                // already calls it on a shared gs), so check on gs directly instead of a full-state copy.
+                boolean done = checkActionFeasibility(child.get(a), gs);
 
                 if (!done) {
-                    // Action is infeasible - use greedy selection for replacement
-                    ArrayList<Action> allAvailableActions = this.allGoodActions(gs.copy(), m_rnd);
+                    // Action is infeasible - use greedy selection for replacement.
+                    // allGoodActions is read-only (the catch branch below already calls it on gs), so no copy.
+                    ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
                     
                     Action bestAction = null;
                     double bestScore = Double.NEGATIVE_INFINITY;
@@ -614,12 +694,14 @@ public class ExperimentalEMCTSAgent extends Agent {
                     if (bestAction != null) {
                         advance(gs, bestAction);
                         repairedChild.add(bestAction);
+                        lastRepairReplaced++;
                     } else {
                         break;
                     }
                 } else {
                     repairedChild.add(child.get(a));
                     advance(gs, child.get(a));
+                    lastRepairKept++;
                 }
             } catch (Exception e) {
                 // Action threw exception - use greedy selection for replacement
@@ -649,6 +731,7 @@ public class ExperimentalEMCTSAgent extends Agent {
                 if (bestAction != null) {
                     advance(gs, bestAction);
                     repairedChild.add(bestAction);
+                    lastRepairReplaced++;
                 } else {
                     break;
                 }
@@ -928,6 +1011,7 @@ public class ExperimentalEMCTSAgent extends Agent {
 
         // Repair the crossover sequence using greedy evaluation
         ArrayList<Action> repairedSeq = new ArrayList<>();
+        lastXoRepairKept = 0; lastXoRepairReplaced = 0;   // v5 telemetry (per-call; main loop folds in)
         GameState testGs = gs.copy();
 
         for (int i = 0; i < crossoverSeq.size(); i++) {
@@ -950,6 +1034,7 @@ public class ExperimentalEMCTSAgent extends Agent {
                 // Action is valid, add it and advance state
                 repairedSeq.add(currentAction);
                 advance(testGs, currentAction);
+                lastXoRepairKept++;
             } else {
                 // Action is invalid - use greedy selection to find best replacement
                 ArrayList<Action> allAvailableActions = this.allGoodActions(testGs.copy(), m_rnd);
@@ -983,6 +1068,7 @@ public class ExperimentalEMCTSAgent extends Agent {
                 if (bestAction != null) {
                     repairedSeq.add(bestAction);
                     advance(testGs, bestAction);
+                    lastXoRepairReplaced++;
                 } else {
                     // No viable action found, stop repair
                     break;
