@@ -1031,6 +1031,60 @@ def extra_bb_usefulness(df_burn):
     fig.tight_layout(); fig.savefig(FIGS / 'E14_bb_usefulness.png'); plt.close(fig)
 
 
+def extra_crossover_mechanism(turn_df):
+    """E15/E16. Why does crossover change performance? Decompose the per-turn search into breadth
+    (NodesEvaluated), diversity (unique fraction), repair cost (FmCalls per node) and node-region
+    quality (AvgNodeValue = mean heuristic value of all evaluated nodes), then test which of these
+    co-moves with paired Δ vs EMCTS at each budget. AvgNodeValue is a proxy for HOW GOOD a region
+    of sequence space the search spends its evaluations in — high = concentrated near the optimum."""
+    em = (turn_df[turn_df.Config == 'EMCTS']
+          [['ThinkingMs','ScenarioId','VisitId','FinalSequenceValue']]
+          .drop_duplicates(['ThinkingMs','ScenarioId','VisitId']).rename(columns={'FinalSequenceValue':'emc'}))
+    jj = turn_df.merge(em, on=['ThinkingMs','ScenarioId','VisitId'])
+    jj['pdelta'] = jj.FinalSequenceValue - jj.emc
+    rows = []
+    for cfg in [c for c in ORDER if c in turn_df.Config.unique()]:
+        for ms in MS_LEVELS:
+            s = turn_df[(turn_df.Config == cfg) & (turn_df.ThinkingMs == ms)]
+            if s.empty: continue
+            nodes = s.NodesEvaluated.mean(); uniq = s.UniqueSequences.mean()
+            rows.append(dict(Config=cfg, ms=ms, nodes=nodes, unique=uniq, uniq_frac=uniq / nodes,
+                             fm_per_node=s.FmCalls.mean() / nodes, AvgNodeValue=s.AvgNodeValue.mean(),
+                             pdelta=jj[(jj.Config == cfg) & (jj.ThinkingMs == ms)].pdelta.mean()))
+    t = pd.DataFrame(rows)
+    t.round(3).to_csv(TABLES / 'E15_search_metrics.csv', index=False)
+
+    # --- E15: what crossover does to the search — repair cost & node-region quality vs ratio ---
+    exp = (t[t.Config.str.startswith('CrossoverExpansion')]
+           .assign(ratio=lambda d: d.Config.str.split('@').str[1].astype(int)))
+    emt = t[t.Config == 'EMCTS'].set_index('ms')
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.3), squeeze=False); axes = axes[0]
+    for ax, (col, ylab) in zip(axes, [('fm_per_node', 'forward-model calls per node'),
+                                      ('AvgNodeValue', 'mean value of evaluated nodes')]):
+        for ms in MS_LEVELS:
+            sub = exp[exp.ms == ms].sort_values('ratio')
+            line, = ax.plot(sub.ratio, sub[col], marker='o', lw=1.8, label=f'{ms} ms')
+            ax.axhline(emt.loc[ms, col], color=line.get_color(), ls=':', lw=1.2)
+        ax.set_xticks(RATIOS); ax.set_xlabel('crossover ratio'); ax.set_ylabel(ylab); ax.legend(fontsize=8)
+    fig.suptitle('What crossover does to the search (dotted = EMCTS baseline)', fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E15_crossover_mechanism.png'); plt.close(fig)
+
+    # --- E16: which search property predicts performance, by budget (correlation across configs) ---
+    metrics = [('nodes', 'nodes evaluated'), ('uniq_frac', 'unique fraction'),
+               ('AvgNodeValue', 'mean node value')]
+    fig, ax = plt.subplots(figsize=(8, 5))
+    width = 0.26; x = np.arange(len(MS_LEVELS))
+    for i, (col, lab) in enumerate(metrics):
+        corrs = [t[t.ms == ms].pdelta.corr(t[t.ms == ms][col]) for ms in MS_LEVELS]
+        ax.bar(x + (i - 1) * width, corrs, width, label=lab)
+    ax.axhline(0, color='black', lw=0.8)
+    ax.set_xticks(x); ax.set_xticklabels([f'{m} ms' for m in MS_LEVELS])
+    ax.set_ylabel('correlation with paired Δ vs EMCTS (across 12 configs)'); ax.set_ylim(-1, 1)
+    ax.legend(fontsize=8)
+    fig.suptitle('Which search property predicts performance, by thinking time', fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E16_performance_attribution.png'); plt.close(fig)
+
+
 # -------------------------------------------------- main --
 def main():
     print(f'Loading from {ROOT} ...')
@@ -1083,6 +1137,7 @@ def main():
     print('E12: ratio vs nodes & unique fraction');      extra_ratio_nodes_unique(turn_df)
     print('E13: nodes & unique fraction with/without CBB'); extra_bb_nodes_table(turn_df)
     print('E14: bridge-burning usefulness');             extra_bb_usefulness(df_burn)
+    print('E15/E16: crossover mechanism + attribution'); extra_crossover_mechanism(turn_df)
 
     print(f'\nDone. tables -> {TABLES}/  figures -> {FIGS}/')
 
