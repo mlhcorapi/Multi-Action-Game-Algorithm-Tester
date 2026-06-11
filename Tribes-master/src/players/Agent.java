@@ -100,6 +100,9 @@ public abstract class Agent {
     public List<TurnData> getTurnDataLog() { return Collections.emptyList(); }
     public List<BridgeBurnEventData> getBridgeBurnDataLog() { return Collections.emptyList(); }
     public List<CrossoverEventData> getCrossoverDataLog() { return Collections.emptyList(); }
+    /** v5 operator telemetry for the LAST planned turn (mutation vs crossover-expansion stats);
+     *  null for agents that do not collect it. */
+    public core.data.dto.OperatorTelemetryData getOperatorTelemetry() { return null; }
 
 
     enum ACTION_TYPE

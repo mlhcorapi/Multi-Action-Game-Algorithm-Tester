@@ -60,6 +60,18 @@ public class IsolationPhaseRunnerV5 {
     public static final String TRAJECTORY_HEADER_BURN =
             TRAJECTORY_HEADER_BASE + ",RawImprovement,PercentageImprovement";
 
+    /** Operator-telemetry CSV schema — ONE row per (scenario, visit) turn, written alongside each
+     *  leaf's results.csv as {@code turn_telemetry.csv}. Collected to discriminate the v5 hypotheses
+     *  for the single-vs-dual gap (see {@link core.data.dto.OperatorTelemetryData}): H1 blend
+     *  coherence (XoChildVs*), H2 repair disruption (Mut/XoRepair*), H3 elite-pool collapse
+     *  (XoParentSimilaritySum, *ChildDuplicates), H4 operator credit (Mut/XoBestGain*). */
+    public static final String TELEMETRY_HEADER =
+            "ScenarioId,ScenarioSource,VisitId,AgentName,Ratio,"
+            + "MutEvents,MutBestGains,MutBestGainSum,MutChildDuplicates,MutRepairKept,MutRepairReplaced,"
+            + "XoEvents,XoBestGains,XoBestGainSum,XoChildVsBestParentSum,XoChildVsMeanParentSum,"
+            + "XoChildBeatsBestParent,XoChildWorseThanBothParents,XoParentSimilaritySum,XoChildDuplicates,"
+            + "XoRepairKept,XoRepairReplaced";
+
     private IsolationPhaseRunnerV5() {}
 
     /**
@@ -95,6 +107,8 @@ public class IsolationPhaseRunnerV5 {
             File csv = leafCsv(baseDir, cfg, computeUnits);
             ExpCsv.ensureDir(csv.getParentFile());
             if (csv.exists()) csv.delete();
+            File tele = new File(csv.getParentFile(), "turn_telemetry.csv");
+            if (tele.exists()) tele.delete();
 
             System.out.println(String.format(Locale.ROOT,
                     "[v5] (%d/%d) RUN  %s (%d scenarios × %d visits = %d turns)",
@@ -113,6 +127,8 @@ public class IsolationPhaseRunnerV5 {
                                      int threads) throws Exception {
         String header = cfg.burnCrossover ? TRAJECTORY_HEADER_BURN : TRAJECTORY_HEADER_BASE;
         ExpCsv.append(csv, header, Collections.emptyList());   // write header up-front
+        File tele = new File(csv.getParentFile(), "turn_telemetry.csv");
+        ExpCsv.append(tele, TELEMETRY_HEADER, Collections.emptyList());
 
         int total = portfolio.size() * VISITS_PER_SCENARIO;
         AtomicInteger completed = new AtomicInteger(0);
@@ -126,9 +142,13 @@ public class IsolationPhaseRunnerV5 {
                 final Scenario scenario = sc;
                 futures.add(pool.submit(() -> {
                     try {
-                        List<String> rows = runOneTurn(cfg, scenario, visitId);
+                        TurnResult res = runOneTurn(cfg, scenario, visitId);
                         synchronized (writeLock) {
-                            ExpCsv.append(csv, header, rows);
+                            ExpCsv.append(csv, header, res.burnRows);
+                            if (res.telemetryRow != null) {
+                                ExpCsv.append(tele, TELEMETRY_HEADER,
+                                        Collections.singletonList(res.telemetryRow));
+                            }
                         }
                     } catch (Throwable t) {
                         System.err.println("[v5] task failed scenario=" + scenario.id + " visit=" + visitId
@@ -147,8 +167,18 @@ public class IsolationPhaseRunnerV5 {
         pool.awaitTermination(1, TimeUnit.HOURS);
     }
 
-    /** Runs ONE search turn from the captured scenario. Returns CSV rows (one per bridge-burn phase). */
-    private static List<String> runOneTurn(AgentConfig cfg, Scenario scenario, int visitId) {
+    /** Output of one (scenario, visit) turn: per-burn trajectory rows + one operator-telemetry row. */
+    private static final class TurnResult {
+        final List<String> burnRows;
+        final String telemetryRow;
+        TurnResult(List<String> burnRows, String telemetryRow) {
+            this.burnRows = burnRows; this.telemetryRow = telemetryRow;
+        }
+    }
+
+    /** Runs ONE search turn from the captured scenario. Returns the per-burn CSV rows plus the
+     *  one-per-turn operator-telemetry row. */
+    private static TurnResult runOneTurn(AgentConfig cfg, Scenario scenario, int visitId) {
         long seed = visitSeed(scenario.id, visitId);
         Agent agent = cfg.spec.create(seed);
         GameState gs = scenario.state.copy();
@@ -166,7 +196,7 @@ public class IsolationPhaseRunnerV5 {
         List<BridgeBurnEventData> burns = agent.getBridgeBurnDataLog();
         List<CrossoverEventData> crossovers = cfg.burnCrossover ? agent.getCrossoverDataLog() : Collections.emptyList();
         if (turns.isEmpty() || burns.isEmpty()) {
-            return Collections.emptyList();
+            return new TurnResult(Collections.emptyList(), null);
         }
         TurnData t = turns.get(0);   // single-turn run: exactly one TurnData
 
@@ -206,7 +236,22 @@ public class IsolationPhaseRunnerV5 {
             }
             rows.add(row.toString());
         }
-        return rows;
+
+        // One operator-telemetry row per turn (null for agent types that don't collect it).
+        String teleRow = null;
+        core.data.dto.OperatorTelemetryData ot = agent.getOperatorTelemetry();
+        if (ot != null) {
+            teleRow = scenario.id + "," + scenario.source + "," + visitId + ","
+                    + cfg.name + "," + ratioLabel + ","
+                    + ot.mutEvents + "," + ot.mutBestGains + "," + ExpCsv.round(ot.mutBestGainSum) + ","
+                    + ot.mutChildDuplicates + "," + ot.mutRepairKept + "," + ot.mutRepairReplaced + ","
+                    + ot.xoEvents + "," + ot.xoBestGains + "," + ExpCsv.round(ot.xoBestGainSum) + ","
+                    + ExpCsv.round(ot.xoChildVsBestParentSum) + "," + ExpCsv.round(ot.xoChildVsMeanParentSum) + ","
+                    + ot.xoChildBeatsBestParent + "," + ot.xoChildWorseThanBothParents + ","
+                    + ExpCsv.round(ot.xoParentSimilaritySum) + "," + ot.xoChildDuplicates + ","
+                    + ot.xoRepairKept + "," + ot.xoRepairReplaced;
+        }
+        return new TurnResult(rows, teleRow);
     }
 
     /** Shared per-(scenario, visit) seed — identical across all 12 configs (paired-comparison core). */

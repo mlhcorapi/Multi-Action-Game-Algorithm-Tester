@@ -51,6 +51,12 @@ public class EMCTSAgent extends Agent {
     private int nodesEvaluated;
     private double sumNodeValue;
     private final java.util.HashSet<String> uniqueSeqKeys = new java.util.HashSet<>();
+    // v5 operator telemetry (reset each planTurn). EMCTS is mutation-only, so every crossover (xo*)
+    // field of the exposed OperatorTelemetryData stays zero — this is the baseline the crossover
+    // variants are compared against. Observation-only: no advance/copy/eval, no ComputeMeter impact.
+    private int mutEvents, mutBestGains, mutChildDuplicates, mutRepairKept, mutRepairReplaced;
+    private double mutBestGainSum;
+    private int lastRepairKept, lastRepairReplaced;   // per-repair() call; folded in by the main loop
     // Per-turn planning state: the engine calls act() once per action, so we plan the
     // entire turn once (a single phased search) and replay the cached best action
     // sequence across the turn's subsequent act() calls instead of re-searching.
@@ -68,6 +74,15 @@ public class EMCTSAgent extends Agent {
     @Override
     public List<TurnData> getTurnDataLog() {
         return turnDataLog;
+    }
+
+    @Override
+    public core.data.dto.OperatorTelemetryData getOperatorTelemetry() {
+        // Mutation-only baseline: every crossover (xo*) field is zero by construction.
+        return new core.data.dto.OperatorTelemetryData(
+                mutEvents, mutBestGains, mutBestGainSum, mutChildDuplicates,
+                mutRepairKept, mutRepairReplaced,
+                0, 0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0, 0, 0);
     }
 
     @Override
@@ -125,6 +140,9 @@ public class EMCTSAgent extends Agent {
         this.nodesEvaluated = 0;
         this.sumNodeValue = 0.0;
         this.uniqueSeqKeys.clear();
+        // v5 operator telemetry — fresh per planning episode.
+        mutEvents = mutBestGains = mutChildDuplicates = mutRepairKept = mutRepairReplaced = 0;
+        mutBestGainSum = 0.0;
         core.game.ComputeMeter.reset(); // deterministic compute-unit budget (STOP_COMPUTE)
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
@@ -199,9 +217,16 @@ public class EMCTSAgent extends Agent {
                 // Standard MCTS iteration: select, mutate once, evaluate, backpropagate
                 EMCTSTreeNode toMutate = nodeToExpand();
                 EMCTSTreeNode child = mutate(toMutate, gs.copy());
+                // v5 telemetry: operator stats (duplicate check BEFORE eval registers the key).
+                mutEvents++;
+                mutRepairKept += lastRepairKept; mutRepairReplaced += lastRepairReplaced;
+                boolean childDuplicate = uniqueSeqKeys.contains(seqKey(child.getSequence()));
+                double prevBest = bestNode.getValue();
                 eval(gs.copy(), child);
+                if (childDuplicate) mutChildDuplicates++;
 
-                if (child.getValue() > bestNode.getValue()) {
+                if (child.getValue() > prevBest) {
+                    mutBestGains++; mutBestGainSum += child.getValue() - prevBest;
                     bestNode = child;
                 }
 
@@ -477,6 +502,7 @@ public class EMCTSAgent extends Agent {
      */
     private ArrayList<Action> repair(ArrayList<Action> child, GameState gs) {
         ArrayList<Action> repairedChild = new ArrayList<>();
+        lastRepairKept = 0; lastRepairReplaced = 0;   // v5 telemetry (per-call; folded in by caller)
 
         for (int a = 0; a < child.size(); a++) {
             if (!(gs.getActiveTribeID() == getPlayerID())) {
@@ -517,13 +543,15 @@ public class EMCTSAgent extends Agent {
                     if (bestAction != null) {
                         advance(gs, bestAction);
                         repairedChild.add(bestAction);
+                        lastRepairReplaced++;
                     } else {
                         break;
                     }
-                
+
                 } else {
                     repairedChild.add(child.get(a));
                     advance(gs, child.get(a));
+                    lastRepairKept++;
                 }
             } catch (Exception e) {
                 // Action threw exception - use greedy selection for replacement
@@ -553,6 +581,7 @@ public class EMCTSAgent extends Agent {
                 if (bestAction != null) {
                     advance(gs, bestAction);
                     repairedChild.add(bestAction);
+                    lastRepairReplaced++;
                 } else {
                     break;
                 }

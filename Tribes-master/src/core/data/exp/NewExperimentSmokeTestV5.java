@@ -101,7 +101,15 @@ public class NewExperimentSmokeTestV5 {
                 && checkLeaf(new File(base + "/CrossoverExpansion/ratio_5/" + cu + "/results.csv"), false);
         System.out.println("Folder layout + schema: " + (layoutOk ? "PASS" : "FAIL"));
 
-        boolean allOk = roundTripOk && allValid && sharedInitOk && acrossCuOk && layoutOk;
+        System.out.println("\n==================== 5. Operator-telemetry verification ====================");
+        int expectedTurns = portfolio.size() * 2;   // 3 scenarios × 2 visits
+        boolean teleOk = checkTelemetry(new File(base + "/EMCTS/" + cu + "/turn_telemetry.csv"), false, expectedTurns)
+                && checkTelemetry(new File(base + "/CrossoverBB/" + cu + "/turn_telemetry.csv"), false, expectedTurns)
+                && checkTelemetry(new File(base + "/CrossoverExpansion/ratio_5/" + cu + "/turn_telemetry.csv"), true, expectedTurns);
+        System.out.println("Operator telemetry (EMCTS/BB xo=0; Expansion xo>0; counters sane): "
+                + (teleOk ? "PASS" : "FAIL"));
+
+        boolean allOk = roundTripOk && allValid && sharedInitOk && acrossCuOk && layoutOk && teleOk;
         System.out.println("\nTotal smoke_v5 time: " + (System.currentTimeMillis() - t0) / 1000.0 + "s");
         System.out.println(allOk ? "PASS: v5 pipeline sound." : "FAIL: see checks above.");
     }
@@ -132,7 +140,8 @@ public class NewExperimentSmokeTestV5 {
             File bin = new File(scenariosDir, "scenario_" + BuildV5Portfolio.sid(s) + ".bin");
             FastGameStateIO.save(gs, bin);
             String row = s + ",single," + s + ",555555,666666," + tick + "," + gs.getActiveTribeID()
-                    + ",0,0,0," + gs.getAllAvailableActions().size();
+                    + ",0,0,0," + gs.getAllAvailableActions().size()
+                    + ",0,0,0,0,0";   // action-composition columns: not needed by the smoke
             ExpCsv.append(manifest, BuildV5Portfolio.MANIFEST_HEADER, Collections.singletonList(row));
             result.add(new Scenario(s, "single", s, tick, gs));
         }
@@ -294,8 +303,69 @@ public class NewExperimentSmokeTestV5 {
                     rows.add(row.toString());
                 }
                 ExpCsv.append(csv, header, rows);
+
+                // Operator-telemetry row (same as IsolationPhaseRunnerV5).
+                core.data.dto.OperatorTelemetryData ot = a.getOperatorTelemetry();
+                if (ot != null) {
+                    File tele = new File(csv.getParentFile(), "turn_telemetry.csv");
+                    String teleRow = sc.id + "," + sc.source + "," + v + ","
+                            + spec.name + "," + (ratio < 0 ? "NA" : String.valueOf(ratio)) + ","
+                            + ot.mutEvents + "," + ot.mutBestGains + "," + ExpCsv.round(ot.mutBestGainSum) + ","
+                            + ot.mutChildDuplicates + "," + ot.mutRepairKept + "," + ot.mutRepairReplaced + ","
+                            + ot.xoEvents + "," + ot.xoBestGains + "," + ExpCsv.round(ot.xoBestGainSum) + ","
+                            + ExpCsv.round(ot.xoChildVsBestParentSum) + "," + ExpCsv.round(ot.xoChildVsMeanParentSum) + ","
+                            + ot.xoChildBeatsBestParent + "," + ot.xoChildWorseThanBothParents + ","
+                            + ExpCsv.round(ot.xoParentSimilaritySum) + "," + ot.xoChildDuplicates + ","
+                            + ot.xoRepairKept + "," + ot.xoRepairReplaced;
+                    ExpCsv.append(tele, IsolationPhaseRunnerV5.TELEMETRY_HEADER,
+                            Collections.singletonList(teleRow));
+                }
             }
         }
+    }
+
+    /**
+     * Telemetry sanity per leaf: file exists with one row per (scenario, visit); EMCTS must report
+     * ZERO crossover events (mutation-only baseline); the crossover-expansion agent must report
+     * xoEvents > 0 at the smoke budget; every agent must report mutEvents > 0 and repair counters
+     * that actually accumulated (kept + replaced > 0).
+     */
+    private static boolean checkTelemetry(File tele, boolean expectXo, int expectedRows) {
+        if (!tele.exists()) { System.out.println("  MISSING: " + tele); return false; }
+        try {
+            List<String> lines = Files.readAllLines(tele.toPath());
+            if (lines.size() != expectedRows + 1) {
+                System.out.println("  " + tele.getPath() + " — expected " + (expectedRows + 1)
+                        + " lines (header + " + expectedRows + " turns), got " + lines.size());
+                return false;
+            }
+            List<String> cols = Arrays.asList(lines.get(0).split(","));
+            int iMutEvents = cols.indexOf("MutEvents"), iMutKept = cols.indexOf("MutRepairKept"),
+                iMutRepl = cols.indexOf("MutRepairReplaced"), iXoEvents = cols.indexOf("XoEvents"),
+                iXoSim = cols.indexOf("XoParentSimilaritySum");
+            if (iMutEvents < 0 || iXoEvents < 0 || iXoSim < 0) {
+                System.out.println("  " + tele.getPath() + " — header missing expected columns");
+                return false;
+            }
+            long mutEvents = 0, xoEvents = 0, repairTotal = 0;
+            boolean simInRange = true;
+            for (int i = 1; i < lines.size(); i++) {
+                String[] f = lines.get(i).split(",");
+                mutEvents += Long.parseLong(f[iMutEvents]);
+                xoEvents += Long.parseLong(f[iXoEvents]);
+                repairTotal += Long.parseLong(f[iMutKept]) + Long.parseLong(f[iMutRepl]);
+                double sim = Double.parseDouble(f[iXoSim]);
+                long xo = Long.parseLong(f[iXoEvents]);
+                if (sim < 0 || sim > xo + 1e-9) simInRange = false;   // similarity ∈ [0,1] per event
+            }
+            boolean xoOk = expectXo ? (xoEvents > 0) : (xoEvents == 0);
+            boolean ok = mutEvents > 0 && repairTotal > 0 && xoOk && simInRange;
+            System.out.println(String.format(Locale.ROOT,
+                    "  %s — turns=%d mutEvents=%d xoEvents=%d (expectXo=%s) repairCounts=%d simRange=%s -> %s",
+                    tele.getPath(), lines.size() - 1, mutEvents, xoEvents, expectXo, repairTotal,
+                    simInRange, ok ? "OK" : "FAIL"));
+            return ok;
+        } catch (Exception e) { e.printStackTrace(); return false; }
     }
 
     private static boolean checkLeaf(File csv, boolean expectBurn) {

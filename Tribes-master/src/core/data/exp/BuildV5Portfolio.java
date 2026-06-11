@@ -60,10 +60,15 @@ public class BuildV5Portfolio {
     public static final long   FIXED_GAME_SEED        = 9_000_001L;
     public static final long   SOURCE_AGENT_SEED      = 100L;
 
-    /** Header for the portfolio.csv manifest. Same as v4; downstream readers depend on it. */
+    /** Header for the portfolio.csv manifest. The v4 columns come first (downstream readers parse the
+     *  leading columns by index), followed by the v5 action-type composition of the captured state
+     *  (H5: does the single/dual gap track combat-action availability rather than the source label?).
+     *  Categories: Attack | Move | other unit actions (Capture/Convert/Heal/Upgrade/...) | city
+     *  actions | tribe actions (Research/EndTurn/...). */
     public static final String MANIFEST_HEADER =
             "ScenarioId,Source,SourceGameId,SourceLevelSeed,SourceGameSeed,CapturedTick,ActiveTribeId," +
-            "ActiveTribeNumCities,ActiveTribeNumUnits,ActiveTribeScore,BranchingFactor";
+            "ActiveTribeNumCities,ActiveTribeNumUnits,ActiveTribeScore,BranchingFactor," +
+            "NumAttackActions,NumMoveActions,NumOtherUnitActions,NumCityActions,NumTribeActions";
 
     private static final Types.TRIBE[] TRIBES = {Types.TRIBE.IMPERIUS, Types.TRIBE.IMPERIUS2};
 
@@ -226,12 +231,23 @@ public class BuildV5Portfolio {
             City c = (City) gs.getActor(cId);
             if (c != null) numUnits += c.getUnitsID().size();
         }
-        int branchingFactor = gs.getAllAvailableActions().size();
+        java.util.ArrayList<core.actions.Action> allActions = gs.getAllAvailableActions();
+        int branchingFactor = allActions.size();
         int score = at.getScore();
+        // v5 action-type composition (H5): how combat- vs economy-oriented is this state's action space?
+        int nAttack = 0, nMove = 0, nOtherUnit = 0, nCity = 0, nTribe = 0;
+        for (core.actions.Action a : allActions) {
+            if (a instanceof core.actions.unitactions.Attack) nAttack++;
+            else if (a instanceof core.actions.unitactions.Move) nMove++;
+            else if (a instanceof core.actions.unitactions.UnitAction) nOtherUnit++;
+            else if (a instanceof core.actions.cityactions.CityAction) nCity++;
+            else if (a instanceof core.actions.tribeactions.TribeAction) nTribe++;
+        }
 
         String row = scenarioId + "," + source + "," + sourceGameId + "," + levelSeed + "," + gameSeed + ","
                 + capturedTick + "," + activeTribeId + "," + numCities + "," + numUnits + "," + score + ","
-                + branchingFactor;
+                + branchingFactor + ","
+                + nAttack + "," + nMove + "," + nOtherUnit + "," + nCity + "," + nTribe;
         ExpCsv.append(manifest, MANIFEST_HEADER, java.util.Collections.singletonList(row));
         System.out.println(String.format(Locale.ROOT,
                 "  scenario %s: tribe=%d cities=%d units=%d score=%d branching=%d  (%s, gameId=%d, tick=%d)",

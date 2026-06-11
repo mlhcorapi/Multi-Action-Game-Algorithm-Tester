@@ -17,6 +17,14 @@ Plus a handful of analysis-driven extras the data invites:
   E3. Single-vs-dual portfolio split: does the ranking change?
   E4. Convergence speed — burn phase at which each agent reaches 95% of its final gain.
 
+v5 additions — the single-vs-dual hypothesis battery, built on the per-turn operator telemetry
+(turn_telemetry.csv per leaf; see analysis/V5_HYPOTHESES.md for the design):
+  E17. Operator credit (H4) — share of best-sequence gain from crossover vs mutation children.
+  E18. Blend coherence (H1) — crossover child value vs its two parents, by source × BF tier.
+  E19. Repair disruption (H2) — actions replaced during repair, crossover vs mutation baseline.
+  E20. Elite-pool collapse (H3) — parent similarity + duplicate-child rates by source × budget.
+  E21. Action composition (H5) — combat/economy action mix of the captured scenarios.
+
 Run:  python analysis/analyze_v5_full.py [test_results/v5]
 Output: analysis/figures_v5_full/*.png  +  analysis/tables_v5_full/*.csv
 """
@@ -1085,6 +1093,238 @@ def extra_crossover_mechanism(turn_df):
     fig.tight_layout(); fig.savefig(FIGS / 'E16_performance_attribution.png'); plt.close(fig)
 
 
+# -------------------------------------------------- v5 operator telemetry: E17-E21 --
+# One turn_telemetry.csv per leaf (one row per scenario × visit) collected to discriminate the
+# hypotheses for the single-vs-dual gap. See analysis/V5_HYPOTHESES.md for the full design.
+TELE_RE = re.compile(r'(?P<agent>EMCTS|CrossoverBB|CrossoverExpansion|CrossoverCombo)'
+                     r'(?:/ratio_(?P<ratio>\d+))?'
+                     r'/(?P<ms>\d+)cu/turn_telemetry\.csv$')
+
+def load_telemetry():
+    """One row per (config, budget, scenario, visit) with the operator-telemetry counters."""
+    frames = []
+    for f in sorted(glob.glob(str(ROOT) + '/**/turn_telemetry.csv', recursive=True)):
+        rel = f.replace(os.sep, '/').split(str(ROOT).replace(os.sep, '/') + '/', 1)[-1]
+        m = TELE_RE.search(rel)
+        if not m: continue
+        df = pd.read_csv(f)
+        df['Config'] = _config_label(m.group('agent'), m.group('ratio')) if m.group('ratio') \
+                        else m.group('agent')
+        df['ThinkingMs'] = int(m.group('ms'))   # compute budget (cu); column name kept for consistency
+        frames.append(df)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+def _bf_tiers_by_source(portfolio):
+    """Per-source BF tertiles (~1/3 of each source per tier) — same convention as E7."""
+    p = portfolio.copy()
+    labels = ['Low BF', 'Mid BF', 'High BF']
+    p['BF_tier'] = pd.Series(index=p.index, dtype=object)
+    for src in ('single', 'dual'):
+        mask = p.Source == src
+        p.loc[mask, 'BF_tier'] = pd.qcut(p.loc[mask, 'BranchingFactor'], 3, labels=labels).astype(str)
+    p['BF_tier'] = pd.Categorical(p['BF_tier'], categories=labels, ordered=True)
+    return p[['ScenarioId', 'BF_tier']]
+
+
+def extra_operator_credit(tele):
+    """E17 (H4 operator credit). Decompose each agent's best-sequence improvements by generating
+    operator: the share of total best-gain value contributed by crossover children vs mutation
+    children, by source. If crossover rarely drives the best sequence forward in single games, its
+    iterations are pure overhead there."""
+    xo_cfgs = [c for c in ORDER if '@' in c and c in tele.Config.unique()]
+    rows = []
+    for cfg in xo_cfgs:
+        for ms in MS_LEVELS:
+            for src in ('single', 'dual'):
+                s = tele[(tele.Config == cfg) & (tele.ThinkingMs == ms) & (tele.ScenarioSource == src)]
+                if s.empty: continue
+                xg, mg = s.XoBestGainSum.sum(), s.MutBestGainSum.sum()
+                rows.append(dict(Config=cfg, budget=ms, source=src,
+                                 xo_gain_share=xg / (xg + mg) if (xg + mg) > 0 else np.nan,
+                                 xo_best_events=s.XoBestGains.sum(), mut_best_events=s.MutBestGains.sum(),
+                                 xo_events=s.XoEvents.sum(), mut_events=s.MutEvents.sum(),
+                                 xo_gain_per_event=xg / max(1, s.XoEvents.sum()),
+                                 mut_gain_per_event=mg / max(1, s.MutEvents.sum())))
+    t = pd.DataFrame(rows)
+    t.round(4).to_csv(TABLES / 'E17_operator_credit.csv', index=False)
+    fig, axes = plt.subplots(1, len(MS_LEVELS), figsize=(5.2 * len(MS_LEVELS), 5),
+                             squeeze=False, sharey=True)
+    axes = axes[0]
+    for ax, ms in zip(axes, MS_LEVELS):
+        sub = t[t.budget == ms]
+        x = np.arange(len(xo_cfgs))
+        sng = sub[sub.source == 'single'].set_index('Config').reindex(xo_cfgs)['xo_gain_share']
+        dul = sub[sub.source == 'dual'].set_index('Config').reindex(xo_cfgs)['xo_gain_share']
+        ax.bar(x - 0.2, sng.values * 100, 0.4, color='#1f78b4', label='single')
+        ax.bar(x + 0.2, dul.values * 100, 0.4, color='#e31a1c', label='dual')
+        ax.set_xticks(x); ax.set_xticklabels(xo_cfgs, rotation=60, ha='right', fontsize=7)
+        ax.set_title(f'{ms} cu')
+        ax.set_ylabel('% of best-sequence gain from crossover children')
+    axes[0].legend(fontsize=8)
+    fig.suptitle('Share of best-sequence improvement contributed by crossover vs mutation',
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E17_operator_credit.png'); plt.close(fig)
+
+
+def extra_blend_coherence(tele, portfolio):
+    """E18 (H1 blend coherence). Quality of crossover blends relative to their two parents, by
+    source × BF tier. 'Beats both parents' = synergistic blend; 'below both parents' = destructive
+    blend. If economic (single) blends are structurally incoherent, destructive rates should be
+    elevated there even at the same BF tier."""
+    if portfolio.empty:
+        print('  E18: portfolio missing, skipping'); return
+    tiers = _bf_tiers_by_source(portfolio)
+    t = tele.merge(tiers, on='ScenarioId')
+    exp_cfgs = [f'CrossoverExpansion@{r}' for r in RATIOS
+                if f'CrossoverExpansion@{r}' in t.Config.unique()]
+    xs = ['Low BF', 'Mid BF', 'High BF']
+    rows = []
+    for cfg in [c for c in ORDER if '@' in c and c in t.Config.unique()]:
+        for src in ('single', 'dual'):
+            for tier in xs:
+                s = t[(t.Config == cfg) & (t.ScenarioSource == src) & (t.BF_tier == tier)]
+                ev = s.XoEvents.sum()
+                if ev == 0: continue
+                rows.append(dict(Config=cfg, source=src, BF_tier=tier, xo_events=ev,
+                                 beats_both_pct=100 * s.XoChildBeatsBestParent.sum() / ev,
+                                 below_both_pct=100 * s.XoChildWorseThanBothParents.sum() / ev,
+                                 child_vs_best_parent=s.XoChildVsBestParentSum.sum() / ev,
+                                 child_vs_mean_parent=s.XoChildVsMeanParentSum.sum() / ev))
+    tt = pd.DataFrame(rows)
+    tt.round(4).to_csv(TABLES / 'E18_blend_coherence.csv', index=False)
+    fig, axes = plt.subplots(2, 2, figsize=(11, 8), squeeze=False, sharex=True)
+    metrics = [('beats_both_pct', '% of blends beating both parents'),
+               ('below_both_pct', '% of blends below both parents')]
+    for i, (col, ylab) in enumerate(metrics):
+        for j, src in enumerate(('single', 'dual')):
+            ax = axes[i][j]
+            for cfg in exp_cfgs:
+                s = tt[(tt.Config == cfg) & (tt.source == src)].set_index('BF_tier').reindex(xs)
+                ax.plot(range(3), s[col].values, marker='o', color=COLORS[cfg], label=cfg, lw=1.8)
+            ax.set_xticks(range(3)); ax.set_xticklabels(xs)
+            if j == 0: ax.set_ylabel(ylab)
+            if i == 0: ax.set_title(f'{src} scenarios')
+            if i == 0 and j == 0: ax.legend(fontsize=6.5)
+    fig.suptitle('Crossover blend quality vs the two parents (Expansion family, pooled budgets)',
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E18_blend_coherence.png'); plt.close(fig)
+
+
+def extra_repair_disruption(tele, portfolio):
+    """E19 (H2 repair disruption). Fraction of child actions greedily REPLACED during repair —
+    crossover children vs the mutation baseline, by source × BF tier. If repair rewrites crossover
+    children specifically in single/high-BF states, the spliced material never survives to be
+    evaluated and crossover degenerates into greedy resampling."""
+    if portfolio.empty:
+        print('  E19: portfolio missing, skipping'); return
+    tiers = _bf_tiers_by_source(portfolio)
+    t = tele.merge(tiers, on='ScenarioId')
+    exp_cfgs = [f'CrossoverExpansion@{r}' for r in RATIOS
+                if f'CrossoverExpansion@{r}' in t.Config.unique()]
+    xs = ['Low BF', 'Mid BF', 'High BF']
+    rows = []
+    for cfg in [c for c in ORDER if c in t.Config.unique()]:
+        for src in ('single', 'dual'):
+            for tier in xs:
+                s = t[(t.Config == cfg) & (t.ScenarioSource == src) & (t.BF_tier == tier)]
+                if s.empty: continue
+                mk, mr = s.MutRepairKept.sum(), s.MutRepairReplaced.sum()
+                xk, xr = s.XoRepairKept.sum(), s.XoRepairReplaced.sum()
+                rows.append(dict(Config=cfg, source=src, BF_tier=tier,
+                                 mut_replaced_frac=mr / (mk + mr) if (mk + mr) else np.nan,
+                                 xo_replaced_frac=xr / (xk + xr) if (xk + xr) else np.nan))
+    tt = pd.DataFrame(rows)
+    tt.round(4).to_csv(TABLES / 'E19_repair_disruption.csv', index=False)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.8), squeeze=False, sharey=True)
+    axes = axes[0]
+    for ax, src in zip(axes, ('single', 'dual')):
+        e = tt[(tt.Config == 'EMCTS') & (tt.source == src)].set_index('BF_tier').reindex(xs)
+        ax.plot(range(3), e.mut_replaced_frac.values * 100, marker='s', color='#222222', ls='--',
+                lw=2.0, label='mutation children (EMCTS)')
+        for cfg in exp_cfgs:
+            s = tt[(tt.Config == cfg) & (tt.source == src)].set_index('BF_tier').reindex(xs)
+            ax.plot(range(3), s.xo_replaced_frac.values * 100, marker='o', color=COLORS[cfg],
+                    lw=1.8, label=f'crossover children ({cfg})')
+        ax.set_xticks(range(3)); ax.set_xticklabels(xs)
+        ax.set_title(f'{src} scenarios'); ax.set_ylabel('% of child actions replaced by repair')
+    axes[0].legend(fontsize=6.5)
+    fig.suptitle('Repair disruption of generated children (pooled budgets)', fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E19_repair_disruption.png'); plt.close(fig)
+
+
+def extra_pool_collapse(tele):
+    """E20 (H3 elite-pool collapse). Positional similarity of the two crossover parents and the
+    duplicate-child rates, vs compute budget, by source. High similarity + high duplicate rate = the
+    top-2 pool has converged to near-clones and crossover re-breeds the same material (inbreeding)."""
+    exp_cfgs = [f'CrossoverExpansion@{r}' for r in RATIOS
+                if f'CrossoverExpansion@{r}' in tele.Config.unique()]
+    rows = []
+    for cfg in exp_cfgs + (['EMCTS'] if 'EMCTS' in tele.Config.unique() else []):
+        for ms in MS_LEVELS:
+            for src in ('single', 'dual'):
+                s = tele[(tele.Config == cfg) & (tele.ThinkingMs == ms) & (tele.ScenarioSource == src)]
+                if s.empty: continue
+                xe = s.XoEvents.sum(); me = s.MutEvents.sum()
+                rows.append(dict(Config=cfg, budget=ms, source=src,
+                                 parent_similarity=s.XoParentSimilaritySum.sum() / xe if xe else np.nan,
+                                 xo_dup_rate=s.XoChildDuplicates.sum() / xe if xe else np.nan,
+                                 mut_dup_rate=s.MutChildDuplicates.sum() / me if me else np.nan))
+    t = pd.DataFrame(rows)
+    t.round(4).to_csv(TABLES / 'E20_pool_collapse.csv', index=False)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.8), squeeze=False)
+    axes = axes[0]
+    panels = [('parent_similarity', 'mean parent–parent positional similarity'),
+              ('xo_dup_rate', 'duplicate-child rate (crossover children)')]
+    for ax, (col, ylab) in zip(axes, panels):
+        for cfg in exp_cfgs:
+            for src, ls in (('dual', '-'), ('single', '--')):
+                s = t[(t.Config == cfg) & (t.source == src)].set_index('budget').reindex(MS_LEVELS)
+                ax.plot(MS_LEVELS, s[col].values, marker='o', color=COLORS[cfg], ls=ls, lw=1.7,
+                        label=f'{cfg} ({src})' if col == 'parent_similarity' else None)
+        ax.set_xscale('log'); ax.set_xticks(MS_LEVELS)
+        ax.set_xticklabels([str(m) for m in MS_LEVELS])
+        ax.set_xlabel('compute budget (units, log scale)'); ax.set_ylabel(ylab)
+    axes[0].legend(fontsize=6, ncol=2)
+    fig.suptitle('Elite-pool similarity and duplicate breeding by source (solid = dual, dashed = single)',
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E20_pool_collapse.png'); plt.close(fig)
+
+
+def extra_action_composition(portfolio):
+    """E21 (H5 action-space composition). Action-type composition of the captured scenarios — is the
+    single/dual gap better explained by combat-action availability than by the source label? The
+    per-scenario columns also let downstream analysis stratify performance by attack share."""
+    needed = {'NumAttackActions', 'NumMoveActions', 'NumOtherUnitActions',
+              'NumCityActions', 'NumTribeActions'}
+    if portfolio.empty or not needed.issubset(portfolio.columns):
+        print('  E21: portfolio lacks action-composition columns, skipping'); return
+    p = portfolio.copy()
+    p['attack_share'] = p.NumAttackActions / p.BranchingFactor
+    cats = ['NumAttackActions', 'NumMoveActions', 'NumOtherUnitActions',
+            'NumCityActions', 'NumTribeActions']
+    labels = ['Attack', 'Move', 'Other unit', 'City', 'Tribe']
+    summary = p.groupby('Source')[cats + ['attack_share', 'BranchingFactor']].mean().round(3)
+    summary.to_csv(TABLES / 'E21_action_composition.csv')
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.6), squeeze=False)
+    axes = axes[0]
+    x = np.arange(len(cats))
+    for src, color, off in (('single', '#1f78b4', -0.2), ('dual', '#e31a1c', +0.2)):
+        axes[0].bar(x + off, summary.loc[src, cats].values, 0.4, color=color, label=src)
+    axes[0].set_xticks(x); axes[0].set_xticklabels(labels)
+    axes[0].set_ylabel('mean available actions per scenario'); axes[0].legend(fontsize=8)
+    for src, color in (('single', '#1f78b4'), ('dual', '#e31a1c')):
+        s = p[p.Source == src]
+        axes[1].scatter(s.BranchingFactor, s.attack_share * 100, s=18, alpha=0.6, color=color,
+                        label=src, edgecolor='black', linewidth=0.3)
+    axes[1].set_xlabel('branching factor'); axes[1].set_ylabel('attack actions (% of action space)')
+    axes[1].legend(fontsize=8)
+    fig.suptitle('Action-type composition of the captured scenarios', fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E21_action_composition.png'); plt.close(fig)
+    print(summary.to_string())
+
+
 # -------------------------------------------------- main --
 def main():
     print(f'Loading from {ROOT} ...')
@@ -1138,6 +1378,18 @@ def main():
     print('E13: nodes & unique fraction with/without CBB'); extra_bb_nodes_table(turn_df)
     print('E14: bridge-burning usefulness');             extra_bb_usefulness(df_burn)
     print('E15/E16: crossover mechanism + attribution'); extra_crossover_mechanism(turn_df)
+
+    # --- v5 operator telemetry: the single-vs-dual hypothesis battery (see V5_HYPOTHESES.md)
+    print('\nOPERATOR TELEMETRY (single-vs-dual hypotheses):')
+    tele = load_telemetry()
+    if tele.empty:
+        print('  no turn_telemetry.csv found — skipping E17-E20')
+    else:
+        print('E17: operator credit (H4)');     extra_operator_credit(tele)
+        print('E18: blend coherence (H1)');     extra_blend_coherence(tele, portfolio)
+        print('E19: repair disruption (H2)');   extra_repair_disruption(tele, portfolio)
+        print('E20: elite-pool collapse (H3)'); extra_pool_collapse(tele)
+    print('E21: action composition (H5)');      extra_action_composition(portfolio)
 
     print(f'\nDone. tables -> {TABLES}/  figures -> {FIGS}/')
 
