@@ -184,20 +184,21 @@ def fig_ranking_points(turn_df):
     panels = [(ms, f'{ms} cu') for ms in MS_LEVELS] + [('avg', 'avg across budgets')]
     fig, axes2 = plt.subplots(2, 2, figsize=(11, 8), squeeze=False)
     axes = axes2.flatten()
-    n_configs = 12
+    n_scen = int(turn_df.ScenarioId.nunique())   # 200 in v5; derived so it tracks the portfolio
     for ax, (key, title) in zip(axes, panels):
         pts = ranking_points(turn_df, key)
-        avg_pt = pts / 100   # 100 scenarios; mean rank per scenario
+        n_configs = len(pts)
+        avg_pt = pts / n_scen   # mean rank per scenario
         colors = [COLORS[c] for c in pts.index]
         ax.bar(range(len(pts)), pts.values, color=colors, edgecolor='black', linewidth=0.4)
         ax.set_xticks(range(len(pts)))
         ax.set_xticklabels(pts.index, rotation=60, ha='right', fontsize=7)
-        # Reference line at "chance" (mean rank * 100 scenarios)
-        ax.axhline(100 * (n_configs+1) / 2, color='red', ls=':', lw=1, label='chance')
-        ax.set_title(f'{title}  (chance: {100*(n_configs+1)/2:.0f})'); ax.set_ylabel('total ranking points')
+        chance = n_scen * (n_configs + 1) / 2
+        ax.axhline(chance, color='red', ls=':', lw=1, label='chance')
+        ax.set_title(f'{title}  (chance: {chance:.0f})'); ax.set_ylabel('total ranking points')
         for i, (v, a) in enumerate(zip(pts.values, avg_pt.values)):
             ax.text(i, v + 5, f'{a:.1f}', ha='center', fontsize=7)
-    fig.suptitle('Ranking points (last=1 … best=12 per scenario, summed over 100 scenarios)',
+    fig.suptitle(f'Ranking points (last=1 … best=12 per scenario, summed over {n_scen} scenarios)',
                  fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'fig4_ranking_points.png'); plt.close(fig)
     for key, title in panels:
@@ -824,12 +825,13 @@ def extra_inbreeding(turn_df):
     frac.round(4).to_csv(TABLES / 'E9_unique_fraction.csv')
     cnt.round(2).to_csv(TABLES / 'E9_unique_count.csv')
     red.round(2).to_csv(TABLES / 'E9_redundant_evals.csv')
-    # Δ(500→5000) summary column — the headline "more inbreeding at high budget" number.
+    # Δ(lowest → highest budget) summary — the headline "more inbreeding at high budget" number.
+    lo, hi = MS_LEVELS[0], MS_LEVELS[-1]
     summary = pd.DataFrame({
-        'uniq_frac_500': frac[500], 'uniq_frac_5000': frac[5000],
-        'delta_uniq_frac_500_to_5000': (frac[5000] - frac[500]),
-        'unique_500': cnt[500], 'unique_5000': cnt[5000],
-        'redundant_500': red[500], 'redundant_5000': red[5000],
+        f'uniq_frac_{lo}': frac[lo], f'uniq_frac_{hi}': frac[hi],
+        f'delta_uniq_frac_{lo}_to_{hi}': (frac[hi] - frac[lo]),
+        f'unique_{lo}': cnt[lo], f'unique_{hi}': cnt[hi],
+        f'redundant_{lo}': red[lo], f'redundant_{hi}': red[hi],
     }).round(4)
     summary.to_csv(TABLES / 'E9_inbreeding_summary.csv')
 
@@ -1207,8 +1209,7 @@ def extra_blend_coherence(tele, portfolio):
             if j == 0: ax.set_ylabel(ylab)
             if i == 0: ax.set_title(f'{src} scenarios')
             if i == 0 and j == 0: ax.legend(fontsize=6.5)
-    fig.suptitle('Crossover blend quality vs the two parents (Expansion family, pooled budgets)',
-                 fontweight='bold')
+    fig.suptitle('Crossover blend quality vs the two parents', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E18_blend_coherence.png'); plt.close(fig)
 
 
@@ -1250,7 +1251,7 @@ def extra_repair_disruption(tele, portfolio):
         ax.set_xticks(range(3)); ax.set_xticklabels(xs)
         ax.set_title(f'{src} scenarios'); ax.set_ylabel('% of child actions replaced by repair')
     axes[0].legend(fontsize=6.5)
-    fig.suptitle('Repair disruption of generated children (pooled budgets)', fontweight='bold')
+    fig.suptitle('Repair disruption of generated children', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E19_repair_disruption.png'); plt.close(fig)
 
 
@@ -1287,8 +1288,7 @@ def extra_pool_collapse(tele):
         ax.set_xticklabels([str(m) for m in MS_LEVELS])
         ax.set_xlabel('compute budget (units, log scale)'); ax.set_ylabel(ylab)
     axes[0].legend(fontsize=6, ncol=2)
-    fig.suptitle('Elite-pool similarity and duplicate breeding by source (solid = dual, dashed = single)',
-                 fontweight='bold')
+    fig.suptitle('Elite-pool similarity and duplicate breeding by source', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E20_pool_collapse.png'); plt.close(fig)
 
 

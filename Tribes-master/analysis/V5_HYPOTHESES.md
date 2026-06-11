@@ -106,3 +106,29 @@ fixed BF; the source label adds little once composition is controlled. → **E21
 The hypotheses are not mutually exclusive — H1/H2/H3 are mechanisms, H4 is the bottom line they
 produce, and H5 reframes "source" as a continuous property. The battery is designed so each gets an
 independent, directly-logged signal rather than an inference from outcome data.
+
+## Symmetry and overhead
+
+**Symmetry.** The mutation-side telemetry is collected by *identical code* in `EMCTSAgent` (the
+baseline) and in the mutation branch of `ExperimentalEMCTSAgent`: same counters, same pre-`eval`
+duplicate check, same best-gain attribution, and the same kept/replaced accounting inside `repair()`.
+The `seqKey` sequence-identity function is byte-for-byte identical in both classes, so the
+duplicate-rate comparison (E20) and the repair baseline (E19) are like-for-like. The crossover-only
+fields are zero by construction for EMCTS / CrossoverBB, which is exactly what makes them the
+mutation baseline.
+
+**Overhead.** Measured by running 120 fixed-compute turns per agent with the instrumentation present
+vs. reverted (identical seeds, single-threaded):
+
+| agent | without telemetry | with telemetry | overhead |
+|---|---:|---:|---:|
+| EMCTS (mutation only) | 676.9 ms/turn | 682.5 ms/turn | **+0.8 %** |
+| CrossoverExpansion@5 (mutation + crossover) | 676.7 ms/turn | 694.4 ms/turn | **+2.6 %** |
+
+Crucially the per-turn `FinalSequenceValue` and forward-model-call totals were **identical** with and
+without telemetry (e.g. 605,561.0 and 2,802,589 for EMCTS in both builds) — the instrumentation
+performs no `advance`/`copy`/`eval`, so it consumes **zero** compute units and leaves the search
+trajectory and every result **unchanged**. The only cost is a few % of wall-clock (one extra
+`seqKey` per iteration for the duplicate check, plus one `O(len)` parent-similarity pass per
+crossover event). Under the STOP_COMPUTE budget that wall-clock cost does not affect the experiment
+at all; it only makes a run take ~1–3 % longer.
