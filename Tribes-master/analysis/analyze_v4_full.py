@@ -930,6 +930,107 @@ def extra_source_effect_vs_time(turn_df, portfolio):
             .reindex([c for c in ORDER if c != 'EMCTS']).round(2).to_string())
 
 
+def _ratio_of(cfg):
+    """Integer crossover ratio from a config label like 'CrossoverExpansion@5'."""
+    return int(cfg.split('@')[1])
+
+
+def extra_ratio_nodes_unique(turn_df):
+    """E12. Effect of the crossover ratio on nodes evaluated, forward-model calls, and the
+    unique-sequence fraction, for the CrossoverExpansion family. NodesEvaluated counts full
+    turn-length sequences scored (tens per turn); FmCalls is the forward-model budget (thousands)."""
+    rows = []
+    for fam in ('CrossoverExpansion', 'CrossoverCombo'):
+        for r in RATIOS:
+            cfg = f'{fam}@{r}'
+            for ms in MS_LEVELS:
+                s = turn_df[(turn_df.Config == cfg) & (turn_df.ThinkingMs == ms)]
+                if s.empty: continue
+                rows.append(dict(family=fam, ratio=r, ms=ms,
+                                 nodes=s.NodesEvaluated.mean(),
+                                 fmcalls=s.FmCalls.mean(),
+                                 unique=s.UniqueSequences.mean(),
+                                 uniq_frac=s.UniqueSequences.mean() / s.NodesEvaluated.mean()))
+    t = pd.DataFrame(rows).round(4)
+    t.to_csv(TABLES / 'E12_ratio_sweep.csv', index=False)
+
+    exp = t[t.family == 'CrossoverExpansion']
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.3), squeeze=False); axes = axes[0]
+    panels = [('nodes', 'nodes evaluated per turn'),
+              ('fmcalls', 'forward-model calls per turn'),
+              ('uniq_frac', 'unique-sequence fraction')]
+    for ax, (col, ylab) in zip(axes, panels):
+        for ms in MS_LEVELS:
+            sub = exp[exp.ms == ms].sort_values('ratio')
+            ax.plot(sub.ratio, sub[col], marker='o', lw=1.8, label=f'{ms} ms')
+        ax.set_xticks(RATIOS); ax.set_xlabel('crossover ratio')
+        ax.set_ylabel(ylab); ax.legend(fontsize=8)
+    fig.suptitle('CrossoverExpansion: effect of crossover ratio on search breadth and diversity',
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E12_ratio_nodes_unique.png'); plt.close(fig)
+
+
+def extra_bb_nodes_table(turn_df):
+    """E13. Nodes evaluated and unique-sequence fraction WITH vs WITHOUT crossover bridge burning.
+    Pairs hold the rest of the configuration fixed: EMCTS↔CrossoverBB (no expansion) and
+    CrossoverExpansion@r↔CrossoverCombo@r (expansion at ratio r)."""
+    def stats(cfg, ms):
+        s = turn_df[(turn_df.Config == cfg) & (turn_df.ThinkingMs == ms)]
+        if s.empty: return (np.nan, np.nan)
+        return (s.NodesEvaluated.mean(), s.UniqueSequences.mean() / s.NodesEvaluated.mean())
+    pairs = [('no expansion', 'EMCTS', 'CrossoverBB')]
+    for r in RATIOS:
+        pairs.append((f'expansion@{r}', f'CrossoverExpansion@{r}', f'CrossoverCombo@{r}'))
+    rows = []
+    for base, no_bb, bb in pairs:
+        for ms in MS_LEVELS:
+            n0, u0 = stats(no_bb, ms); n1, u1 = stats(bb, ms)
+            rows.append(dict(base=base, ms=ms,
+                             nodes_noCBB=round(n0, 1), nodes_CBB=round(n1, 1),
+                             uniqFrac_noCBB=round(u0, 3), uniqFrac_CBB=round(u1, 3)))
+    t = pd.DataFrame(rows)
+    t.to_csv(TABLES / 'E13_with_without_cbb.csv', index=False)
+    print('\n  E13 nodes & unique fraction, with vs without crossover bridge burning:')
+    print(t.to_string(index=False))
+
+
+def extra_bb_usefulness(df_burn):
+    """E14. Usefulness of crossover bridge burning: for each CBB agent, the share of CBB events whose
+    bred child improved on the best elite parent (RawImprovement>0), tied it (=0), or was worse (<0).
+    Plus the pooled average across all CBB agents."""
+    if 'RawImprovement' not in df_burn.columns:
+        print('  E14: no RawImprovement column, skipping'); return
+    ev = df_burn[df_burn.RawImprovement.notna()]
+    cbb = ['CrossoverBB'] + [f'CrossoverCombo@{r}' for r in RATIOS]
+    rows = []
+    for cfg in cbb:
+        s = ev[ev.Config == cfg]
+        if s.empty: continue
+        rows.append(dict(Config=cfg, n=len(s),
+                         improved=(s.RawImprovement > 0).mean(),
+                         no_change=(s.RawImprovement == 0).mean(),
+                         worse=(s.RawImprovement < 0).mean()))
+    rows.append(dict(Config='all CBB (pooled)', n=len(ev),
+                     improved=(ev.RawImprovement > 0).mean(),
+                     no_change=(ev.RawImprovement == 0).mean(),
+                     worse=(ev.RawImprovement < 0).mean()))
+    t = pd.DataFrame(rows)
+    t.round(4).to_csv(TABLES / 'E14_bb_usefulness.csv', index=False)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    x = np.arange(len(t))
+    imp, noc, wor = t.improved.values * 100, t.no_change.values * 100, t.worse.values * 100
+    ax.bar(x, imp, color='#2ca02c', label='improved')
+    ax.bar(x, noc, bottom=imp, color='#9e9e9e', label='no change')
+    ax.bar(x, wor, bottom=imp + noc, color='#d62728', label='worse')
+    ax.set_xticks(x); ax.set_xticklabels(t.Config, rotation=45, ha='right', fontsize=8)
+    ax.set_ylabel('% of crossover bridge-burn events'); ax.set_ylim(0, 100)
+    ax.legend(fontsize=8, loc='upper right')
+    fig.suptitle('Usefulness of crossover bridge burning — bred child vs best elite parent',
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'E14_bb_usefulness.png'); plt.close(fig)
+
+
 # -------------------------------------------------- main --
 def main():
     print(f'Loading from {ROOT} ...')
@@ -979,6 +1080,9 @@ def main():
     print('E9: crossover inbreeding / diversity collapse'); extra_inbreeding(turn_df)
     print('E10: Expansion BF × source × time');          extra_expansion_bf_time(turn_df, portfolio)
     print('E11: source advantage vs thinking time');     extra_source_effect_vs_time(turn_df, portfolio)
+    print('E12: ratio vs nodes & unique fraction');      extra_ratio_nodes_unique(turn_df)
+    print('E13: nodes & unique fraction with/without CBB'); extra_bb_nodes_table(turn_df)
+    print('E14: bridge-burning usefulness');             extra_bb_usefulness(df_burn)
 
     print(f'\nDone. tables -> {TABLES}/  figures -> {FIGS}/')
 
