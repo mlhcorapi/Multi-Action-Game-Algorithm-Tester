@@ -179,4 +179,45 @@ public class ExpAgents {
     public static AgentSpec crossoverComboV4(int ratio) {
         return new AgentSpec("CrossoverCombo", seed -> new CrossoverComboAgent(seed, expParamsV4(ratio)));
     }
+
+    // ---- v5 Isolation Phase variants ----
+    // Identical to v4 (randomInitialSequence=true, shared root per scenario × visit) EXCEPT the per-turn
+    // budget is the deterministic COMPUTE-UNIT budget (STOP_COMPUTE via ComputeMeter) instead of
+    // wall-clock (STOP_TIME). This makes every turn's search reproducible and independent of CPU
+    // contention / multithreading — the v4 wall-clock budget made compute-per-turn vary with machine load.
+
+    private static ExperimentalEMCTSParams expParamsV5(int ratio, int computeUnits) {
+        ExperimentalEMCTSParams p = new ExperimentalEMCTSParams();
+        p.stop_type = p.STOP_COMPUTE;
+        p.num_computeUnits = computeUnits;
+        p.heuristic_method = p.SIMPLE_HEURISTIC;
+        p.depth = DEPTH;
+        p.mutationExpansionRatio = ratio;
+        p.randomInitialSequence = true;
+        return p;
+    }
+
+    public static AgentSpec emctsV5(int computeUnits) {
+        return new AgentSpec("EMCTS", seed -> {
+            EMCTSParams p = new EMCTSParams();
+            p.stop_type = p.STOP_COMPUTE;
+            p.num_computeUnits = computeUnits;
+            p.heuristic_method = p.SIMPLE_HEURISTIC;
+            p.depth = DEPTH;
+            p.randomInitialSequence = true;
+            return new EMCTSAgent(seed, p);
+        });
+    }
+
+    public static AgentSpec crossoverExpansionV5(int ratio, int computeUnits) {
+        return new AgentSpec("CrossoverExpansion", seed -> new CrossoverExpansionAgent(seed, expParamsV5(ratio, computeUnits)));
+    }
+
+    public static AgentSpec crossoverBBV5(int computeUnits) {
+        return new AgentSpec("CrossoverBB", seed -> new CrossoverBBAgent(seed, expParamsV5(5, computeUnits)));
+    }
+
+    public static AgentSpec crossoverComboV5(int ratio, int computeUnits) {
+        return new AgentSpec("CrossoverCombo", seed -> new CrossoverComboAgent(seed, expParamsV5(ratio, computeUnits)));
+    }
 }
