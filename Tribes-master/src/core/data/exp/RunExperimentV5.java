@@ -50,9 +50,9 @@ public class RunExperimentV5 {
         File ckpt = new File(baseDir, "_completed.txt");
         Set<String> done = ExpCsv.readCompleted(ckpt);
 
-        // 1. Build the 200-scenario portfolio (always regenerates a fresh portfolio).
+        // 1. Build the 200-scenario portfolio (always regenerates a fresh portfolio; parallel across threads).
         banner("PORTFOLIO build", t0);
-        BuildV5Portfolio.main(new String[]{ BASE + "/_portfolio" });
+        BuildV5Portfolio.main(new String[]{ BASE + "/_portfolio", String.valueOf(threads) });
 
         // 1b. Verify every persisted scenario starts up properly before any long isolation pass.
         banner("PORTFOLIO verify", t0);

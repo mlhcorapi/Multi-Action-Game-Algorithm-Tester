@@ -14,42 +14,50 @@ import utils.ElapsedCpuTimer;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /**
  * v5 Isolation Phase: builds a fixed 200-scenario portfolio used by every agent at every compute
- * budget. Identical methodology to {@link BuildV4Portfolio} (same level-seed bases, capture ticks,
- * game modes and validation), scaled up to 200 scenarios — so the first 100 captures are the SAME
- * game states from the same turns as v4, with 100 additional captures appended.
- *
- * <p>Portfolio composition:
+ * budget. Same methodology as {@link BuildV4Portfolio} (same level-seed bases, game modes and
+ * validation), but:
  * <ul>
- *   <li><b>100 single-player scenarios</b> — EMCTS-vs-passive games (SCORE mode, 30-turn limit),
- *       capturing the start-of-turn state for ticks 21..30 (10 per game ⇒ 10 source games).</li>
- *   <li><b>100 two-player scenarios</b> — EMCTS-vs-EMCTS games (CAPITALS, 50-turn limit), captured at
- *       the start of tick 25 (one per game ⇒ 100 source games).</li>
+ *   <li>100 single-player + 100 two-player scenarios;</li>
+ *   <li>single captures at turns 10,12,14,16,18,20,22,24,26,28,30 (11/game); dual captures at turns
+ *       15,20,25 (3/game);</li>
+ *   <li>source games are generated <b>in parallel</b> across worker threads — each game is independent
+ *       and the per-thread {@link core.game.ComputeMeter} keeps the deterministic compute budget
+ *       thread-safe. Captures are collected and IDs assigned in (gameAttempt, tick) order, so the
+ *       portfolio is reproducible regardless of thread-completion order;</li>
+ *   <li>level-seed attempt caps raised 5× (failing seeds are common at the earlier capture turns).</li>
  * </ul>
  *
- * <p>Source agents use the deterministic compute-unit budget (1000ms-equivalent = 26800 units) so the
- * portfolio is reproducible across machines/threads. Map is the standard 11x11 water-free board.
- *
  * <p>Output: {@code test_results/v5/_portfolio/} — {@code scenarios/scenario_NNN.bin} +
- * {@code portfolio.csv} (manifest, same header as v4).
+ * {@code portfolio.csv} (manifest, with the v5 action-composition columns).
+ *
+ * <p>Usage: {@code BuildV5Portfolio [outDir] [threads] [numSingle] [numDual]}. The last two override
+ * the scenario targets (for quick test builds); production runs pass only outDir + threads.
  */
 public class BuildV5Portfolio {
 
     /** Target number of single-source scenarios (turn-start states across some 1-tribe games). */
     public static final int    NUM_SINGLE_SCENARIOS    = 100;
-    /** Target number of dual-source scenarios (tick 25 of 2-tribe games). */
+    /** Target number of dual-source scenarios. */
     public static final int    NUM_DUAL_SCENARIOS      = 100;
-    /** Cap on level-seed attempts before giving up on a category. ~3× the games we expect to need
-     *  (10 single games × 10 ticks = 100; 100 dual games × 1 = 100). */
-    public static final int    MAX_SINGLE_GAME_ATTEMPTS = 30;
-    public static final int    MAX_DUAL_GAME_ATTEMPTS   = 300;
+    /** Cap on level-seed attempts before giving up on a category (raised 5× from the v4-style caps —
+     *  the earlier capture turns make more source seeds fail validation). */
+    public static final int    MAX_SINGLE_GAME_ATTEMPTS = 150;
+    public static final int    MAX_DUAL_GAME_ATTEMPTS   = 1500;
 
-    public static final int    SINGLE_FIRST_TICK = 21;       // last 10 turn-start states (ticks 21..30)
-    public static final int    SINGLE_LAST_TICK  = 30;
-    public static final int    DUAL_CAPTURE_TICK = 25;
+    /** Single-player capture turns (11 turn-start states per source game). */
+    public static final int[]  SINGLE_TICKS = {10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30};
+    /** Two-player capture turns (3 turn-start states per source game). */
+    public static final int[]  DUAL_TICKS   = {15, 20, 25};
 
     /** Minimum active-tribe score for validateScenario to accept the position (stuck-game guard). */
     public static final int    MIN_VALID_SCORE = 500;
@@ -72,12 +80,23 @@ public class BuildV5Portfolio {
 
     private static final Types.TRIBE[] TRIBES = {Types.TRIBE.IMPERIUS, Types.TRIBE.IMPERIUS2};
 
+    /** One captured scenario before ID assignment: provenance + the snapshot. */
+    private static final class Cap {
+        final int gameAttempt; final long levelSeed; final int tick; final GameState gs;
+        Cap(int gameAttempt, long levelSeed, int tick, GameState gs) {
+            this.gameAttempt = gameAttempt; this.levelSeed = levelSeed; this.tick = tick; this.gs = gs;
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         String outDir = args.length > 0 ? args[0] : "test_results/v5/_portfolio";
+        int threads   = args.length > 1 ? Integer.parseInt(args[1]) : Runtime.getRuntime().availableProcessors();
+        int numSingle = args.length > 2 ? Integer.parseInt(args[2]) : NUM_SINGLE_SCENARIOS;
+        int numDual   = args.length > 3 ? Integer.parseInt(args[3]) : NUM_DUAL_SCENARIOS;
+
         File dir = new File(outDir);
         File scenariosDir = new File(dir, "scenarios");
-        // Always start fresh: a partial portfolio is a corruption hazard.
-        deleteDir(scenariosDir);
+        deleteDir(scenariosDir);   // always start fresh: a partial portfolio is a corruption hazard
         File manifest = new File(dir, "portfolio.csv");
         if (manifest.exists()) manifest.delete();
         File ckpt = new File(dir, "_completed.txt");
@@ -85,18 +104,19 @@ public class BuildV5Portfolio {
         ExpCsv.ensureDir(scenariosDir);
 
         ExpCsv.writeText(new File(dir, "config.txt"),
-                "v5 Isolation Phase - Portfolio Generator\n" +
-                "singlePlayer=" + NUM_SINGLE_SCENARIOS + " scenarios from EMCTS vs DoNothing (SCORE/30); capture ticks "
-                        + SINGLE_FIRST_TICK + ".." + SINGLE_LAST_TICK + "; level-seed attempts capped at "
+                "v5 Isolation Phase - Portfolio Generator (parallel, " + threads + " threads)\n" +
+                "singlePlayer=" + numSingle + " scenarios from EMCTS vs DoNothing (SCORE); capture turns "
+                        + java.util.Arrays.toString(SINGLE_TICKS) + "; level-seed attempts capped at "
                         + MAX_SINGLE_GAME_ATTEMPTS + "\n" +
-                "twoPlayer=" + NUM_DUAL_SCENARIOS + " scenarios from EMCTS vs EMCTS (CAPITALS/50); capture tick "
-                        + DUAL_CAPTURE_TICK + "; level-seed attempts capped at " + MAX_DUAL_GAME_ATTEMPTS + "\n" +
+                "twoPlayer=" + numDual + " scenarios from EMCTS vs EMCTS (CAPITALS); capture turns "
+                        + java.util.Arrays.toString(DUAL_TICKS) + "; level-seed attempts capped at "
+                        + MAX_DUAL_GAME_ATTEMPTS + "\n" +
                 "sourceBudget=" + SOURCE_BUDGET_UNITS + " compute-units (1000ms-equiv, reproducible)\n" +
-                "selection=same level-seed bases / capture ticks as v4, so the first 100 captures are the\n" +
-                "          SAME game states from the same turns as v4, with 100 more appended\n" +
+                "parallel=source games run concurrently; captures collected + IDs assigned in "
+                        + "(gameAttempt, tick) order so the portfolio is thread-order-independent\n" +
                 "validation=activeTribe cities>=1 AND units>=1 AND score>=" + MIN_VALID_SCORE
                         + " AND a tiny EMCTS planTurn does not throw\n" +
-                "stuck-game guard=if FIRST captured tick of a source game fails validation the whole game is aborted\n" +
+                "stuck-game guard=if FIRST captured turn of a source game fails validation the whole game is aborted\n" +
                 "tribes=IMPERIUS vs IMPERIUS2 on 11x11 water-free board\n");
 
         Constants.VISUALS = false;
@@ -105,107 +125,97 @@ public class BuildV5Portfolio {
         Constants.TURN_TIME_MILLIS = 10_000_000L;
         Constants.REMOVE_FISHING = true;
 
-        int scenarioId = 0;
         long t0 = System.currentTimeMillis();
 
-        // ---- SINGLE-source scenarios — extend the level-seed pool until NUM_SINGLE_SCENARIOS valid
-        // captures are collected (or the safety cap is reached).
-        Constants.MAX_TURNS_CAPITALS = 30;
-        int validSingles = 0;
-        int singleGamesTried = 0;
-        for (int gameAttempt = 1;
-             validSingles < NUM_SINGLE_SCENARIOS && gameAttempt <= MAX_SINGLE_GAME_ATTEMPTS;
-             gameAttempt++) {
-            long levelSeed = SINGLE_LEVEL_SEED_BASE + gameAttempt;
-            singleGamesTried = gameAttempt;
-            System.out.println("[Portfolio] SINGLE attempt " + gameAttempt + " (levelSeed=" + levelSeed
-                    + "); valid so far " + validSingles + "/" + NUM_SINGLE_SCENARIOS);
-            ArrayList<Agent> players = new ArrayList<>();
-            players.add(buildEmctsSourceAgent());
-            players.add(new players.DoNothingAgent(SOURCE_AGENT_SEED));
-            Game game = new Game();
-            int collectedThisGame = 0;
-            try {
-                game.init(players, levelSeed, TRIBES, FIXED_GAME_SEED, Types.GAME_MODE.SCORE);
+        // SINGLE-source: EMCTS vs DoNothing, SCORE mode. MAX_TURNS_CAPITALS must cover the last capture turn.
+        Constants.MAX_TURNS_CAPITALS = SINGLE_TICKS[SINGLE_TICKS.length - 1];
+        List<Cap> singles = collectCategory("single", SINGLE_LEVEL_SEED_BASE, Types.GAME_MODE.SCORE,
+                SINGLE_TICKS, numSingle, MAX_SINGLE_GAME_ATTEMPTS, false, threads);
 
-                for (int tick = SINGLE_FIRST_TICK; tick <= SINGLE_LAST_TICK; tick++) {
-                    if (validSingles >= NUM_SINGLE_SCENARIOS) break;
-                    GameState gs = game.captureAtTickAsTurnStart(tick);
-                    if (gs.isGameOver()) {
-                        System.out.println("  game ended early at tick " + gs.getTick());
-                        break;
-                    }
-                    if (!validateScenario(gs, scenarioId + 1)) {
-                        if (tick == SINGLE_FIRST_TICK) {
-                            System.out.println("  ABORT game " + gameAttempt
-                                    + " (stuck position at first captured tick — next seed)");
-                            break;
-                        }
-                        continue;
-                    }
-                    scenarioId++;
-                    persistAndManifest(scenarioId, "single", gameAttempt, levelSeed, FIXED_GAME_SEED, tick, gs,
-                            scenariosDir, manifest);
-                    validSingles++;
-                    collectedThisGame++;
-                }
-            } catch (Throwable t) {
-                System.out.println("  ABORT game " + gameAttempt + ": engine threw "
-                        + t.getClass().getSimpleName() + " — next seed");
-            }
-            System.out.println("  collected " + collectedThisGame + " valid scenarios from game " + gameAttempt);
-        }
-        if (validSingles < NUM_SINGLE_SCENARIOS) {
-            System.out.println("  WARN: only " + validSingles + "/" + NUM_SINGLE_SCENARIOS
-                    + " valid single scenarios after " + singleGamesTried + " attempts (cap "
-                    + MAX_SINGLE_GAME_ATTEMPTS + ").");
-        }
-
-        // ---- DUAL-source scenarios — same extension model, one capture per source game at tick 25.
+        // DUAL-source: EMCTS vs EMCTS, CAPITALS mode.
         Constants.MAX_TURNS_CAPITALS = 50;
-        int validDuals = 0;
-        int dualGamesTried = 0;
-        for (int gameAttempt = 1;
-             validDuals < NUM_DUAL_SCENARIOS && gameAttempt <= MAX_DUAL_GAME_ATTEMPTS;
-             gameAttempt++) {
-            long levelSeed = DUAL_LEVEL_SEED_BASE + gameAttempt;
-            dualGamesTried = gameAttempt;
-            System.out.println("[Portfolio] DUAL attempt " + gameAttempt + " (levelSeed=" + levelSeed
-                    + "); valid so far " + validDuals + "/" + NUM_DUAL_SCENARIOS);
-            ArrayList<Agent> players = new ArrayList<>();
-            players.add(buildEmctsSourceAgent());
-            players.add(buildEmctsSourceAgent());
-            Game game = new Game();
-            GameState gs;
-            try {
-                game.init(players, levelSeed, TRIBES, FIXED_GAME_SEED, Types.GAME_MODE.CAPITALS);
-                gs = game.captureAtTickAsTurnStart(DUAL_CAPTURE_TICK);
-            } catch (Throwable t) {
-                System.out.println("  ABORT game " + gameAttempt + ": engine threw "
-                        + t.getClass().getSimpleName() + " — next seed");
-                continue;
-            }
-            if (gs.isGameOver()) {
-                System.out.println("  game ended early at tick " + gs.getTick() + " — skipping");
-                continue;
-            }
-            if (!validateScenario(gs, scenarioId + 1)) {
-                continue;
-            }
-            scenarioId++;
-            persistAndManifest(scenarioId, "dual", gameAttempt, levelSeed, FIXED_GAME_SEED, DUAL_CAPTURE_TICK, gs,
-                    scenariosDir, manifest);
-            validDuals++;
-        }
-        if (validDuals < NUM_DUAL_SCENARIOS) {
-            System.out.println("  WARN: only " + validDuals + "/" + NUM_DUAL_SCENARIOS
-                    + " valid dual scenarios after " + dualGamesTried + " attempts (cap "
-                    + MAX_DUAL_GAME_ATTEMPTS + ").");
-        }
+        List<Cap> duals = collectCategory("dual", DUAL_LEVEL_SEED_BASE, Types.GAME_MODE.CAPITALS,
+                DUAL_TICKS, numDual, MAX_DUAL_GAME_ATTEMPTS, true, threads);
+
+        // Persist single-threaded in (category, gameAttempt, tick) order — deterministic IDs, no write contention.
+        int scenarioId = 0;
+        for (Cap c : singles) persistAndManifest(++scenarioId, "single", c.gameAttempt, c.levelSeed,
+                FIXED_GAME_SEED, c.tick, c.gs, scenariosDir, manifest);
+        for (Cap c : duals)   persistAndManifest(++scenarioId, "dual", c.gameAttempt, c.levelSeed,
+                FIXED_GAME_SEED, c.tick, c.gs, scenariosDir, manifest);
 
         System.out.println(String.format(Locale.ROOT,
-                "[Portfolio] Complete. %d scenarios in %.1fs. Output: %s",
-                scenarioId, (System.currentTimeMillis() - t0) / 1000.0, dir.getPath()));
+                "[Portfolio] Complete. %d scenarios (%d single + %d dual) in %.1fs. Output: %s",
+                scenarioId, singles.size(), duals.size(), (System.currentTimeMillis() - t0) / 1000.0, dir.getPath()));
+    }
+
+    /**
+     * Runs source games concurrently (in attempt-ordered waves of {@code threads}) until {@code target}
+     * valid scenarios are collected or the attempt cap is hit. Captures are returned in
+     * (gameAttempt, tick) order, so downstream ID assignment is independent of thread timing.
+     */
+    private static List<Cap> collectCategory(String source, long seedBase, Types.GAME_MODE mode,
+                                             int[] ticks, int target, int maxAttempts,
+                                             boolean twoPlayer, int threads) throws Exception {
+        List<Cap> collected = new ArrayList<>();
+        ExecutorService pool = Executors.newFixedThreadPool(Math.max(1, threads));
+        try {
+            int next = 1;
+            while (collected.size() < target && next <= maxAttempts) {
+                int start = next, end = Math.min(maxAttempts, start + Math.max(1, threads) - 1);
+                List<Future<List<Cap>>> futures = new ArrayList<>();
+                for (int a = start; a <= end; a++) {
+                    final int attempt = a;
+                    final long levelSeed = seedBase + a;
+                    futures.add(pool.submit(() -> runOneSourceGame(attempt, levelSeed, mode, ticks, twoPlayer)));
+                }
+                for (Future<List<Cap>> f : futures) {     // drained in submission (= attempt) order
+                    List<Cap> caps;
+                    try { caps = f.get(); } catch (Exception e) { caps = Collections.emptyList(); }
+                    for (Cap c : caps) if (collected.size() < target) collected.add(c);
+                }
+                System.out.println(String.format(Locale.ROOT,
+                        "[Portfolio] %s: attempts %d..%d -> %d/%d valid", source, start, end,
+                        collected.size(), target));
+                next = end + 1;
+            }
+        } finally {
+            pool.shutdown();
+            pool.awaitTermination(2, TimeUnit.HOURS);
+        }
+        if (collected.size() < target) {
+            System.out.println("  WARN: only " + collected.size() + "/" + target + " valid " + source
+                    + " scenarios after " + maxAttempts + " attempts.");
+        }
+        return collected;
+    }
+
+    /** Plays one source game and returns its valid captures (in tick order). Applies the stuck-game
+     *  guard: if the FIRST captured turn fails validation the whole game is abandoned. Swallows engine
+     *  throws (returns whatever was captured before the throw) so one bad seed never aborts the build. */
+    private static List<Cap> runOneSourceGame(int attempt, long levelSeed, Types.GAME_MODE mode,
+                                              int[] ticks, boolean twoPlayer) {
+        List<Cap> out = new ArrayList<>();
+        ArrayList<Agent> players = new ArrayList<>();
+        players.add(buildEmctsSourceAgent());
+        players.add(twoPlayer ? buildEmctsSourceAgent() : new players.DoNothingAgent(SOURCE_AGENT_SEED));
+        Game game = new Game();
+        try {
+            game.init(players, levelSeed, TRIBES, FIXED_GAME_SEED, mode);
+            for (int ti = 0; ti < ticks.length; ti++) {
+                GameState gs = game.captureAtTickAsTurnStart(ticks[ti]);
+                if (gs.isGameOver()) break;
+                if (!validateScenario(gs, attempt)) {
+                    if (ti == 0) break;   // stuck position at first captured turn — abandon this seed
+                    continue;
+                }
+                out.add(new Cap(attempt, levelSeed, ticks[ti], gs));
+            }
+        } catch (Throwable t) {
+            System.out.println("  game attempt " + attempt + " (seed " + levelSeed + "): engine threw "
+                    + t.getClass().getSimpleName() + " — keeping " + out.size() + " captures, next seed");
+        }
+        return out;
     }
 
     private static Agent buildEmctsSourceAgent() {
@@ -256,7 +266,8 @@ public class BuildV5Portfolio {
     }
 
     /** Pre-persist validation: rejects empty/stuck positions and states where a tiny EMCTS plan-turn
-     *  throws. Restores Constants.TURN_TIME_MILLIS. */
+     *  throws. Thread-safe — the validation budget is set on a local timer rather than by mutating the
+     *  global {@code Constants.TURN_TIME_MILLIS}, so it can run on many source games concurrently. */
     public static boolean validateScenario(GameState gs, int scenarioId) {
         int aid = gs.getActiveTribeID();
         if (aid < 0 || aid >= gs.getTribes().length) {
@@ -274,19 +285,14 @@ public class BuildV5Portfolio {
         }
         int score = at.getScore();
         if (numCities == 0 || numUnits == 0) {
-            System.out.println("  REJECT " + sid(scenarioId) + ": activeTribe " + aid
-                    + " has cities=" + numCities + " units=" + numUnits + " (passive/empty position)");
-            return false;
+            return false;   // passive/empty position (common at first captured turn — quiet)
         }
         if (score < MIN_VALID_SCORE) {
-            System.out.println("  REJECT " + sid(scenarioId) + ": activeTribe " + aid
-                    + " has cities=" + numCities + " units=" + numUnits + " score=" + score
-                    + " (< " + MIN_VALID_SCORE + " — stuck game)");
-            return false;
+            return false;   // stuck game (spawn-pinned tribe stays at the starting score)
         }
-        long savedTtm = Constants.TURN_TIME_MILLIS;
+        // Smoke-act with a tiny EMCTS to catch NPE / IllegalState from edge-case states. The 50ms budget
+        // is set on this local timer only — no global Constants mutation, so this is thread-safe.
         try {
-            Constants.TURN_TIME_MILLIS = 50;
             EMCTSParams p = new EMCTSParams();
             p.stop_type = p.STOP_TIME;
             p.heuristic_method = p.SIMPLE_HEURISTIC;
@@ -297,7 +303,7 @@ public class BuildV5Portfolio {
             for (int k = 0; k < gs.getTribes().length; k++) allIds.add(k);
             a.setPlayerIDs(aid, allIds);
             ElapsedCpuTimer ect = new ElapsedCpuTimer();
-            ect.setMaxTimeMillis(Constants.TURN_TIME_MILLIS);
+            ect.setMaxTimeMillis(50);
             GameState copy = gs.copy();
             copy.setRandomGenerator(new java.util.Random(SOURCE_AGENT_SEED));
             a.act(copy, ect);
@@ -305,8 +311,6 @@ public class BuildV5Portfolio {
         } catch (Throwable t) {
             System.out.println("  REJECT " + sid(scenarioId) + ": EMCTS act() threw " + t);
             return false;
-        } finally {
-            Constants.TURN_TIME_MILLIS = savedTtm;
         }
     }
 
