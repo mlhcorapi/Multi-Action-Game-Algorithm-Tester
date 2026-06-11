@@ -584,11 +584,14 @@ public class ExperimentalEMCTSAgent extends Agent {
             }
 
             try {
-                boolean done = checkActionFeasibility(child.get(a), gs.copy());
+                // Feasibility is a read-only predicate (isFeasible has no side effects — allGoodActions
+                // already calls it on a shared gs), so check on gs directly instead of a full-state copy.
+                boolean done = checkActionFeasibility(child.get(a), gs);
 
                 if (!done) {
-                    // Action is infeasible - use greedy selection for replacement
-                    ArrayList<Action> allAvailableActions = this.allGoodActions(gs.copy(), m_rnd);
+                    // Action is infeasible - use greedy selection for replacement.
+                    // allGoodActions is read-only (the catch branch below already calls it on gs), so no copy.
+                    ArrayList<Action> allAvailableActions = this.allGoodActions(gs, m_rnd);
                     
                     Action bestAction = null;
                     double bestScore = Double.NEGATIVE_INFINITY;
