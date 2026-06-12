@@ -10,6 +10,8 @@ import players.Agent;
 import utils.ElapsedCpuTimer;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -106,15 +108,27 @@ public class IsolationPhaseRunnerV5 {
             }
             File csv = leafCsv(baseDir, cfg, computeUnits);
             ExpCsv.ensureDir(csv.getParentFile());
-            if (csv.exists()) csv.delete();
             File tele = new File(csv.getParentFile(), "turn_telemetry.csv");
-            if (tele.exists()) tele.delete();
+            String header = cfg.burnCrossover ? TRAJECTORY_HEADER_BURN : TRAJECTORY_HEADER_BASE;
+            int total = portfolio.size() * VISITS_PER_SCENARIO;
 
-            System.out.println(String.format(Locale.ROOT,
-                    "[v5] (%d/%d) RUN  %s (%d scenarios × %d visits = %d turns)",
-                    i+1, configs.size(), key, portfolio.size(), VISITS_PER_SCENARIO,
-                    portfolio.size() * VISITS_PER_SCENARIO));
-            runOneConfig(cfg, portfolio, csv, threads);
+            // Per-turn resume: a config can be interrupted mid-run (the server restarts during the
+            // 12+ hour job). Rather than wipe the leaf and recompute all 20k turns, keep every turn
+            // that finished and recompute only the missing ones. compactPartialLeaf() drops any
+            // partially-written tail from the crash, so the resumed files are clean.
+            Set<String> doneTurns;
+            if (csv.exists() || tele.exists()) {
+                doneTurns = compactPartialLeaf(csv, tele, header);
+                System.out.println(String.format(Locale.ROOT,
+                        "[v5] (%d/%d) RESUME %s — %d/%d turns already done", i+1, configs.size(), key,
+                        doneTurns.size(), total));
+            } else {
+                doneTurns = Collections.emptySet();
+                System.out.println(String.format(Locale.ROOT,
+                        "[v5] (%d/%d) RUN  %s (%d scenarios × %d visits = %d turns)",
+                        i+1, configs.size(), key, portfolio.size(), VISITS_PER_SCENARIO, total));
+            }
+            runOneConfig(cfg, portfolio, csv, threads, doneTurns);
             ExpCsv.markCompleted(ckpt, key);
             System.out.println(String.format(Locale.ROOT,
                     "[v5] (%d/%d) DONE %s   elapsed=%s",
@@ -122,22 +136,23 @@ public class IsolationPhaseRunnerV5 {
         }
     }
 
-    /** Runs all portfolio×visit tasks for ONE config, parallelised across {@code threads} workers. */
+    /** Runs all NOT-yet-done portfolio×visit tasks for ONE config, parallelised across {@code threads}
+     *  workers. Headers are written lazily by the first {@link ExpCsv#append}; on resume the files
+     *  already exist (compacted) so appends never duplicate the header. */
     private static void runOneConfig(AgentConfig cfg, List<Scenario> portfolio, File csv,
-                                     int threads) throws Exception {
+                                     int threads, Set<String> doneTurns) throws Exception {
         String header = cfg.burnCrossover ? TRAJECTORY_HEADER_BURN : TRAJECTORY_HEADER_BASE;
-        ExpCsv.append(csv, header, Collections.emptyList());   // write header up-front
         File tele = new File(csv.getParentFile(), "turn_telemetry.csv");
-        ExpCsv.append(tele, TELEMETRY_HEADER, Collections.emptyList());
 
         int total = portfolio.size() * VISITS_PER_SCENARIO;
-        AtomicInteger completed = new AtomicInteger(0);
+        AtomicInteger completed = new AtomicInteger(doneTurns.size());   // resumed turns count as done
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         Object writeLock = new Object();
         List<Future<?>> futures = new ArrayList<>();
 
         for (Scenario sc : portfolio) {
             for (int v = 0; v < VISITS_PER_SCENARIO; v++) {
+                if (doneTurns.contains(sc.id + ":" + v)) continue;   // already persisted on a prior run
                 final int visitId = v;
                 final Scenario scenario = sc;
                 futures.add(pool.submit(() -> {
@@ -165,6 +180,55 @@ public class IsolationPhaseRunnerV5 {
         for (Future<?> f : futures) f.get();
         pool.shutdown();
         pool.awaitTermination(1, TimeUnit.HOURS);
+    }
+
+    /**
+     * Resume support: rewrite a leaf's results.csv + turn_telemetry.csv keeping only fully-completed
+     * (scenario, visit) turns, and return that done-set. The telemetry row is written LAST in each
+     * turn's synchronized block, so a telemetry row is the authority that a turn finished; results
+     * rows not backed by a telemetry row (a turn whose burn rows were written but whose process died
+     * before the telemetry append) are dropped so the recompute does not duplicate them. Malformed
+     * tail lines from a mid-write crash are skipped by the field-count guards.
+     */
+    private static Set<String> compactPartialLeaf(File csv, File tele, String resultsHeader) throws Exception {
+        Set<String> done = new LinkedHashSet<>();
+        // 1) telemetry is the completion authority (22 fields; ScenarioId@0, VisitId@2).
+        List<String> teleKept = new ArrayList<>();
+        if (tele.exists()) {
+            List<String> lines = Files.readAllLines(tele.toPath());
+            for (int i = 1; i < lines.size(); i++) {
+                String[] f = lines.get(i).split(",", -1);
+                if (f.length < 22) continue;
+                try {
+                    String tup = Integer.parseInt(f[0].trim()) + ":" + Integer.parseInt(f[2].trim());
+                    if (done.add(tup)) teleKept.add(lines.get(i));   // dedup
+                } catch (NumberFormatException ignore) { }
+            }
+        }
+        writeLeaf(tele, TELEMETRY_HEADER, teleKept);
+        // 2) results: keep only rows whose (scenario, visit) finished (ScenarioId@0, VisitId@4).
+        int baseFields = resultsHeader.split(",").length;
+        List<String> resKept = new ArrayList<>();
+        if (csv.exists()) {
+            List<String> lines = Files.readAllLines(csv.toPath());
+            for (int i = 1; i < lines.size(); i++) {
+                String[] f = lines.get(i).split(",", -1);
+                if (f.length < baseFields) continue;
+                try {
+                    String tup = Integer.parseInt(f[0].trim()) + ":" + Integer.parseInt(f[4].trim());
+                    if (done.contains(tup)) resKept.add(lines.get(i));
+                } catch (NumberFormatException ignore) { }
+            }
+        }
+        writeLeaf(csv, resultsHeader, resKept);
+        return done;
+    }
+
+    /** Overwrite a CSV with {@code header} + {@code rows} (used by resume compaction). */
+    private static void writeLeaf(File f, String header, List<String> rows) throws Exception {
+        StringBuilder sb = new StringBuilder(header).append('\n');
+        for (String r : rows) sb.append(r).append('\n');
+        Files.write(f.toPath(), sb.toString().getBytes(StandardCharsets.UTF_8));
     }
 
     /** Output of one (scenario, visit) turn: per-burn trajectory rows + one operator-telemetry row. */
@@ -252,6 +316,30 @@ public class IsolationPhaseRunnerV5 {
                     + ot.xoRepairKept + "," + ot.xoRepairReplaced;
         }
         return new TurnResult(rows, teleRow);
+    }
+
+    /**
+     * Times running EMCTS over the given (scenario × visits) subset at {@code computeUnits} with
+     * {@code threads} workers, WITHOUT persisting anything — used by the thread-count auto-tune.
+     * Returns wall-clock milliseconds (lower = faster for that thread count).
+     */
+    public static long benchmarkThroughput(int computeUnits, int threads, List<Scenario> subset, int visits) {
+        Constants.TURN_TIME_LIMITED = false;
+        Constants.TURN_TIME_MILLIS = 10_000_000L;   // STOP_COMPUTE agents gate on compute, not the clock
+        AgentConfig cfg = new AgentConfig("EMCTS", -1, ExpAgents.emctsV5(computeUnits), false);
+        ExecutorService pool = Executors.newFixedThreadPool(Math.max(1, threads));
+        List<Future<?>> fs = new ArrayList<>();
+        long t0 = System.nanoTime();
+        for (Scenario sc : subset) {
+            for (int v = 0; v < visits; v++) {
+                final int vv = v; final Scenario s = sc;
+                fs.add(pool.submit(() -> { try { runOneTurn(cfg, s, vv); } catch (Throwable ignore) {} }));
+            }
+        }
+        for (Future<?> f : fs) { try { f.get(); } catch (Exception ignore) {} }
+        pool.shutdown();
+        try { pool.awaitTermination(1, TimeUnit.HOURS); } catch (InterruptedException ignore) {}
+        return (System.nanoTime() - t0) / 1_000_000L;
     }
 
     /** Shared per-(scenario, visit) seed — identical across all 12 configs (paired-comparison core). */

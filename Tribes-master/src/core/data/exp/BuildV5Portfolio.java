@@ -96,9 +96,30 @@ public class BuildV5Portfolio {
 
         File dir = new File(outDir);
         File scenariosDir = new File(dir, "scenarios");
-        deleteDir(scenariosDir);   // always start fresh: a partial portfolio is a corruption hazard
         File manifest = new File(dir, "portfolio.csv");
+        File doneMarker = new File(dir, "_portfolio_complete.txt");
+
+        // Checkpoint: if a COMPLETE portfolio for these exact targets already exists, skip the ~hour
+        // rebuild (the server may restart during the long isolation phase, which re-enters this main).
+        String wantTag = "single=" + numSingle + " dual=" + numDual;
+        if (doneMarker.exists() && manifest.exists()) {
+            try {
+                String have = new String(java.nio.file.Files.readAllBytes(doneMarker.toPath())).trim();
+                long rows = java.nio.file.Files.lines(manifest.toPath()).count() - 1; // minus header
+                if (have.equals(wantTag) && rows == (numSingle + numDual)) {
+                    System.out.println("[Portfolio] already complete (" + wantTag + ", " + rows
+                            + " scenarios) — skipping regeneration. Delete " + doneMarker.getName()
+                            + " to force a rebuild.");
+                    return;
+                }
+            } catch (Exception ignore) { /* fall through to a fresh build */ }
+        }
+
+        // Not complete (fresh, partial, or target changed): always start clean — a partial portfolio
+        // is a corruption hazard, and the build itself is short relative to the isolation phase.
+        deleteDir(scenariosDir);
         if (manifest.exists()) manifest.delete();
+        if (doneMarker.exists()) doneMarker.delete();
         File ckpt = new File(dir, "_completed.txt");
         if (ckpt.exists()) ckpt.delete();
         ExpCsv.ensureDir(scenariosDir);
@@ -144,6 +165,10 @@ public class BuildV5Portfolio {
         for (Cap c : duals)   persistAndManifest(++scenarioId, "dual", c.gameAttempt, c.levelSeed,
                 FIXED_GAME_SEED, c.tick, c.gs, scenariosDir, manifest);
 
+        // Completion marker — read on re-entry to skip rebuilding a finished portfolio.
+        if (scenarioId == numSingle + numDual) {
+            ExpCsv.writeText(doneMarker, wantTag + "\n");
+        }
         System.out.println(String.format(Locale.ROOT,
                 "[Portfolio] Complete. %d scenarios (%d single + %d dual) in %.1fs. Output: %s",
                 scenarioId, singles.size(), duals.size(), (System.currentTimeMillis() - t0) / 1000.0, dir.getPath()));
