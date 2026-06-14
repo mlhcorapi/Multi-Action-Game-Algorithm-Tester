@@ -1,0 +1,12 @@
+Config,mean,std,count,ci95
+CrossoverBB,13.272,210.964,59837,1.69
+CrossoverCombo@10,36.128,230.624,59839,1.848
+CrossoverCombo@2,19.503,241.295,59844,1.933
+CrossoverCombo@20,31.301,224.464,59837,1.799
+CrossoverCombo@5,34.97,235.186,59848,1.884
+CrossoverCombo@50,23.372,217.787,59841,1.745
+CrossoverExpansion@10,24.03,201.938,59825,1.618
+CrossoverExpansion@2,10.643,211.664,59838,1.696
+CrossoverExpansion@20,21.388,192.762,59847,1.544
+CrossoverExpansion@5,21.899,207.09,59837,1.659
+CrossoverExpansion@50,16.658,166.832,59843,1.337

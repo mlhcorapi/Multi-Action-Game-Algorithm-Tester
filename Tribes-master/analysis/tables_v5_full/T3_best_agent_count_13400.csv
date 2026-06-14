@@ -1,0 +1,13 @@
+,count
+EMCTS,17
+CrossoverBB,1
+CrossoverExpansion@2,5
+CrossoverExpansion@5,24
+CrossoverExpansion@10,49
+CrossoverExpansion@20,43
+CrossoverExpansion@50,17
+CrossoverCombo@2,12
+CrossoverCombo@5,15
+CrossoverCombo@10,11
+CrossoverCombo@20,2
+CrossoverCombo@50,4

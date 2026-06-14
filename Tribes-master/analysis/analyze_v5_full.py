@@ -470,6 +470,8 @@ def extra_single_vs_dual(turn_df, portfolio):
     'developed solo' and 'competitive mid-game' scenarios?"""
     if portfolio.empty: return
     m = turn_df.merge(portfolio[['ScenarioId','Source']], on='ScenarioId')
+    n_single = int((portfolio.Source == 'single').sum())
+    n_dual = int((portfolio.Source == 'dual').sum())
     rows = []
     for src in ('single', 'dual'):
         sub = m[m.Source == src]
@@ -496,8 +498,8 @@ def extra_single_vs_dual(turn_df, portfolio):
         x = np.arange(len(configs_present))
         s = sub[sub.Source=='single'].set_index('Config').reindex(configs_present)['deltaVsEMCTS']
         d = sub[sub.Source=='dual'  ].set_index('Config').reindex(configs_present)['deltaVsEMCTS']
-        ax.bar(x - 0.2, s.values, 0.4, color='#1f78b4', label='single-player scenarios (n=50)')
-        ax.bar(x + 0.2, d.values, 0.4, color='#e31a1c', label='dual-player scenarios (n=50)')
+        ax.bar(x - 0.2, s.values, 0.4, color='#1f78b4', label=f'single-player scenarios (n={n_single})')
+        ax.bar(x + 0.2, d.values, 0.4, color='#e31a1c', label=f'dual-player scenarios (n={n_dual})')
         ax.axhline(0, color='black', lw=0.8)
         ax.set_xticks(x); ax.set_xticklabels(configs_present, rotation=60, ha='right', fontsize=7)
         ax.set_title(f'{ms} cu')
@@ -628,7 +630,7 @@ def extra_branching_source_diagnostics(turn_df, portfolio):
     pivot_dual.round(2).to_csv(TABLES / 'E7_bf_tier_dual.csv')
 
     # ----------------------------------------------------- E8: BF scatter with regression lines ----
-    select_agents = ['CrossoverExpansion@2', 'CrossoverExpansion@15', 'CrossoverBB', 'CrossoverCombo@5']
+    select_agents = ['CrossoverExpansion@2', 'CrossoverExpansion@20', 'CrossoverBB', 'CrossoverCombo@5']
     # Per-scenario delta means (averaged over visits and ms) so each scenario is one data point.
     per_scen = (j.groupby(['Config','ScenarioId','BranchingFactor','Source'], observed=True)['delta']
                   .mean().reset_index())
@@ -875,7 +877,7 @@ def extra_expansion_bf_time(turn_df, portfolio):
     if portfolio.empty:
         print('  E10: portfolio missing, skipping'); return
     j = _paired_delta_table(turn_df, portfolio)
-    ratios_show = [2, 5, 15]
+    ratios_show = [2, 5, 20]
     ms_colors = dict(zip(MS_LEVELS, ['#fdae6b', '#e6550d', '#7f2704']))  # light→dark by ms
     fig, axes = plt.subplots(2, len(ratios_show), figsize=(4.7*len(ratios_show), 8.4),
                              squeeze=False, sharex=True, sharey=True)
