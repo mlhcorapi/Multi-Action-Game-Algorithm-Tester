@@ -84,3 +84,6 @@ in `wilcoxon_sequence_value.csv`.
 - Bars/CI in `Fig5_significance.png` are the per-(scenario×visit) paired deltas (n≈5000, the existing
   Fig 5); the significance stars use the more conservative per-scenario Wilcoxon (n=100) so the test
   respects scenario clustering. The two agree on direction throughout.
+- `Fig5_significance_perscenario.png` redraws the same figure with PER-SCENARIO bars + 95% CIs (n=100,
+  the same unit as the Wilcoxon). Bar heights are unchanged (balanced design) but the whiskers are
+  wider; e.g. CE@5's CIs now cross zero at every budget, consistent with its non-significant test.

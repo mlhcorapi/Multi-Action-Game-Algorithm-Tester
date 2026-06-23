@@ -231,7 +231,48 @@ def fig7_significance():
     fig.tight_layout(); fig.savefig(OUT / 'Fig7_significance.png', dpi=300); plt.close(fig)
 
 
+def fig5_perscenario():
+    """Fig 5, per-scenario unit: bars + whiskers are the PER-SCENARIO paired Δ (one mean Δ per
+    scenario, n=100) with 95% CI = 1.96·SEM across the 100 scenarios — the SAME unit as the Wilcoxon
+    test, so bars and * markers are now consistent. Bar heights match the per-(scenario×visit) Fig 5
+    (balanced design), but the whiskers are wider (n=100, with scenario-level variance)."""
+    fig, axes2 = plt.subplots(2, 2, figsize=(13, 9), squeeze=False)
+    axes = axes2.flatten()
+    for ax, key in zip(axes, _panel_keys()):
+        items = []
+        for cfg in AGENTS:
+            d = paired_delta(cfg, key).to_numpy(dtype=float)
+            d = d[~np.isnan(d)]
+            if len(d) == 0:
+                continue
+            mean = float(np.mean(d))
+            ci = 1.96 * float(np.std(d, ddof=1)) / np.sqrt(len(d))
+            items.append((cfg, mean, ci))
+        items.sort(key=lambda t: t[1])
+        cfgs = [t[0] for t in items]; means = np.array([t[1] for t in items]); cis = np.array([t[2] for t in items])
+        ys = np.arange(len(cfgs)); colors = [v4.COLORS[c] for c in cfgs]
+        ax.barh(ys, means, xerr=cis, capsize=2, error_kw=dict(lw=0.8),
+                color=colors, edgecolor='black', linewidth=0.4)
+        ax.set_yticks(ys); ax.set_yticklabels([v4.disp(c) for c in cfgs], fontsize=11)
+        ax.axvline(0, color='black', lw=0.8)
+        ax.set_title(f'{key}' + (' ms' if key != 'avg' else ''))
+        ax.set_xlabel('Δ final sequence value vs EMCTS (per scenario, n=100)')
+        xspan = ax.get_xlim()[1] - ax.get_xlim()[0]
+        for yi, cfg in enumerate(cfgs):
+            if SIG.get((cfg, key), False):
+                m, ci = means[yi], cis[yi]
+                if m >= 0:
+                    ax.text(m + ci + 0.012 * xspan, yi, '*', ha='left', va='center', fontsize=16, fontweight='bold')
+                else:
+                    ax.text(m - ci - 0.012 * xspan, yi, '*', ha='right', va='center', fontsize=16, fontweight='bold')
+    fig.suptitle('Mean improvement over EMCTS in final sequence value (±95% CI, per scenario n=100)\n'
+                 '* = paired Wilcoxon p_adj < 0.05 (per scenario, Benjamini–Hochberg)',
+                 fontweight='bold')
+    fig.tight_layout(); fig.savefig(OUT / 'Fig5_significance_perscenario.png', dpi=300); plt.close(fig)
+
+
 fig5_significance()
+fig5_perscenario()
 fig7_significance()
 
 
@@ -319,6 +360,9 @@ in `wilcoxon_sequence_value.csv`.
 - Bars/CI in `Fig5_significance.png` are the per-(scenario×visit) paired deltas (n≈5000, the existing
   Fig 5); the significance stars use the more conservative per-scenario Wilcoxon (n=100) so the test
   respects scenario clustering. The two agree on direction throughout.
+- `Fig5_significance_perscenario.png` redraws the same figure with PER-SCENARIO bars + 95% CIs (n=100,
+  the same unit as the Wilcoxon). Bar heights are unchanged (balanced design) but the whiskers are
+  wider; e.g. CE@5's CIs now cross zero at every budget, consistent with its non-significant test.
 """
 (OUT / 'SIGNIFICANCE_V4.md').write_text(md, encoding='utf-8')
 
@@ -335,4 +379,11 @@ for b in (BUDGETS + ['avg']):
     print(f'  {blab}: n={int(r.n)}  meanD={r.mean_delta:+8.3f}  medianD={r.median_delta:+8.3f}  '
           f'W={r.W:>7.0f}  p_raw={r.p_raw:.3e}  p_adj={r.p_adj:.3e}  '
           f'rank-biserial={r.rank_biserial:+.3f}  {"SIG" if r.significant else "ns"} ({r.method})')
-print(f'\nDeliverables -> {OUT}/  (CSV, SIGNIFICANCE_V4.md, Fig5_significance.png, Fig7_significance.png)')
+print('\n=== CE@5 per-scenario 95% CI (n=100, same unit as the Wilcoxon) ===')
+for b in (BUDGETS + ['avg']):
+    d = paired_delta('CrossoverExpansion@5', b).to_numpy(dtype=float); d = d[~np.isnan(d)]
+    mean = float(np.mean(d)); ci = 1.96 * float(np.std(d, ddof=1)) / np.sqrt(len(d))
+    blab = 'avg     ' if b == 'avg' else f'{b:>4} ms'
+    print(f'  {blab}: meanD={mean:+7.3f}  95% CI [{mean - ci:+7.3f}, {mean + ci:+7.3f}]  (+/-{ci:.3f}, n={len(d)})')
+print(f'\nDeliverables -> {OUT}/  (CSV, SIGNIFICANCE_V4.md, Fig5_significance.png, '
+      f'Fig5_significance_perscenario.png, Fig7_significance.png)')
