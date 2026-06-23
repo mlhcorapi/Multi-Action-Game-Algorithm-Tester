@@ -50,7 +50,18 @@ COLORS = {'EMCTS': '#222222', 'CrossoverBB': '#ff7f0e'}
 for cfg, c in zip([f'CrossoverExpansion@{r}' for r in RATIOS], _shades('#1f77b4', 5)): COLORS[cfg] = c
 for cfg, c in zip([f'CrossoverCombo@{r}'     for r in RATIOS], _shades('#2ca02c', 5)): COLORS[cfg] = c
 
-plt.rcParams.update({'figure.dpi': 110, 'font.size': 9, 'axes.grid': True, 'grid.alpha': 0.3})
+# Short display labels for legibility: CrossoverExpansion→CE, CrossoverBB→CBB, CrossoverCombo→CC
+# (the '@ratio' suffix is kept). Data keys / CSV Config values stay the full names; disp() is only
+# for what is drawn on the figures (tick labels, legends, titles).
+def disp(cfg):
+    return (str(cfg).replace('CrossoverExpansion@', 'CE@').replace('CrossoverCombo@', 'CC@')
+            .replace('CrossoverExpansion', 'CE').replace('CrossoverCombo', 'CC')
+            .replace('CrossoverBB', 'CBB'))
+
+# Bigger text + grid so axis labels are legible at the figure sizes used below.
+plt.rcParams.update({'figure.dpi': 120, 'font.size': 13, 'axes.titlesize': 14, 'axes.labelsize': 13,
+                     'xtick.labelsize': 12, 'ytick.labelsize': 12, 'legend.fontsize': 11,
+                     'figure.titlesize': 15, 'axes.grid': True, 'grid.alpha': 0.3})
 
 LEAF_RE = re.compile(r'(?P<agent>EMCTS|CrossoverBB|CrossoverExpansion|CrossoverCombo)'
                      r'(?:/ratio_(?P<ratio>\d+))?'
@@ -145,17 +156,17 @@ def best_agent_counts(turn_df, ms_or_avg):
 
 def fig_best_per_scenario(turn_df):
     panels = [(ms, f'{ms} ms') for ms in MS_LEVELS] + [('avg', 'avg across ms')]
-    fig, axes2 = plt.subplots(2, 2, figsize=(11, 8), squeeze=False)
+    fig, axes2 = plt.subplots(2, 2, figsize=(10, 7), squeeze=False)
     axes = axes2.flatten()
     for ax, (key, title) in zip(axes, panels):
         counts = best_agent_counts(turn_df, key)
         colors = [COLORS[c] for c in counts.index]
         ax.bar(range(len(counts)), counts.values, color=colors, edgecolor='black', linewidth=0.4)
         ax.set_xticks(range(len(counts)))
-        ax.set_xticklabels(counts.index, rotation=60, ha='right', fontsize=7)
+        ax.set_xticklabels([disp(c) for c in counts.index], rotation=60, ha='right', fontsize=11)
         ax.set_title(title); ax.set_ylabel('scenarios won')
         for i, v in enumerate(counts.values):
-            if v: ax.text(i, v + 0.4, str(v), ha='center', fontsize=8)
+            if v: ax.text(i, v + 0.4, str(v), ha='center', fontsize=10)
     fig.suptitle('Best-agent-per-scenario count (argmax of mean FinalSequenceValue)',
                  fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'fig3_best_agent_per_scenario.png'); plt.close(fig)
@@ -174,7 +185,7 @@ def ranking_points(turn_df, ms_or_avg):
 
 def fig_ranking_points(turn_df):
     panels = [(ms, f'{ms} ms') for ms in MS_LEVELS] + [('avg', 'avg across ms')]
-    fig, axes2 = plt.subplots(2, 2, figsize=(11, 8), squeeze=False)
+    fig, axes2 = plt.subplots(2, 2, figsize=(10, 7), squeeze=False)
     axes = axes2.flatten()
     n_configs = 12
     for ax, (key, title) in zip(axes, panels):
@@ -183,12 +194,12 @@ def fig_ranking_points(turn_df):
         colors = [COLORS[c] for c in pts.index]
         ax.bar(range(len(pts)), pts.values, color=colors, edgecolor='black', linewidth=0.4)
         ax.set_xticks(range(len(pts)))
-        ax.set_xticklabels(pts.index, rotation=60, ha='right', fontsize=7)
+        ax.set_xticklabels([disp(c) for c in pts.index], rotation=60, ha='right', fontsize=11)
         # Reference line at "chance" (mean rank * 100 scenarios)
         ax.axhline(100 * (n_configs+1) / 2, color='red', ls=':', lw=1, label='chance')
         ax.set_title(f'{title}  (chance: {100*(n_configs+1)/2:.0f})'); ax.set_ylabel('total ranking points')
         for i, (v, a) in enumerate(zip(pts.values, avg_pt.values)):
-            ax.text(i, v + 5, f'{a:.1f}', ha='center', fontsize=7)
+            ax.text(i, v + 5, f'{a:.1f}', ha='center', fontsize=9)
     fig.suptitle('Ranking points (last=1 … best=12 per scenario, summed over 100 scenarios)',
                  fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'fig4_ranking_points.png'); plt.close(fig)
@@ -223,7 +234,7 @@ def fig_trajectories(df_burn, kind='raw', name_prefix='fig5'):
     Layout: 4 panels (3 ms + 1 averaged), all 12 configs on each — the most useful comparison view."""
     traj = trajectory_data(df_burn, kind)
     panels = [(ms, f'{ms} ms') for ms in MS_LEVELS] + [('avg', 'avg across ms')]
-    fig, axes2 = plt.subplots(2, 2, figsize=(13, 9), squeeze=False)
+    fig, axes2 = plt.subplots(2, 2, figsize=(11.5, 8), squeeze=False)
     axes = axes2.flatten()
     ylabel = 'mean BestSequenceValue' if kind == 'raw' \
              else 'mean % improvement over initial sequence'
@@ -236,7 +247,7 @@ def fig_trajectories(df_burn, kind='raw', name_prefix='fig5'):
             else:
                 if (cfg, key) not in traj.index.droplevel(2): continue
                 series = traj.loc[(cfg, key)]
-            ax.plot(series.index, series.values, color=COLORS[cfg], label=cfg, lw=1.7,
+            ax.plot(series.index, series.values, color=COLORS[cfg], label=disp(cfg), lw=1.7,
                     marker='o', markersize=3)
             all_y.extend(series.values.tolist())
         # Tight ylim so lines are distinguishable — the user's clarity request.
@@ -245,7 +256,7 @@ def fig_trajectories(df_burn, kind='raw', name_prefix='fig5'):
         ax.set_ylabel(ylabel)
     # Global legend below the figure
     h, l = axes[0].get_legend_handles_labels()
-    fig.legend(h, l, loc='lower center', bbox_to_anchor=(0.5, -0.02), ncol=4, fontsize=8, frameon=False)
+    fig.legend(h, l, loc='lower center', bbox_to_anchor=(0.5, -0.02), ncol=4, fontsize=10, frameon=False)
     fig.suptitle(('Within-turn trajectory (raw value)' if kind == 'raw'
                   else 'Within-turn trajectory (% improvement over initial)'),
                  fontweight='bold')
@@ -257,7 +268,7 @@ def fig_trajectories_per_agent(df_burn, kind='raw', name_prefix='fig5b'):
     its trajectory at every ms with adjusted ylim. Use this when you want to see one agent in detail."""
     traj = trajectory_data(df_burn, kind)
     configs = [c for c in ORDER if c in traj.index.get_level_values('Config')]
-    fig, axes = plt.subplots(3, 4, figsize=(14, 9), squeeze=False)
+    fig, axes = plt.subplots(3, 4, figsize=(13, 8), squeeze=False)
     # Pick 12 representatives — all 12 configs
     for i, cfg in enumerate(configs[:12]):
         ax = axes[i // 4][i % 4]
@@ -268,13 +279,13 @@ def fig_trajectories_per_agent(df_burn, kind='raw', name_prefix='fig5b'):
             ax.plot(s.index, s.values, label=f'{ms} ms', lw=1.7, marker='o', markersize=3,
                     alpha=0.5 + 0.5 * (MS_LEVELS.index(ms) / (len(MS_LEVELS)-1)))
             all_y.extend(s.values.tolist())
-        ax.set_title(cfg, fontsize=10, color=COLORS[cfg], fontweight='bold')
+        ax.set_title(disp(cfg), fontsize=12, color=COLORS[cfg], fontweight='bold')
         _set_tight_ylim(ax, all_y, pad_frac=0.08)
         if i % 4 == 0:
             ax.set_ylabel('BSV' if kind == 'raw' else '% over init')
         if i // 4 == 2:
             ax.set_xlabel('burn phase')
-        if i == 0: ax.legend(fontsize=7, loc='lower right')
+        if i == 0: ax.legend(fontsize=9, loc='lower right')
     fig.suptitle(('Within-turn trajectory per agent — raw' if kind == 'raw'
                   else 'Within-turn trajectory per agent — % over initial'), fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / f'{name_prefix}_trajectory_per_agent_{kind}.png',
@@ -329,17 +340,17 @@ def fig_branching_scatter(turn_df, portfolio, kind='raw'):
                 xx = np.linspace(xs.min(), xs.max(), 50)
                 ax.plot(xx, p[0]*xx + p[1], color='black', lw=1.0, alpha=0.6)
                 r = np.corrcoef(xs, ys)[0, 1]
-                ax.text(0.02, 0.95, f'r={r:.2f}', transform=ax.transAxes, fontsize=7,
+                ax.text(0.02, 0.95, f'r={r:.2f}', transform=ax.transAxes, fontsize=9,
                         va='top', bbox=dict(boxstyle='round,pad=0.1', fc='white', ec='none', alpha=0.7))
             if j == 0:
-                ax.set_ylabel(cfg, fontsize=8, color=COLORS[cfg], fontweight='bold')
+                ax.set_ylabel(disp(cfg), fontsize=11, color=COLORS[cfg], fontweight='bold')
             if i == 0:
                 ax.set_title(f'{key}' + (' ms' if key != 'avg' else ''), fontsize=10)
             if i == len(configs)-1:
-                ax.set_xlabel('branching factor', fontsize=8)
+                ax.set_xlabel('branching factor', fontsize=10)
             ax.tick_params(labelsize=7)
     if axes[0][0].get_legend_handles_labels()[1]:
-        axes[0][0].legend(fontsize=7, loc='lower right')
+        axes[0][0].legend(fontsize=9, loc='lower right')
     fig.suptitle(f'Branching factor vs {ylabel} (per scenario)', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / f'fig7_branching_scatter_{kind}.png',
                                      bbox_inches='tight', dpi=110)
@@ -353,7 +364,7 @@ def fig_pct_improvement_bars(turn_df):
     turn_df['pctImp'] = (turn_df.FinalSequenceValue - turn_df.InitialSequenceValue) \
                        / turn_df.InitialSequenceValue.abs() * 100
     panels = [(ms, f'{ms} ms') for ms in MS_LEVELS] + [('avg', 'avg across ms')]
-    fig, axes2 = plt.subplots(2, 2, figsize=(11, 8), squeeze=False, sharey=True)
+    fig, axes2 = plt.subplots(2, 2, figsize=(10, 7), squeeze=False, sharey=True)
     axes = axes2.flatten()
     for ax, (key, title) in zip(axes, panels):
         sub = turn_df if key == 'avg' else turn_df[turn_df.ThinkingMs == key]
@@ -364,7 +375,7 @@ def fig_pct_improvement_bars(turn_df):
         ax.bar(range(len(means)), means.values, yerr=cis.values, capsize=2,
                error_kw=dict(lw=0.8), color=colors, edgecolor='black', linewidth=0.4)
         ax.set_xticks(range(len(means)))
-        ax.set_xticklabels(means.index, rotation=60, ha='right', fontsize=7)
+        ax.set_xticklabels([disp(c) for c in means.index], rotation=60, ha='right', fontsize=11)
         ax.set_title(title)
         ax.set_ylabel('mean % improvement over initial sequence (±95% CI)')
     fig.suptitle('% improvement over initial sequence — per agent per ms',
@@ -389,7 +400,7 @@ def extra_paired_delta_with_ci(turn_df):
     # Independent y-axes: each panel sorts bars by its own mean, so each panel needs its own labels
     # in the matching order. With sharey=True matplotlib lets the last-set y-tick labels win for ALL
     # panels, which was the cause of the label/bar mismatch in the previous version.
-    fig, axes2 = plt.subplots(2, 2, figsize=(13, 9), squeeze=False, sharey=False)
+    fig, axes2 = plt.subplots(2, 2, figsize=(11.5, 8), squeeze=False, sharey=False)
     axes = axes2.flatten()
     # per ms + avg
     keys = [*MS_LEVELS, 'avg']
@@ -404,11 +415,11 @@ def extra_paired_delta_with_ci(turn_df):
         colors = [COLORS[c] for c in agg.index]
         ax.barh(ys, agg['mean'].values, xerr=agg['ci95'].values, capsize=2,
                 error_kw=dict(lw=0.8), color=colors, edgecolor='black', linewidth=0.4)
-        ax.set_yticks(ys); ax.set_yticklabels(agg.index, fontsize=8)
+        ax.set_yticks(ys); ax.set_yticklabels([disp(c) for c in agg.index], fontsize=11)
         ax.axvline(0, color='black', lw=0.8)
         ax.set_title(f'{key}' + (' ms' if key != 'avg' else ''))
-        ax.set_xlabel('paired Δ vs EMCTS (FinalSequenceValue, ±95% CI)')
-    fig.suptitle('Paired Δ vs EMCTS (same scenario × visit pair, ±95% CI)',
+        ax.set_xlabel('Δ final sequence value vs EMCTS')
+    fig.suptitle('Mean improvement over EMCTS in final sequence value (±95% paired CI)',
                  fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E1_paired_delta_with_ci.png'); plt.close(fig)
     # table
@@ -441,17 +452,17 @@ def extra_best_ratio_per_budget(turn_df):
     t = pd.DataFrame(rows).round(3)
     t.to_csv(TABLES / 'E2_best_ratio_per_budget.csv', index=False)
     # Companion figure: ratio sweep per ms per agent_base
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5), squeeze=False)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.8), squeeze=False)
     axes = axes[0]
     for ax, agent_base in zip(axes, ('CrossoverExpansion','CrossoverCombo')):
         for ms in MS_LEVELS:
             sub = t[(t.Agent==agent_base) & (t.ms==ms)].sort_values('Ratio')
             ax.plot(sub.Ratio, sub.deltaVsEMCTS, marker='o', label=f'{ms} ms', lw=1.8)
         ax.axhline(0, color='black', lw=0.8, ls=':')
-        ax.set_xticks(RATIOS); ax.set_xlabel('mutationExpansionRatio (higher = less crossover)')
+        ax.set_xticks(RATIOS); ax.set_xlabel('crossover ratio (higher = less crossover)')
         ax.set_ylabel('paired Δ vs EMCTS')
-        ax.set_title(agent_base); ax.legend(fontsize=8)
-    fig.suptitle('Best ratio per budget — Crossover{Expansion,Combo} (paired Δ vs EMCTS)',
+        ax.set_title(disp(agent_base)); ax.legend(fontsize=10)
+    fig.suptitle('Best ratio per thinking time — CE / CC (paired Δ vs EMCTS)',
                  fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E2_best_ratio_per_budget.png'); plt.close(fig)
 
@@ -490,10 +501,10 @@ def extra_single_vs_dual(turn_df, portfolio):
         ax.bar(x - 0.2, s.values, 0.4, color='#1f78b4', label='single-player scenarios (n=50)')
         ax.bar(x + 0.2, d.values, 0.4, color='#e31a1c', label='dual-player scenarios (n=50)')
         ax.axhline(0, color='black', lw=0.8)
-        ax.set_xticks(x); ax.set_xticklabels(configs_present, rotation=60, ha='right', fontsize=7)
+        ax.set_xticks(x); ax.set_xticklabels([disp(c) for c in configs_present], rotation=60, ha='right', fontsize=11)
         ax.set_title(f'{ms} ms')
         ax.set_ylabel('mean FinalSequenceValue advantage over EMCTS')
-    axes[0].legend(fontsize=8, loc='lower left')
+    axes[0].legend(fontsize=10, loc='lower left')
     fig.suptitle('Single-player vs dual-player portfolio split — paired Δ vs EMCTS',
                  fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E3_single_vs_dual.png'); plt.close(fig)
@@ -603,13 +614,13 @@ def extra_branching_source_diagnostics(turn_df, portfolio):
         edges = tier_edges[src]
         ax.set_xticks(range(len(TIER_LABELS))); ax.set_xticklabels(
             [f'{TIER_LABELS[i]}\n{edges[i]:.0f}–{edges[i+1]:.0f}'
-             for i in range(len(TIER_LABELS))], fontsize=8)
-        ax.set_yticks(range(len(configs))); ax.set_yticklabels(configs, fontsize=8)
+             for i in range(len(TIER_LABELS))], fontsize=10)
+        ax.set_yticks(range(len(configs))); ax.set_yticklabels([disp(c) for c in configs], fontsize=11)
         ax.set_xlabel('Branching factor')
         ax.set_title(f'{label} scenarios')
         for (i, k), v in np.ndenumerate(pivot.values):
             if np.isfinite(v):
-                ax.text(k, i, f'{v:+.0f}', ha='center', va='center', fontsize=8,
+                ax.text(k, i, f'{v:+.0f}', ha='center', va='center', fontsize=10,
                         color='white' if abs(v) > vmax * 0.55 else 'black')
         fig.colorbar(im, ax=ax, shrink=0.85).set_label('paired Δ vs EMCTS')
     fig.suptitle('BF-tertile × source heatmap — paired Δ vs EMCTS (averaged over ms and visits)',
@@ -623,7 +634,7 @@ def extra_branching_source_diagnostics(turn_df, portfolio):
     # Per-scenario delta means (averaged over visits and ms) so each scenario is one data point.
     per_scen = (j.groupby(['Config','ScenarioId','BranchingFactor','Source'], observed=True)['delta']
                   .mean().reset_index())
-    fig, axes2 = plt.subplots(2, 2, figsize=(12, 8.5), squeeze=False)
+    fig, axes2 = plt.subplots(2, 2, figsize=(11, 7.8), squeeze=False)
     axes = axes2.flatten()
     for ax, cfg in zip(axes, select_agents):
         sub = per_scen[per_scen.Config == cfg]
@@ -638,13 +649,13 @@ def extra_branching_source_diagnostics(turn_df, portfolio):
                 r = np.corrcoef(s.BranchingFactor, s['delta'])[0, 1]
                 ax.text(0.02, 0.93 if src == 'single' else 0.86,
                         f'{src}: slope={p[0]*100:+.2f}/100BF  r={r:+.2f}',
-                        transform=ax.transAxes, fontsize=8, color=color,
+                        transform=ax.transAxes, fontsize=10, color=color,
                         bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.85))
         ax.axhline(0, color='black', lw=0.6, linestyle=':')
-        ax.set_title(cfg, fontsize=10, color=COLORS.get(cfg, 'black'), fontweight='bold')
+        ax.set_title(disp(cfg), fontsize=12, color=COLORS.get(cfg, 'black'), fontweight='bold')
         ax.set_xlabel('Branching factor')
         ax.set_ylabel('paired Δ vs EMCTS')
-        ax.legend(fontsize=8, loc='lower right')
+        ax.legend(fontsize=10, loc='lower right')
     fig.suptitle('Branching factor vs paired Δ vs EMCTS — per-source regression lines',
                  fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E8_bf_source_regression.png'); plt.close(fig)
@@ -726,7 +737,7 @@ def extra_search_breadth_vs_cost(turn_df):
                              fmCalls_per_eval=fm/n_iter if n_iter else np.nan))
     t = pd.DataFrame(rows).round(2)
     t.to_csv(TABLES / 'E5_search_breadth_vs_cost.csv', index=False)
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.5), squeeze=False)
+    fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.4), squeeze=False)
     axes = axes[0]
     metrics = [('evals_per_turn',   'eval() calls per turn'),
                ('fmCalls_per_turn', 'forward-model calls per turn'),
@@ -737,8 +748,8 @@ def extra_search_breadth_vs_cost(turn_df):
         for i, ms in enumerate(MS_LEVELS):
             sub = t[t.ms == ms].set_index('Config').reindex(cfgs_present)
             ax.plot(x, sub[col].values, marker='o', label=f'{ms} ms', lw=1.5)
-        ax.set_xticks(x); ax.set_xticklabels(cfgs_present, rotation=60, ha='right', fontsize=7)
-        ax.set_ylabel(ylab); ax.legend(fontsize=8)
+        ax.set_xticks(x); ax.set_xticklabels([disp(c) for c in cfgs_present], rotation=60, ha='right', fontsize=11)
+        ax.set_ylabel(ylab); ax.legend(fontsize=10)
     fig.suptitle('Per-iteration cost decomposition', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E5_search_breadth_vs_cost.png',
                                      bbox_inches='tight'); plt.close(fig)
@@ -771,7 +782,7 @@ def extra_convergence_speed(df_burn):
     im = ax.imshow(pivot.values, aspect='auto', cmap='RdYlGn_r',
                    vmin=1, vmax=20)
     ax.set_xticks(range(pivot.shape[1])); ax.set_xticklabels([f'{c} ms' for c in pivot.columns])
-    ax.set_yticks(range(pivot.shape[0])); ax.set_yticklabels(pivot.index, fontsize=8)
+    ax.set_yticks(range(pivot.shape[0])); ax.set_yticklabels([disp(c) for c in pivot.index], fontsize=11)
     for (i, j), v in np.ndenumerate(pivot.values):
         if np.isfinite(v):
             ax.text(j, i, int(v), ha='center', va='center',
@@ -825,30 +836,30 @@ def extra_inbreeding(turn_df):
     }).round(4)
     summary.to_csv(TABLES / 'E9_inbreeding_summary.csv')
 
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5.2), squeeze=False)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5), squeeze=False)
     axes = axes[0]
     # Panel A — unique fraction vs ms, ALL configs (reveals the two opposite mechanisms by family).
     axA = axes[0]
     for cfg in configs:
         ys = [frac.loc[cfg, ms] for ms in MS_LEVELS]
-        axA.plot(MS_LEVELS, ys, marker='o', color=COLORS[cfg], lw=1.8, label=cfg)
+        axA.plot(MS_LEVELS, ys, marker='o', color=COLORS[cfg], lw=1.8, label=disp(cfg))
     axA.set_xscale('log'); axA.set_xticks(MS_LEVELS); axA.set_xticklabels([str(m) for m in MS_LEVELS])
     axA.set_xlabel('thinking time (ms, log scale)')
     axA.set_ylabel('unique-sequence fraction')
-    axA.set_title('A. Unique-sequence fraction (all configs)', fontsize=10)
-    axA.legend(fontsize=6, ncol=2, loc='center left')
+    axA.set_title('A. Unique-sequence fraction (all configs)', fontsize=12)
+    axA.legend(fontsize=10, ncol=2, loc='center left')
     # Panel B — absolute unique sequences/turn, EMCTS vs Expansion family: the crossover point.
     axB = axes[1]
     focus = ['EMCTS'] + [f'CrossoverExpansion@{r}' for r in RATIOS]
     for cfg in focus:
         ys = [cnt.loc[cfg, ms] for ms in MS_LEVELS]
         lw = 2.8 if cfg in ('EMCTS','CrossoverExpansion@2') else 1.4
-        axB.plot(MS_LEVELS, ys, marker='o', color=COLORS[cfg], lw=lw, label=cfg)
+        axB.plot(MS_LEVELS, ys, marker='o', color=COLORS[cfg], lw=lw, label=disp(cfg))
     axB.set_xscale('log'); axB.set_xticks(MS_LEVELS); axB.set_xticklabels([str(m) for m in MS_LEVELS])
     axB.set_xlabel('thinking time (ms, log scale)')
     axB.set_ylabel('unique sequences found per turn')
     axB.set_title('B. Unique sequences per turn (Expansion family)', fontsize=10)
-    axB.legend(fontsize=7, loc='upper left')
+    axB.legend(fontsize=9, loc='upper left')
     fig.suptitle('Diversity of evaluated sequences vs thinking time', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E9_inbreeding.png'); plt.close(fig)
     print('\n  E9 unique-sequence fraction (config × ms):')
@@ -884,10 +895,10 @@ def extra_expansion_bf_time(turn_df, portfolio):
                 ax.plot(xx, p[0]*xx + p[1], color=ms_colors[ms], lw=2.4,
                         label=f'{ms} ms (slope {p[0]*100:+.1f}/100BF)')
             ax.axhline(0, color='black', lw=0.6, ls=':')
-            ax.set_title(f'{cfg} — {src}', fontsize=9, fontweight='bold')
+            ax.set_title(f'{disp(cfg)} — {src}', fontsize=12, fontweight='bold')
             if col == 0: ax.set_ylabel(f'{src} scenarios\npaired Δ vs EMCTS')
             if row == 1: ax.set_xlabel('branching factor')
-            ax.legend(fontsize=6.5, loc='upper right')
+            ax.legend(fontsize=9, loc='upper right')
     axes[0][0].set_ylim(-60, 60)  # clip to the central bulk so slope lines stay readable
     fig.suptitle('CrossoverExpansion — branching factor × source × thinking time',
                  fontweight='bold')
@@ -917,13 +928,13 @@ def extra_source_effect_vs_time(turn_df, portfolio):
         emphasize = cfg.startswith('CrossoverExpansion') or cfg == 'CrossoverBB'
         ax.plot(MS_LEVELS, sub['dual_minus_single'].values, marker='o', color=COLORS[cfg],
                 lw=2.4 if emphasize else 1.0, alpha=1.0 if emphasize else 0.35,
-                label=cfg if emphasize else None, zorder=3 if emphasize else 1)
+                label=disp(cfg) if emphasize else None, zorder=3 if emphasize else 1)
     ax.axhline(0, color='black', lw=0.8)
     ax.set_xscale('log'); ax.set_xticks(MS_LEVELS); ax.set_xticklabels([str(m) for m in MS_LEVELS])
     ax.set_xlabel('thinking time (ms, log scale)')
     ax.set_ylabel('dual advantage  =  mean(dual paired Δ) − mean(single paired Δ)')
     ax.set_title('Dual-vs-single advantage vs thinking time', fontweight='bold')
-    ax.legend(fontsize=8, ncol=2)
+    ax.legend(fontsize=10, ncol=2)
     fig.tight_layout(); fig.savefig(FIGS / 'E11_source_advantage_vs_time.png'); plt.close(fig)
     print('\n  E11 dual-minus-single advantage by ms (positive = stronger in dual):')
     print(t.pivot(index='Config', columns='ms', values='dual_minus_single')
@@ -955,7 +966,7 @@ def extra_ratio_nodes_unique(turn_df):
     t.to_csv(TABLES / 'E12_ratio_sweep.csv', index=False)
 
     exp = t[t.family == 'CrossoverExpansion']
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.3), squeeze=False); axes = axes[0]
+    fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.2), squeeze=False); axes = axes[0]
     panels = [('nodes', 'nodes evaluated per turn'),
               ('fmcalls', 'forward-model calls per turn'),
               ('uniq_frac', 'unique-sequence fraction')]
@@ -964,7 +975,7 @@ def extra_ratio_nodes_unique(turn_df):
             sub = exp[exp.ms == ms].sort_values('ratio')
             ax.plot(sub.ratio, sub[col], marker='o', lw=1.8, label=f'{ms} ms')
         ax.set_xticks(RATIOS); ax.set_xlabel('crossover ratio')
-        ax.set_ylabel(ylab); ax.legend(fontsize=8)
+        ax.set_ylabel(ylab); ax.legend(fontsize=10)
     fig.suptitle('CrossoverExpansion: effect of crossover ratio on search breadth and diversity',
                  fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E12_ratio_nodes_unique.png'); plt.close(fig)
@@ -1023,9 +1034,9 @@ def extra_bb_usefulness(df_burn):
     ax.bar(x, imp, color='#2ca02c', label='improved')
     ax.bar(x, noc, bottom=imp, color='#9e9e9e', label='no change')
     ax.bar(x, wor, bottom=imp + noc, color='#d62728', label='worse')
-    ax.set_xticks(x); ax.set_xticklabels(t.Config, rotation=45, ha='right', fontsize=8)
+    ax.set_xticks(x); ax.set_xticklabels([disp(c) for c in t.Config], rotation=45, ha='right', fontsize=11)
     ax.set_ylabel('% of crossover bridge-burn events'); ax.set_ylim(0, 100)
-    ax.legend(fontsize=8, loc='upper right')
+    ax.legend(fontsize=10, loc='upper right')
     fig.suptitle('Usefulness of crossover bridge burning — bred child vs best elite parent',
                  fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E14_bb_usefulness.png'); plt.close(fig)
@@ -1065,7 +1076,7 @@ def extra_crossover_mechanism(turn_df):
             sub = exp[exp.ms == ms].sort_values('ratio')
             line, = ax.plot(sub.ratio, sub[col], marker='o', lw=1.8, label=f'{ms} ms')
             ax.axhline(emt.loc[ms, col], color=line.get_color(), ls=':', lw=1.2)
-        ax.set_xticks(RATIOS); ax.set_xlabel('crossover ratio'); ax.set_ylabel(ylab); ax.legend(fontsize=8)
+        ax.set_xticks(RATIOS); ax.set_xlabel('crossover ratio'); ax.set_ylabel(ylab); ax.legend(fontsize=10)
     fig.suptitle('What crossover does to the search (dotted = EMCTS baseline)', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E15_crossover_mechanism.png'); plt.close(fig)
 
@@ -1080,9 +1091,73 @@ def extra_crossover_mechanism(turn_df):
     ax.axhline(0, color='black', lw=0.8)
     ax.set_xticks(x); ax.set_xticklabels([f'{m} ms' for m in MS_LEVELS])
     ax.set_ylabel('correlation with paired Δ vs EMCTS (across 12 configs)'); ax.set_ylim(-1, 1)
-    ax.legend(fontsize=8)
+    ax.legend(fontsize=10)
     fig.suptitle('Which search property predicts performance, by thinking time', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'E16_performance_attribution.png'); plt.close(fig)
+
+
+def extra_winrate_vs_emcts():
+    """Condensed full-GAME win rate vs EMCTS from the prior (Phase-2) win-rate experiment, for the
+    best ratio of each crossover family. >0.5 = beats EMCTS head-to-head more often than not.
+    Source: analysis/tables/T4b_phase2_winrate_vs_emcts.csv (only 500 ms & 1000 ms were tested there)."""
+    src = Path('analysis/tables/T4b_phase2_winrate_vs_emcts.csv')
+    if not src.exists():
+        print('  win-rate: source table not found, skipping'); return
+    df = pd.read_csv(src)
+
+    def split(cfgfull):           # 'CrossoverExpansion@r5' -> ('CrossoverExpansion', 5); 'CrossoverBB' -> (..,None)
+        if '@' in cfgfull:
+            base, r = cfgfull.split('@'); return base, int(r.lstrip('r'))
+        return cfgfull, None
+    df[['base', 'ratio']] = df.ConfigFull.apply(lambda c: pd.Series(split(c)))
+    df['ms'] = df.Level.str.replace('ms', '', regex=False).astype(int)
+
+    # Best ratio per family (by mean win rate across the available thinking times).
+    selected = {}   # base -> chosen ratio (or None)
+    for base in ('CrossoverBB', 'CrossoverExpansion', 'CrossoverCombo'):
+        sub = df[df.base == base]
+        if sub.empty: continue
+        if sub.ratio.isna().all():
+            selected[base] = None
+        else:
+            selected[base] = int(sub.groupby('ratio').WinRate_vs_EMCTS.mean().idxmax())
+
+    # Display order: CBB, CE@best, CC@best.
+    order = [('CrossoverBB', selected.get('CrossoverBB')),
+             ('CrossoverExpansion', selected.get('CrossoverExpansion')),
+             ('CrossoverCombo', selected.get('CrossoverCombo'))]
+    order = [(b, r) for (b, r) in order if b in selected]
+    labels = [disp(b if r is None else f'{b}@{r}') for (b, r) in order]
+    ms_levels = sorted(df.ms.unique())
+
+    # Table.
+    rows = []
+    for (b, r) in order:
+        for ms in ms_levels:
+            m = df[(df.base == b) & (df.ms == ms) & ((df.ratio == r) if r is not None else df.ratio.isna())]
+            wr = float(m.WinRate_vs_EMCTS.iloc[0]) if len(m) else np.nan
+            rows.append(dict(agent=disp(b if r is None else f'{b}@{r}'), thinking_ms=ms, winrate_vs_EMCTS=wr))
+    tab = pd.DataFrame(rows)
+    tab.to_csv(TABLES / 'T_winrate_vs_emcts.csv', index=False)
+
+    # Grouped bar chart: agent on x, one bar per thinking time, win rate printed above each bar.
+    fig, ax = plt.subplots(figsize=(7.5, 5))
+    x = np.arange(len(order)); width = 0.8 / max(1, len(ms_levels))
+    for i, ms in enumerate(ms_levels):
+        vals = [tab[(tab.agent == lbl) & (tab.thinking_ms == ms)].winrate_vs_EMCTS.iloc[0] for lbl in labels]
+        off = (i - (len(ms_levels) - 1) / 2) * width
+        bars = ax.bar(x + off, vals, width, label=f'{ms} ms')
+        for b_, v in zip(bars, vals):
+            if np.isfinite(v):
+                ax.text(b_.get_x() + b_.get_width() / 2, v + 0.008, f'{v:.2f}', ha='center', fontsize=11)
+    ax.axhline(0.5, color='black', lw=1.0, ls='--', label='EMCTS parity (0.5)')
+    ax.set_xticks(x); ax.set_xticklabels(labels)
+    ax.set_ylabel('win rate vs EMCTS (full games)')
+    ax.set_ylim(0.4, max(0.7, float(np.nanmax(tab.winrate_vs_EMCTS)) + 0.05))
+    ax.legend()
+    fig.suptitle('Full-game win rate vs EMCTS (best ratio per family)', fontweight='bold')
+    fig.tight_layout(); fig.savefig(FIGS / 'W_winrate_vs_emcts.png'); plt.close(fig)
+    print(tab.to_string(index=False))
 
 
 # -------------------------------------------------- main --
@@ -1138,6 +1213,7 @@ def main():
     print('E13: nodes & unique fraction with/without CBB'); extra_bb_nodes_table(turn_df)
     print('E14: bridge-burning usefulness');             extra_bb_usefulness(df_burn)
     print('E15/E16: crossover mechanism + attribution'); extra_crossover_mechanism(turn_df)
+    print('W: full-game win rate vs EMCTS (Phase-2)');    extra_winrate_vs_emcts()
 
     print(f'\nDone. tables -> {TABLES}/  figures -> {FIGS}/')
 
