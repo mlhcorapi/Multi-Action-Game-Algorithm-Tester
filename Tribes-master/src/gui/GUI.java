@@ -115,6 +115,13 @@ public class GUI extends JFrame {
         panTranslate = new Vector2d(0,0);
         boardView = new GameView(game, infoView, panTranslate);
 
+        // Followable mode adds a third column (Start + tech tree), which makes the total preferred
+        // width exceed the screen. GridBagLayout then starves the zero-minimum board column down to
+        // nothing. Pin the board's minimum size so the deficit is taken from the other columns and
+        // the map always stays visible.
+        if (followable)
+            boardView.setMinimumSize(new Dimension(GUI_GAME_VIEW_SIZE, GUI_GAME_VIEW_SIZE));
+
         // Create frame layout
         GridBagLayout gbl = new GridBagLayout();
         GridBagConstraints gbc = new GridBagConstraints();
@@ -151,6 +158,13 @@ public class GUI extends JFrame {
 
         // Frame properties
         pack();
+        if (followable) {
+            // Keep the (wider) followable window on screen. The board cannot shrink below its pinned
+            // minimum, so GridBagLayout takes any deficit from the other columns instead.
+            Rectangle max = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+            setSize(Math.min(getWidth(), max.width), Math.min(getHeight(), max.height));
+            setLocation(max.x, max.y);
+        }
         this.setVisible(true);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         if(closeAppOnClosingWindow){
@@ -449,7 +463,9 @@ public class GUI extends JFrame {
             panel.add(techTitle, c);
 
             c.gridy++;
-            techView.setViewSize(new Dimension(GUI_SIDE_PANEL_WIDTH, GUI_GAME_VIEW_SIZE));
+            // Leave room above for the Start button + instructions so the column isn't taller than
+            // the board (and the window stays within the screen). The tech tree scrolls if needed.
+            techView.setViewSize(new Dimension(GUI_SIDE_PANEL_WIDTH, Math.max(220, GUI_GAME_VIEW_SIZE - 200)));
             panel.add(techView, c);
         }
 

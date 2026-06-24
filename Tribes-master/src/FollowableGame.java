@@ -35,12 +35,22 @@ public class FollowableGame {
     public static void main(String[] args) {
 
         try {
-            JSONObject config = new IO().readJSON("followable_game.json");
+            // Resolve the config file robustly: VS Code / IDE "Run" launches with a different working
+            // directory than the project root, so a plain relative path often isn't found.
+            String configPath = resolveConfigPath(args);
+            if (configPath == null) return;  // resolveConfigPath already printed a helpful message
 
+            // The framework loads resources (terrainProbs.json, levels/, img/, save/) relative to the
+            // working directory. If we were launched from a different folder (common with IDE "Run"
+            // buttons), re-launch in the folder that holds the config so everything resolves.
+            if (maybeRelaunchInProjectRoot(configPath)) return;
+
+            JSONObject config = new IO().readJSON(configPath);
             if (config == null || config.isEmpty()) {
-                System.out.println("ERROR: Couldn't find 'followable_game.json'");
+                System.out.println("ERROR: 'followable_game.json' is empty or not valid JSON: " + configPath);
                 return;
             }
+            System.out.println("Loaded config: " + configPath);
 
             String runMode = config.getString("Run Mode");
             Constants.VERBOSE = config.getBoolean("Verbose");
@@ -117,6 +127,107 @@ public class FollowableGame {
 
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    /**
+     * Finds followable_game.json without depending on the working directory (IDE "Run" buttons often
+     * launch from a different folder than the project root). Search order:
+     *   1. an explicit path passed as the first command-line argument;
+     *   2. the current working directory and up to 5 parent directories (also checking a
+     *      "Tribes-master" subfolder of each);
+     *   3. the folder containing the compiled classes / jar and its parents (same checks).
+     * @return absolute path to the config file, or null if it could not be found (a diagnostic is
+     *         printed in that case).
+     */
+    private static String resolveConfigPath(String[] args) {
+        final String name = "followable_game.json";
+        java.util.LinkedHashSet<String> candidates = new java.util.LinkedHashSet<>();
+
+        if (args != null && args.length > 0 && args[0] != null && !args[0].trim().isEmpty())
+            candidates.add(args[0].trim());
+
+        candidates.add(name);  // plain relative to the working directory
+
+        // Walk up from the working directory.
+        try {
+            java.io.File dir = new java.io.File(".").getCanonicalFile();
+            for (int i = 0; i < 5 && dir != null; i++) {
+                candidates.add(new java.io.File(dir, name).getPath());
+                candidates.add(new java.io.File(new java.io.File(dir, "Tribes-master"), name).getPath());
+                dir = dir.getParentFile();
+            }
+        } catch (Exception ignored) { }
+
+        // Walk up from the location of the compiled classes / jar (e.g. bin/, out/, target/).
+        try {
+            java.io.File src = new java.io.File(
+                    FollowableGame.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            java.io.File dir = src.isFile() ? src.getParentFile() : src;
+            for (int i = 0; i < 6 && dir != null; i++) {
+                candidates.add(new java.io.File(dir, name).getPath());
+                candidates.add(new java.io.File(new java.io.File(dir, "Tribes-master"), name).getPath());
+                dir = dir.getParentFile();
+            }
+        } catch (Exception ignored) { }
+
+        for (String c : candidates) {
+            java.io.File f = new java.io.File(c);
+            if (f.isFile()) return f.getAbsolutePath();
+        }
+
+        System.out.println("ERROR: Couldn't find '" + name + "'.");
+        System.out.println("Working directory (user.dir): " + System.getProperty("user.dir"));
+        System.out.println("Looked in:");
+        for (String c : candidates)
+            System.out.println("  - " + new java.io.File(c).getAbsolutePath());
+        System.out.println("Tip: pass the path as the first argument, e.g.  java FollowableGame path/to/" + name);
+        return null;
+    }
+
+    /**
+     * If the working directory is not the project root (the folder that contains the config and the
+     * other resources such as terrainProbs.json), re-launches this program in that folder. This makes
+     * the script work from IDE "Run" buttons, which often launch from the workspace root.
+     * @return true if a child process was launched (the caller should then return), false otherwise.
+     */
+    private static boolean maybeRelaunchInProjectRoot(String configPath) {
+        try {
+            if (System.getenv("FOLLOWABLE_RELAUNCHED") != null) return false;  // already a relaunch
+
+            java.io.File projectRoot = new java.io.File(configPath).getCanonicalFile().getParentFile();
+            java.io.File cwd = new java.io.File(".").getCanonicalFile();
+            if (projectRoot == null || projectRoot.equals(cwd)) return false;
+
+            // Only relaunch if the resources really live in projectRoot and not in the current cwd.
+            if (!new java.io.File(projectRoot, "terrainProbs.json").isFile()) return false;
+            if (new java.io.File(cwd, "terrainProbs.json").isFile()) return false;
+
+            System.out.println("Working directory is '" + cwd + "',");
+            System.out.println("but the game resources live in '" + projectRoot + "'. Re-launching there...");
+
+            String javaBin = System.getProperty("java.home") + java.io.File.separator + "bin"
+                    + java.io.File.separator + "java";
+            String sep = System.getProperty("path.separator");
+            StringBuilder cp = new StringBuilder();
+            for (String part : System.getProperty("java.class.path").split(java.util.regex.Pattern.quote(sep))) {
+                if (cp.length() > 0) cp.append(sep);
+                cp.append(new java.io.File(part).getAbsolutePath());  // make absolute before cwd change
+            }
+
+            ProcessBuilder pb = new ProcessBuilder(javaBin, "-cp", cp.toString(),
+                    "FollowableGame", new java.io.File(configPath).getAbsolutePath());
+            pb.directory(projectRoot);
+            pb.inheritIO();
+            pb.environment().put("FOLLOWABLE_RELAUNCHED", "1");
+            int code = pb.start().waitFor();
+            System.exit(code);
+            return true;  // unreachable
+        } catch (Exception e) {
+            System.out.println("WARNING: could not re-launch in the project root (" + e + ").");
+            System.out.println("Please run FollowableGame with the working directory set to the folder "
+                    + "containing followable_game.json.");
+            return false;  // fall through and try in-process anyway
         }
     }
 

@@ -280,13 +280,14 @@ public class Game {
 
         boolean firstEnd = true;
 
-        // Followable demo mode: paint the initial board (map, scores, tech tree) and wait until the
-        // user presses "Start" in the window before playing the first turn.
+        // Followable demo mode: keep painting the initial board (map, scores, tech tree) and wait
+        // until the user presses "Start" in the window before playing the first turn. We repaint
+        // inside the loop (not just once) so the map is drawn as soon as the window is realised.
         if (followable && frame != null) {
-            frame.update(getGameState(-1), null);
             while (!frame.isClosed() && !frame.isStarted()) {
+                frame.update(getGameState(-1), null);
                 try {
-                    Thread.sleep(30);
+                    Thread.sleep(60);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
