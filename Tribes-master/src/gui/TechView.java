@@ -39,6 +39,11 @@ public class TechView extends JComponent {
     private int bannerRemaining = 0;
     private javax.swing.Timer flashTimer;
 
+    /** Notified when the active tribe researches a new technology (used to show a banner elsewhere). */
+    public interface ResearchListener { void onResearch(String tribeName, String techName); }
+    private ResearchListener researchListener;
+    public void setResearchListener(ResearchListener l) { this.researchListener = l; }
+
     // TODO: search functionality (i.e. "custom house -> Trade research")
     TechView(Game game, ActionController ac, InfoView infoView)
     {
@@ -209,11 +214,16 @@ public class TechView extends JComponent {
                         known.add(opt);
                         if (!firstSeen) {
                             flashRemaining[i] = FLASH_FRAMES;
-                            bannerRemaining = FLASH_FRAMES;
-                            flashBanner.setText("★  " + t.getName() + " researched " + opt.toString() + "  ★");
-                            flashBanner.setOpaque(true);
-                            flashBanner.setBackground(new Color(40, 40, 40));
                             if (!flashTimer.isRunning()) flashTimer.start();
+                            if (researchListener != null) {
+                                // Followable mode shows the message elsewhere (above the scores).
+                                researchListener.onResearch(t.getName(), opt.toString());
+                            } else {
+                                bannerRemaining = FLASH_FRAMES;
+                                flashBanner.setText("★  " + t.getName() + " researched " + opt.toString() + "  ★");
+                                flashBanner.setOpaque(true);
+                                flashBanner.setBackground(new Color(40, 40, 40));
+                            }
                         }
                     }
 

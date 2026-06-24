@@ -99,4 +99,11 @@ public class TribeView extends JComponent {
         return size;
     }
 
+    /** Resizes the scores view (used by the followable demo GUI to give it a fixed area). */
+    public void setViewSize(Dimension d) {
+        this.size = d;
+        if (textArea != null) textArea.setPreferredSize(d);
+        revalidate();
+    }
+
 }

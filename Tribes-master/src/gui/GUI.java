@@ -31,11 +31,17 @@ public class GUI extends JFrame {
     private int otherInfoDelay = GUI_INFO_DELAY;
     private int levelingUp = 0;
 
-    // Followable demo mode: the window opens but waits for the user to press "Start" before the
-    // game begins. In this mode scores and the tech tree are shown side-by-side (un-tabbed).
+    // Followable demo mode: the window opens maximised with a large map, waits for the user to press
+    // a centred "Start" button before the game begins, and shows the scores + a "tech purchased"
+    // banner + the tech tree stacked in a single side panel next to the map.
     private boolean followable = false;
     private volatile boolean started = false;
     private JButton startButton;
+    private JLabel researchBanner;                 // "tech purchased" message, above the scores
+    private javax.swing.Timer researchBannerTimer; // clears the banner after a few seconds
+    private int fTechTreeHeight;                    // followable: tech tree height
+    private int fScoresHeight;                      // followable: scores panel height
+    private int fFontBig;                           // followable: base font size for side-panel text
 
     private Game game;
     private GameState gs;
@@ -102,6 +108,32 @@ public class GUI extends JFrame {
         GUI_TECH_PANEL_HEIGHT = (int)(0.16*screenDiagonal*scale);
         GUI_TECH_PANEL_FULL_SIZE = (int)(GUI_TECH_PANEL_FULL_SIZE*(1/scale));
 
+        if (followable) {
+            // Presentation mode: make the map as large as the screen allows, with a side panel beside
+            // it. Keep the original CELL_SIZE : GUI_GAME_VIEW_SIZE ratio (0.038 : 0.36) so the board
+            // still fits its view exactly, just bigger. Everything is sized from the real screen.
+            int sw = rect.width, sh = rect.height;
+            int titleChrome = 90;                                   // window title bar + borders + margins
+            int spacing = Math.max(8, (int)(0.010 * sh));
+            int sideW = Math.min(Math.max((int)(0.30 * sw), 460), 660);
+            int contentH = sh - titleChrome;
+            int mapSize = Math.min(contentH, sw - sideW - 5 * spacing);
+
+            GUI_GAME_VIEW_SIZE = mapSize;
+            CELL_SIZE = Math.max(1, (int) Math.round(mapSize * (0.038 / 0.36)));
+            GUI_SIDE_PANEL_WIDTH = sideW;
+            GUI_COMP_SPACING = spacing;
+            GUI_MIN_PAN = (int)(0.015 * screenDiagonal);
+            GUI_CITY_TAG_WIDTH = Math.max(12, (int)(0.012 * mapSize));
+            fScoresHeight = (int)(0.25 * contentH);
+            GUI_TECH_PANEL_HEIGHT = fScoresHeight;
+            GUI_INFO_PANEL_HEIGHT = (int)(0.12 * contentH);
+            GUI_ACTION_PANEL_HEIGHT = (int)(0.05 * contentH);
+            GUI_TECH_PANEL_FULL_SIZE = (int)(0.50 * contentH);      // scrollable tech-button panel
+            fTechTreeHeight = (int)(0.40 * contentH);              // visible tech tree height
+            fFontBig = Math.max(18, (int)(0.020 * sh));
+        }
+
 //        this.ki = ki;
         this.ac = ac;
         this.wi = wi;
@@ -158,19 +190,63 @@ public class GUI extends JFrame {
 
         // Frame properties
         pack();
-        if (followable) {
-            // Keep the (wider) followable window on screen. The board cannot shrink below its pinned
-            // minimum, so GridBagLayout takes any deficit from the other columns instead.
-            Rectangle max = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
-            setSize(Math.min(getWidth(), max.width), Math.min(getHeight(), max.height));
-            setLocation(max.x, max.y);
-        }
         this.setVisible(true);
+        if (followable) {
+            // Presentation mode: run full screen (maximised) and overlay a big centred Start button.
+            setExtendedState(getExtendedState() | Frame.MAXIMIZED_BOTH);
+            installStartOverlay();
+        }
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         if(closeAppOnClosingWindow){
             setDefaultCloseOperation(EXIT_ON_CLOSE);
         }
         repaint();
+    }
+
+    /**
+     * Installs a dim, full-window overlay (the frame's glass pane) with a big centred "Start" button.
+     * The overlay swallows all input until pressed; once pressed it hides itself for good and the game
+     * is allowed to run.
+     */
+    private void installStartOverlay() {
+        JPanel glass = new JPanel(new GridBagLayout()) {
+            @Override protected void paintComponent(Graphics g) {
+                g.setColor(new Color(0, 0, 0, 150));
+                g.fillRect(0, 0, getWidth(), getHeight());
+                super.paintComponent(g);
+            }
+        };
+        glass.setOpaque(false);
+
+        startButton = new JButton("▶  START GAME");
+        startButton.setFont(new Font(startButton.getFont().getName(), Font.BOLD, Math.max(30, fFontBig + 10)));
+        startButton.setBackground(new Color(46, 160, 67));
+        startButton.setForeground(Color.WHITE);
+        startButton.setOpaque(true);
+        startButton.setFocusPainted(false);
+        startButton.setBorder(BorderFactory.createEmptyBorder(20, 56, 20, 56));
+        startButton.addActionListener(e -> {
+            started = true;
+            getGlassPane().setVisible(false);  // remove the overlay permanently
+        });
+
+        glass.add(startButton, new GridBagConstraints());
+        setGlassPane(glass);
+        glass.setVisible(true);
+    }
+
+    /** Followable mode: show the "tech purchased" banner above the scores, then auto-clear it. */
+    private void showResearchBanner(String tribeName, String techName) {
+        if (researchBanner == null) return;
+        researchBanner.setText("★  " + tribeName + " researched " + techName + "  ★");
+        if (researchBannerTimer == null) {
+            researchBannerTimer = new javax.swing.Timer(2800, e -> {
+                researchBanner.setText(" ");
+                researchBannerTimer.stop();
+            });
+            researchBannerTimer.setRepeats(false);
+        }
+        researchBannerTimer.restart();
     }
 
 
@@ -316,19 +392,57 @@ public class GUI extends JFrame {
         tribeView = new TribeView(game);
         techView = new TechView(game, ac, infoView);
 
-        // In followable mode the scores live here and the tech tree gets its own column (added in
-        // createFrameworkPanel) so the map, scores and tech tree are all visible at once. Otherwise
-        // both share a tabbed pane as before.
-        JComponent scoreAndResearch;
         if (followable) {
-            scoreAndResearch = tribeView;
-        } else {
-            JTabbedPane tribeResearchInfo = new JTabbedPane();
-            tribeResearchInfo.setPreferredSize(new Dimension(GUI_SIDE_PANEL_WIDTH, GUI_TECH_PANEL_HEIGHT));
-            tribeResearchInfo.add("Tribe Info", tribeView);
-            tribeResearchInfo.add("Tech Tree", techView);
-            scoreAndResearch = tribeResearchInfo;
+            // ---- Presentation side panel: labels -> "tech purchased" banner -> scores -> tech tree -> Pause ----
+            tribeView.setViewSize(new Dimension(GUI_SIDE_PANEL_WIDTH, fScoresHeight));
+            techView.setViewSize(new Dimension(GUI_SIDE_PANEL_WIDTH, fTechTreeHeight));
+            techView.setFont(new Font(textFont.getName(), Font.PLAIN, Math.max(13, fFontBig - 4)));
+            techView.setResearchListener(this::showResearchBanner);
+
+            researchBanner = new JLabel(" ", SwingConstants.CENTER);
+            researchBanner.setFont(new Font(textFont.getName(), Font.BOLD, fFontBig + 2));
+            researchBanner.setForeground(new Color(204, 150, 0));
+            researchBanner.setPreferredSize(new Dimension(GUI_SIDE_PANEL_WIDTH, (int)(fFontBig * 2.2)));
+
+            JLabel scoresTitle = new JLabel("Scores");
+            scoresTitle.setFont(new Font(textFont.getName(), Font.BOLD, fFontBig + 2));
+            JLabel techTitle = new JLabel("Tech Tree (active tribe)");
+            techTitle.setFont(new Font(textFont.getName(), Font.BOLD, fFontBig + 2));
+
+            int gy = 0;
+            c.gridy = gy++; sidePanel.add(appTurn, c);
+            c.gridy = gy++; sidePanel.add(activeTribe, c);
+            c.gridy = gy++; sidePanel.add(activeTribeInfo, c);
+            c.gridy = gy++; sidePanel.add(otherInfo, c);
+            c.gridy = gy++; sidePanel.add(Box.createRigidArea(new Dimension(0, GUI_COMP_SPACING)), c);
+            c.gridy = gy++; sidePanel.add(researchBanner, c);   // "tech purchased" message, above scores
+            c.gridy = gy++; sidePanel.add(scoresTitle, c);
+            c.gridy = gy++; sidePanel.add(tribeView, c);
+            c.gridy = gy++; sidePanel.add(Box.createRigidArea(new Dimension(0, GUI_COMP_SPACING)), c);
+            c.gridy = gy++; sidePanel.add(techTitle, c);
+            c.gridy = gy++; sidePanel.add(techView, c);
+            c.gridy = gy++; sidePanel.add(Box.createRigidArea(new Dimension(0, GUI_COMP_SPACING)), c);
+
+            JButton pause = new JButton("Pause");
+            pause.setFont(textFont);
+            pause.addActionListener(e -> {
+                if (game.isPaused()) { game.setPaused(false); pause.setText("Pause"); }
+                else { game.setPaused(true); pause.setText("Resume"); }
+            });
+            c.gridy = gy++; sidePanel.add(pause, c);
+
+            // Push everything to the top of the panel.
+            c.gridy = gy; c.weighty = 1; c.fill = GridBagConstraints.VERTICAL;
+            sidePanel.add(Box.createVerticalGlue(), c);
+
+            return sidePanel;
         }
+
+        // ---- Original (non-followable) side panel: scores + tech tree in a tabbed pane ----
+        JTabbedPane tribeResearchInfo = new JTabbedPane();
+        tribeResearchInfo.setPreferredSize(new Dimension(GUI_SIDE_PANEL_WIDTH, GUI_TECH_PANEL_HEIGHT));
+        tribeResearchInfo.add("Tribe Info", tribeView);
+        tribeResearchInfo.add("Tech Tree", techView);
 
         c.gridy = 0;
         sidePanel.add(appTitle, c);
@@ -359,7 +473,7 @@ public class GUI extends JFrame {
         sidePanel.add(Box.createRigidArea(new Dimension(0, GUI_COMP_SPACING/2)), c);
 
         c.gridy++;
-        sidePanel.add(scoreAndResearch, c);
+        sidePanel.add(tribeResearchInfo, c);
 
         c.gridy++;
         sidePanel.add(Box.createRigidArea(new Dimension(0, GUI_COMP_SPACING/2)), c);
@@ -417,58 +531,8 @@ public class GUI extends JFrame {
         JPanel panel = new JPanel();
         panel.setLayout(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
-        c.anchor = GridBagConstraints.NORTH;
+        c.anchor = GridBagConstraints.SOUTH;
         c.weighty = 0;
-        c.gridx = 0;
-        c.gridy = 0;
-
-        if (followable) {
-            // Big Start button: in followable mode the game does not begin until this is pressed.
-            startButton = new JButton("▶  START GAME");
-            startButton.setFont(new Font(startButton.getFont().getName(), Font.BOLD, 22));
-            startButton.setBackground(new Color(46, 160, 67));
-            startButton.setForeground(Color.WHITE);
-            startButton.setOpaque(true);
-            startButton.setFocusPainted(false);
-            startButton.setPreferredSize(new Dimension(GUI_SIDE_PANEL_WIDTH, (int)(0.05*screenDiagonal)));
-            startButton.addActionListener(e -> {
-                started = true;
-                startButton.setEnabled(false);
-                startButton.setText("●  RUNNING");
-                startButton.setBackground(new Color(120, 120, 120));
-            });
-            panel.add(startButton, c);
-
-            c.gridy++;
-            panel.add(Box.createRigidArea(new Dimension(0, GUI_COMP_SPACING/2)), c);
-
-            // Instructions for whoever is recording / watching.
-            JLabel info = new JLabel("<html><div style='width:" + GUI_SIDE_PANEL_WIDTH + "px'>"
-                    + "Press <b>START GAME</b> to begin.<br/>"
-                    + "Actions play one at a time, with a pause between each action and a longer "
-                    + "pause between players' turns (configured in <i>followable_game.json</i>).<br/>"
-                    + "Watch the <b>Tech Tree</b> below: a newly researched technology <b>flashes gold</b>."
-                    + "</div></html>");
-            info.setFont(new Font(info.getFont().getName(), Font.PLAIN, 13));
-            c.gridy++;
-            panel.add(info, c);
-
-            c.gridy++;
-            panel.add(Box.createRigidArea(new Dimension(0, GUI_COMP_SPACING/2)), c);
-
-            // Tech tree of the active tribe, given its own column so it is always visible.
-            JLabel techTitle = new JLabel("Tech Tree (active tribe)");
-            techTitle.setFont(new Font(techTitle.getFont().getName(), Font.BOLD, 16));
-            c.gridy++;
-            panel.add(techTitle, c);
-
-            c.gridy++;
-            // Leave room above for the Start button + instructions so the column isn't taller than
-            // the board (and the window stays within the screen). The tech tree scrolls if needed.
-            techView.setViewSize(new Dimension(GUI_SIDE_PANEL_WIDTH, Math.max(220, GUI_GAME_VIEW_SIZE - 200)));
-            panel.add(techView, c);
-        }
-
         return panel;
     }
 
