@@ -31,6 +31,12 @@ public class GUI extends JFrame {
     private int otherInfoDelay = GUI_INFO_DELAY;
     private int levelingUp = 0;
 
+    // Followable demo mode: the window opens but waits for the user to press "Start" before the
+    // game begins. In this mode scores and the tech tree are shown side-by-side (un-tabbed).
+    private boolean followable = false;
+    private volatile boolean started = false;
+    private JButton startButton;
+
     private Game game;
     private GameState gs;
 
@@ -61,7 +67,20 @@ public class GUI extends JFrame {
      * @param title Title of the window.
      */
     public GUI(Game game, String title, KeyController ki, WindowInput wi, ActionController ac, boolean closeAppOnClosingWindow) {
+        this(game, title, ki, wi, ac, closeAppOnClosingWindow, false);
+    }
+
+    /**
+     * Constructor
+     * @param title Title of the window.
+     * @param followable If true, the window opens in "followable" demo mode: it waits for the user
+     *                   to press a Start button before the game runs, and shows the scores and the
+     *                   tech tree side-by-side so progress is easy to follow on screen.
+     */
+    public GUI(Game game, String title, KeyController ki, WindowInput wi, ActionController ac, boolean closeAppOnClosingWindow, boolean followable) {
         super(title);
+
+        this.followable = followable;
 
         try {
             UIManager.setLookAndFeel( UIManager.getCrossPlatformLookAndFeelClassName() );
@@ -280,12 +299,22 @@ public class GUI extends JFrame {
         otherInfo = new JLabel(".");
         otherInfo.setFont(textFont);
 
-        JTabbedPane tribeResearchInfo = new JTabbedPane();
         tribeView = new TribeView(game);
         techView = new TechView(game, ac, infoView);
-        tribeResearchInfo.setPreferredSize(new Dimension(GUI_SIDE_PANEL_WIDTH, GUI_TECH_PANEL_HEIGHT));
-        tribeResearchInfo.add("Tribe Info", tribeView);
-        tribeResearchInfo.add("Tech Tree", techView);
+
+        // In followable mode the scores live here and the tech tree gets its own column (added in
+        // createFrameworkPanel) so the map, scores and tech tree are all visible at once. Otherwise
+        // both share a tabbed pane as before.
+        JComponent scoreAndResearch;
+        if (followable) {
+            scoreAndResearch = tribeView;
+        } else {
+            JTabbedPane tribeResearchInfo = new JTabbedPane();
+            tribeResearchInfo.setPreferredSize(new Dimension(GUI_SIDE_PANEL_WIDTH, GUI_TECH_PANEL_HEIGHT));
+            tribeResearchInfo.add("Tribe Info", tribeView);
+            tribeResearchInfo.add("Tech Tree", techView);
+            scoreAndResearch = tribeResearchInfo;
+        }
 
         c.gridy = 0;
         sidePanel.add(appTitle, c);
@@ -316,7 +345,7 @@ public class GUI extends JFrame {
         sidePanel.add(Box.createRigidArea(new Dimension(0, GUI_COMP_SPACING/2)), c);
 
         c.gridy++;
-        sidePanel.add(tribeResearchInfo, c);
+        sidePanel.add(scoreAndResearch, c);
 
         c.gridy++;
         sidePanel.add(Box.createRigidArea(new Dimension(0, GUI_COMP_SPACING/2)), c);
@@ -374,8 +403,56 @@ public class GUI extends JFrame {
         JPanel panel = new JPanel();
         panel.setLayout(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
-        c.anchor = GridBagConstraints.SOUTH;
+        c.anchor = GridBagConstraints.NORTH;
         c.weighty = 0;
+        c.gridx = 0;
+        c.gridy = 0;
+
+        if (followable) {
+            // Big Start button: in followable mode the game does not begin until this is pressed.
+            startButton = new JButton("▶  START GAME");
+            startButton.setFont(new Font(startButton.getFont().getName(), Font.BOLD, 22));
+            startButton.setBackground(new Color(46, 160, 67));
+            startButton.setForeground(Color.WHITE);
+            startButton.setOpaque(true);
+            startButton.setFocusPainted(false);
+            startButton.setPreferredSize(new Dimension(GUI_SIDE_PANEL_WIDTH, (int)(0.05*screenDiagonal)));
+            startButton.addActionListener(e -> {
+                started = true;
+                startButton.setEnabled(false);
+                startButton.setText("●  RUNNING");
+                startButton.setBackground(new Color(120, 120, 120));
+            });
+            panel.add(startButton, c);
+
+            c.gridy++;
+            panel.add(Box.createRigidArea(new Dimension(0, GUI_COMP_SPACING/2)), c);
+
+            // Instructions for whoever is recording / watching.
+            JLabel info = new JLabel("<html><div style='width:" + GUI_SIDE_PANEL_WIDTH + "px'>"
+                    + "Press <b>START GAME</b> to begin.<br/>"
+                    + "Actions play one at a time, with a pause between each action and a longer "
+                    + "pause between players' turns (configured in <i>followable_game.json</i>).<br/>"
+                    + "Watch the <b>Tech Tree</b> below: a newly researched technology <b>flashes gold</b>."
+                    + "</div></html>");
+            info.setFont(new Font(info.getFont().getName(), Font.PLAIN, 13));
+            c.gridy++;
+            panel.add(info, c);
+
+            c.gridy++;
+            panel.add(Box.createRigidArea(new Dimension(0, GUI_COMP_SPACING/2)), c);
+
+            // Tech tree of the active tribe, given its own column so it is always visible.
+            JLabel techTitle = new JLabel("Tech Tree (active tribe)");
+            techTitle.setFont(new Font(techTitle.getFont().getName(), Font.BOLD, 16));
+            c.gridy++;
+            panel.add(techTitle, c);
+
+            c.gridy++;
+            techView.setViewSize(new Dimension(GUI_SIDE_PANEL_WIDTH, GUI_GAME_VIEW_SIZE));
+            panel.add(techView, c);
+        }
+
         return panel;
     }
 
@@ -522,6 +599,14 @@ public class GUI extends JFrame {
 
     public boolean isClosed() {
         return wi.windowClosed;
+    }
+
+    /**
+     * @return true if the game is allowed to run. In followable mode this is false until the user
+     * presses the Start button; otherwise it is always true.
+     */
+    public boolean isStarted() {
+        return !followable || started;
     }
 
     public boolean pauseAfterTurn() {

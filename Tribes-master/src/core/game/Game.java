@@ -42,6 +42,13 @@ public class Game {
     // Is the game paused from the GUI?
     private boolean paused, animationPaused;
 
+    // Followable demo mode (for recording an example game). When enabled, the game renders the
+    // initial state and then waits for the user to press "Start" in the GUI before the first turn.
+    // It also pauses for 'followableTurnPauseMillis' between players' turns. Per-action pacing is
+    // handled separately via Constants.FRAME_DELAY (the delay between consecutive actions).
+    private boolean followable = false;
+    private long followableTurnPauseMillis = 0;
+
     // AI stats for each player.
     private AIStats[] aiStats;
 
@@ -273,6 +280,19 @@ public class Game {
 
         boolean firstEnd = true;
 
+        // Followable demo mode: paint the initial board (map, scores, tech tree) and wait until the
+        // user presses "Start" in the window before playing the first turn.
+        if (followable && frame != null) {
+            frame.update(getGameState(-1), null);
+            while (!frame.isClosed() && !frame.isStarted()) {
+                try {
+                    Thread.sleep(30);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+
         while (frame == null || !frame.isClosed()) {
 //            System.out.println("Frame closed: " + frame.isClosed());
             // Loop while window is still open, even if the game ended.
@@ -350,6 +370,16 @@ public class Game {
             //it may be that this player won the game, no more playing.
             if (gameOver()) {
                 return;
+            }
+
+            // Followable demo mode: pause between players' turns so viewers can follow along.
+            if (followable && frame != null && followableTurnPauseMillis > 0 && !frame.isClosed()) {
+                frame.update(getGameState(-1), null);
+                try {
+                    Thread.sleep(followableTurnPauseMillis);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
             }
 
             // Check if game should be paused automatically after this turn
@@ -643,6 +673,16 @@ public class Game {
 
     public boolean isPaused() {
         return paused;
+    }
+
+    /**
+     * Enables "followable" demo mode for recording an example game.
+     * @param followable whether to wait for a Start press and pause between turns.
+     * @param turnPauseMillis pause (in milliseconds) inserted between players' turns.
+     */
+    public void setFollowable(boolean followable, long turnPauseMillis) {
+        this.followable = followable;
+        this.followableTurnPauseMillis = turnPauseMillis;
     }
 
     public TreeSet<TribeResult> getCurrentRanking() {

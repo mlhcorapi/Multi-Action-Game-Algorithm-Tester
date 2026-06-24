@@ -1,0 +1,206 @@
+import core.Constants;
+import core.Types;
+import core.game.Game;
+import gui.GUI;
+import gui.WindowInput;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import players.ActionController;
+import players.Agent;
+import players.KeyController;
+import utils.file.IO;
+
+import java.util.ArrayList;
+import java.util.Random;
+
+import static core.Types.GAME_MODE.*;
+
+/**
+ * Entry point for recording a "followable" example game.
+ *
+ * Compared to {@link Play}, this runner is built for watching/recording: visuals are always on, the
+ * actions of each turn are executed one at a time with a configurable pause between them, there is a
+ * (longer) configurable pause between players' turns, and the window opens already showing the map,
+ * the scores and the tech tree but waits for the user to press a "Start" button before the game
+ * actually begins.
+ *
+ * All configuration (pauses, algorithms and tribes) is read from {@code followable_game.json}.
+ */
+public class FollowableGame {
+
+    private static boolean RUN_VERBOSE = true;
+    private static long AGENT_SEED = -1;
+    private static long GAME_SEED = -1;
+
+    public static void main(String[] args) {
+
+        try {
+            JSONObject config = new IO().readJSON("followable_game.json");
+
+            if (config == null || config.isEmpty()) {
+                System.out.println("ERROR: Couldn't find 'followable_game.json'");
+                return;
+            }
+
+            String runMode = config.getString("Run Mode");
+            Constants.VERBOSE = config.getBoolean("Verbose");
+            Constants.VISUALS = true;  // Followable mode is always visual.
+
+            // Pacing for the followable playback.
+            int actionPauseMs = config.getInt("Action Pause Millis");
+            long turnPauseMs = config.getLong("Turn Pause Millis");
+            Constants.FRAME_DELAY = actionPauseMs;  // delay (ms) between consecutive actions
+
+            JSONArray playersArray = (JSONArray) config.get("Players");
+            JSONArray tribesArray = (JSONArray) config.get("Tribes");
+            if (playersArray.length() != tribesArray.length())
+                throw new Exception("Number of players must be equal to number of tribes");
+
+            int nPlayers = playersArray.length();
+            Run.PlayerType[] playerTypes = new Run.PlayerType[nPlayers];
+            Types.TRIBE[] tribes = new Types.TRIBE[nPlayers];
+
+            for (int i = 0; i < nPlayers; ++i) {
+                playerTypes[i] = Run.parsePlayerTypeStr(playersArray.getString(i));
+                tribes[i] = Run.parseTribeStr(tribesArray.getString(i));
+            }
+
+            Types.GAME_MODE gameMode = config.getString("Game Mode").equalsIgnoreCase("Capitals") ?
+                    CAPITALS : SCORE;
+
+            Run.MAX_LENGTH = config.getInt("Search Depth");
+            Run.FORCE_TURN_END = config.getBoolean("Force End");
+            Run.MCTS_ROLLOUTS = config.getBoolean("Rollouts");
+            Run.POP_SIZE = config.getInt("Population Size");
+
+            //Portfolio and pruning variables:
+            Run.PRUNING = config.getBoolean("Pruning");
+            Run.PROGBIAS = config.getBoolean("Progressive Bias");
+            Run.K_INIT_MULT = config.getDouble("K init mult");
+            Run.T_MULT = config.getDouble("T mult");
+            Run.A_MULT = config.getDouble("A mult");
+            Run.B = config.getDouble("B");
+
+            JSONArray weights = null;
+            if (config.has("pMCTS Weights"))
+                weights = (JSONArray) config.get("pMCTS Weights");
+            Run.pMCTSweights = Run.getWeights(weights);
+
+            if (config.has("Remove Fishing"))
+                Constants.REMOVE_FISHING = config.getBoolean("Remove Fishing");
+
+            AGENT_SEED = config.getLong("Agents Seed");
+            GAME_SEED = config.getLong("Game Seed");
+            long levelSeed = config.getLong("Level Seed");
+
+            Game game;
+            //1. One game with visuals using the Level Generator:
+            if (runMode.equalsIgnoreCase("PlayLG")) {
+                game = _prepareGame(tribes, levelSeed, playerTypes, gameMode);
+
+            //2. One game with visuals from a level file:
+            } else if (runMode.equalsIgnoreCase("PlayFile")) {
+                String levelFile = config.getString("Level File");
+                game = _prepareGame(levelFile, playerTypes, gameMode);
+
+            //3. One game with visuals from a savegame:
+            } else if (runMode.equalsIgnoreCase("Replay")) {
+                String saveGameFile = config.getString("Replay File Name");
+                game = _loadGame(playerTypes, saveGameFile);
+
+            } else {
+                System.out.println("ERROR: run mode '" + runMode + "' not recognized.");
+                return;
+            }
+
+            runFollowable(game, turnPauseMs);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void runFollowable(Game game, long turnPauseMs) {
+        KeyController ki = new KeyController(true);
+        ActionController ac = new ActionController();
+
+        WindowInput wi = new WindowInput();
+        wi.windowClosed = false;
+        // closeAppOnClosingWindow = true (standalone demo), followable = true.
+        GUI frame = new GUI(game, "Tribes - Followable Game", ki, wi, ac, true, true);
+        frame.addWindowListener(wi);
+        frame.addKeyListener(ki);
+
+        game.setFollowable(true, turnPauseMs);
+
+        System.out.println("Followable game ready. Press 'START GAME' in the window to begin.");
+        game.run(frame, wi);
+    }
+
+    private static ArrayList<Agent> getPlayers(Run.PlayerType[] playerTypes) {
+        ArrayList<Agent> players = new ArrayList<>();
+        long agentSeed = AGENT_SEED == -1 ? System.currentTimeMillis() + new Random().nextInt() : AGENT_SEED;
+
+        if (RUN_VERBOSE) System.out.println("Agents random seed: " + agentSeed);
+
+        ArrayList<Integer> allIds = new ArrayList<>();
+        for (int i = 0; i < playerTypes.length; ++i)
+            allIds.add(i);
+
+        for (int i = 0; i < playerTypes.length; ++i) {
+            Agent ag = Run.getAgent(playerTypes[i], agentSeed);
+            assert ag != null;
+            ag.setPlayerIDs(i, allIds);
+            players.add(ag);
+        }
+        return players;
+    }
+
+    private static Game _prepareGame(Types.TRIBE[] tribes, long levelSeed, Run.PlayerType[] playerTypes, Types.GAME_MODE gameMode) {
+        long gameSeed = GAME_SEED == -1 ? System.currentTimeMillis() : GAME_SEED;
+        if (RUN_VERBOSE) System.out.println("Game seed: " + gameSeed);
+
+        ArrayList<Agent> players = getPlayers(playerTypes);
+
+        Game game = new Game();
+        long levelGenSeed = levelSeed;
+        if (levelGenSeed == -1)
+            levelGenSeed = System.currentTimeMillis() + new Random().nextInt();
+
+        if (RUN_VERBOSE) System.out.println("Level seed: " + levelGenSeed);
+
+        game.init(players, levelGenSeed, tribes, gameSeed, gameMode);
+        return game;
+    }
+
+    private static Game _prepareGame(String levelFile, Run.PlayerType[] playerTypes, Types.GAME_MODE gameMode) {
+        long gameSeed = GAME_SEED == -1 ? System.currentTimeMillis() : GAME_SEED;
+        if (RUN_VERBOSE) System.out.println("Game seed: " + gameSeed);
+
+        ArrayList<Agent> players = getPlayers(playerTypes);
+
+        Game game = new Game();
+        game.init(players, levelFile, gameSeed, gameMode);
+        return game;
+    }
+
+    private static Game _loadGame(Run.PlayerType[] playerTypes, String saveGameFile) {
+        long agentSeed = AGENT_SEED == -1 ? System.currentTimeMillis() + new Random().nextInt() : AGENT_SEED;
+
+        ArrayList<Agent> players = new ArrayList<>();
+        ArrayList<Integer> allIds = new ArrayList<>();
+        for (int i = 0; i < playerTypes.length; ++i)
+            allIds.add(i);
+
+        for (int i = 0; i < playerTypes.length; ++i) {
+            Agent ag = Run.getAgent(playerTypes[i], agentSeed);
+            assert ag != null;
+            ag.setPlayerIDs(i, allIds);
+            players.add(ag);
+        }
+
+        Game game = new Game();
+        game.init(players, saveGameFile);
+        return game;
+    }
+}
