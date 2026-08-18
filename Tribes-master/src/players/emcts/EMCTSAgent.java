@@ -57,6 +57,13 @@ public class EMCTSAgent extends Agent {
     private int mutEvents, mutBestGains, mutChildDuplicates, mutRepairKept, mutRepairReplaced;
     private double mutBestGainSum;
     private int lastRepairKept, lastRepairReplaced;   // per-repair() call; folded in by the main loop
+
+    // ---- v6 realized-spend accounting (reset each planTurn); identical to the experimental agent's,
+    // so the baseline and the crossover variants are measured by the same code. ----
+    private double initComputeUnits;
+    private long initAdvances, initCopies, initEvals;
+    private int initFmCalls;
+    private long initMillis;
     // Per-turn planning state: the engine calls act() once per action, so we plan the
     // entire turn once (a single phased search) and replay the cached best action
     // sequence across the turn's subsequent act() calls instead of re-searching.
@@ -165,6 +172,20 @@ public class EMCTSAgent extends Agent {
 
         double initialValue = root.getValue();
 
+        // ---- v6: the greedy initialization is NOT charged to the search budget --------------------
+        // Identical treatment to ExperimentalEMCTSAgent (see the full rationale there): the initial
+        // sequence is shared across every config for a given (scenario, visit), and its cost scales
+        // with branching factor, which differs systematically by scenario source. Measured, logged,
+        // then excluded so the phase ceilings below bound SEARCH only. Bridge burning stays INSIDE
+        // the budget.
+        initComputeUnits = core.game.ComputeMeter.computeUnits();
+        initAdvances = core.game.ComputeMeter.advances();
+        initCopies   = core.game.ComputeMeter.copies();
+        initEvals    = core.game.ComputeMeter.evals();
+        initFmCalls  = this.fmCallsCount;
+        initMillis   = System.currentTimeMillis() - turnStartTimeMillis;
+        core.game.ComputeMeter.reset();
+
         bestNode = root;
         fmCallsRun = 0;
 
@@ -175,7 +196,9 @@ public class EMCTSAgent extends Agent {
         // phase gets an equal CUMULATIVE slice of the budget. Standard bridge burning (promote the
         // best child) spends no forward-model calls, so this baseline fills the whole budget with
         // search and performs all 20 burns.
-        long turnBudgetTime = ect.remainingTimeMillis();
+        // Explicit params.num_timeMillis (> 0) gives the search a fixed slice independent of how long
+        // initialization took — see AlgParams.num_timeMillis and the v6 calibration runner.
+        long turnBudgetTime = params.num_timeMillis > 0 ? params.num_timeMillis : ect.remainingTimeMillis();
         ElapsedCpuTimer turnTimer = new ElapsedCpuTimer();
         long fmPerPhase      = Math.max(1, params.num_fmcalls      / Math.max(1, params.depth));
         long computePerPhase = Math.max(1, params.num_computeUnits / Math.max(1, params.depth));
@@ -205,7 +228,8 @@ public class EMCTSAgent extends Agent {
                 } else if (params.stop_type == params.STOP_COMPUTE) {
                     ceilingReached = core.game.ComputeMeter.computeUnits() >= computeCeiling;
                 } else { // STOP_FMCALLS (default)
-                    ceilingReached = fmCallsCount >= fmCeiling;
+                    // Relative to the post-initialization baseline (see STOP_COMPUTE above).
+                    ceilingReached = (fmCallsCount - initFmCalls) >= fmCeiling;
                 }
                 boolean needChildForBurn = (currentPhase < params.depth - 1) && root.getChildren().isEmpty();
                 if (ceilingReached && !needChildForBurn) break;
@@ -259,7 +283,8 @@ public class EMCTSAgent extends Agent {
                     // Log the best sequence value found SO FAR (bestNode), not the promoted root's
                     // value (which degrades as the search dives) - the monotonic expansion curve.
                     long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTimeMillis;
-                    bridgeBurnDataLog.add(new BridgeBurnEventData(-1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestNode.getValue(), this.fmCallsCount));
+                    bridgeBurnDataLog.add(new BridgeBurnEventData(-1, gs.getTick(), expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestNode.getValue(), this.fmCallsCount,
+                            core.game.ComputeMeter.computeUnits()));   // v6 per-phase SEARCH spend
                 }
             }
         }
@@ -273,7 +298,12 @@ public class EMCTSAgent extends Agent {
         double finalValue = bestNode.getValue();
         double avgNodeValue = nodesEvaluated > 0 ? sumNodeValue / nodesEvaluated : 0.0;
         turnDataLog.add(new TurnData(-1, gs.getTick(), scoreAtTurnStart, initialValue, finalValue, avgNodeValue,
-                this.fmCallsCount, nodesEvaluated, uniqueSeqKeys.size()));
+                this.fmCallsCount, nodesEvaluated, uniqueSeqKeys.size(),
+                // v6 realized SEARCH spend (post-init) + initialization spend + wall-clock split.
+                core.game.ComputeMeter.computeUnits(), core.game.ComputeMeter.advances(),
+                core.game.ComputeMeter.copies(), core.game.ComputeMeter.evals(),
+                initComputeUnits, initAdvances, initCopies, initEvals, initFmCalls,
+                System.currentTimeMillis() - turnStartTimeMillis, initMillis));
 
         // Cache the best full action sequence; act() replays it over the turn.
         ArrayList<Action> bestSeq = bestNode.getSequence();

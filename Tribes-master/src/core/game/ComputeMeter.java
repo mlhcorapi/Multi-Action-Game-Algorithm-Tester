@@ -11,7 +11,8 @@ package core.game;
  * and combines them into "compute units" via calibrated relative weights (advance = 1.0), so that
  * 1 unit ~= one advance's worth of wall-clock time. Because it is a deterministic COUNT (not a clock),
  * a fixed compute-unit budget yields the same search on every run/machine (reproducible), while still
- * reflecting total compute (forward model is only ~79% of it; the rest is copies + eval).
+ * reflecting total compute rather than the forward model alone (advance() is well short of 100% of
+ * planning cost, and its share varies by agent - see FmComputeProbe).
  *
  * Thread-local so parallel games never interfere. Weights are machine-calibrated by ComputeCalibrate;
  * re-run it on a new machine and update W_COPY / W_EVAL below.
@@ -20,8 +21,10 @@ public final class ComputeMeter {
     private ComputeMeter() {}
 
     // Calibrated relative op costs (advance = 1.0). Measured on the dev machine by ComputeCalibrate
-    // (per-op ~37us advance / ~6us copy / ~3us eval => compute share 85% / 11% / 4%). Re-run
-    // ComputeCalibrate on a new machine and update these.
+    // (per-op wall-clock ratios, order ~37us advance / ~6us copy / ~3us eval; the exact weights below
+    // are the values ComputeCalibrate printed, not these rounded figures). The resulting shares are
+    // shares of the COUNTED ops only and are not comparable with FmComputeProbe's share of total
+    // planning wall-clock. Re-run ComputeCalibrate on a new machine and update these.
     public static volatile double W_ADVANCE = 1.0;
     public static volatile double W_COPY = 0.16;
     public static volatile double W_EVAL = 0.077;

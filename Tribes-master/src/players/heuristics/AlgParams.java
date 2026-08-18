@@ -25,6 +25,11 @@ public class AlgParams
     public int num_iterations = 200;
     public int num_fmcalls = 2000;
     public int num_computeUnits = 13400; // budget when stop_type == STOP_COMPUTE (compute-units; see ComputeMeter)
+    // Explicit per-turn SEARCH time budget in ms, used when stop_type == STOP_TIME and this is > 0.
+    // 0 (the default) keeps the historical behaviour: the budget is whatever the engine's per-turn
+    // ElapsedCpuTimer has left. The v6 calibration (CalibrationRunnerV6) sets it so that each agent
+    // gets exactly T ms of SEARCH regardless of how long its greedy initialization took.
+    public int num_timeMillis = 0;
     public int num_time = 40;
     public int FORCE_TURN_END = 5;
     public boolean PRIORITIZE_ROOT = false;

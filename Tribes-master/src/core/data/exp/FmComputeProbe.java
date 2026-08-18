@@ -8,8 +8,12 @@ import java.util.Arrays;
 
 /**
  * One-off measurement: what fraction of EMCTS-family planning wall-clock is the forward model
- * (gs.advance()) versus everything else (state copies, heuristic evaluation, bookkeeping)? This
- * justifies using forward-model calls as the budget currency. Uses the opt-in profiler in
+ * (gs.advance()) versus everything else (state copies, heuristic evaluation, bookkeeping)? This is
+ * the motivation for NOT budgeting on forward-model calls alone: the FM share is well below 100%
+ * and varies by agent, so equal-fmcalls would not be equal compute. It is measured as a share of
+ * TOTAL planning wall-clock, so it also covers work the {@link core.game.ComputeMeter} does not
+ * count (action generation, repair bookkeeping, allocation) - do not compare it directly with the
+ * counted-op shares printed by {@link ComputeCalibrate}. Uses the opt-in profiler in
  * ExperimentalEMCTSAgent (PROFILE_FM) and runs a few SCORE turns vs the passive opponent at a real
  * budget. EMCTS (standard) is structurally identical (same advance/eval/copy loop), so this is
  * representative of the whole family.
