@@ -220,4 +220,81 @@ public class ExpAgents {
     public static AgentSpec crossoverComboV5(int ratio, int computeUnits) {
         return new AgentSpec("CrossoverCombo", seed -> new CrossoverComboAgent(seed, expParamsV5(ratio, computeUnits)));
     }
+
+    // ---- v6 Isolation Phase variants ----------------------------------------------------------
+    // Two differences from v5:
+    //   1. GREEDY initial sequence (randomInitialSequence left at its false default), matching standard
+    //      EMCTS. All 12 configs run byte-identical initialization code before any operator-specific
+    //      work, so a shared (scenario, visit) seed still yields an identical root in every config —
+    //      the paired-comparison guarantee, now on a strong rather than a deliberately weak start.
+    //   2. The budget bounds SEARCH only: the agents measure the greedy initialization and reset the
+    //      ComputeMeter before the phase loop (see ExperimentalEMCTSAgent.planTurn). Bridge burning,
+    //      including the crossover tournament, is INSIDE the budget.
+    // Both budget flavours are provided: STOP_COMPUTE for the main run, STOP_TIME + num_timeMillis for
+    // the C0 calibration (which needs exactly T ms of search regardless of initialization cost).
+
+    private static ExperimentalEMCTSParams expParamsV6(int ratio, int computeUnits) {
+        ExperimentalEMCTSParams p = new ExperimentalEMCTSParams();
+        p.stop_type = p.STOP_COMPUTE;
+        p.num_computeUnits = computeUnits;
+        p.heuristic_method = p.SIMPLE_HEURISTIC;
+        p.depth = DEPTH;
+        p.mutationExpansionRatio = ratio;
+        p.randomInitialSequence = false;   // greedy 1-ply init (explicit for the reader; false is the default)
+        return p;
+    }
+
+    private static ExperimentalEMCTSParams expParamsV6Time(int ratio, int searchMillis) {
+        ExperimentalEMCTSParams p = expParamsV6(ratio, 0);
+        p.stop_type = p.STOP_TIME;
+        p.num_timeMillis = searchMillis;
+        return p;
+    }
+
+    public static AgentSpec emctsV6(int computeUnits) {
+        return new AgentSpec("EMCTS", seed -> new EMCTSAgent(seed, emctsParamsV6(computeUnits)));
+    }
+
+    public static AgentSpec crossoverExpansionV6(int ratio, int computeUnits) {
+        return new AgentSpec("CrossoverExpansion", seed -> new CrossoverExpansionAgent(seed, expParamsV6(ratio, computeUnits)));
+    }
+
+    public static AgentSpec crossoverBBV6(int computeUnits) {
+        return new AgentSpec("CrossoverBB", seed -> new CrossoverBBAgent(seed, expParamsV6(5, computeUnits)));
+    }
+
+    public static AgentSpec crossoverComboV6(int ratio, int computeUnits) {
+        return new AgentSpec("CrossoverCombo", seed -> new CrossoverComboAgent(seed, expParamsV6(ratio, computeUnits)));
+    }
+
+    public static AgentSpec emctsV6Time(int searchMillis) {
+        return new AgentSpec("EMCTS", seed -> {
+            EMCTSParams p = emctsParamsV6(0);
+            p.stop_type = p.STOP_TIME;
+            p.num_timeMillis = searchMillis;
+            return new EMCTSAgent(seed, p);
+        });
+    }
+
+    public static AgentSpec crossoverExpansionV6Time(int ratio, int searchMillis) {
+        return new AgentSpec("CrossoverExpansion", seed -> new CrossoverExpansionAgent(seed, expParamsV6Time(ratio, searchMillis)));
+    }
+
+    public static AgentSpec crossoverBBV6Time(int searchMillis) {
+        return new AgentSpec("CrossoverBB", seed -> new CrossoverBBAgent(seed, expParamsV6Time(5, searchMillis)));
+    }
+
+    public static AgentSpec crossoverComboV6Time(int ratio, int searchMillis) {
+        return new AgentSpec("CrossoverCombo", seed -> new CrossoverComboAgent(seed, expParamsV6Time(ratio, searchMillis)));
+    }
+
+    private static EMCTSParams emctsParamsV6(int computeUnits) {
+        EMCTSParams p = new EMCTSParams();
+        p.stop_type = p.STOP_COMPUTE;
+        p.num_computeUnits = computeUnits;
+        p.heuristic_method = p.SIMPLE_HEURISTIC;
+        p.depth = DEPTH;
+        p.randomInitialSequence = false;   // greedy 1-ply init
+        return p;
+    }
 }

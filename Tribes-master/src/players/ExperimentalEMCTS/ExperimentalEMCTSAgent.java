@@ -51,7 +51,11 @@ public class ExperimentalEMCTSAgent extends Agent {
     protected void recordBridgeBurn(int bridgeBurningPhaseNumber, double bestSequenceValue, long turnStartTime, int tick) {
         long expansionPhaseTimestamp = System.currentTimeMillis() - turnStartTime;
         bridgeBurnDataList.add(new BridgeBurnEventData(
-                -1, tick, expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestSequenceValue, this.fmCallsCount
+                -1, tick, expansionPhaseTimestamp, bridgeBurningPhaseNumber, bestSequenceValue, this.fmCallsCount,
+                // v6: SEARCH compute-units spent so far this turn (init excluded — the meter was reset
+                // after initialization). Gives the per-phase budget trajectory and makes within-turn
+                // drift in the advance/copy/eval mix observable.
+                core.game.ComputeMeter.computeUnits()
         ));
     }
 
@@ -109,6 +113,14 @@ public class ExperimentalEMCTSAgent extends Agent {
     // repair (crossover path); the main-loop call sites fold them into the turn totals above.
     protected int lastRepairKept, lastRepairReplaced;       // repair()  — mutation children
     protected int lastXoRepairKept, lastXoRepairReplaced;   // crossover() inline repair
+
+    // ---- v6 realized-spend accounting (reset each planTurn) --------------------------------------
+    // Cost of the greedy 1-ply initialization, which v6 measures but does NOT charge to the search
+    // budget; and the wall-clock split. See planTurn() for why initialization is excluded.
+    protected double initComputeUnits;
+    protected long initAdvances, initCopies, initEvals;
+    protected int initFmCalls;
+    protected long initMillis;
 
 
     public ExperimentalEMCTSAgent(long seed, ExperimentalEMCTSParams params) {
@@ -193,6 +205,28 @@ public class ExperimentalEMCTSAgent extends Agent {
 
         double initialValue = root.getValue();
 
+        // ---- v6: the greedy initialization is NOT charged to the search budget --------------------
+        // The initial sequence is produced by identical code in every agent and is shared across all
+        // configs for a given (scenario, visit), so its cost is a common constant that carries no
+        // information about the operators under study. Charging it would also bias the comparison
+        // along the primary covariate: greedy init evaluates EVERY available action at EVERY sequence
+        // position, so its cost scales with branching factor — and branching factor differs
+        // systematically between single and dual scenarios (v4: BF mean 452 vs 290). Charging it would
+        // therefore hand single scenarios systematically less SEARCH budget than dual, along the exact
+        // axis the single-vs-dual analysis measures.
+        //
+        // Bridge burning (standard and crossover) is deliberately NOT excluded: the crossover
+        // tournament runs inside the phase loop below, after this reset, and its advance/copy/eval
+        // calls are counted like any other search work. Paying for the tournament out of the shared
+        // budget is the whole point — it is the efficiency cost under study.
+        initComputeUnits = core.game.ComputeMeter.computeUnits();
+        initAdvances = core.game.ComputeMeter.advances();
+        initCopies   = core.game.ComputeMeter.copies();
+        initEvals    = core.game.ComputeMeter.evals();
+        initFmCalls  = this.fmCallsCount;
+        initMillis   = System.currentTimeMillis() - turnStartTimeMillis;
+        core.game.ComputeMeter.reset();   // phase ceilings below bound SEARCH only
+
         bestNode = root;
         fmCallsRun = 0;
 
@@ -212,13 +246,18 @@ public class ExperimentalEMCTSAgent extends Agent {
         //
         // Each phase is allotted an equal CUMULATIVE slice of the budget: a phase runs MCTS
         // iterations until the running total reaches that phase's ceiling = (phase+1)*budget/depth.
-        // Because the ceiling is cumulative, the forward-model calls a crossover bridge-burn
-        // tournament spends are absorbed by the NEXT phase doing proportionally fewer iterations.
-        // Net effect: every agent consumes the SAME total budget (num_fmcalls / turn time) AND
+        // Because the ceiling is cumulative, the budget a crossover bridge-burn tournament spends
+        // is absorbed by the NEXT phase doing proportionally fewer iterations.
+        // Net effect: every agent consumes the SAME total budget (compute-units under STOP_COMPUTE,
+        // which is what v5 uses; fmcalls / iterations / time under the other stop types) AND
         // performs the SAME 20 burns; crossover agents simply evaluate fewer distinct sequences
         // (the cost of their tournaments) - which is the effect under study, not a difference in
         // the amount of pruning.
-        long turnBudgetTime = ect.remainingTimeMillis();
+        // Under STOP_TIME an explicit params.num_timeMillis (> 0) gives the search a fixed slice that
+        // does not shrink by however long the greedy initialization took — required by the v6
+        // calibration, which asks "what does this agent do in exactly T ms of SEARCH". 0 keeps the
+        // historical behaviour (whatever the engine's turn timer has left).
+        long turnBudgetTime = params.num_timeMillis > 0 ? params.num_timeMillis : ect.remainingTimeMillis();
         ElapsedCpuTimer turnTimer = new ElapsedCpuTimer();
         long fmPerPhase      = Math.max(1, params.num_fmcalls      / Math.max(1, params.depth));
         long computePerPhase = Math.max(1, params.num_computeUnits / Math.max(1, params.depth));
@@ -249,7 +288,9 @@ public class ExperimentalEMCTSAgent extends Agent {
                 } else if (params.stop_type == params.STOP_COMPUTE) {
                     ceilingReached = core.game.ComputeMeter.computeUnits() >= computeCeiling;
                 } else { // STOP_FMCALLS (default)
-                    ceilingReached = fmCallsCount >= fmCeiling;
+                    // Relative to the post-initialization baseline, so this stop type excludes the
+                    // greedy init exactly as STOP_COMPUTE does.
+                    ceilingReached = (fmCallsCount - initFmCalls) >= fmCeiling;
                 }
                 boolean needChildForBurn = (currentPhase < params.depth - 1) && root.getChildren().isEmpty();
                 if (ceilingReached && !needChildForBurn) break;
@@ -383,7 +424,13 @@ public class ExperimentalEMCTSAgent extends Agent {
         double avgNodeValue = nodesEvaluated > 0 ? sumNodeValue / nodesEvaluated : 0.0;
         turnDataList.add(new TurnData(
                 -1, gs.getTick(), scoreAtTurnStart, initialValue, finalValue, avgNodeValue,
-                this.fmCallsCount, nodesEvaluated, uniqueSeqKeys.size()
+                this.fmCallsCount, nodesEvaluated, uniqueSeqKeys.size(),
+                // v6 realized SEARCH spend (the meter was reset after initialization, so these are
+                // post-init) + the separately-measured initialization spend + the wall-clock split.
+                core.game.ComputeMeter.computeUnits(), core.game.ComputeMeter.advances(),
+                core.game.ComputeMeter.copies(), core.game.ComputeMeter.evals(),
+                initComputeUnits, initAdvances, initCopies, initEvals, initFmCalls,
+                System.currentTimeMillis() - turnStartTimeMillis, initMillis
         ));
 
         // Cache the best full action sequence; act() replays it over the turn.

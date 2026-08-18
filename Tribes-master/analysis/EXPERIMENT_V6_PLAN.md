@@ -1,0 +1,320 @@
+# V6 — Plan
+
+v6 keeps v5's research questions and its full measurement battery, and changes four things: how the
+thinking budget is set and verified, how the initial sequence is built, how many repeats are run, and
+how the whole thing is driven.
+
+v6 runs in two parts. **Part I is a standalone calibration experiment (C0)** that must complete and be
+read before Part II is configured — it decides the budget rule and resolves one open design collision
+(§5). **Part II is the isolation run** proper.
+
+---
+
+## 1. Research questions (unchanged)
+
+Carried over verbatim from v4/v5; v6 re-answers them on a defensible budget.
+
+**Performance.** Does crossover expansion improve turn-level plan quality over standard EMCTS, at which
+mutation:crossover ratios, and at which thinking times? Does crossover bridge-burning help
+independently of crossover expansion, and do the two compose (Combo) or interfere?
+
+**The single-vs-dual gap.** v4 found crossover's advantage concentrated in dual (two-player) scenarios
+and deteriorating with branching factor in single (passive-opponent) scenarios. v5's hypothesis battery
+(H1–H5) instruments the search to discriminate five explanations: blend incoherence, repair disruption,
+elite-pool collapse, operator credit, and action-space composition. **All five carry into v6 unchanged**,
+with the same directly-logged signals — see [V5_HYPOTHESES.md](V5_HYPOTHESES.md), which remains the
+governing document for the telemetry semantics.
+
+The reason to re-run rather than reuse v5: the budget under which v5 was collected is the thing under
+repair, and the initialization change (§3C) alters the search's starting point for every agent, so
+v5's numbers do not transfer.
+
+---
+
+## 2. Changes from v5 at a glance
+
+| # | Change | Status |
+|---|---|---|
+| A | Thinking budget set from a reference-machine calibration; realized spend logged per turn | Part I decides the rule |
+| B | Greedy shared initial sequence, replacing the uniformly-random one | Requires §5 resolution |
+| C | 50 visits per scenario (was 100) | Straightforward |
+| D | Notebook-driven with a progress cell | Mirrors v5 notebook |
+| E | Same 200-scenario portfolio, same 12 configs, same telemetry | Unchanged |
+
+---
+
+## 3. The four changes in detail
+
+### A. Budget: calibrated, and verified from logged spend
+
+v5 budgeted on a single shared compute-unit scalar
+(`units = 1.0·advances + 0.16·copies + 0.077·evals`, [ComputeMeter](../src/core/game/ComputeMeter.java))
+with weights measured once, and **logged no evidence that the budget was actually equalised** — the only
+workload column in `TurnData` is `FmCalls`, which is *expected* to differ across agents.
+
+v6 fixes both halves:
+
+1. **The budget rule is chosen from calibration data**, not assumed (Part I).
+2. **Realized spend is logged every turn**, so budget adherence becomes a reported result rather than a
+   claim. New per-turn columns:
+
+| column | purpose |
+|---|---|
+| `ComputeUnits` | realized spend; overshoot vs. target is then measurable |
+| `Advances`, `Copies`, `Evals` | the op mix — supports counterfactual reweighting and the "equal fmcalls would have been unfair by x%" table |
+| `InitUnits` | cost of the greedy initialization alone (see §5) |
+| `PlanMillis` | wall-clock, logged as evidence only — never used as a budget |
+
+All are observation-only: reading the meter performs no `advance`/`copy`/`eval`, so trajectories are
+unchanged, exactly as with the existing v5 telemetry.
+
+**Why the budget rule is not pre-decided.** Two schemes are live, and they differ only by the size of the
+cost-model error:
+
+- *Shared scalar* (v5): every agent gets the same unit budget. Fair **iff** the weights are right;
+  a weight error biases whichever agent has the most divergent op mix, and more samples do not fix it.
+- *Per-agent calibrated* : each agent gets the op count it completes in T seconds on the reference
+  machine. Fairness criterion is direct ("equal reference-machine thinking time"), no weights to defend,
+  and the residual error is calibration noise — which shrinks with repetitions. If this wins, the
+  currency can be plain forward-model calls (`STOP_FMCALLS`, already implemented, and the standard
+  currency in the Tribes literature), since fmcalls then only need to be a monotone stopping clock.
+
+Part I measures which is warranted. The deciding statistic is **ms-per-unit variation between agents vs.
+within an agent across scenarios** (§4.4).
+
+### B. Greedy shared initial sequence
+
+v5 forced `params.randomInitialSequence = true` on every agent
+([ExpAgents.java:196](../src/core/data/exp/ExpAgents.java)), so all 12 configs started a
+(scenario, visit) from the same *uniformly-random* sequence. v6 reverts to the greedy 1-ply
+initialization that is standard EMCTS's default — for each position, evaluate every available action and
+take the best.
+
+**Implementation is a flag flip, not new code.** `randomInitialSequence` already defaults to `false`, and
+the greedy branch already exists in both
+[EMCTSAgent.randomActions()](../src/players/emcts/EMCTSAgent.java) and
+[ExperimentalEMCTSAgent.randomActions()](../src/players/ExperimentalEMCTS/ExperimentalEMCTSAgent.java).
+v6 simply stops setting the flag in the v6 agent factories.
+
+**Sameness across agents still holds, but for a different reason and it must be re-verified.** The greedy
+loop breaks score ties randomly (`m_rnd.nextInt(numTies)`), so the initial sequence is a function of the
+shared per-visit seed, not a pure function of the state. Since all 12 configs run byte-identical
+initialization code before any operator-specific work, they consume the same RNG draws in the same order
+and must produce identical roots. v5's existing invariance gate
+(`RunExperimentV5.verifyRandomInit`, checkpointed as `_random_init_ok.txt`) already asserts exactly this
+and **is kept for v6**, renamed to reflect that it now guards a greedy root.
+
+**Two consequences to carry into the analysis:**
+
+1. *Repeats now sample less.* Under random init, visits varied both the starting point and the search
+   RNG. Under greedy init the starting point is near-constant per scenario (varying only through tie-breaks),
+   so the 50 repeats sample search-RNG variation almost exclusively. This tightens the paired comparison —
+   which is part of why 50 is defensible where v5 used 100 (§3C) — but it means `InitialSequenceValue`
+   becomes approximately a per-scenario constant, and any analysis using it as a covariate changes meaning.
+2. *Headroom shrinks.* The v5 comment on the random-init mode is explicit that it produces an
+   "intentionally worse-than-greedy" start to widen room-for-improvement during search. Greedy init removes
+   that headroom deliberately: v6 measures whether the operators improve on a *strong* start, which is the
+   more realistic and more demanding question, but effect sizes should be expected to compress relative to v4/v5.
+
+### C. 50 visits per scenario
+
+`IsolationPhaseRunnerV5.VISITS_PER_SCENARIO` 100 → 50. Total turns per budget level:
+200 scenarios × 50 visits × 12 configs = **120,000** (v5: 240,000). Across three budget levels,
+**360,000 turns** total (v5: 720,000).
+
+Justification for the paper: the design is paired at (scenario, visit) and greedy init removes the
+starting-point variance component (§3B), so the residual being averaged is smaller than in v5. The
+per-scenario-unit significance analysis from v4 (Fig5 at n=100) should be re-run at n=50 to confirm the
+comparisons of interest remain adequately powered — **this is a check to perform on the Part I data
+before committing**, not an assumption.
+
+### D. Notebook-driven
+
+`analysis/run_v6_jupyter.ipynb`, mirroring the 6-section structure of
+[run_v5_jupyter.ipynb](run_v5_jupyter.ipynb):
+
+| section | contents |
+|---|---|
+| 0 | Environment check (paths, java, cores, free RAM) |
+| 1 | Build (`javac @sources.txt`) |
+| 2 | Smoke test — `NewExperimentSmokeTestV6`, pipeline correctness in ~10 s |
+| 3 | **Calibration run (C0)** — new for v6; writes `test_results/v6/_calibration/` |
+| 4 | Run v6 (background + log) — also the RESUME cell |
+| 5 | **Progress cell** — re-run to refresh; see below |
+| 6 | Analyse |
+
+The progress cell (5) reports, without touching the running job: per-(agent, ratio, budget) checkpoint
+completion from `_completed.txt`; per-leaf row counts vs. expected (200 × 50); turns/minute and projected
+finish; live thread count and RSS; and the tail of the run log. Everything it needs is already written by
+the resumable runner — it is a read-only view over the output tree.
+
+---
+
+## 4. Part I — the C0 calibration experiment
+
+Runs first, standalone, and produces the numbers that configure Part II. Runs **single-threaded on the
+quiesced dev machine** — this is the reference machine, and its numbers are what the paper converts to
+seconds.
+
+### 4.1 Why it cannot be shortcut
+
+v4's aggregated tables ([E5_search_breadth_vs_cost.csv](tables_v4_full/E5_search_breadth_vs_cost.csv))
+already contain a contaminated version of this measurement, and it shows two things:
+
+- **Agents differ 2.4× in fmcall throughput at equal wall-clock** (500 ms level: EMCTS 3,265 fmcalls/turn,
+  CrossoverCombo@2 7,822). Evals/turn spread 2.5×; fmcalls-per-eval ranges 117–148. The op mix genuinely
+  varies by agent — this is the empirical justification for the whole exercise, and belongs in the paper.
+- **Those throughput numbers are not usable as a calibration.** EMCTS did 3,265 fmcalls at 500 ms and
+  3,420 at 1000 ms — +4.7% for double the time. Fitting the 1000→5000 ms points gives ~1 fmcall/ms against
+  the ~27 advances/ms `ComputeCalibrate` measured single-threaded. The v4 runs were evidently heavily
+  contended, so their delivered compute bears little relation to nominal thinking time.
+
+### 4.2 Design
+
+- **Budget type during calibration:** `STOP_TIME` — the question is "what does this agent do in T seconds".
+- **Targets:** 500 / 1000 / 5000 ms, **each a separate run**.
+
+  > **Do not checkpoint a 5 s run at 1 s to obtain the 1 s numbers.** The turn is split into 21 phases with
+  > ceilings derived from the *total* budget (`timePerPhase = turnBudgetTime / depth`,
+  > [ExperimentalEMCTSAgent.java:225](../src/players/ExperimentalEMCTS/ExperimentalEMCTSAgent.java#L225)).
+  > A 5 s budget gives 238 ms/phase, a 1 s budget 48 ms/phase; at t=1 s the 5 s run is in phase 4 with 3
+  > burns done, while a real 1 s run has finished all 21 phases and all 20 burns. Different trajectories,
+  > different op mixes.
+
+- **Sample:** ~24 portfolio scenarios stratified by source (12 single / 12 dual) and BF tertile, × 5
+  repetitions × 12 configs. Sampling the *actual portfolio* matters: `copy()` cost scales with state size
+  and available-action counts grow through a game, so a fresh-game calibration would not transfer.
+- **Structure:** mirrors the isolation phase exactly — one search turn per (scenario, visit), same configs,
+  same greedy init.
+- **Hygiene:** discard JIT warmup turns; interleave configs so thermal drift cannot align with agent
+  identity; record JVM version, flags, `-Xmx`, and CPU model as run provenance.
+- **Do not assume steady throughput — measure it.** The 5 repetitions exist to report a coefficient of
+  variation, which is the evidence that the reference machine was stable.
+
+**Cost:** 12 configs × 24 scenarios × 5 reps = 1,440 turns per target; (0.5 + 1 + 5) s ≈ **2.6 hours**
+single-threaded. Cheap for what it settles.
+
+### 4.3 Recorded per turn
+
+Target ms, realized ms, `Advances`, `Copies`, `Evals`, `InitUnits`, scenario id/source/BF, config, rep —
+plus op counts at each of the 21 **phase boundaries** (phase-indexed checkpoints are the natural unit here,
+not wall-clock seconds).
+
+### 4.4 Outputs, and what each decides
+
+| output | question it answers |
+|---|---|
+| Per-agent op counts per target, with CI | the candidate per-agent budgets |
+| **ms per compute-unit, by agent** | is the shared composite agent-invariant? → **decides shared vs. per-agent budget** |
+| ms per compute-unit, by scenario source and BF tertile | the H5 confound: does a fixed unit budget buy different real compute in single vs. dual? |
+| Op mix by phase index | within-turn drift as the tree grows |
+| Op mix by target time | does composition differ at 500 ms vs. 5000 ms? |
+| CV across repetitions | validates the reference-machine stability assumption |
+| **`InitUnits` by source and BF tertile** | resolves §5 |
+
+**Decision rule.** If ms-per-unit is agent-invariant → keep v5's shared scalar and simply report the
+conversion. If it varies between agents but is stable within them → per-agent calibrated budgets, and
+fmcalls suffice as the currency. If it varies substantially *within* an agent across scenarios → keep the
+composite (it absorbs mix drift) and calibrate per agent on top of it.
+
+---
+
+## 5. Open collision: greedy init vs. the budget
+
+**This must be resolved before Part II is configured, and it is the main reason C0 runs first.**
+
+Greedy initialization evaluates *every available action at every sequence position*. Cost per candidate is
+one copy + one advance + one eval ≈ 1.24 compute units, over up to `NODE_SIZE - 1` = 19 positions. The v6
+portfolio's branching factors are large — from
+[E6_bf_dist_per_source.csv](tables_v4_full/E6_bf_dist_per_source.csv), BF mean **452 single / 290 dual**,
+max 619.
+
+A back-of-envelope estimate (assuming BF halves on average as units are consumed) puts greedy init at
+roughly **5,000–6,000 units in single scenarios and 3,000–4,000 in dual**. Against the calibrated budgets
+that is on the order of **40% (single) and 25% (dual) of the entire 13,400-unit "500 ms" level**. Under v5's
+random init the same step cost ~19 advances — negligible. C0 measures the real figure via `InitUnits`;
+treat these numbers as the reason to look, not as results.
+
+Two problems follow if init is charged to the budget:
+
+1. **At the small budget there is little left to search with.** Combined with the 20 mandatory bridge burns,
+   the low level risks becoming initialization-plus-burns with almost no operator activity — and the
+   operators are the object of study.
+2. **The overcharge is correlated with the independent variable.** Init cost scales with BF, and BF differs
+   systematically by source (452 vs. 290). Charging init to the budget therefore hands single scenarios
+   systematically *less search budget* than dual — along the exact axis the single-vs-dual analysis measures.
+
+**Recommended resolution: exclude the greedy initialization from the budget** and charge only post-init
+search. The initial sequence is now identical across all 12 configs by construction, so its cost is a
+common constant that carries no information about the operators; excluding it advantages no one and removes
+a BF-correlated confound from the primary contrast. The paper then states the budget precisely as
+*"search budget following a common greedy initialization"*, and reports `InitUnits` separately — which is
+more informative than burying it.
+
+Alternatives if C0 shows init cost is small: leave it inside the budget (simplest, no explanation needed),
+or raise the budget levels so init is a modest share. **Decide from the C0 numbers.**
+
+---
+
+## 6. Part II — the v6 isolation run
+
+Unchanged from v5 except where noted:
+
+- **Portfolio:** the same 200 scenarios (100 single / 100 dual), rebuilt by `BuildV6Portfolio` with the same
+  action-composition columns v5 added for H5. Resumable, skipped if `_portfolio_complete.txt` exists.
+- **Configs (12):** EMCTS, CrossoverBB, CrossoverExpansion@{2,5,10,20,50}, CrossoverCombo@{2,5,10,20,50}.
+  EMCTS and CrossoverBB log zero crossover events by construction — they are the mutation baseline.
+- **Visits:** 50 per scenario, shared `visitSeed(scenarioId, visitId)` across all 12 configs (the paired
+  guarantee).
+- **Budgets:** three levels, values and rule set by C0.
+- **Init:** greedy, shared, invariance-gated.
+- **Output:** `test_results/v6/<Agent>/[ratio_<r>/]<level>/results.csv` + `turn_telemetry.csv`, same layout
+  and same resumability (per-(agent, ratio, budget) checkpoint plus per-(scenario, visit) recovery).
+
+**Runtime:** ≈ half of v5's turn count. Actual wall-clock depends on delivered server throughput, which the
+v4 evidence (§4.1) suggests can be far below single-thread rates under contention — the compute budget makes
+the *work* fixed, not the elapsed time. Budget for a multi-hour job and rely on the resume path.
+
+---
+
+## 7. Analysis
+
+`analysis/analyze_v6_full.py`, carrying over every v5 output unchanged so v5→v6 is a like-for-like
+comparison: fig3/fig4 (best agent per scenario, ranking points), fig5/fig5b (trajectories), fig7 (branching
+scatter), fig8 (% improvement bars), E1 (paired Δ with CI), E2 (best ratio per budget), E3 (single vs dual),
+E6/E7 (BF distribution and tiers), E9 (inbreeding), E11–E15, the ANCOVA, and the v5 hypothesis battery
+E17–E21 (operator credit, blend coherence, repair disruption, pool collapse, action composition).
+
+**New for v6 — the budget-adherence section**, which is what makes the methodology reportable:
+
+| table/figure | content |
+|---|---|
+| `B1_budget_adherence` | realized `ComputeUnits` vs. target, per agent per level: mean, SD, overshoot distribution, max |
+| `B2_op_mix` | advances/copies/evals per turn per agent — and what an equal-fmcalls budget *would* have given each agent, quantifying the unfairness avoided |
+| `B3_reference_conversion` | the C0 units→seconds table for the reference machine, with provenance |
+| `B4_init_cost` | `InitUnits` by source and BF tertile, and its share of the budget |
+
+---
+
+## 8. Decisions still open
+
+1. **Budget rule** — shared scalar vs. per-agent calibrated; decided by C0 §4.4.
+2. **Init inside or outside the budget** — §5; recommendation is outside, decided by C0's `InitUnits`.
+3. **Budget levels** — the "500 ms" level may need raising if C0 confirms init and burns dominate it.
+   v5's guide already notes 500 ms is the floor at which the 20 mandatory tournaments fit; greedy init
+   pushes that floor up.
+4. **n=50 power check** — re-run the v4 per-scenario-unit significance analysis at n=50 on C0 or v5 data
+   before committing.
+5. **Reproducibility assertion** (deferred from v5) — a rerun-identity check at 1 vs. T threads. Cheap, and
+   it is the property that the count-based budget is *for*. Recommend folding into the v6 smoke test.
+
+---
+
+## 9. Build order
+
+1. C0 harness + `InitUnits`/spend logging → run C0 (~2.6 h) → read §4.4 outputs.
+2. Resolve decisions 1–3 from the C0 data.
+3. `BuildV6Portfolio`, `IsolationPhaseRunnerV6`, `RunExperimentV6`, `NewExperimentSmokeTestV6`.
+4. `run_v6_jupyter.ipynb`.
+5. Run v6.
+6. `analyze_v6_full.py`.
