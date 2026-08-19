@@ -26,14 +26,24 @@ public class ExpCsv {
         if (!dir.exists()) dir.mkdirs();
     }
 
-    /** Append a batch of rows to a CSV, writing the header only when the file is created. */
+    /**
+     * Append a batch of rows to a CSV, writing the header only when the file is created.
+     *
+     * <p>Rows are terminated with an explicit {@code '\n'} rather than {@code println()}'s
+     * platform separator. Resume paths rewrite these files wholesale (see
+     * {@code IsolationPhaseRunnerV6.compactPartialLeaf}) and then append to them, so a
+     * platform-dependent terminator produces a file whose first N lines end differently from the
+     * rest — invisible on Linux, and on Windows enough to make two runs of the same work compare
+     * unequal for no real reason. One terminator everywhere keeps a resumed file identical to an
+     * uninterrupted one.
+     */
     public static synchronized void append(File file, String header, List<String> lines) {
         if (lines.isEmpty()) return;
         boolean isNew = !file.exists();
         try (FileWriter fw = new FileWriter(file, true);
              PrintWriter pw = new PrintWriter(fw)) {
-            if (isNew && header != null) pw.println(header);
-            for (String line : lines) pw.println(line);
+            if (isNew && header != null) { pw.print(header); pw.print('\n'); }
+            for (String line : lines) { pw.print(line); pw.print('\n'); }
         } catch (IOException e) {
             e.printStackTrace();
         }

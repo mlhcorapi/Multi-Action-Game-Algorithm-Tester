@@ -50,8 +50,16 @@ import java.util.concurrent.atomic.AtomicInteger;
  * agents gate on compute, not time) and never varied, and {@link core.game.ComputeMeter} is
  * thread-local, so all configs and (scenario, visit) tasks can run in a shared pool safely.
  *
+ * <p><b>Concurrency is bounded twice.</b> The pool size comes from {@link ThreadCalibrationV6} (itself
+ * capped at physical cores by {@link ServerProfile}), and a {@link LoadGovernor} sits inside it and
+ * lowers the number of concurrently-running turns whenever the JVM shows memory pressure. Neither can
+ * change a result — the budget is a deterministic compute-unit count and each turn's output depends
+ * only on its {@code (scenario, visit)} seed — so both are free to act automatically.
+ *
  * <p><b>Resumable.</b> Per-(agent, ratio, budget) checkpoint key in {@code _completed.txt}, plus
- * per-(scenario, visit) recovery inside a partially-finished leaf.
+ * per-(scenario, visit) recovery inside a partially-finished leaf. A SIGTERM/SIGINT stops the
+ * submission of new turns and lets the running ones finish and write (see {@link RunGuard}), so an
+ * orderly stop loses nothing at all and a hard kill loses at most one turn per worker.
  */
 public class IsolationPhaseRunnerV6 {
 
@@ -63,6 +71,9 @@ public class IsolationPhaseRunnerV6 {
 
     /** Number of fields in {@link #TELEMETRY_HEADER}; the resume logic uses it as a completeness guard. */
     private static final int TELEMETRY_FIELDS = 22;
+
+    /** How often the {@link LoadGovernor} samples memory pressure during a leaf. */
+    private static final long GOVERNOR_INTERVAL_MS = 3_000L;
 
     /** Trajectory CSV schema for EMCTS / CrossoverExpansion (no crossover-improvement columns). */
     public static final String TRAJECTORY_HEADER_BASE =
@@ -111,6 +122,11 @@ public class IsolationPhaseRunnerV6 {
 
         long t0 = System.currentTimeMillis();
         for (int i = 0; i < configs.size(); i++) {
+            if (RunGuard.stopRequested()) {
+                System.out.println("[v6] stop requested — leaving the remaining configs at cu="
+                        + computeUnits + " for the next resume");
+                return;
+            }
             AgentConfig cfg = configs.get(i);
             String key = configKey(cfg, computeUnits);
             if (done.contains(key)) {
@@ -135,7 +151,13 @@ public class IsolationPhaseRunnerV6 {
                         "[v6] (%d/%d) RUN  %s (%d scenarios × %d visits = %d turns)",
                         i+1, configs.size(), key, portfolio.size(), VISITS_PER_SCENARIO, total));
             }
-            runOneConfig(cfg, portfolio, csv, threads, doneTurns);
+            boolean complete = runOneConfig(cfg, portfolio, csv, threads, doneTurns);
+            if (!complete) {
+                System.out.println(String.format(Locale.ROOT,
+                        "[v6] (%d/%d) INTERRUPTED %s — NOT marked complete; resume continues per "
+                        + "(scenario, visit)", i+1, configs.size(), key));
+                return;
+            }
             ExpCsv.markCompleted(ckpt, key);
             System.out.println(String.format(Locale.ROOT,
                     "[v6] (%d/%d) DONE %s   elapsed=%s",
@@ -153,50 +175,92 @@ public class IsolationPhaseRunnerV6 {
         return configs;
     }
 
-    /** Runs all NOT-yet-done portfolio×visit tasks for ONE config, parallelised across {@code threads}
-     *  workers. Headers are written lazily by the first {@link ExpCsv#append}; on resume the files
-     *  already exist (compacted) so appends never duplicate the header. */
-    private static void runOneConfig(AgentConfig cfg, List<Scenario> portfolio, File csv,
-                                     int threads, Set<String> doneTurns) throws Exception {
+    /**
+     * Runs all NOT-yet-done portfolio×visit tasks for ONE config, parallelised across {@code threads}
+     * workers and gated by a {@link LoadGovernor}. Headers are written lazily by the first
+     * {@link ExpCsv#append}; on resume the files already exist (compacted) so appends never duplicate
+     * the header.
+     *
+     * @return true if every outstanding turn ran; false if a stop was requested part-way, in which
+     *         case the caller must NOT mark the config complete
+     */
+    private static boolean runOneConfig(AgentConfig cfg, List<Scenario> portfolio, File csv,
+                                        int threads, Set<String> doneTurns) throws Exception {
         String header = cfg.burnCrossover ? TRAJECTORY_HEADER_BURN : TRAJECTORY_HEADER_BASE;
         File tele = new File(csv.getParentFile(), "turn_telemetry.csv");
 
         int total = portfolio.size() * VISITS_PER_SCENARIO;
         AtomicInteger completed = new AtomicInteger(doneTurns.size());
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        AtomicInteger skipped = new AtomicInteger(0);
+        AtomicInteger empty = new AtomicInteger(0);
+        ExecutorService pool = RunGuard.register(Executors.newFixedThreadPool(threads));
+        LoadGovernor governor = new LoadGovernor(threads, GOVERNOR_INTERVAL_MS);
+        governor.start();
         Object writeLock = new Object();
         List<Future<?>> futures = new ArrayList<>();
 
-        for (Scenario sc : portfolio) {
-            for (int v = 0; v < VISITS_PER_SCENARIO; v++) {
-                if (doneTurns.contains(sc.id + ":" + v)) continue;
-                final int visitId = v;
-                final Scenario scenario = sc;
-                futures.add(pool.submit(() -> {
-                    try {
-                        TurnResult res = runOneTurn(cfg, scenario, visitId);
-                        synchronized (writeLock) {
-                            ExpCsv.append(csv, header, res.burnRows);
-                            if (res.telemetryRow != null) {
-                                ExpCsv.append(tele, TELEMETRY_HEADER,
-                                        Collections.singletonList(res.telemetryRow));
-                            }
+        try {
+            for (Scenario sc : portfolio) {
+                for (int v = 0; v < VISITS_PER_SCENARIO; v++) {
+                    if (doneTurns.contains(sc.id + ":" + v)) continue;
+                    final int visitId = v;
+                    final Scenario scenario = sc;
+                    futures.add(pool.submit(() -> {
+                        // A stop turns every queued-but-unstarted task into a no-op, so the pool drains
+                        // in seconds instead of grinding through thousands of pending turns.
+                        if (RunGuard.stopRequested()) { skipped.incrementAndGet(); return; }
+                        try {
+                            governor.acquire();
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            skipped.incrementAndGet();
+                            return;
                         }
-                    } catch (Throwable t) {
-                        System.err.println("[v6] task failed scenario=" + scenario.id + " visit=" + visitId
-                                + " agent=" + cfg.name + ": " + t);
-                        t.printStackTrace();
-                    }
-                    int c = completed.incrementAndGet();
-                    if (c % 200 == 0 || c == total) {
-                        System.out.println(String.format(Locale.ROOT, "    %s: %d/%d", configShort(cfg), c, total));
-                    }
-                }));
+                        try {
+                            TurnResult res = runOneTurn(cfg, scenario, visitId);
+                            if (res.telemetryRow == null && res.burnRows.isEmpty()) empty.incrementAndGet();
+                            synchronized (writeLock) {
+                                // Results first, telemetry last: the resume compaction treats the
+                                // telemetry row as the proof a turn finished, so it must never be the
+                                // earlier of the two writes.
+                                ExpCsv.append(csv, header, res.burnRows);
+                                if (res.telemetryRow != null) {
+                                    ExpCsv.append(tele, TELEMETRY_HEADER,
+                                            Collections.singletonList(res.telemetryRow));
+                                }
+                            }
+                        } catch (Throwable t) {
+                            System.err.println("[v6] task failed scenario=" + scenario.id + " visit=" + visitId
+                                    + " agent=" + cfg.name + ": " + t);
+                            t.printStackTrace();
+                        } finally {
+                            governor.release();
+                        }
+                        int c = completed.incrementAndGet();
+                        if (c % 200 == 0 || c == total) {
+                            System.out.println(String.format(Locale.ROOT, "    %s: %d/%d   [%s]",
+                                    configShort(cfg), c, total, governor.status()));
+                        }
+                    }));
+                }
             }
+            for (Future<?> f : futures) f.get();
+        } finally {
+            governor.stop();
+            RunGuard.shutdownAndWait(pool, 1);
         }
-        for (Future<?> f : futures) f.get();
-        pool.shutdown();
-        pool.awaitTermination(1, TimeUnit.HOURS);
+
+        if (empty.get() > 0) {
+            System.out.println("[v6] WARN " + configShort(cfg) + ": " + empty.get()
+                    + " turn(s) produced no rows (agent threw or logged nothing); they are re-attempted "
+                    + "on the next resume of this leaf");
+        }
+        if (governor.throttleEvents() > 0) {
+            System.out.println("[v6] governor summary for " + configShort(cfg) + ": "
+                    + governor.throttleEvents() + " throttle event(s), concurrency fell to "
+                    + governor.lowestAllowed() + "/" + threads);
+        }
+        return skipped.get() == 0 && !RunGuard.stopRequested();
     }
 
     /**
@@ -350,18 +414,20 @@ public class IsolationPhaseRunnerV6 {
         Constants.TURN_TIME_LIMITED = false;
         Constants.TURN_TIME_MILLIS = 10_000_000L;
         AgentConfig cfg = new AgentConfig("EMCTS", -1, ExpAgents.emctsV6(computeUnits), false);
-        ExecutorService pool = Executors.newFixedThreadPool(Math.max(1, threads));
+        ExecutorService pool = RunGuard.register(Executors.newFixedThreadPool(Math.max(1, threads)));
         List<Future<?>> fs = new ArrayList<>();
         long t0 = System.nanoTime();
         for (Scenario sc : subset) {
             for (int v = 0; v < visits; v++) {
                 final int vv = v; final Scenario s = sc;
-                fs.add(pool.submit(() -> { try { runOneTurn(cfg, s, vv); } catch (Throwable ignore) {} }));
+                fs.add(pool.submit(() -> {
+                    if (RunGuard.stopRequested()) return;
+                    try { runOneTurn(cfg, s, vv); } catch (Throwable ignore) {}
+                }));
             }
         }
         for (Future<?> f : fs) { try { f.get(); } catch (Exception ignore) {} }
-        pool.shutdown();
-        try { pool.awaitTermination(1, TimeUnit.HOURS); } catch (InterruptedException ignore) {}
+        RunGuard.shutdownAndWait(pool, 1);
         return (System.nanoTime() - t0) / 1_000_000L;
     }
 

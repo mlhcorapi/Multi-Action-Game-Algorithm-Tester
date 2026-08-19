@@ -11,10 +11,12 @@ import core.game.GameState;
 import players.Agent;
 import players.emcts.EMCTSAgent;
 import players.emcts.EMCTSParams;
+import utils.ElapsedCpuTimer;
 
 import java.io.File;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.concurrent.*;
 
 /**
  * v6 pipeline smoke test (into {@code test_results/smoke_v6/}). Tiny scale: 3 synthetic scenarios,
@@ -41,7 +43,10 @@ import java.util.*;
  */
 public class NewExperimentSmokeTestV6 {
 
-    /** Small budgets for the invariance sweep (the real run uses the C0-calibrated levels). */
+    /** Small budgets for the invariance sweep. The property being checked — that all 12 configs share
+     *  the greedy initial sequence — is budget-independent by construction, so tiny budgets prove it
+     *  just as well as the real levels ({@link RunExperimentV6#DEFAULT_COMPUTE_LEVELS}) and keep the
+     *  smoke test to seconds. */
     private static final int[] SMOKE_CU_LEVELS = {2_000, 5_000, 13_400};
     /** Budget for the tiny isolation pass + the shared-initial-sequence check. */
     private static final int   SMOKE_CU = 5_000;
@@ -124,9 +129,120 @@ public class NewExperimentSmokeTestV6 {
         System.out.println("\n==================== 6+7. Budget boundaries (init OUT, bridge burning IN) ====================");
         boolean budgetOk = verifyBudgetBoundaries(portfolio.get(0));
 
-        boolean allOk = roundTripOk && allValid && sharedInitOk && acrossCuOk && layoutOk && teleOk && budgetOk;
+        System.out.println("\n==================== 8. Thread-count invariance (1 thread == N threads) ====================");
+        boolean threadOk = verifyThreadInvariance(portfolio);
+
+        boolean allOk = roundTripOk && allValid && sharedInitOk && acrossCuOk && layoutOk && teleOk
+                && budgetOk && threadOk;
         System.out.println("\nTotal smoke_v6 time: " + (System.currentTimeMillis() - t0) / 1000.0 + "s");
         System.out.println(allOk ? "PASS: v6 pipeline sound." : "FAIL: see checks above.");
+    }
+
+    /**
+     * Section 8. The property the whole compute-unit budget exists to buy: <b>the thread count cannot
+     * change a result.</b>
+     *
+     * <p>Runs the same set of (config, scenario, visit) turns twice — once strictly single-threaded,
+     * once across a pool — and requires every turn's outcome to match exactly: the greedy root, the
+     * final sequence value, the realized compute units, the nodes evaluated, the distinct sequences,
+     * and the bridge-burn count. Any mismatch means shared mutable state has leaked between workers,
+     * and the experiment's results would then depend on how busy the machine was when they were
+     * produced.
+     *
+     * <p>This is the check {@code EXPERIMENT_V6_PLAN.md} §8.5 left open, in the form that is actually
+     * meaningful. It deliberately compares <i>agent behaviour</i>, not files: the serialized scenario
+     * bytes are not stable across JVM runs (enum-keyed {@code HashMap}s serialize in identity-hash
+     * order), so a checksum comparison would report a failure that has no bearing on any result. What
+     * matters is that the same seed produces the same search, and that is what this asserts.
+     */
+    private static boolean verifyThreadInvariance(List<Scenario> portfolio) {
+        final int cu = SMOKE_CU;
+        final int visits = 2;
+        List<Object[]> configs = new ArrayList<>();
+        configs.add(new Object[]{"EMCTS", ExpAgents.emctsV6(cu)});
+        configs.add(new Object[]{"CrossoverBB", ExpAgents.crossoverBBV6(cu)});
+        configs.add(new Object[]{"CrossoverCombo@5", ExpAgents.crossoverComboV6(5, cu)});
+
+        List<Callable<String>> tasks = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        for (Object[] cfg : configs) {
+            for (Scenario sc : portfolio) {
+                for (int v = 0; v < visits; v++) {
+                    final AgentSpec spec = (AgentSpec) cfg[1];
+                    final Scenario scenario = sc;
+                    final int visit = v;
+                    tasks.add(() -> fingerprint(spec, scenario, visit));
+                    labels.add(cfg[0] + "/scenario " + scenario.id + "/visit " + visit);
+                }
+            }
+        }
+
+        List<String> serial = new ArrayList<>();
+        for (Callable<String> t : tasks) {
+            try { serial.add(t.call()); } catch (Exception e) { serial.add("EXCEPTION " + e); }
+        }
+
+        int threads = Math.max(2, Math.min(8, Runtime.getRuntime().availableProcessors()));
+        List<String> parallel = new ArrayList<>();
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<String>> fs = new ArrayList<>();
+            for (Callable<String> t : tasks) fs.add(pool.submit(t));
+            for (Future<String> f : fs) {
+                try { parallel.add(f.get()); } catch (Exception e) { parallel.add("EXCEPTION " + e); }
+            }
+        } finally {
+            pool.shutdown();
+            try { pool.awaitTermination(10, TimeUnit.MINUTES); } catch (InterruptedException ignore) { }
+        }
+
+        int mismatches = 0;
+        for (int i = 0; i < serial.size(); i++) {
+            if (!serial.get(i).equals(parallel.get(i))) {
+                mismatches++;
+                if (mismatches <= 3) {
+                    System.out.println("  MISMATCH " + labels.get(i));
+                    System.out.println("    1 thread  : " + serial.get(i));
+                    System.out.println("    " + threads + " threads: " + parallel.get(i));
+                }
+            }
+        }
+        System.out.println("  " + (serial.size() - mismatches) + "/" + serial.size()
+                + " turns identical between 1 thread and " + threads + " threads"
+                + "  (root sequence, final value, compute units, nodes, unique sequences, burns)");
+        boolean ok = mismatches == 0 && !serial.isEmpty();
+        System.out.println("Thread-count invariance (results independent of concurrency): "
+                + (ok ? "PASS" : "FAIL"));
+        return ok;
+    }
+
+    /** Everything about one turn's outcome that a concurrency bug could disturb, as one string. */
+    private static String fingerprint(AgentSpec spec, Scenario sc, int visitId) {
+        long seed = IsolationPhaseRunnerV6.visitSeed(sc.id, visitId);
+        Agent a = spec.create(seed);
+        ArrayList<Integer> ids = new ArrayList<>();
+        for (int k = 0; k < sc.state.getTribes().length; k++) ids.add(k);
+        a.setPlayerIDs(sc.state.getActiveTribeID(), ids);
+        GameState gs = sc.state.copy();
+        gs.setRandomGenerator(new java.util.Random(seed));
+        ElapsedCpuTimer ect = new ElapsedCpuTimer();
+        ect.setMaxTimeMillis(Constants.TURN_TIME_MILLIS);
+        try { a.act(gs, ect); } catch (Throwable t) { return "THREW " + t.getClass().getSimpleName(); }
+        List<core.data.dto.TurnData> log = a.getTurnDataLog();
+        if (log.isEmpty()) return "NO_TURN_DATA";
+        core.data.dto.TurnData t = log.get(0);
+        List<String> root =
+                a instanceof players.emcts.EMCTSAgent
+                        ? ((players.emcts.EMCTSAgent) a).getInitialRootSequenceForV4()
+                        : a instanceof players.ExperimentalEMCTS.ExperimentalEMCTSAgent
+                            ? ((players.ExperimentalEMCTS.ExperimentalEMCTSAgent) a).getInitialRootSequenceForV4()
+                            : java.util.Collections.emptyList();
+        return "root=" + String.join("|", root).hashCode()
+                + " final=" + ExpCsv.round(t.getFinalSequenceValue())
+                + " units=" + ExpCsv.round(t.getComputeUnits())
+                + " adv=" + t.getAdvances() + " cop=" + t.getCopies() + " ev=" + t.getEvals()
+                + " nodes=" + t.getNodesEvaluated() + " uniq=" + t.getUniqueSequences()
+                + " burns=" + a.getBridgeBurnDataLog().size();
     }
 
     /**

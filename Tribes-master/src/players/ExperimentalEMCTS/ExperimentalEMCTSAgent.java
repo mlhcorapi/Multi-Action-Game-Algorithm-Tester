@@ -122,6 +122,23 @@ public class ExperimentalEMCTSAgent extends Agent {
     protected int initFmCalls;
     protected long initMillis;
 
+    // ---- Bridge-burn elite-pool occupancy (reset each planTurn) ---------------------------------
+    // The crossover bridge-burn tournament is a 3-level bracket over the phase's top EIGHT nodes:
+    // 8 -> 4 -> 2 -> 1. It runs whenever the pool holds at least 2, so at a small budget it can fire
+    // on a pool of 2 or 3 and degenerate into a single pairing - structurally a different operator
+    // from the one the design describes. These counters make that observable, which is what decides
+    // whether a budget level is large enough to be testing crossover bridge burning at all.
+    protected int bbTournaments;      // burns that actually ran a tournament
+    protected int bbPoolSizeSum;      // sum of pool sizes at those tournaments
+    protected int bbFullBrackets;     // tournaments that had the full 8
+
+    /** Burns at which a crossover tournament ran (rather than a plain best-child promotion). */
+    public int getBbTournaments()  { return bbTournaments; }
+    /** Mean number of elites available to those tournaments; 8 is a full bracket. */
+    public double getBbMeanPoolSize() { return bbTournaments > 0 ? bbPoolSizeSum / (double) bbTournaments : 0.0; }
+    /** Tournaments that had all 8 elites, i.e. the bracket the operator is defined as. */
+    public int getBbFullBrackets() { return bbFullBrackets; }
+
 
     public ExperimentalEMCTSAgent(long seed, ExperimentalEMCTSParams params) {
         super(seed);
@@ -183,6 +200,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         xoEvents = xoBestGains = xoChildBeatsBestParent = xoChildWorseThanBothParents = 0;
         xoChildDuplicates = xoRepairKept = xoRepairReplaced = 0;
         xoBestGainSum = xoChildVsBestParentSum = xoChildVsMeanParentSum = xoParentSimilaritySum = 0.0;
+        bbTournaments = bbPoolSizeSum = bbFullBrackets = 0;
         core.game.ComputeMeter.reset(); // deterministic compute-unit budget (STOP_COMPUTE)
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
@@ -387,6 +405,9 @@ public class ExperimentalEMCTSAgent extends Agent {
             if (currentPhase < params.depth - 1 && root.getChildren().size() > 0) {
                 ExperimentalEMCTSTreeNode newRoot;
                 if (params.useCrossoverBridgeBurning && topNodesQueue.size() >= 2) {
+                    bbTournaments++;
+                    bbPoolSizeSum += topNodesQueue.size();
+                    if (topNodesQueue.size() >= 8) bbFullBrackets++;
                     newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase, turnStartTimeMillis);
                 } else {
                     newRoot = findBestChild(root);

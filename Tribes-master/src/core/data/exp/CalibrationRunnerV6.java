@@ -93,9 +93,15 @@ public class CalibrationRunnerV6 {
         // The agents gate on their own num_timeMillis; this only stops the engine timer interfering.
         Constants.TURN_TIME_MILLIS = 10_000_000L;
 
+        RunGuard.install("v6 C0 calibration",
+                "re-run the same cell — fully-measured targets are kept, the interrupted one is redone");
+
         File pDir = new File(portfolioDir);
         File out = new File(outDir);
         ExpCsv.ensureDir(out);
+        // Doubly important here: a second C0 process would both corrupt the CSV and, by loading the
+        // machine, invalidate the timings that are the whole point of the job.
+        if (!RunGuard.acquireLock(out, "CalibrationRunnerV6")) RunGuard.abort(2);
         File csv = new File(out, "calibration.csv");
 
         System.out.println("############################################################");
@@ -109,6 +115,10 @@ public class CalibrationRunnerV6 {
                 + "  cores=" + Runtime.getRuntime().availableProcessors()
                 + "  maxHeapMB=" + (Runtime.getRuntime().maxMemory() >> 20));
         System.out.println("############################################################");
+        ServerProfile.get().printBanner("v6 C0 calibration (single-threaded ON PURPOSE)");
+        System.out.println("[C0] This job must be the ONLY load on the machine. Its numbers are the "
+                + "reference-machine conversion the paper reports, so anything else running — including "
+                + "a v6 isolation phase or a thread calibration — invalidates them.");
 
         List<Scenario> portfolio = IsolationPhaseRunner.loadPortfolio(pDir);
         Map<Integer, Integer> bfById = readBranchingFactors(pDir);
@@ -117,6 +127,15 @@ public class CalibrationRunnerV6 {
                 + " (" + perSource + " per source, BF-tertile stratified)");
 
         List<Cfg> configs = configs();
+
+        // Resume: adopt any target that a previous run finished in full, and re-measure the rest.
+        java.util.Set<Integer> finished = new java.util.LinkedHashSet<>();
+        int perTarget = reps * sample.size() * configs.size();
+        List<String> carried = loadFinishedTargets(csv, perTarget, finished);
+        if (!finished.isEmpty()) {
+            System.out.println("[C0] RESUME: targets " + finished + " already complete ("
+                    + carried.size() + " rows kept); re-measuring the rest.");
+        }
 
         // Warm the JIT on a config/scenario mix that exercises both operators, then discard.
         if (warmup > 0) {
@@ -128,12 +147,22 @@ public class CalibrationRunnerV6 {
             }
         }
 
-        List<String> rows = new ArrayList<>();
+        List<String> rows = new ArrayList<>(carried);
         long t0 = System.currentTimeMillis();
-        int total = targets.length * reps * sample.size() * configs.size();
+        int remainingTargets = 0;
+        for (int t : targets) if (!finished.contains(t)) remainingTargets++;
+        int total = remainingTargets * perTarget;
         int done = 0;
 
         for (int target : targets) {
+            if (finished.contains(target)) {
+                System.out.println("[C0] target " + target + "ms — SKIP (already complete on disk)");
+                continue;
+            }
+            if (RunGuard.stopRequested()) {
+                System.out.println("[C0] stop requested — completed targets are on disk; re-run to continue.");
+                break;
+            }
             // Loop order rep → scenario → config keeps the 12 configs adjacent in time, so any thermal
             // or frequency drift over the run cannot align with agent identity.
             for (int rep = 0; rep < reps; rep++) {
@@ -175,6 +204,7 @@ public class CalibrationRunnerV6 {
         writeCsv(csv, rows);
         summarise(rows, targets);
         System.out.println("[C0] DONE   total elapsed=" + elapsed(t0) + "   -> " + csv.getPath());
+        RunGuard.finished();
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -314,10 +344,55 @@ public class CalibrationRunnerV6 {
         System.out.println("compute-unit budget is fair; if it varies, budgets must be calibrated per agent.");
     }
 
+    /** Rewrite the whole file: header + rows. Written via a temp file and an atomic rename, so a kill
+     *  during the write cannot truncate a calibration that already cost hours. */
     private static void writeCsv(File csv, List<String> rows) throws Exception {
         StringBuilder sb = new StringBuilder(HEADER).append('\n');
         for (String r : rows) sb.append(r).append('\n');
-        Files.write(csv.toPath(), sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        RunGuard.atomicWrite(csv, sb.toString());
+    }
+
+    /**
+     * Rows already on disk from an earlier, interrupted run, and the set of targets those rows cover
+     * completely. C0 persists after each target, so a restart can adopt the finished targets verbatim
+     * and only re-measure the one that was cut short — the difference between losing 50 minutes and
+     * losing 2.6 hours.
+     *
+     * <p>A target counts as complete only when its row count matches what a full pass produces
+     * ({@code reps × sample × configs}); a partially-written target is dropped and re-run, because
+     * mixing halves of two runs of a timing experiment is exactly the kind of silent contamination the
+     * calibration exists to avoid.
+     */
+    private static List<String> loadFinishedTargets(File csv, int expectedPerTarget,
+                                                    java.util.Set<Integer> finishedOut) {
+        List<String> kept = new ArrayList<>();
+        if (!csv.exists()) return kept;
+        Map<Integer, List<String>> byTarget = new LinkedHashMap<>();
+        try {
+            List<String> lines = Files.readAllLines(csv.toPath());
+            int fields = HEADER.split(",").length;
+            for (int i = 1; i < lines.size(); i++) {
+                String[] f = lines.get(i).split(",", -1);
+                if (f.length < fields) continue;             // header change or torn final line
+                try {
+                    int target = Integer.parseInt(f[0].trim());
+                    byTarget.computeIfAbsent(target, k -> new ArrayList<>()).add(lines.get(i));
+                } catch (NumberFormatException ignore) { }
+            }
+        } catch (Exception e) {
+            System.out.println("[C0] existing calibration.csv unreadable (" + e + ") — starting fresh.");
+            return new ArrayList<>();
+        }
+        for (Map.Entry<Integer, List<String>> e : byTarget.entrySet()) {
+            if (e.getValue().size() >= expectedPerTarget) {
+                finishedOut.add(e.getKey());
+                kept.addAll(e.getValue());
+            } else {
+                System.out.println("[C0] target " + e.getKey() + "ms is only " + e.getValue().size()
+                        + "/" + expectedPerTarget + " rows — discarding it and re-measuring.");
+            }
+        }
+        return kept;
     }
 
     private static int[] parseInts(String csv) {
