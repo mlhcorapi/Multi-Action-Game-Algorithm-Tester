@@ -135,13 +135,21 @@ before committing**, not an assumption.
 
 | section | contents |
 |---|---|
-| 0 | Environment check (paths, java, cores, free RAM) |
+| 0 | Environment check (java, CPU topology, memory, disk, stray processes and run locks) |
 | 1 | Build (`javac @sources.txt`) |
+| 1b | **Machine policy** — `ServerProfile` prints the worker ceiling and thread ladder, running no work |
 | 2 | Smoke test — `NewExperimentSmokeTestV6`, pipeline correctness in ~10 s |
-| 3 | **Calibration run (C0)** — new for v6; writes `test_results/v6/_calibration/` |
-| 4 | Run v6 (background + log) — also the RESUME cell |
-| 5 | **Progress cell** — re-run to refresh; see below |
-| 6 | Analyse |
+| 3 | Portfolio build — parallel, journalled, restartable |
+| 4 | **Calibration run (C0)** — new for v6; writes `test_results/v6/_calibration/` |
+| 5 | Run v6 (background + log) — also the RESUME cell |
+| 6 | **Progress cell** — re-run to refresh; see below |
+| 6b | Thread-calibration curve — sustained throughput, throttling and clock drop per level |
+| 6c | Graceful stop (`SIGTERM`, never `kill -9`) |
+| 7 | Analyse |
+
+Server placement — the thread ceiling, the per-level calibration, the runtime load governor and what
+survives an interruption — is documented separately in
+[V6_SERVER_RUNBOOK.md](V6_SERVER_RUNBOOK.md).
 
 The progress cell (5) reports, without touching the running job: per-(agent, ratio, budget) checkpoint
 completion from `_completed.txt`; per-leaf row counts vs. expected (200 × 50); turns/minute and projected
@@ -300,13 +308,48 @@ E17–E21 (operator credit, blend coherence, repair disruption, pool collapse, a
 
 1. **Budget rule** — shared scalar vs. per-agent calibrated; decided by C0 §4.4.
 2. **Init inside or outside the budget** — §5; recommendation is outside, decided by C0's `InitUnits`.
-3. **Budget levels** — the "500 ms" level may need raising if C0 confirms init and burns dominate it.
-   v5's guide already notes 500 ms is the floor at which the 20 mandatory tournaments fit; greedy init
-   pushes that floor up.
+3. ~~**Budget levels** — the "500 ms" level may need raising.~~ **Resolved by measurement: the levels are
+   now 40,000 / 80,000 / 400,000** (floor, 2×, 10×). It needed raising by considerably more than
+   expected, and for a sharper reason than "init and burns dominate it".
+
+   The crossover bridge-burn tournament is a 3-level bracket over the phase's top **eight** elites. Its
+   level-1 round pairs them two at a time, so a pool of 2 or 3 yields a single child, trips an internal
+   guard and returns the plain-EMCTS best-child promotion — silently, and without logging a crossover
+   event. The bracket needs a pool of **≥ 4** to run at all. At 13,400 units it ran at only **46%** of
+   the 20 burns, so over half of the "crossover bridge burning" condition was not running crossover
+   bridge burning.
+
+   `BudgetFloorProbe` (notebook §3d) measures this. The completion rate rises 46% → 63% → 74% → 84% →
+   89% across 13.4k → 26.8k → 40k → 54k → 70k units and then **saturates near 0.89**: in the
+   widest-branching scenarios a phase produces few children however large its slice, so about one burn
+   in nine can never assemble a pool of four. 40,000 is the smallest level at which the phase between
+   two burns evaluates **17 new children — twice the 8-slot pool**, so the pool is fully turned over
+   between burns. See `V6_SERVER_RUNBOOK.md` §5d for the full table and reasoning.
+
+   Note this supersedes the assumption that C0 alone would settle the levels: C0 answers "what does an
+   agent do in T ms", which is orthogonal to "is the operator structurally able to run".
 4. **n=50 power check** — re-run the v4 per-scenario-unit significance analysis at n=50 on C0 or v5 data
    before committing.
-5. **Reproducibility assertion** (deferred from v5) — a rerun-identity check at 1 vs. T threads. Cheap, and
-   it is the property that the count-based budget is *for*. Recommend folding into the v6 smoke test.
+5. ~~**Reproducibility assertion** (deferred from v5) — a rerun-identity check at 1 vs. T threads.~~
+   **Answered empirically; see [V6_SERVER_RUNBOOK.md](V6_SERVER_RUNBOOK.md) §3–§4.** The result is not
+   the clean yes it was expected to be, and the distinction matters for how the property should be
+   asserted:
+
+   - **Agent behaviour and portfolio selection are reproducible.** The v6 and v5 builders produce an
+     identical `portfolio.csv` at any thread count; a fixed-seed agent planning from either build's
+     scenarios produces the same greedy root, sequence values, node counts and realized compute units.
+     A hard-killed and resumed isolation phase reproduces an uninterrupted run's dataset exactly, once
+     the three deliberately wall-clock columns (`Timestamp`, `PlanMillis`, `InitMillis`) are excluded.
+   - **The scenario `.bin` files are NOT byte-reproducible, and cannot be made so without changing the
+     engine.** `Tribe` holds enum-keyed `HashMap`s (`monuments`, `tribesMet`); enum `hashCode()` is the
+     JVM identity hash, so those maps' *serialization order* varies between JVM runs and between thread
+     counts. Contents are identical; only the order entries appear in the byte stream differs. This is a
+     pre-existing property of v5's portfolios, not something v6 introduced.
+
+   So a smoke-test assertion should compare the **manifest and a fixed-seed planning trace**, never a
+   checksum of the state files. Making the files themselves byte-stable would mean replacing those maps
+   with `EnumMap`/`LinkedHashMap` in the engine — a larger change, and one that would invalidate every
+   existing portfolio cache.
 
 ---
 

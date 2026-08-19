@@ -80,8 +80,11 @@ public class BuildV5Portfolio {
 
     private static final Types.TRIBE[] TRIBES = {Types.TRIBE.IMPERIUS, Types.TRIBE.IMPERIUS2};
 
-    /** One captured scenario before ID assignment: provenance + the snapshot. */
-    private static final class Cap {
+    /** One captured scenario before ID assignment: provenance + the snapshot.
+     *
+     *  <p>Package-private rather than private so {@link BuildV6Portfolio} can reuse v5's generation
+     *  procedure verbatim instead of copying it. Visibility only — v5's behaviour is unchanged. */
+    static final class Cap {
         final int gameAttempt; final long levelSeed; final int tick; final GameState gs;
         Cap(int gameAttempt, long levelSeed, int tick, GameState gs) {
             this.gameAttempt = gameAttempt; this.levelSeed = levelSeed; this.tick = tick; this.gs = gs;
@@ -218,8 +221,8 @@ public class BuildV5Portfolio {
     /** Plays one source game and returns its valid captures (in tick order). Applies the stuck-game
      *  guard: if the FIRST captured turn fails validation the whole game is abandoned. Swallows engine
      *  throws (returns whatever was captured before the throw) so one bad seed never aborts the build. */
-    private static List<Cap> runOneSourceGame(int attempt, long levelSeed, Types.GAME_MODE mode,
-                                              int[] ticks, boolean twoPlayer) {
+    static List<Cap> runOneSourceGame(int attempt, long levelSeed, Types.GAME_MODE mode,
+                                       int[] ticks, boolean twoPlayer) {
         List<Cap> out = new ArrayList<>();
         ArrayList<Agent> players = new ArrayList<>();
         players.add(buildEmctsSourceAgent());
@@ -252,9 +255,9 @@ public class BuildV5Portfolio {
         return new EMCTSAgent(SOURCE_AGENT_SEED, p);
     }
 
-    private static void persistAndManifest(int scenarioId, String source, int sourceGameId, long levelSeed,
-                                           long gameSeed, int capturedTick, GameState gs,
-                                           File scenariosDir, File manifest) throws Exception {
+    static void persistAndManifest(int scenarioId, String source, int sourceGameId, long levelSeed,
+                                   long gameSeed, int capturedTick, GameState gs,
+                                   File scenariosDir, File manifest) throws Exception {
         File bin = new File(scenariosDir, "scenario_" + sid(scenarioId) + ".bin");
         FastGameStateIO.save(gs, bin);
 
@@ -343,7 +346,7 @@ public class BuildV5Portfolio {
     public static String sid(int id) { return String.format(Locale.ROOT, "%03d", id); }
 
     /** Recursively remove a directory (cleanup before fresh portfolio generation). */
-    private static void deleteDir(File dir) {
+    static void deleteDir(File dir) {
         if (!dir.exists()) return;
         File[] files = dir.listFiles();
         if (files != null) for (File f : files) {
