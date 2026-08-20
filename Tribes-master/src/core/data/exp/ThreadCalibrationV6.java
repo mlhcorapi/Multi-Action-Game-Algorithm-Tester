@@ -257,7 +257,7 @@ public class ThreadCalibrationV6 {
             // Two segments: the first pays the ramp-up, the second shows what the machine SUSTAINS.
             long msA = IsolationPhaseRunnerV6.benchmarkThroughput(budget, threads, subset, visits);
             long msB = IsolationPhaseRunnerV6.benchmarkThroughput(budget, threads, subset, visits);
-            long peak = sampler.stop();
+            long peak = sampler.stopAndPeak();
             double clockEnd = ServerProfile.currentClockMHz();
 
             long ms = msA + msB;
@@ -383,7 +383,12 @@ public class ThreadCalibrationV6 {
                 try { Thread.sleep(50); } catch (InterruptedException e) { return; }
             }
         }
-        long stop() {
+        /** Stop sampling and return the peak seen.
+         *
+         *  <p>Not called {@code stop()}: {@link Thread} declares a final {@code stop()} up to JDK 22,
+         *  so a subclass method of that name is a compile error there. It was removed outright in
+         *  JDK 23, which is why the clash is invisible on a newer compiler and fatal on an older one. */
+        long stopAndPeak() {
             running = false;
             try { join(500); } catch (InterruptedException ignore) { }
             return peak;
