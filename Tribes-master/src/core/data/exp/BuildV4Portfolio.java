@@ -165,10 +165,9 @@ public class BuildV4Portfolio {
                     collectedThisGame++;
                 }
             } catch (Throwable t) {
-                // Tribes engine has a known ClassCastException (and occasional other throws) under
-                // deep search — same root cause that ExperimentEngine.runMatchup retries with perturbed
-                // seeds for the full-game phases. For the portfolio build the cheap fix is: skip this
-                // level seed entirely; the dynamic-extension loop just tries the next one.
+                // Any throw from the engine: skip this level seed entirely; the dynamic-extension
+                // loop just tries the next one. (The stale-actor-id ClassCastException that used to
+                // fire here under deep search is fixed - see test/StaleActorIdTest.java.)
                 System.out.println("  ABORT game " + gameAttempt + ": engine threw "
                         + t.getClass().getSimpleName() + " — next seed");
             }
@@ -200,10 +199,10 @@ public class BuildV4Portfolio {
                 game.init(players, levelSeed, TRIBES, FIXED_GAME_SEED, Types.GAME_MODE.CAPITALS);
                 gs = game.captureAtTickAsTurnStart(DUAL_CAPTURE_TICK);
             } catch (Throwable t) {
-                // Engine ClassCastException (or similar) during one of the source players' planning —
-                // same root cause that ExperimentEngine handles via perturbed-seed retries elsewhere.
-                // For the portfolio: skip this seed; the next attempt's distinct level/agent state is
-                // a different deep-search trajectory and most likely won't trigger it again.
+                // Any throw during one of the source players' planning: skip this seed; the next
+                // attempt's distinct level/agent state is a different search trajectory. (The
+                // stale-actor-id ClassCastException that used to fire here is fixed - see
+                // test/StaleActorIdTest.java.)
                 System.out.println("  ABORT game " + gameAttempt + ": engine threw "
                         + t.getClass().getSimpleName() + " — next seed");
                 continue;
