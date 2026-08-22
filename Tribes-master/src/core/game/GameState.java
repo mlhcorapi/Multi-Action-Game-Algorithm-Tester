@@ -151,6 +151,29 @@ public class GameState implements Serializable {
     }
 
     /**
+     * Gets a game actor from its id, but only if it is of the kind the caller expects.
+     *
+     * Actor ids come from a single per-board counter shared by units and cities, and some
+     * ActionCommands (Examine, LevelUp) draw on this state's Random to decide whether they create
+     * an actor at all. {@link GameState#copy()} re-seeds that Random, so replaying one action
+     * sequence on two copies of the same state can hand the same id to actors of different kinds.
+     * An id stored inside an Action is therefore only meaningful in the state that action was built
+     * from: anywhere else it may resolve to nothing, or to an actor of another kind.
+     *
+     * Code that resolves an id carried by an Action must use this rather than casting the result of
+     * {@link #getActor(int)}, and treat null as "this action does not apply to this state".
+     *
+     * @param actorId the id of the actor to retrieve
+     * @param type the kind of actor the caller requires
+     * @return the actor, or null if no actor has this id or it is not of the requested kind.
+     */
+    public <T extends Actor> T getActor(int actorId, Class<T> type)
+    {
+        Actor actor = board.getActor(actorId);
+        return type.isInstance(actor) ? type.cast(actor) : null;
+    }
+
+    /**
      * Returns the current tick of the game. One tick encompasses a turn for all
      * players in the game.
      * @return current tick of the game.

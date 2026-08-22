@@ -15,11 +15,13 @@ import java.util.function.IntToLongFunction;
  * Each game builds its own fresh agents, so games are independent and thread-safe.
  * There is NO per-game timeout: real games run to completion.
  *
- * Robustness: the underlying Tribes engine can throw (e.g. an occasional ClassCastException of a
- * unit to City under deep search). Rather than silently losing that game, a crashed game is
- * re-run with PERTURBED game/agent RNG seeds (the level seed is kept fixed, so e.g. Phase 3's map
- * is unchanged), up to {@link #MAX_GAME_ATTEMPTS} attempts, so each matchup still yields its full
- * N valid results. Games that still fail after all attempts are logged and dropped.
+ * Robustness: rather than silently losing a game that throws, it is re-run with PERTURBED
+ * game/agent RNG seeds (the level seed is kept fixed, so e.g. Phase 3's map is unchanged), up to
+ * {@link #MAX_GAME_ATTEMPTS} attempts, so each matchup still yields its full N valid results.
+ * Games that still fail after all attempts are logged and dropped.
+ * The ClassCastException of a unit to City that used to make this path fire under deep search was
+ * a stale-actor-id bug in the action layer and is fixed (see test/StaleActorIdTest.java); the
+ * retries remain as a net for anything else, OutOfMemoryError in particular.
  */
 public class ExperimentEngine {
 

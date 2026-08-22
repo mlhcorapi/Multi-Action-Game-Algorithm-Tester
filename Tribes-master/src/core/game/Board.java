@@ -914,6 +914,20 @@ public class Board implements Serializable {
     }
 
     /**
+     * Gets a game actor from its id, but only if it is of the kind the caller expects. See
+     * {@link core.game.GameState#getActor(int, Class)} for why an id carried by an Action cannot be
+     * assumed to resolve to an actor of the expected kind.
+     * @param actorId the id of the actor to retrieve
+     * @param type the kind of actor the caller requires
+     * @return the actor, or null if no actor has this id or it is not of the requested kind.
+     */
+    public <T extends Actor> T getActor(int actorId, Class<T> type)
+    {
+        Actor actor = gameActors.get(actorId);
+        return type.isInstance(actor) ? type.cast(actor) : null;
+    }
+
+    /**
      * Removes an actor from the list of actor
      * @param actorId tileCityId of the actor to remove
      * @return true if the actor was removed (false may indicate that it didn't exist).

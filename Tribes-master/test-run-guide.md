@@ -54,11 +54,13 @@ java -Xmx8g -cp "out;lib/*" core.data.exp.RunAllExperiments 4
   **Phase 2** (win rates), writing to `test_results/full/{phase3,phase2}/`.
 - **It is resumable**: if it is interrupted, just run the same command again — completed
   matchups are skipped (recorded in each phase's `_completed.txt`) and it continues.
-- **Crash-resilient**: the Tribes engine occasionally throws under deep search (a `ClassCastException`
-  of a unit to `City`). Such a game is automatically **re-run with a perturbed RNG seed** (the level
-  seed is kept fixed, so Phase 3's map is unchanged), up to 4 attempts, so each matchup still reaches
-  its full game count. A game that still fails after all attempts is logged (`[warn] … dropped`) and
-  that matchup finishes with one fewer game — rare in practice.
+- **Crash-resilient**: a game that throws is automatically **re-run with a perturbed RNG seed** (the
+  level seed is kept fixed, so Phase 3's map is unchanged), up to 4 attempts, so each matchup still
+  reaches its full game count. A game that still fails after all attempts is logged
+  (`[warn] … dropped`) and that matchup finishes with one fewer game.
+  The `ClassCastException` of a unit to `City` that used to trigger this under deep search was a
+  stale-actor-id bug in the action layer and is fixed — see `test/StaleActorIdTest.java`. The retry
+  path is kept as a net for anything else (e.g. `OutOfMemoryError`).
 
 You can also run the phases individually (each takes an optional thread count). **Run Phase 3
 first** — Phase 2 reads the ratio it writes:

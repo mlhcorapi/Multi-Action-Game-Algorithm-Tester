@@ -162,7 +162,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         Action next = null;
         if (!turnPlan.isEmpty()) {
             Action candidate = turnPlan.remove(0);
-            if (candidate != null && candidate.isFeasible(gs)) {
+            if (candidate != null && checkActionFeasibility(candidate, gs)) {
                 next = candidate;
             }
         }

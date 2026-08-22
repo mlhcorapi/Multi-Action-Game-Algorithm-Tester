@@ -30,12 +30,10 @@ public class ResourceGathering extends CityAction
     @Override
     public boolean isFeasible(final GameState gs)
     {
-        // Defensive: under deep search a stale/mutated cityId can resolve to a non-City
-        // actor (e.g. a SuperUnit, since actor IDs are shared). Treat as infeasible instead
-        // of throwing a ClassCastException that would crash the whole game.
-        Actor actor = gs.getActor(this.cityId);
-        if (!(actor instanceof City)) return false;
-        City city = (City) actor;
+        // A stale/mutated cityId can resolve to a non-City actor (e.g. a SuperUnit, since actor
+        // ids are shared) or to nothing at all. Treat that as infeasible rather than throwing.
+        City city = gs.getActor(this.cityId, City.class);
+        if (city == null) return false;
         Board b = gs.getBoard();
         Tribe t = b.getTribe(city.getTribeId());
 
