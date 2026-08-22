@@ -79,10 +79,18 @@ public class ThreadCalibrationV6 {
      */
     public static final long TARGET_SEGMENT_MILLIS = 25_000L;
 
-    /** Hard ceiling on one budget level's whole sweep. Past this the ladder stops and the knee is
-     *  taken from the points measured so far — a slightly worse thread count costs far less than an
-     *  open-ended tuning phase. */
-    public static final long MAX_SWEEP_MILLIS = 12 * 60_000L;
+    /**
+     * Bounds on one budget level's whole sweep. The actual budget is DERIVED from the pilot — the
+     * ladder length times the planned per-point cost, plus a margin — and then clamped into this range.
+     *
+     * <p>A single fixed cap cannot serve budgets whose per-turn cost differs tenfold. Twelve minutes is
+     * generous at 40,000 units and not enough to measure two points at 400,000, where one turn costs
+     * ~33 s of single-thread time. A sweep that stops after one point does not merely lose precision:
+     * it reports the bottom of the ladder as the knee, and the run then spends days at 8 threads on a
+     * 64-core machine.
+     */
+    public static final long MIN_SWEEP_MILLIS = 8 * 60_000L;
+    public static final long MAX_SWEEP_MILLIS = 90 * 60_000L;
 
     /** Never measure a point on fewer turns than this per thread, however fast the machine is. */
     private static final int MIN_TURNS_PER_THREAD = 3;
@@ -130,11 +138,18 @@ public class ThreadCalibrationV6 {
 
         List<Scenario> portfolio = IsolationPhaseRunner.loadPortfolio(new File(portfolioDir));
 
+        // The run reads its per-level thread count from _tuned_threads_<cu>cu.txt, so write it here
+        // too. Without this, a standalone re-calibration would print a better number and change
+        // nothing — the operator would have to know to create the file by hand.
+        File runBase = new File(RunExperimentV6.BASE);
         for (int cu : levels) {
             if (RunGuard.stopRequested()) break;
             System.out.println("\n=== budget " + cu + " cu ===");
             Result r = calibrate(portfolio, cu, null, csv);
-            System.out.println("  -> chosen threads = " + r.chosen + " for " + cu + " cu");
+            File tuned = new File(runBase, "_tuned_threads_" + cu + "cu.txt");
+            RunGuard.atomicWrite(tuned, r.chosen + "\n");
+            System.out.println("  -> chosen threads = " + r.chosen + " for " + cu + " cu"
+                    + "   (written to " + tuned.getPath() + ")");
         }
         System.out.println("\nWrote " + csv.getPath());
         RunGuard.finished();
@@ -188,33 +203,51 @@ public class ThreadCalibrationV6 {
                 "speedup", "efficiency", "peakHeapMB");
 
         long sweepStart = System.currentTimeMillis();
+        boolean truncated = false;   // set if the sweep ran out of time before finishing the ladder
 
-        // ONE fixed scenario subset for every point in this sweep, spread across the portfolio.
-        //
-        // Sizing a point by taking `portfolio.subList(0, numScen)` made each thread count measure a
-        // DIFFERENT workload: a small point ran the first 16 scenarios, a large one the first 100, and
-        // the portfolio is ordered single-source first, so bigger points also drew a different mix of
-        // branching factors. Comparing throughput across those points is comparing two things at once.
-        // Here the mix is held constant and only the number of visits varies, so the only thing that
-        // changes between points is the thread count — which is the whole question.
-        int subsetSize = Math.min(portfolio.size(), SWEEP_SCENARIOS);
-        List<Scenario> subset = new ArrayList<>(subsetSize);
-        for (int i = 0; i < subsetSize; i++) {
-            subset.add(portfolio.get((int) ((long) i * portfolio.size() / subsetSize)));
-        }
-
-        // Pilot: learn what a turn costs at this budget BEFORE the first measured point, so that point
-        // is sized like the rest rather than running a fixed turns-per-thread that is far too short at
-        // a large budget — and it is the point the whole efficiency column is normalised against. The
-        // pilot uses the SAME subset, so its estimate is not biased by an unrepresentative sample.
+        // Pilot: learn what ONE turn costs at this budget before anything is sized. Small and cheap —
+        // about one turn per thread at the bottom of the ladder.
         int pilotThreads = Math.max(1, ladder[0]);
-        long pilotMs = IsolationPhaseRunnerV6.benchmarkThroughput(budget, pilotThreads, subset, 1);
-        double millisPerTurnPerThread = Math.max(1e-3, pilotMs / (subsetSize / (double) pilotThreads));
-        int lastPerThread = Math.max(2, TURNS_PER_THREAD / 2);   // growth anchor for the first point
+        int pilotScen = Math.min(portfolio.size(), Math.max(8, pilotThreads));
+        List<Scenario> pilotSubset = spread(portfolio, pilotScen);
+        long pilotMs = IsolationPhaseRunnerV6.benchmarkThroughput(budget, pilotThreads, pilotSubset, 1);
+        double millisPerTurnPerThread = Math.max(1e-3, pilotMs / (pilotScen / (double) pilotThreads));
+
+        // Turns per thread per segment, from the target duration. At a large budget a single turn can
+        // cost tens of seconds, so this bottoms out at MIN_TURNS_PER_THREAD and the segment simply
+        // takes as long as it takes — a thread count cannot be measured on less than a few turns each.
+        int perThreadPlan = (int) Math.round(TARGET_SEGMENT_MILLIS / millisPerTurnPerThread);
+        perThreadPlan = Math.max(MIN_TURNS_PER_THREAD, Math.min(perThreadPlan, 4 * TURNS_PER_THREAD));
+
+        // ONE fixed scenario subset for every point in this sweep, spread across the portfolio, and
+        // SIZED FROM THE PILOT.
+        //
+        // Two things this gets right that the previous version did not. Holding the mix fixed means
+        // only the thread count varies between points, so their throughputs are comparable — sizing a
+        // point by `portfolio.subList(0, numScen)` had bigger points drawing a different branching-factor
+        // mix as well as more threads. And sizing the subset from the measured turn cost keeps the
+        // SMALLEST point short: a fixed 64 scenarios puts a floor of 64 turns on every segment, which at
+        // 400,000 units is over four minutes — the sweep then blows its whole time budget on its first
+        // point and picks the bottom of the ladder as the "knee".
+        int subsetSize = Math.max(8, Math.min(Math.min(SWEEP_SCENARIOS, portfolio.size()),
+                perThreadPlan * pilotThreads));
+        List<Scenario> subset = spread(portfolio, subsetSize);
+
+        // Sweep budget, derived rather than fixed. A flat cap cannot serve budgets whose per-turn cost
+        // differs tenfold: 12 minutes is generous at 40,000 units and not enough for two points at
+        // 400,000. This allows the whole ladder at the planned segment size, plus a margin.
+        long perPointMs = (long) (2 * perThreadPlan * millisPerTurnPerThread);
+        long sweepBudgetMs = Math.max(MIN_SWEEP_MILLIS,
+                Math.min(MAX_SWEEP_MILLIS, (long) (ladder.length * perPointMs * 1.3)));
+
+        int lastPerThread = perThreadPlan;   // growth anchor for the first point
         System.out.printf(Locale.ROOT,
-                "  workload: %d scenarios (fixed for every point);  pilot: %d turns on %d threads in "
-                + "%.1fs => sizing each point for ~%ds per segment%n",
-                subsetSize, subsetSize, pilotThreads, pilotMs / 1000.0, TARGET_SEGMENT_MILLIS / 1000);
+                "  pilot: %d turns on %d threads in %.1fs => %.1fs per turn per thread%n",
+                pilotScen, pilotThreads, pilotMs / 1000.0, millisPerTurnPerThread / 1000.0);
+        System.out.printf(Locale.ROOT,
+                "  workload: %d scenarios (fixed for every point), ~%d turns/thread/segment "
+                + "=> ~%.0fs per point; sweep budget %.0f min for %d points%n",
+                subsetSize, perThreadPlan, perPointMs / 1000.0, sweepBudgetMs / 60000.0, ladder.length);
 
         for (int threads : ladder) {
             if (RunGuard.stopRequested()) {
@@ -222,14 +255,22 @@ public class ThreadCalibrationV6 {
                 break;
             }
             long elapsed = System.currentTimeMillis() - sweepStart;
-            if (elapsed > MAX_SWEEP_MILLIS) {
+            if (elapsed > sweepBudgetMs) {
                 System.out.printf(Locale.ROOT,
-                        "  (sweep budget of %ds reached after %ds - taking the knee from the points "
-                        + "measured so far)%n", MAX_SWEEP_MILLIS / 1000, elapsed / 1000);
+                        "  (sweep budget of %.0f min reached after %.0f min - stopping with %d point(s) "
+                        + "measured)%n", sweepBudgetMs / 60000.0, elapsed / 60000.0, points.size());
+                truncated = true;
                 break;
             }
-            // Memory gate: would this point plausibly fit? perTaskMB is 0 until the first point.
-            if (perTaskMB > 0) {
+            // Memory gate: would this point plausibly fit?
+            //
+            // Deliberately not applied after only ONE measured point. The per-task estimate is
+            // peak-heap-above-baseline divided by the thread count, and peak heap carries a fixed
+            // component the workers do not own — so the estimate from the smallest point is the most
+            // inflated one there is. Gating on it can end a sweep at its second rung and hand back the
+            // bottom of the ladder, which is the same failure as a truncated sweep by another route.
+            // Two points in, the divisor is large enough for the estimate to mean something.
+            if (perTaskMB > 0 && points.size() >= 2) {
                 double projectedMB = (baselineHeap >> 20) + perTaskMB * threads;
                 double allowedMB = (maxHeap >> 20) * HEAP_SAFETY;
                 if (projectedMB > allowedMB) {
@@ -305,6 +346,25 @@ public class ThreadCalibrationV6 {
         }
 
         int chosen = pickKnee(points, best, machine);
+
+        // A truncated sweep must never be read as a measurement. With one or two points the "knee" is
+        // just the smallest thread count tried, and returning it silently is how a 64-core machine ends
+        // up running a multi-day level on 8 threads. Fall back to a memory-aware estimate and say so.
+        if (truncated && points.size() < 3) {
+            int memCap = machine.heapCap(perTaskMB, baselineHeap / (double) (1 << 20), HEAP_SAFETY);
+            int estimate = Math.max(chosen,
+                    Math.min(memCap, (int) Math.round(0.75 * machine.maxWorkers())));
+            System.out.println();
+            System.out.println("  *** SWEEP TRUNCATED — only " + points.size() + " point(s) measured. ***");
+            System.out.println("  The smallest thread count tried is NOT a knee, so it is not used.");
+            System.out.printf(Locale.ROOT,
+                    "  Falling back to %d threads: 75%% of the %d-worker ceiling, capped by the %d that%n"
+                    + "  the measured per-task heap (%.0f MB) allows. This is an ESTIMATE, not a%n"
+                    + "  measurement — re-run this level's calibration when the machine is free:%n"
+                    + "    java -cp \"out:lib/*\" core.data.exp.ThreadCalibrationV6 <portfolio> <outDir> %d%n",
+                    estimate, machine.maxWorkers(), memCap, perTaskMB, budget);
+            chosen = estimate;
+        }
         // Mark the chosen row, then persist the whole level at once.
         for (int i = 0; i < rows.size(); i++) {
             String[] f = rows.get(i).split(",", -1);
@@ -360,6 +420,15 @@ public class ThreadCalibrationV6 {
         Point(int threads, double sustained, double throttlePct) {
             this.threads = threads; this.sustained = sustained; this.throttlePct = throttlePct;
         }
+    }
+
+    /** {@code n} scenarios spread evenly across the portfolio, so the sample spans its
+     *  branching-factor range rather than taking a contiguous (and single-source-heavy) prefix. */
+    private static List<Scenario> spread(List<Scenario> portfolio, int n) {
+        n = Math.max(1, Math.min(n, portfolio.size()));
+        List<Scenario> out = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) out.add(portfolio.get((int) ((long) i * portfolio.size() / n)));
+        return out;
     }
 
     private static String fmt(double v) {

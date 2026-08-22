@@ -306,7 +306,11 @@ public class Game {
 
                 firstEnd = false;
 
-                printGameResults();
+                // Gated on VERBOSE (default true, so interactive play is unchanged). A batch
+                // experiment running thousands of games concurrently sets it false: five lines per
+                // game from N worker threads interleave into an unreadable log and bury the runner's
+                // own progress output. Console only - no effect on the game or its results.
+                if (VERBOSE) printGameResults();
                 if (LOG_STATS) {
                     TreeSet<TribeResult> ranking = getCurrentRanking();
                     for (TribeResult tr : ranking) {
