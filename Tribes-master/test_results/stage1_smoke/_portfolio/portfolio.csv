@@ -1,0 +1,7 @@
+ScenarioId,Source,SourceGameId,SourceLevelSeed,SourceGameSeed,CapturedTick,ActiveTribeId,ActiveTribeNumCities,ActiveTribeNumUnits,ActiveTribeScore,BranchingFactor,NumAttackActions,NumMoveActions,NumOtherUnitActions,NumCityActions,NumTribeActions
+1,single,1,4000001,9000001,10,0,3,7,1919,79,0,48,0,6,25
+2,single,1,4000001,9000001,12,0,4,7,4599,119,0,50,7,46,16
+3,single,1,4000001,9000001,14,0,4,9,7074,239,0,53,10,70,106
+4,single,1,4000001,9000001,16,0,5,11,7999,280,0,79,11,89,101
+5,dual,1,5000001,9000001,15,0,4,12,4286,156,1,74,1,60,20
+6,dual,1,5000001,9000001,20,0,6,15,8981,364,0,110,18,151,85

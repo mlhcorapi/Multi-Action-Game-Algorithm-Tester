@@ -1,0 +1,2 @@
+Budget,Contrast,A,B,Pairs,MeanDiff,Lo,Hi,WinRate
+8000,Short15+Bias>Bias alone,Short15_e25,Bias_e25,6,363.3333333333333,86.66666666666667,739.1666666666666,1.0
