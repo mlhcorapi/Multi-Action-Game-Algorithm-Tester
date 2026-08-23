@@ -1,0 +1,7 @@
+ScenarioId,ScenarioSource,VisitId,Config,InitialValue,FinalValue,NodesEvaluated,UniqueSequences,PlanMillis,MutEvents,MutBestGains,MutChildDuplicates,MutRepairKept,MutRepairReplaced,BiasGreedyPicks,BiasUniformPicks,ShortlistCalls,ShortlistSkipped,StatUpdates
+1,single,0,Short15_e25,4409.0,4409.0,279,178,201,278,0,101,2107,128,209,69,122,3934,556
+2,single,0,Short15_e25,7979.0,7979.0,301,161,300,300,0,140,2075,133,236,64,132,11847,600
+3,single,0,Short15_e25,9798.0,10419.0,140,128,298,139,16,12,1573,253,104,35,173,20519,278
+4,single,0,Short15_e25,11164.0,12559.0,229,178,436,228,6,51,1939,184,177,51,134,18007,456
+5,dual,0,Short15_e25,4906.0,5231.0,171,129,352,170,5,42,2041,136,128,42,134,6851,340
+6,dual,0,Short15_e25,11258.0,11578.0,106,92,669,105,6,14,2083,146,84,21,130,19241,210

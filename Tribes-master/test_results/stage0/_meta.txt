@@ -1,0 +1,10 @@
+stage0 signal run
+date=Sat Aug 22 19:19:36 BST 2026
+budgets=[10000, 40000, 160000, 640000]
+gamesPerBudget=4
+opponent=emcts
+turnLimit=50
+threads=4
+computeMeterWeights=advance=1.0000 copy=0.1600 eval=0.0770
+java=26.0.2.1
+os=Windows 11

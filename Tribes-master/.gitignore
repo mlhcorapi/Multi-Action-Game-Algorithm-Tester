@@ -17,3 +17,16 @@ map_elites_*
 # transient build dirs (smoke CSVs are intentionally NOT ignored so they're reviewable in the diff view)
 out_build/
 _*.tmp
+# --- action-bias work line (Stage 0 / Stage 1) ---
+# Raw per-event logs: ~86MB, already gzipped (so they do not pack down further), and fully
+# regenerable by re-running the collectors. The per-turn CSVs and the analysis outputs derived
+# from them ARE tracked, so every published number stays reviewable in the diff.
+test_results/stage0*/mutlog_*.csv.gz
+test_results/stage1*/**/seqlog_*.csv.gz
+# Portfolio snapshots are binary GameStates whose serialization order is not byte-reproducible
+# across JVM runs (see BuildV6Portfolio); the manifest is tracked and the build is deterministic
+# from its seeds, so the set can be rebuilt exactly.
+test_results/stage1*/_portfolio/scenarios/
+# Transient run-lock + javac sources list
+test_results/**/_running.lock
+_srcs.txt
