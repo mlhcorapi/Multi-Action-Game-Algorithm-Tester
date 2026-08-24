@@ -12,6 +12,7 @@ import players.Agent;
 import players.heuristics.StateHeuristic;
 import utils.ElapsedCpuTimer;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -913,22 +914,41 @@ public class ExperimentalEMCTSAgent extends Agent {
     }
 
     /**
-     * Recursively unlink a tree node and all its descendants to allow garbage collection.
+     * Unlink a tree node and all its descendants to allow garbage collection, skipping
+     * {@code protectedNode} and everything beneath it.
      * Called during bridge burning to free memory from abandoned branches.
+     *
+     * <p><b>Iterative, with an explicit stack, and it has to be.</b> This was a recursive descent, and
+     * its recursion depth is the depth of the search tree — which grows with the number of accepted
+     * mutations, i.e. with the compute budget. At 40,000 and 80,000 units it is fine; at 400,000 it
+     * overflowed the default 1 MB thread stack, and because the error propagates out of planTurn and
+     * act() the whole game died. In the v6 full-games tournament that was worse than a crash: the
+     * runner caught it, re-seeded and replayed the game, so the surviving sample was silently
+     * conditioned on "no turn built a deep tree" — a condition correlated with how hard the agent had
+     * searched, and therefore with the agent itself.
+     *
+     * <p>Rewriting it cannot change a result: {@link ExperimentalEMCTSTreeNode#unlink()} only sets
+     * {@code parent = null}, so the operation is idempotent and order-independent, and the protected
+     * subtree is skipped exactly as before (it is never pushed). The heap traffic is identical; only
+     * the stack depth changes, from O(tree depth) to O(1).
      */
     protected void unlinkTree(ExperimentalEMCTSTreeNode node, ExperimentalEMCTSTreeNode protectedNode) {
         if (node == null || node == protectedNode) {
             return;
         }
 
-        ArrayList<ExperimentalEMCTSTreeNode> children = node.getChildren();
-        if (children != null) {
-            for (ExperimentalEMCTSTreeNode child : children) {
-                unlinkTree(child, protectedNode);
+        ArrayDeque<ExperimentalEMCTSTreeNode> pending = new ArrayDeque<>();
+        pending.push(node);
+        while (!pending.isEmpty()) {
+            ExperimentalEMCTSTreeNode current = pending.pop();
+            ArrayList<ExperimentalEMCTSTreeNode> children = current.getChildren();
+            if (children != null) {
+                for (ExperimentalEMCTSTreeNode child : children) {
+                    if (child != null && child != protectedNode) pending.push(child);
+                }
             }
+            current.unlink();
         }
-
-        node.unlink();
     }
 
     /**
