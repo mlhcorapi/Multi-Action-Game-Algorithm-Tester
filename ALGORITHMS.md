@@ -12,44 +12,48 @@ Instead of searching the entire turn space at once, EMCTS splits the allowed tim
 Within each phase:
 1. It initializes a tree root via a 1-ply greedy initialization, generating a random but heuristically strong action sequence.
 2. It iteratively builds the tree from the root. For each iteration:
-   - **Selection/Exploitation:** It greedily traverses down the current tree from the root by selecting children that have the highest evaluation score.
+   - **Selection (pure exploitation):** It expands the *incumbent* - the highest-value node currently in the live tree (UCB with a zero exploration term). A child that improves on the incumbent becomes the new incumbent; one that does not stays a leaf, so failed mutations accumulate as siblings under the incumbent and the tree genuinely branches. (The incumbent is tracked by reference, not recovered by best-child descent: a descent that always follows the best child can never stop at an interior node, which was the pre-fix bug - every new child, better or worse, became the next expansion target, degenerating the tree into a single unguided mutation chain.)
    - **Mutation (Evolutionary aspect):** Once it reaches a node to expand, it applies an evolutionary mutation. It takes the sequence of actions from the node, selects a random point in the sequence, keeps the actions up to that point, randomly picks a new available action, and then appends the remaining actions from the original sequence.
    - **Repair:** Because game states are highly path-dependent, the mutated sequence might be invalid (e.g., trying to move a unit that was already moved, or lacking resources for an action). A **greedy repair** mechanism goes through the newly mutated sequence. If an action is no longer feasible, it replaces it greedily with the highest-scoring valid action.
-   - **Evaluation & Backpropagation:** It evaluates the newly created child node and backpropagates the score (using standard UCB updates) back up the tree.
-3. At the end of a phase, the agent applies **Bridge Burning**. It selects the best-performing child of the root, adds its first action to the final output list, and makes that child the *new* root of the tree.
+   - **Evaluation & Incumbent update:** It evaluates the newly created child node with the heuristic. There is no UCB backpropagation - with a zero exploration term a node's score is exactly its own heuristic value, so nothing propagates; the child simply replaces the incumbent (expansion target) and/or the best-ever node (final answer) when strictly better.
+3. At the end of a phase, the agent applies **Bridge Burning**: it promotes the root child on the incumbent's path (the lineage of the best live sequence) to be the *new* root and prunes every other branch. If no child improved on the root yet, it falls back to the best immediate child - the burn count is fixed - and the incumbent re-anchors onto the surviving subtree. The final answer replayed over the turn is the best-ever node's full sequence, which is tracked separately and survives pruning.
 4. The process repeats for the next phase starting from the new root, effectively "burning the bridge" to alternative early actions in order to focus computational effort deeper into the turn.
 
 ### EMCTS Pseudocode
 
 ```text
 function EMCTS(gameState, maxDepth, timeLimit):
-    rootNode = GreedyInitializeRoot(gameState)
+    rootNode  = GreedyInitializeRoot(gameState)
     Evaluate(rootNode)
+    incumbent = rootNode        // highest-value node in the LIVE tree (expansion target)
+    bestNode  = rootNode        // best sequence EVER seen (survives pruning; the answer)
 
     timePerPhase = timeLimit / maxDepth
 
     for phase = 1 to maxDepth:
         while time_spent_in_phase < timePerPhase:
-            // 1. Selection
-            nodeToExpand = TraverseGreedy(rootNode)
+            // 1. Selection: pure exploitation - always expand the incumbent
+            nodeToExpand = incumbent
 
             // 2. Mutation & Repair
-            mutatedSequence = Mutate(nodeToExpand.sequence)
-            repairedSequence = GreedyRepair(mutatedSequence, nodeToExpand.gameState)
+            mutatedSequence  = Mutate(nodeToExpand.sequence)
+            repairedSequence = GreedyRepair(mutatedSequence, gameState)
 
-            childNode = new Node(repairedSequence, nodeToExpand)
+            childNode = new Node(repairedSequence, parent = nodeToExpand)
 
-            // 3. Evaluation
+            // 3. Evaluation + incumbent/best update (no UCB backpropagation)
             Evaluate(childNode)
+            if childNode.value > incumbent.value: incumbent = childNode
+            if childNode.value > bestNode.value:  bestNode  = childNode
 
-            // 4. Backpropagation
-            Backpropagate(childNode)
+        // Bridge Burning: keep the incumbent's lineage, prune every other branch
+        newRoot = ChildOfRootOnPathTo(incumbent)         // null if incumbent == root
+        if newRoot == null: newRoot = rootNode.getBestChild()
+        rootNode = newRoot
+        if incumbent not under rootNode:                 // pruned by the fallback
+            incumbent = MaxValueNodeIn(rootNode.subtree)
 
-        // Bridge Burning: Commit to the best immediate action and prune the rest
-        bestChild = rootNode.getBestChild()
-        rootNode = bestChild
-
-    return bestNode.sequence.pop_first()
+    return bestNode.sequence
 ```
 
 ---
@@ -69,7 +73,7 @@ In the standard EMCTS iteration loop, instead of always applying mutation to a s
 1. It extracts the top 2 nodes from the global top queue.
 2. It performs **Uniform Crossover** on their action sequences: at each position in the action sequence, it randomly chooses the action from either Parent 1 or Parent 2.
 3. The resulting sequence is then put through the greedy **Repair** mechanism to ensure game logic feasibility.
-4. The repaired crossover child is added to the tree under the stronger of the two parents.
+4. The repaired crossover child is added to the tree under the stronger of the two parents. (The global top queue is purged of pruned nodes at every bridge burn, so both parents - and therefore the graft - are always inside the live tree, reachable by selection and by the burn-lineage walk.)
 
 #### Crossover Bridge Burning
 Standard bridge burning simply picks the best child of the current root. Experimental crossover bridge burning tries to *synthesize* a better root candidate using a hierarchy of crossovers:
@@ -79,7 +83,7 @@ Standard bridge burning simply picks the best child of the current root. Experim
    - **Level 2:** Pairs the 4 children into 2 crossover children.
    - **Level 3:** Pairs the 2 children into 1 final crossover child.
 3. It evaluates all 7 newly generated crossover children.
-4. If the best crossover child outperforms the standard "best child" from the tree, the crossover child becomes the new root for the next phase.
+4. If the best crossover child outperforms the standard bridge-burning target (the root child on the incumbent's path, falling back to the best immediate child), the bred child becomes the new root for the next phase - discarding the old tree entirely, so the search restarts from the bred sequence and the incumbent re-anchors onto it.
 
 ### ExperimentalEMCTS Pseudocode
 
@@ -93,36 +97,47 @@ function ExperimentalEMCTS(gameState, maxDepth, timeLimit, useCrossoverExp, useC
 
     timePerPhase = timeLimit / maxDepth
 
+    incumbent = rootNode        // highest-value node in the LIVE tree (expansion target)
+    bestNode  = rootNode        // best sequence EVER seen (survives pruning; the answer)
+
     for phase = 1 to maxDepth:
         while time_spent_in_phase < timePerPhase:
-            nodeToExpand = TraverseGreedy(rootNode)
+            // Selection: pure exploitation - always expand the incumbent
+            nodeToExpand = incumbent
 
             if useCrossoverExp and should_do_crossover_expansion:
                 parent1, parent2 = globalTopNodes.getTop(2)
                 crossedSequence = UniformCrossover(parent1, parent2)
-                repairedSequence = GreedyRepair(crossedSequence, parent1.gameState)
-                childNode = new Node(repairedSequence, Stronger(parent1, parent2))
+                repairedSequence = GreedyRepair(crossedSequence, gameState)
+                childNode = new Node(repairedSequence, parent = Stronger(parent1, parent2))
             else:
                 mutatedSequence = Mutate(nodeToExpand.sequence)
-                repairedSequence = GreedyRepair(mutatedSequence, nodeToExpand.gameState)
-                childNode = new Node(repairedSequence, nodeToExpand)
+                repairedSequence = GreedyRepair(mutatedSequence, gameState)
+                childNode = new Node(repairedSequence, parent = nodeToExpand)
 
+            // Evaluation + incumbent/best update (no UCB backpropagation)
             Evaluate(childNode)
-            Backpropagate(childNode)
+            if childNode.value > incumbent.value: incumbent = childNode
+            if childNode.value > bestNode.value:  bestNode  = childNode
 
             globalTopNodes.add(childNode)
             phaseTopNodes.add(childNode)
 
-        // Bridge Burning
-        bestChild = rootNode.getBestChild()
+        // Bridge Burning: the standard target is the incumbent's lineage
+        standardTarget = ChildOfRootOnPathTo(incumbent)
+        if standardTarget == null: standardTarget = rootNode.getBestChild()
 
         if useCrossoverBB and phaseTopNodes.size >= 2:
-            bestCrossoverCandidate = HierarchicalCrossoverBracket(phaseTopNodes)
-            if bestCrossoverCandidate.score > bestChild.score:
-                bestChild = bestCrossoverCandidate
+            bredCandidate = HierarchicalCrossoverBracket(phaseTopNodes)
+            newRoot = (bredCandidate.value > standardTarget.value) ? bredCandidate : standardTarget
+        else:
+            newRoot = standardTarget
 
-        rootNode = bestChild
-        phaseTopNodes.clear()
+        rootNode = newRoot
+        if incumbent not under rootNode:                 // fallback promotion or bred root
+            incumbent = MaxValueNodeIn(rootNode.subtree)
+        globalTopNodes.removeEntriesNotUnder(rootNode)   // crossover parents must be live
+        phaseTopNodes.clear(); phaseTopNodes.add(rootNode)
 
-    return bestNode.sequence.pop_first()
+    return bestNode.sequence
 ```

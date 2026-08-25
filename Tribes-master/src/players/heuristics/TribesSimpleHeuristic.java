@@ -101,7 +101,11 @@ public class TribesSimpleHeuristic implements StateHeuristic{
             if(gameState.getTribeWinStatus(playerId) == Types.RESULT.WIN)
                 boost = WIN_BOOST;
             else if (gameState.getTribeWinStatus(playerId) == Types.RESULT.LOSS)
-                boost = LOSE_BOOST;
+                // NEGATIVE: a loss must repel the search. This was `boost = LOSE_BOOST`
+                // (positive, same as a win) since the original import; in the 2-player
+                // score-diff both sides' boosts then cancelled exactly, so terminal
+                // outcomes were invisible to every agent using this heuristic.
+                boost = -LOSE_BOOST;
 
         double fishingPenalty = 0;
         if (Constants.REMOVE_FISHING) {
