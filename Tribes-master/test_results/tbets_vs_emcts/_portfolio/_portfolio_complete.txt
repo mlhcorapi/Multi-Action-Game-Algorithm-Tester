@@ -1,0 +1,1 @@
+single=20 dual=20

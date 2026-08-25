@@ -6,6 +6,8 @@ import gui.GUI;
 import gui.WindowInput;
 import players.emcts.EMCTSAgent;
 import players.emcts.EMCTSParams;
+import players.tbets.TBETSAgent;
+import players.tbets.TBETSParams;
 import players.heuristics.PrunePortfolioHeuristic;
 import players.mc.MCParams;
 import players.mc.MonteCarloAgent;
@@ -76,6 +78,7 @@ class Run {
         CROSSOVER_BB,
         CROSSOVER_EXPANSION,
         CROSSOVER_COMBO,
+        TBETS,
         PORTFOLIO_MCTS
     }
 
@@ -90,6 +93,7 @@ class Run {
     public static boolean PROGBIAS;
     public static boolean FORCE_TURN_END;
     public static boolean MCTS_ROLLOUTS;
+    public static boolean TBETS_ROLLOUTS;
     public static int POP_SIZE;
 
 
@@ -111,6 +115,7 @@ class Run {
             case "CrossoverBB": return Run.PlayerType.CROSSOVER_BB;
             case "CrossoverExpansion": return Run.PlayerType.CROSSOVER_EXPANSION;
             case "CrossoverCombo": return Run.PlayerType.CROSSOVER_COMBO;
+            case "TBETS": return Run.PlayerType.TBETS;
         }
         throw new Exception("Error: unrecognized Player Type: " + arg);
     }
@@ -209,6 +214,14 @@ class Run {
                 return new CrossoverExpansionAgent(agentSeed);
             case CROSSOVER_COMBO:
                 return new CrossoverComboAgent(agentSeed);
+            case TBETS:
+                TBETSParams tbetsParams = new TBETSParams();
+                tbetsParams.stop_type = tbetsParams.STOP_FMCALLS;
+                tbetsParams.heuristic_method = tbetsParams.DIFF_HEURISTIC;
+                // Off unless a config sets the optional "TBETS Rollouts" key; see
+                // TBETSParams.useRollouts for the cost and the fog-of-war caveat.
+                tbetsParams.useRollouts = TBETS_ROLLOUTS;
+                return new TBETSAgent(agentSeed, tbetsParams);
             case RHEA:
                 RHEAParams rheaParams = new RHEAParams();
                 rheaParams.stop_type = rheaParams.STOP_FMCALLS;
