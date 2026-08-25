@@ -27,6 +27,10 @@ test_results/stage1*/**/seqlog_*.csv.gz
 # across JVM runs (see BuildV6Portfolio); the manifest is tracked and the build is deterministic
 # from its seeds, so the set can be rebuilt exactly.
 test_results/stage1*/_portfolio/scenarios/
+test_results/**/_portfolio/scenarios/
+# Raw stdout of the TBETS-vs-EMCTS runs: the per-turn CSVs and analysis/TBETS_VS_EMCTS.md carry
+# every number, and the runs are reproducible from the commands documented there.
+test_results/tbets_vs_emcts/*.log
 # Transient run-lock + javac sources list
 test_results/**/_running.lock
 _srcs.txt
