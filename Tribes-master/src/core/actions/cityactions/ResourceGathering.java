@@ -63,7 +63,11 @@ public class ResourceGathering extends CityAction
 
     public String toString()
     {
-        return "RESOURCE_GATHERED by city " + this.cityId+ " : " + resource.toString();
+        // targetPos is part of this action's identity (one action per resource TILE; see the
+        // factory and isFeasible). It must be in the string: the EMCTS-family agents key
+        // sequences by toString (seqKey / UniqueSequences), and omitting the tile made two
+        // same-type gathers at different tiles collide (verified by ActionKeyCollisionProbe).
+        return "RESOURCE_GATHERED by city " + this.cityId + " at " + targetPos + " : " + resource.toString();
     }
 
     public boolean equals(Object o) {
