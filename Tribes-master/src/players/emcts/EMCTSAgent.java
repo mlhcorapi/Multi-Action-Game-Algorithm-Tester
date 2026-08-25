@@ -42,6 +42,18 @@ public class EMCTSAgent extends Agent {
         return initialRootSequenceForV4;
     }
     private EMCTSTreeNode bestNode;
+    /** Expansion target: the highest-value node currently IN the live tree (the incumbent).
+     *  Purely exploitative selection expands this node on every iteration. Distinct from
+     *  {@link #bestNode}: bestNode is the best sequence EVER seen this turn (it survives
+     *  pruning and supplies the final answer), while the incumbent is re-anchored onto the
+     *  surviving subtree whenever a bridge burn prunes it out of the tree, so
+     *  incumbent.value <= bestNode.value at all times. */
+    private EMCTSTreeNode incumbent;
+    /** Tree-shape check (game lifetime, never reset): max children observed on any single
+     *  node. The 2026-08 selection fix makes failed mutations pile up as siblings under the
+     *  incumbent, so this exceeds 1 as soon as any mutation fails to improve; the pre-fix
+     *  selection degenerated the tree into a 1-child-per-node chain (always exactly 1). */
+    private int maxChildrenOnANode;
     private GameState old_gs;
 
     private int fmCallsCount;
@@ -101,6 +113,13 @@ public class EMCTSAgent extends Agent {
     @Override
     public int getNodesVisited() {
         return totalNodesVisited;
+    }
+
+    /** Tree-shape check: max children observed on any single node over this agent's
+     *  lifetime (one game in the experiments). 1 = the degenerate pre-fix chain;
+     *  > 1 = the search tree really branches. See SelectionFixCheck. */
+    public int getMaxBranching() {
+        return maxChildrenOnANode;
     }
 
     @Override
@@ -188,6 +207,7 @@ public class EMCTSAgent extends Agent {
         core.game.ComputeMeter.reset();
 
         bestNode = root;
+        incumbent = root;
         fmCallsRun = 0;
 
         // ---- Phase-based bridge burning (FIXED burn count for every agent) ----
@@ -239,7 +259,8 @@ public class EMCTSAgent extends Agent {
                 numIters++;
                 fmCallsRun = 0;
 
-                // Standard MCTS iteration: select, mutate once, evaluate, backpropagate
+                // Search iteration: expand the incumbent (purely exploitative selection),
+                // mutate once, evaluate, update the incumbent.
                 EMCTSTreeNode toMutate = nodeToExpand();
                 EMCTSTreeNode child = mutate(toMutate, gs.copy());
                 // v5 telemetry: operator stats (duplicate check BEFORE eval registers the key).
@@ -257,17 +278,26 @@ public class EMCTSAgent extends Agent {
 
                 child.visited();
 
-                // Backpropagate score up the tree (standard UCB update)
-                EMCTSTreeNode current = child;
-                while (current != null) {
-                    current.refreshScore(params.bias);
-                    current = current.getParent();
+                // Purely exploitative incumbent update: a strictly better child becomes the
+                // new expansion target; otherwise it stays a leaf under the incumbent. (No
+                // UCB backpropagation: with a zero exploration term a node's score IS its
+                // heuristic value, so there is nothing to propagate.)
+                if (child.getValue() > incumbent.getValue()) {
+                    incumbent = child;
                 }
             }
 
             // Bridge burn at every phase boundary except the last: FIXED at depth-1 = 20 burns.
             if (currentPhase < params.depth - 1 && root.getChildren().size() > 0) {
-                EMCTSTreeNode bestChild = findBestChild(root);
+                // Promote the root child on the incumbent's path, so the burn keeps the best
+                // live sequence in the tree and search stays anchored on it. (In this
+                // mutation-only tree that child is also the best immediate child: siblings
+                // off the incumbent's path never exceeded the incumbent when created.) When
+                // the incumbent IS the root - no mutation improved on it this turn so far -
+                // fall back to the best immediate child: the burn count is fixed, so the
+                // phase still promotes, and the incumbent re-anchors below.
+                EMCTSTreeNode bestChild = childOfRootOnPathTo(incumbent);
+                if (bestChild == null) bestChild = findBestChild(root);
 
                 if (bestChild != null && bestChild != root) {
                     // Unlink old root branches except best path
@@ -279,6 +309,12 @@ public class EMCTSAgent extends Agent {
 
                     bestChild.unlink();  // Clears parent link safely
                     root = bestChild;
+
+                    // Re-anchor the incumbent if this burn pruned it out of the live tree
+                    // (only possible via the fallback above, i.e. incumbent == old root).
+                    if (!isInLiveTree(incumbent)) {
+                        incumbent = subtreeMax(root);
+                    }
 
                     bridgeBurningPhaseNumber++;
                     // Log the best sequence value found SO FAR (bestNode), not the promoted root's
@@ -343,46 +379,56 @@ public class EMCTSAgent extends Agent {
         return sb.toString();
     }
 
+    /**
+     * Purely exploitative selection: the node expanded on every iteration is the
+     * highest-value node currently in the live tree (the incumbent) - UCB with a zero
+     * exploration term. The incumbent is maintained incrementally (updated when a child
+     * improves on it; re-anchored when a bridge burn prunes it) rather than recovered by
+     * greedy root-to-leaf descent: a descent that always follows the best child cannot
+     * stop at an interior node, which is precisely the pre-fix bug - every new child,
+     * better or worse, became the next expansion target, so the search degenerated into
+     * an unguided random walk along a single mutation chain.
+     */
     private EMCTSTreeNode nodeToExpand() {
-        ArrayList<EMCTSTreeNode> children = root.getChildren();
+        return incumbent != null ? incumbent : root;
+    }
 
-        // If root has no children, return root for first mutation
-        if (children == null || children.size() == 0) {
-            return root;
+    /** The direct child of {@code root} on the path from the root down to {@code node};
+     *  null when {@code node} is the root itself or is not in the live tree. */
+    private EMCTSTreeNode childOfRootOnPathTo(EMCTSTreeNode node) {
+        EMCTSTreeNode current = node;
+        while (current != null && current.getParent() != root) {
+            current = current.getParent();
         }
+        return current;
+    }
 
-        // Pure exploitation traversal: traverse down the tree by always selecting
-        // the child with the highest score (value-based only, no exploration term)
-        EMCTSTreeNode current = root;
+    /** True when {@code node}'s parent chain reaches the current root. */
+    private boolean isInLiveTree(EMCTSTreeNode node) {
+        for (EMCTSTreeNode current = node; current != null; current = current.getParent()) {
+            if (current == root) return true;
+        }
+        return false;
+    }
 
-        while (true) {
-            if (current == null) {
-                return root;
-            }
-            ArrayList<EMCTSTreeNode> currentChildren = current.getChildren();
-
-            if (currentChildren == null) {
-                return current;
-            }
-            // If no children, this is a leaf node - return it for mutation
-            if (currentChildren.size() == 0) {
-                return current;
-            }
-
-            // Select child with highest score (pure exploitation)
-            EMCTSTreeNode bestChild = null;
-            double bestScore = Double.NEGATIVE_INFINITY;
-
-            for (EMCTSTreeNode child : currentChildren) {
-                if (child.getScore() > bestScore) {
-                    bestScore = child.getScore();
-                    bestChild = child;
+    /** Highest-value node in the subtree rooted at {@code node} (iterative, O(subtree)).
+     *  Only called after a bridge burn that pruned the incumbent, so the cost is rare and
+     *  bounded by the surviving subtree. */
+    private EMCTSTreeNode subtreeMax(EMCTSTreeNode node) {
+        EMCTSTreeNode best = node;
+        ArrayDeque<EMCTSTreeNode> pending = new ArrayDeque<>();
+        pending.push(node);
+        while (!pending.isEmpty()) {
+            EMCTSTreeNode current = pending.pop();
+            if (current.getValue() > best.getValue()) best = current;
+            ArrayList<EMCTSTreeNode> children = current.getChildren();
+            if (children != null) {
+                for (EMCTSTreeNode c : children) {
+                    if (c != null) pending.push(c);
                 }
             }
-
-            // Move down the tree to the best child
-            current = bestChild;
         }
+        return best;
     }
 
     /**
@@ -522,6 +568,8 @@ public class EMCTSAgent extends Agent {
         newSeq = truncateAtEndTurn(repair(newSeq, clone));
         EMCTSTreeNode newNode = new EMCTSTreeNode(newSeq, node);
         node.addChild(newNode);
+        int nChildren = node.getChildren().size();
+        if (nChildren > maxChildrenOnANode) maxChildrenOnANode = nChildren;
 
         return newNode;
     }

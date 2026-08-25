@@ -236,6 +236,8 @@ public class Stage1BiasedAgent extends ExperimentalEMCTSAgent {
         newSeq = truncateAtEndTurn(repair(newSeq, clone));
         ExperimentalEMCTSTreeNode newNode = new ExperimentalEMCTSTreeNode(newSeq, node);
         node.addChild(newNode);
+        int nChildren = node.getChildren().size();
+        if (nChildren > maxChildrenOnANode) maxChildrenOnANode = nChildren;
 
         pendingChild = newNode;
         pendingParent = node;

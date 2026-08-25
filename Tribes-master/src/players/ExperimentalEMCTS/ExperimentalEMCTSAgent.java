@@ -85,6 +85,19 @@ public class ExperimentalEMCTSAgent extends Agent {
         return initialRootSequenceForV4;
     }
     protected ExperimentalEMCTSTreeNode bestNode;
+    /** Expansion target: the highest-value node currently IN the live tree (the incumbent).
+     *  Purely exploitative selection expands this node on every iteration. Distinct from
+     *  {@link #bestNode}: bestNode is the best sequence EVER seen this turn (it survives
+     *  pruning and supplies the final answer), while the incumbent is re-anchored onto the
+     *  surviving subtree whenever a bridge burn prunes it out of the tree (fallback
+     *  promotions and tournament-bred roots), so incumbent.value <= bestNode.value always. */
+    protected ExperimentalEMCTSTreeNode incumbent;
+    /** Tree-shape check (game lifetime, never reset): max children observed on any single
+     *  node. The 2026-08 selection fix makes failed children pile up as siblings under the
+     *  incumbent, so this exceeds 1 as soon as any child fails to improve; the pre-fix
+     *  selection degenerated the tree into a 1-child-per-node chain (1, plus occasional
+     *  crossover grafts). */
+    protected int maxChildrenOnANode;
     protected GameState old_gs;
 
     protected int fmCallsCount;
@@ -139,6 +152,11 @@ public class ExperimentalEMCTSAgent extends Agent {
     public double getBbMeanPoolSize() { return bbTournaments > 0 ? bbPoolSizeSum / (double) bbTournaments : 0.0; }
     /** Tournaments that had all 8 elites, i.e. the bracket the operator is defined as. */
     public int getBbFullBrackets() { return bbFullBrackets; }
+
+    /** Tree-shape check: max children observed on any single node over this agent's
+     *  lifetime (one game in the experiments). 1 = the degenerate pre-fix chain;
+     *  > 1 = the search tree really branches. See SelectionFixCheck. */
+    public int getMaxBranching() { return maxChildrenOnANode; }
 
 
     public ExperimentalEMCTSAgent(long seed, ExperimentalEMCTSParams params) {
@@ -247,6 +265,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         core.game.ComputeMeter.reset();   // phase ceilings below bound SEARCH only
 
         bestNode = root;
+        incumbent = root;
         fmCallsRun = 0;
 
         // Initialize PriorityQueue for tracking top nodes (min heap by value to keep the top K elements)
@@ -318,7 +337,8 @@ public class ExperimentalEMCTSAgent extends Agent {
                 numIters++;
                 fmCallsRun = 0;
 
-                // Standard MCTS iteration: select, mutate once (or crossover-expand), evaluate, backpropagate.
+                // Search iteration: expand the incumbent (purely exploitative selection),
+                // mutate once (or crossover-expand), evaluate, update the incumbent.
                 ExperimentalEMCTSTreeNode toMutate = nodeToExpand();
                 ExperimentalEMCTSTreeNode child = null;
                 // v5 telemetry: which operator generated this child + the crossover parents' stats.
@@ -338,11 +358,15 @@ public class ExperimentalEMCTSAgent extends Agent {
                         xoP1 = p1.getValue(); xoP2 = p2.getValue();
                         xoParentSimilaritySum += sequenceSimilarity(p1.getSequence(), p2.getSequence());
 
-                        ArrayList<Action> crossoverSeq = crossover(p1, p2, gs.copy());
+                        // crossover() copies the state internally exactly once and never
+                        // mutates its gs argument, so no pre-copy (one charged copy, not two).
+                        ArrayList<Action> crossoverSeq = crossover(p1, p2, gs);
 
                         ExperimentalEMCTSTreeNode strongerParent = (p1.getValue() > p2.getValue()) ? p1 : p2;
                         child = new ExperimentalEMCTSTreeNode(crossoverSeq, strongerParent);
                         strongerParent.addChild(child);
+                        int nGraftChildren = strongerParent.getChildren().size();
+                        if (nGraftChildren > maxChildrenOnANode) maxChildrenOnANode = nGraftChildren;
                         xoEvents++;
                         xoRepairKept += lastXoRepairKept; xoRepairReplaced += lastXoRepairReplaced;
                     } else {
@@ -392,11 +416,14 @@ public class ExperimentalEMCTSAgent extends Agent {
                     globalTopNodesQueue.poll();
                 }
 
-                // Backpropagate score up the tree (standard UCB update)
-                ExperimentalEMCTSTreeNode current = child;
-                while (current != null) {
-                    current.refreshScore(params.bias);
-                    current = current.getParent();
+                // Purely exploitative incumbent update: a strictly better child becomes the
+                // new expansion target; otherwise it stays a leaf where it was attached. (No
+                // UCB backpropagation: with a zero exploration term a node's score IS its
+                // heuristic value, so there is nothing to propagate.) Crossover-expansion
+                // children are grafted onto live parents (see purgeDetachedTopNodes), so any
+                // child that wins here is reachable by the burn-lineage walk.
+                if (child.getValue() > incumbent.getValue()) {
+                    incumbent = child;
                 }
             }
 
@@ -411,7 +438,7 @@ public class ExperimentalEMCTSAgent extends Agent {
                     if (topNodesQueue.size() >= 8) bbFullBrackets++;
                     newRoot = performCrossoverBridgeBurning(gs.copy(), currentPhase, turnStartTimeMillis);
                 } else {
-                    newRoot = findBestChild(root);
+                    newRoot = standardBurnTarget();
                 }
 
                 if (newRoot != null && newRoot != root) {
@@ -428,6 +455,21 @@ public class ExperimentalEMCTSAgent extends Agent {
                     // Clear and reset queue for next phase
                     topNodesQueue.clear();
                     topNodesQueue.offer(root);
+
+                    // Re-anchor the incumbent if this burn pruned it out of the live tree:
+                    // possible when the fallback promoted a non-incumbent branch (the
+                    // incumbent was the old root) and when a crossover tournament bred a
+                    // fresh root (which discards the entire old tree by design).
+                    if (!isInLiveTree(incumbent)) {
+                        incumbent = subtreeMax(root);
+                    }
+
+                    // Purge crossover-expansion parents that this burn just pruned: a child
+                    // grafted onto a node outside the live tree would be invisible to both
+                    // selection and bridge burning.
+                    if (params.useCrossoverExpansion) {
+                        purgeDetachedTopNodes();
+                    }
 
                     // Record the bridge-burn trajectory point (1-indexed phase number), logging the
                     // best sequence value found SO FAR (bestNode) - the monotonic expansion curve.
@@ -521,46 +563,86 @@ public class ExperimentalEMCTSAgent extends Agent {
                 xoParentSimilaritySum, xoChildDuplicates, xoRepairKept, xoRepairReplaced);
     }
 
+    /**
+     * Purely exploitative selection: the node expanded on every iteration is the
+     * highest-value node currently in the live tree (the incumbent) - UCB with a zero
+     * exploration term. The incumbent is maintained incrementally (updated when a child
+     * improves on it; re-anchored when a bridge burn prunes it) rather than recovered by
+     * greedy root-to-leaf descent, for two reasons. First, a descent that always follows
+     * the best child cannot stop at an interior node - the pre-fix bug: every new child,
+     * better or worse, became the next expansion target, so the search degenerated into an
+     * unguided random walk along a single mutation chain. Second, crossover expansion
+     * grafts children onto elite parents elsewhere in the tree, and a best-child descent
+     * is blind to a maximum sitting below a weaker ancestor; tracking the incumbent by
+     * reference finds it regardless of where it was grafted.
+     */
     protected ExperimentalEMCTSTreeNode nodeToExpand() {
-        ArrayList<ExperimentalEMCTSTreeNode> children = root.getChildren();
+        return incumbent != null ? incumbent : root;
+    }
 
-        // If root has no children, return root for first mutation
-        if (children == null || children.size() == 0) {
-            return root;
+    /** Standard bridge-burn target: the root child on the incumbent's path (keeps the best
+     *  live sequence in the tree), falling back to the best immediate child when the
+     *  incumbent is the root itself - no child improved on it yet, but the burn count is
+     *  fixed, so the phase still promotes (and the incumbent re-anchors after promotion). */
+    protected ExperimentalEMCTSTreeNode standardBurnTarget() {
+        ExperimentalEMCTSTreeNode onIncumbentPath = childOfRootOnPathTo(incumbent);
+        return onIncumbentPath != null ? onIncumbentPath : findBestChild(root);
+    }
+
+    /** The direct child of {@code root} on the path from the root down to {@code node};
+     *  null when {@code node} is the root itself or is not in the live tree. */
+    protected ExperimentalEMCTSTreeNode childOfRootOnPathTo(ExperimentalEMCTSTreeNode node) {
+        ExperimentalEMCTSTreeNode current = node;
+        while (current != null && current.getParent() != root) {
+            current = current.getParent();
         }
+        return current;
+    }
 
-        // Pure exploitation traversal: traverse down the tree by always selecting
-        // the child with the highest score (value-based only, no exploration term)
-        ExperimentalEMCTSTreeNode current = root;
+    /** True when {@code node}'s parent chain reaches the current root. */
+    protected boolean isInLiveTree(ExperimentalEMCTSTreeNode node) {
+        for (ExperimentalEMCTSTreeNode current = node; current != null; current = current.getParent()) {
+            if (current == root) return true;
+        }
+        return false;
+    }
 
-        while (true) {
-            if (current == null) {
-                return root;
-            }
-            ArrayList<ExperimentalEMCTSTreeNode> currentChildren = current.getChildren();
-
-            if (currentChildren == null) {
-                return current;
-            }
-            // If no children, this is a leaf node - return it for mutation
-            if (currentChildren.size() == 0) {
-                return current;
-            }
-
-            // Select child with highest score (pure exploitation)
-            ExperimentalEMCTSTreeNode bestChild = currentChildren.get(0);
-            double bestScore = bestChild.getScore();
-
-            for (int i = 1; i < currentChildren.size(); i++) {
-                ExperimentalEMCTSTreeNode child = currentChildren.get(i);
-                if (child.getScore() > bestScore) {
-                    bestScore = child.getScore();
-                    bestChild = child;
+    /** Highest-value node in the subtree rooted at {@code node} (iterative, O(subtree)).
+     *  Only called after a bridge burn that pruned the incumbent, so the cost is rare and
+     *  bounded by the surviving subtree. */
+    protected ExperimentalEMCTSTreeNode subtreeMax(ExperimentalEMCTSTreeNode node) {
+        ExperimentalEMCTSTreeNode best = node;
+        ArrayDeque<ExperimentalEMCTSTreeNode> pending = new ArrayDeque<>();
+        pending.push(node);
+        while (!pending.isEmpty()) {
+            ExperimentalEMCTSTreeNode current = pending.pop();
+            if (current.getValue() > best.getValue()) best = current;
+            ArrayList<ExperimentalEMCTSTreeNode> children = current.getChildren();
+            if (children != null) {
+                for (ExperimentalEMCTSTreeNode c : children) {
+                    if (c != null) pending.push(c);
                 }
             }
+        }
+        return best;
+    }
 
-            // Move down the tree to the best child
-            current = bestChild;
+    /** Drops globalTopNodesQueue entries that are no longer in the live tree (their branch
+     *  was just burned). Crossover-expansion children are grafted onto the stronger parent,
+     *  and a graft below a detached node would be unreachable for selection and burning, so
+     *  parents must be live. Reseeds with the current root when nothing survives, so the
+     *  size >= 2 crossover gate re-opens as new children arrive. */
+    protected void purgeDetachedTopNodes() {
+        ArrayList<ExperimentalEMCTSTreeNode> survivors = new ArrayList<>();
+        for (ExperimentalEMCTSTreeNode n : globalTopNodesQueue) {
+            if (isInLiveTree(n)) survivors.add(n);
+        }
+        if (survivors.size() < globalTopNodesQueue.size()) {
+            globalTopNodesQueue.clear();
+            for (ExperimentalEMCTSTreeNode n : survivors) globalTopNodesQueue.offer(n);
+        }
+        if (globalTopNodesQueue.isEmpty()) {
+            globalTopNodesQueue.offer(root);
         }
     }
 
@@ -711,6 +793,8 @@ public class ExperimentalEMCTSAgent extends Agent {
         newSeq = truncateAtEndTurn(repair(newSeq, clone));
         ExperimentalEMCTSTreeNode newNode = new ExperimentalEMCTSTreeNode(newSeq, node);
         node.addChild(newNode);
+        int nChildren = node.getChildren().size();
+        if (nChildren > maxChildrenOnANode) maxChildrenOnANode = nChildren;
 
         return newNode;
     }
@@ -965,7 +1049,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         
         // Ensure we have at least 2 nodes for crossover
         if (topEight.size() < 2) {
-            return findBestChild(root);
+            return standardBurnTarget();
         }
 
         // Shuffle to create random pairings
@@ -977,7 +1061,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         // Level 1: Create 4 children from top 8 (4 random pairs)
         for (int i = 0; i < Math.min(topEight.size() - 1, 8); i += 2) {
             if (i + 1 < topEight.size()) {
-                ArrayList<Action> crossoverSeq = crossover(topEight.get(i), topEight.get(i + 1), gs.copy());
+                ArrayList<Action> crossoverSeq = crossover(topEight.get(i), topEight.get(i + 1), gs);
                 ExperimentalEMCTSTreeNode child = new ExperimentalEMCTSTreeNode(crossoverSeq, null);
                 eval(gs.copy(), child);
                 level1Children.add(child);
@@ -987,7 +1071,7 @@ public class ExperimentalEMCTSAgent extends Agent {
 
         // If we have fewer than 4 children, use standard bridge burning instead
         if (level1Children.size() < 2) {
-            return findBestChild(root);
+            return standardBurnTarget();
         }
 
         ArrayList<ExperimentalEMCTSTreeNode> level2Children = new ArrayList<>();
@@ -996,7 +1080,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         Collections.shuffle(level1Children, m_rnd);
         for (int i = 0; i < Math.min(level1Children.size() - 1, 4); i += 2) {
             if (i + 1 < level1Children.size()) {
-                ArrayList<Action> crossoverSeq = crossover(level1Children.get(i), level1Children.get(i + 1), gs.copy());
+                ArrayList<Action> crossoverSeq = crossover(level1Children.get(i), level1Children.get(i + 1), gs);
                 ExperimentalEMCTSTreeNode child = new ExperimentalEMCTSTreeNode(crossoverSeq, null);
                 eval(gs.copy(), child);
                 level2Children.add(child);
@@ -1007,7 +1091,7 @@ public class ExperimentalEMCTSAgent extends Agent {
         // Level 3: Create 1 child from 2 level2 children (1 pair)
         ExperimentalEMCTSTreeNode level3Child = null;
         if (level2Children.size() >= 2) {
-            ArrayList<Action> crossoverSeq = crossover(level2Children.get(0), level2Children.get(1), gs.copy());
+            ArrayList<Action> crossoverSeq = crossover(level2Children.get(0), level2Children.get(1), gs);
             level3Child = new ExperimentalEMCTSTreeNode(crossoverSeq, null);
             eval(gs.copy(), level3Child);
             allCrossoverChildren.add(level3Child);
@@ -1030,11 +1114,12 @@ public class ExperimentalEMCTSAgent extends Agent {
         }
 
         // New-root selection (per the ALGORITHMS spec): the standard bridge-burning target
-        // is the best immediate child of the root - identical to EMCTS / CrossoverExpansion.
-        // The bred candidate only replaces it if it strictly beats it. This keeps the
-        // non-crossover path identical to the baseline, so the experiment isolates the
-        // impact of crossover rather than also changing the fallback to "best of 8 elite".
-        ExperimentalEMCTSTreeNode standardBestChild = findBestChild(root);
+        // is the root child on the incumbent's path (falling back to the best immediate
+        // child) - identical to EMCTS / CrossoverExpansion. The bred candidate only
+        // replaces it if it strictly beats it. This keeps the non-crossover path identical
+        // to the baseline, so the experiment isolates the impact of crossover rather than
+        // also changing the fallback to "best of 8 elite".
+        ExperimentalEMCTSTreeNode standardBestChild = standardBurnTarget();
         ExperimentalEMCTSTreeNode newRootCandidate;
         if (standardBestChild == null) {
             newRootCandidate = bestCrossoverChild;
@@ -1077,7 +1162,9 @@ public class ExperimentalEMCTSAgent extends Agent {
      * 
      * @param p1 First parent node
      * @param p2 Second parent node
-     * @param gs Current game state for action validation and greedy evaluation
+     * @param gs Turn-start game state for action validation and greedy evaluation; copied
+     *           internally exactly once and never mutated, so callers pass it directly
+     *           (a pre-copy would double-charge the ComputeMeter budget)
      * @return An ArrayList of actions representing the crossed-over and repaired sequence
      */
     protected ArrayList<Action> crossover(ExperimentalEMCTSTreeNode p1, ExperimentalEMCTSTreeNode p2, GameState gs) {
@@ -1111,9 +1198,13 @@ public class ExperimentalEMCTSAgent extends Agent {
             Action currentAction = crossoverSeq.get(i);
             boolean isValid = false;
 
-            // Check if the current action is feasible
+            // Check if the current action is feasible. Feasibility is a read-only predicate
+            // (isFeasible has no side effects - the mutation-path repair() already checks on
+            // its live state directly), so no full-state copy: under STOP_COMPUTE a copy here
+            // would overcharge crossover children relative to mutation children for the exact
+            // same repair work.
             try {
-                isValid = checkActionFeasibility(currentAction, testGs.copy());
+                isValid = checkActionFeasibility(currentAction, testGs);
             } catch (Exception e) {
                 isValid = false;
             }
@@ -1124,8 +1215,9 @@ public class ExperimentalEMCTSAgent extends Agent {
                 advance(testGs, currentAction);
                 lastXoRepairKept++;
             } else {
-                // Action is invalid - use greedy selection to find best replacement
-                ArrayList<Action> allAvailableActions = this.allGoodActions(testGs.copy(), m_rnd);
+                // Action is invalid - use greedy selection to find best replacement.
+                // allGoodActions is read-only, so no copy (matches the mutation-path repair()).
+                ArrayList<Action> allAvailableActions = this.allGoodActions(testGs, m_rnd);
 
                 if (allAvailableActions.isEmpty()) {
                     // No actions available, stop repair

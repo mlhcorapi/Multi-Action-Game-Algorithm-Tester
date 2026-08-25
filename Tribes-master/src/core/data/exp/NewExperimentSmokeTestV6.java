@@ -33,9 +33,11 @@ import java.util.concurrent.*;
  *       "InitUnits &gt; 0 and SearchUnits ≈ budget" is the discriminating observation.</li>
  *   <li><b>Bridge burning is INSIDE the budget.</b> All agents must perform the full 20 burns, and the
  *       crossover-bridge-burning agents must pay for their tournaments out of the same budget rather
- *       than on top of it: their search spend stays at the budget while they evaluate strictly fewer
- *       distinct sequences than EMCTS. That gap IS the efficiency cost under study. Also checks the
- *       per-phase spend trajectory is monotone and lands on the per-turn total.</li>
+ *       than on top of it: their search spend stays at the budget while their MAIN LOOP runs strictly
+ *       fewer iterations than the tournament-free twin with the same operator mix (CrossoverBB vs
+ *       EMCTS; CrossoverCombo vs CrossoverExpansion at the same ratio). That displacement IS the
+ *       efficiency cost under study. Also checks the per-phase spend trajectory is monotone and lands
+ *       on the per-turn total.</li>
  * </ol>
  *
  * <p>If this passes, the v6 design is sound and the full {@link RunExperimentV6} is safe to launch.
@@ -248,9 +250,9 @@ public class NewExperimentSmokeTestV6 {
     /**
      * Sections 6 and 7. Runs one turn per representative config at {@link #BOUNDARY_CU} and checks:
      * initialization is measured but not charged; the search spend reaches the budget; all 20 burns
-     * happen; crossover tournaments are paid out of the budget (so those agents evaluate fewer
-     * distinct sequences than EMCTS); and the per-phase spend trajectory is monotone and consistent
-     * with the per-turn total.
+     * happen; crossover tournaments are paid out of the budget (so those agents run fewer main-loop
+     * iterations than their tournament-free twin); and the per-phase spend trajectory is monotone and
+     * consistent with the per-turn total.
      */
     private static boolean verifyBudgetBoundaries(Scenario sc) {
         Constants.TURN_TIME_MILLIS = 10_000_000L;
@@ -263,8 +265,9 @@ public class NewExperimentSmokeTestV6 {
 
         boolean ok = true;
         Map<String, Integer> uniqueByAgent = new LinkedHashMap<>();
-        System.out.printf(Locale.ROOT, "  %-22s %10s %12s %10s %7s %8s%n",
-                "config", "initUnits", "searchUnits", "search/bud", "burns", "uniqSeq");
+        Map<String, Integer> mainLoopItersByAgent = new LinkedHashMap<>();
+        System.out.printf(Locale.ROOT, "  %-22s %10s %12s %10s %7s %8s %8s%n",
+                "config", "initUnits", "searchUnits", "search/bud", "burns", "uniqSeq", "iters");
 
         for (Object[] c : configs) {
             String name = (String) c[0];
@@ -288,10 +291,15 @@ public class NewExperimentSmokeTestV6 {
             List<BridgeBurnEventData> burns = a.getBridgeBurnDataLog();
             double ratio = t.getComputeUnits() / (double) BOUNDARY_CU;
             uniqueByAgent.put(name, t.getUniqueSequences());
+            // Main-loop iterations = mutation + crossover-expansion events. Tournament crossovers are
+            // deliberately NOT in these counters, which is what makes the 7d displacement check work.
+            core.data.dto.OperatorTelemetryData ot = a.getOperatorTelemetry();
+            int mainLoopIters = (ot == null) ? -1 : ot.mutEvents + ot.xoEvents;
+            mainLoopItersByAgent.put(name, mainLoopIters);
 
-            System.out.printf(Locale.ROOT, "  %-22s %10.0f %12.0f %10.2f %7d %8d%n",
+            System.out.printf(Locale.ROOT, "  %-22s %10.0f %12.0f %10.2f %7d %8d %8d%n",
                     name, t.getInitComputeUnits(), t.getComputeUnits(), ratio,
-                    burns == null ? 0 : burns.size(), t.getUniqueSequences());
+                    burns == null ? 0 : burns.size(), t.getUniqueSequences(), mainLoopIters);
 
             // 6a. Initialization happened and was measured.
             if (!(t.getInitComputeUnits() > 0) || t.getInitFmCalls() <= 0) {
@@ -338,15 +346,23 @@ public class NewExperimentSmokeTestV6 {
             }
         }
 
-        // 7d. The substantive signature that burns are charged: at an equal budget the
-        // crossover-bridge-burning agents must buy fewer distinct sequences than EMCTS, because their
-        // 20 mandatory tournaments come out of the same pot.
-        Integer emcts = uniqueByAgent.get("EMCTS");
-        for (String name : new String[]{"CrossoverBB", "CrossoverCombo@5"}) {
-            Integer v = uniqueByAgent.get(name);
-            if (emcts != null && v != null) {
-                boolean fewer = v < emcts;
-                System.out.println("  " + name + " uniqueSeq=" + v + " vs EMCTS=" + emcts
+        // 7d. The substantive signature that burns are charged: the 20 mandatory tournaments must
+        // DISPLACE main-loop iterations at an equal budget. Each tournament agent is compared with its
+        // tournament-free twin running the same main-loop operator mix: CrossoverBB (mutation-only
+        // loop) vs EMCTS, and CrossoverCombo vs CrossoverExpansion at the same ratio.
+        //
+        // (The pre-2026-08 form of this check compared UNIQUE SEQUENCES against EMCTS, which encoded
+        // an artifact of the then-buggy chain-shaped selection: its random-walk expansion made nearly
+        // every mutation novel, so fewer iterations implied fewer uniques. The incumbent-based search
+        // legitimately concentrates sampling near the best sequence — duplicates rise, and uniqueness
+        // stops being a proxy for spend. Iteration counts measure the displacement directly.)
+        String[][] twinPairs = {{"CrossoverBB", "EMCTS"}, {"CrossoverCombo@5", "CrossoverExpansion@5"}};
+        for (String[] p : twinPairs) {
+            Integer tourney = mainLoopItersByAgent.get(p[0]);
+            Integer twin = mainLoopItersByAgent.get(p[1]);
+            if (tourney != null && twin != null && tourney >= 0 && twin >= 0) {
+                boolean fewer = tourney < twin;
+                System.out.println("  " + p[0] + " mainLoopIters=" + tourney + " vs " + p[1] + "=" + twin
                         + " -> " + (fewer ? "OK (tournaments charged to the budget)"
                                           : "FAIL (tournaments look free)"));
                 if (!fewer) ok = false;

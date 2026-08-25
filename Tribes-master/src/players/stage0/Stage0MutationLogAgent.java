@@ -142,6 +142,8 @@ public class Stage0MutationLogAgent extends ExperimentalEMCTSAgent {
         newSeq = truncateAtEndTurn(repair(newSeq, clone));
         ExperimentalEMCTSTreeNode newNode = new ExperimentalEMCTSTreeNode(newSeq, node);
         node.addChild(newNode);
+        int nChildren = node.getChildren().size();
+        if (nChildren > maxChildrenOnANode) maxChildrenOnANode = nChildren;
 
         // ---- bookkeeping: assemble the row up to the fields only known after eval() ----
         // Repair keeps the surviving Action OBJECTS, so identity tells us whether the inserted
