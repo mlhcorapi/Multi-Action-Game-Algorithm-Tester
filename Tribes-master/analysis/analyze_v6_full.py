@@ -222,10 +222,13 @@ def b2_op_mix(turn_df):
 def b3_reference_conversion():
     """B3 — the units→seconds conversion for the reference machine, from the C0 calibration.
 
-    This is what lets the paper say "13,400 units is about half a second of thinking on machine X".
-    The agent column is the important one: if units/ms is flat across configs, one shared unit budget
-    is equal thinking time for everyone and the conversion is a single number. If it varies by agent,
-    the shared budget is not equal time and budgets must be calibrated per agent instead.
+    This is what lets the paper say "40,000 units is about a second of thinking on machine X".
+
+    The agent column is the important one, and since the weights became per (config, level) it is a
+    CHECK rather than a design question: a unit is defined as a fixed amount of wall-clock, so
+    units/ms should be flat across configs. Spread here means some config was priced with the wrong
+    weights - stale, measured elsewhere, or its profile missing from the calibration file - and its
+    nominal budget bought it more or less real compute than everyone else's.
     """
     if not CALIB.exists():
         print(f'  B3: no calibration at {CALIB} — run CalibrationRunnerV6 first, skipping'); return
@@ -258,7 +261,15 @@ def b3_reference_conversion():
     print(by_src.round(2).to_string())
     print('\n  repetition stability (CV of SearchUnits; small = the reference machine was steady):')
     print(stab.cv.groupby('TargetMillis').describe()[['mean', 'max']].round(4).to_string())
-    print('\n  per-agent budgets IF the per-agent-calibration route is taken:')
+    flat = (by_cfg.max() / by_cfg.min() - 1) * 100
+    print('\n  FLATNESS across configs per target (the per-config weight check):')
+    for t, v in flat.items():
+        verdict = 'flat' if v < 5 else ('drifting' if v < 15 else 'NOT FLAT - weights suspect')
+        print(f'     {t:>6} ms: {v:5.1f}%   {verdict}')
+    print('  A unit is defined as a fixed amount of wall-clock, so a large spread means a config was')
+    print('  priced with weights that are not its own - see B5 for which weights were in force.')
+
+    print('\n  units spent per config x target (also flat when the currency is right):')
     print(budgets.round(0).to_string())
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.6))
@@ -278,6 +289,80 @@ def b3_reference_conversion():
     axes[1].set_title('Conversion by scenario source (H5 confound check)', fontsize=10)
     fig.suptitle('B3 — reference-machine conversion', fontweight='bold')
     fig.tight_layout(); fig.savefig(FIGS / 'B3_reference_conversion.png'); plt.close(fig)
+
+
+def b5_compute_profiles():
+    """B5 — the per-(config, level) weights that priced this dataset.
+
+    Provenance, and the evidence for why they are per-cell at all. A compute-unit is only defined
+    relative to these numbers, so a dataset without them is not interpretable; and the spread of
+    `AdvanceNanos` within a level is the measurement that made one global weight set untenable.
+    """
+    prof = ROOT / '_calibration' / 'compute_profiles.csv'
+    if not prof.exists():
+        print(f'  B5: no {prof.name} - this tree was produced WITHOUT per-config weight calibration,')
+        print('      so every config was priced with the global weights. Report that as a limitation.')
+        return
+    p = pd.read_csv(prof)
+    p.to_csv(TABLES / 'B5_compute_profiles.csv', index=False)
+
+    print('\n  B5 per-operation cost by profile (ns), and the weights derived from them:')
+    print(p[['Profile', 'AdvanceNanos', 'CopyNanos', 'EvalNanos',
+             'W_ADVANCE', 'W_COPY', 'W_EVAL']].round(4).to_string(index=False))
+
+    spread = p.groupby('BudgetUnits').AdvanceNanos.agg(['min', 'max'])
+    spread['spread_pct'] = (spread['max'] / spread['min'] - 1) * 100
+    print('\n  per-advance cost spread WITHIN a level (why the weights are per-config):')
+    print(spread.round(1).to_string())
+
+    if 'MsPerKiloUnitOld' in p.columns:
+        old = p.groupby('BudgetUnits').MsPerKiloUnitOld.agg(['min', 'max'])
+        old['unfairness_pct'] = (old['max'] / old['min'] - 1) * 100
+        print('\n  what 1,000 nominal units really bought under the OLD single weight set (ms):')
+        print(old.round(3).to_string())
+        print(f"  under the per-config weights it is {p.MsPerKiloUnitNew.iloc[0]:.3f} ms for every "
+              'cell by construction - that constancy is the fix.')
+
+    bad = p[p.Status != 'ok'] if 'Status' in p.columns else p.iloc[0:0]
+    if len(bad):
+        print(f'\n  WARNING: {len(bad)} cell(s) failed their calibration checks:')
+        print(bad[['Profile', 'Status']].to_string(index=False))
+
+
+def b6_realized_time_per_unit(turn_df):
+    """B6 — did equal unit budgets actually cost equal wall-clock in the run itself?
+
+    B5 is what the calibration measured; this is what the experiment then did. `PlanMillis` minus
+    `InitMillis` is the search time of a turn and `SearchUnits` is what it was charged, so their ratio
+    is the realized price of a unit. With per-config weights it should be near-constant across configs
+    within a level.
+
+    Read it as corroboration, not as proof: the isolation phase runs ~90 turns at once, so PlanMillis
+    carries whatever contention and clock behaviour the machine had at that moment, and a leaf that
+    happened to run during a throttled stretch looks dear. C0 (B3) is the clean measurement, because it
+    is single-threaded on a quiesced machine; this one has the virtue of being measured on the actual
+    dataset.
+    """
+    need = {'PlanMillis', 'InitMillis', 'SearchUnits'}
+    if not need.issubset(turn_df.columns):
+        print('  B6: no wall-clock columns in this tree, skipping'); return
+    t = turn_df.copy()
+    t['SearchMillis'] = (t.PlanMillis - t.InitMillis).clip(lower=1)
+    t['MsPerKiloUnit'] = 1000.0 * t.SearchMillis / t.SearchUnits.clip(lower=1)
+    g = (t.groupby(['ThinkingMs', 'Config']).MsPerKiloUnit
+          .agg(['median', 'mean', 'count']).reset_index())
+    g.round(4).to_csv(TABLES / 'B6_realized_ms_per_unit.csv', index=False)
+
+    piv = g.pivot(index='Config', columns='ThinkingMs', values='median')
+    print('\n  B6 realized ms per 1,000 SEARCH units (median), by config x budget level:')
+    print(piv.reindex([c for c in v5.ORDER if c in piv.index]).round(3).to_string())
+    spread = (piv.max() / piv.min() - 1) * 100
+    print('\n  spread across configs within a level:')
+    for lvl, v in spread.items():
+        verdict = 'consistent' if v < 15 else 'wide - check B5 and the governor/throttle log'
+        print(f'     {lvl:>8} cu: {v:5.1f}%   {verdict}')
+    print('  (Multi-threaded wall-clock, so treat this as corroboration of B3 rather than a')
+    print('   measurement in its own right.)')
 
 
 def b4_init_cost(turn_df, portfolio):
@@ -366,6 +451,8 @@ def main():
     print('\nB2: operation mix');           b2_op_mix(turn_df)
     print('\nB3: reference conversion');    b3_reference_conversion()
     print('\nB4: init cost (excluded)');    b4_init_cost(turn_df, portfolio)
+    print('\nB5: compute-unit weight profiles'); b5_compute_profiles()
+    print('\nB6: realized time per unit');    b6_realized_time_per_unit(turn_df)
 
     print(f'\nDone. tables -> {TABLES}/  figures -> {FIGS}/')
 

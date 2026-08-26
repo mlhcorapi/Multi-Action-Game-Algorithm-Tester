@@ -288,13 +288,23 @@ The mechanism behind that is the cumulative per-phase ceiling: each phase runs u
 reaches `(phase+1) × budget / depth`, so whatever a crossover tournament spends is absorbed by the next
 phase doing fewer iterations. Overshoot is bounded by one iteration, not by one tournament.
 
-### Fair — yes, to about a percentage point
+### Fair — because the weights are per configuration and per level
 
-A unit is `advances + 0.16·copies + 0.077·evals`. Those weights are wall-clock ratios of the machine
-`ComputeCalibrate` last ran on, so on a different memory subsystem they are somewhat wrong. That only
-becomes *unfairness* to the extent the configurations spend differently — if they all used operations in
-the same proportions, a wrong weight would rescale every budget identically and cancel out of a paired
-comparison.
+A unit is `W_ADVANCE·advances + W_COPY·copies + W_EVAL·evals`, and since v6 those weights are measured
+**per (configuration, budget level)** by `ComputeCalibrateV6` rather than once for the whole pipeline.
+The reason is that the operations do not cost the same everywhere: a crossover agent advances, copies
+and evaluates states its mutation-only counterpart never reaches, and at ten times the budget the tree
+stops fitting in cache. Measured on the dev laptop, per-advance cost varies **13–18% between
+configurations within a single level**.
+
+Every weight is relative to one reference operation (an advance in `EMCTS@40000`), so `W_ADVANCE` is
+1.0 only for the reference and an agent whose advances really take 1.4× as long is charged 1.4 units
+for each. Equal unit budgets are then equal wall-clock, by measurement rather than by assumption.
+
+The numbers below are the *old* single-weight-set analysis, retained because it quantifies what the
+per-config profiles remove. It only became *unfairness* to the extent the configurations spend
+differently — if they all used operations in the same proportions, a wrong weight would rescale every
+budget identically and cancel out of a paired comparison.
 
 They spend nearly alike. Copies per advance range 0.685 (EMCTS) to 0.812 (CrossoverCombo@5); the
 weighted split is ~85% advances / ~10% copies / ~4.5% evals for every config. Re-pricing each config's
@@ -316,12 +326,19 @@ Two honest caveats for the write-up:
 - The bias has a **direction**. Crossover configurations are slightly copy-heavier, so if copies are
   under-priced they receive marginally *more* real compute than EMCTS — the direction that flatters
   crossover. Worth stating explicitly if a crossover advantage of the same order is reported.
-- The fix is cheap: run `ComputeCalibrate` on the R7615 and pass its weights with
-  `-Dcompute.wCopy=… -Dcompute.wEval=…` (no rebuild). Do it **before** C0, since changing the weights
-  changes what a unit is, and C0 re-derives the budget levels in those units.
+- The fix is not a flag any more, it is a measurement: run `ComputeCalibrateV6` on the R7615
+  (notebook §0.5). It writes `compute_weights.properties`, which the whole pipeline auto-loads, with one
+  weight set per (config, level). Do it **before** C0, since changing the weights changes what a unit
+  is, and re-run `BudgetFloorProbe` afterwards because the floor was derived in the old currency.
 
-C0's `units/ms by config` table is the direct empirical version of the same check: flat across configs
-on the run machine means the currency is fair there.
+Two things to check rather than assume:
+
+- **The run banner.** Both runners print `Compute profiles: N/M calibrated`. Anything short of M means
+  some configurations fell back to the global weights — silently, with no error — and their budget is
+  no longer equal compute. `BudgetFairnessProbe` prints which profile priced each configuration.
+- **C0's `units/ms by config` table**, which is the direct empirical version of the same check: flat
+  across configs on the run machine means the currency is fair there. That table is now a pass/fail on
+  work already done rather than an open design question.
 
 ## 5c. Do the tests answer the crossover question?
 
@@ -427,9 +444,10 @@ takes a lock so a second copy cannot start beside it.
 # what will this machine do?
 java -cp "out:lib/*" core.data.exp.ServerProfile
 
-# compute-unit weights for THIS machine — writes a file the whole pipeline auto-loads,
-# and refuses to write it if its own validity checks fail
-java -Xmx16g -cp "out:lib/*" core.data.exp.ComputeCalibrateV6
+# compute-unit weights for THIS machine, per config per budget level (~35 min) — writes a file
+# the whole pipeline auto-loads, and refuses to write it if any cell fails its validity checks.
+# Needs the portfolio: it measures on the positions the experiment actually searches.
+java -Xmx32g -cp "out:lib/*" core.data.exp.ComputeCalibrateV6
 
 # smallest budget at which the crossover operators actually run as specified (see 5d)
 java -Xmx16g -cp "out:lib/*" core.data.exp.BudgetFloorProbe \

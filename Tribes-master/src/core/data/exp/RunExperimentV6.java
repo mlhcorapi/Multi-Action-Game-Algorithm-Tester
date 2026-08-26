@@ -119,6 +119,7 @@ public class RunExperimentV6 {
         // record which ones priced this dataset.
         System.out.println("# ComputeMeter weights: " + core.game.ComputeMeter.weightsSummary()
                 + "   (override with -Dcompute.wCopy / -Dcompute.wEval; see BudgetFairnessProbe)");
+        System.out.println("# " + ComputeCalibrateV6.coverageBanner(cuLevels));
         System.out.println("############################################################");
         ServerProfile machine = ServerProfile.get();
         machine.printBanner("EXPERIMENT v6");

@@ -1,5 +1,6 @@
 package core.data.exp;
 
+import core.game.ComputeMeter;
 import players.ExperimentalEMCTS.CrossoverBBAgent;
 import players.ExperimentalEMCTS.CrossoverComboAgent;
 import players.ExperimentalEMCTS.CrossoverExpansionAgent;
@@ -233,20 +234,40 @@ public class ExpAgents {
     // Both budget flavours are provided: STOP_COMPUTE for the main run, STOP_TIME + num_timeMillis for
     // the C0 calibration (which needs exactly T ms of search regardless of initialization cost).
 
-    private static ExperimentalEMCTSParams expParamsV6(int ratio, int computeUnits) {
+    /**
+     * Params for one v6 configuration, including its ComputeMeter weight PROFILE.
+     *
+     * <p>{@code keyRatio} is the ratio as it appears in the profile name and is not always
+     * {@code mutationRatio}: CrossoverBB carries a ratio field that its search never reads, so its
+     * profile is {@code CrossoverBB@<units>} rather than {@code CrossoverBB_r5@<units>}. Getting this
+     * wrong would not fail loudly - the agent would simply fall back to the global weights - so the
+     * key is built in one place from {@link ComputeMeter#profileKey}.
+     */
+    private static ExperimentalEMCTSParams expParamsV6(String config, int keyRatio, int mutationRatio,
+                                                       int computeUnits) {
         ExperimentalEMCTSParams p = new ExperimentalEMCTSParams();
         p.stop_type = p.STOP_COMPUTE;
         p.num_computeUnits = computeUnits;
         p.heuristic_method = p.SIMPLE_HEURISTIC;
         p.depth = DEPTH;
-        p.mutationExpansionRatio = ratio;
+        p.mutationExpansionRatio = mutationRatio;
         p.randomInitialSequence = false;   // greedy 1-ply init (explicit for the reader; false is the default)
+        p.computeProfile = ComputeMeter.profileKey(config, keyRatio, computeUnits);
         return p;
     }
 
-    private static ExperimentalEMCTSParams expParamsV6Time(int ratio, int searchMillis) {
-        ExperimentalEMCTSParams p = expParamsV6(ratio, 0);
+    /**
+     * The STOP_TIME flavour used by the C0 calibration. The budget is a clock, so the weights do not
+     * bound the search here - but they still price the {@code SearchUnits} C0 reports, and C0's whole
+     * question is "how many units per millisecond does this configuration do". It therefore has to
+     * state which profile priced them, which is what {@code profileUnits} is: the budget level whose
+     * weights to use.
+     */
+    private static ExperimentalEMCTSParams expParamsV6Time(String config, int keyRatio, int mutationRatio,
+                                                           int searchMillis, int profileUnits) {
+        ExperimentalEMCTSParams p = expParamsV6(config, keyRatio, mutationRatio, profileUnits);
         p.stop_type = p.STOP_TIME;
+        p.num_computeUnits = 0;
         p.num_timeMillis = searchMillis;
         return p;
     }
@@ -256,36 +277,62 @@ public class ExpAgents {
     }
 
     public static AgentSpec crossoverExpansionV6(int ratio, int computeUnits) {
-        return new AgentSpec("CrossoverExpansion", seed -> new CrossoverExpansionAgent(seed, expParamsV6(ratio, computeUnits)));
+        return new AgentSpec("CrossoverExpansion", seed -> new CrossoverExpansionAgent(
+                seed, expParamsV6("CrossoverExpansion", ratio, ratio, computeUnits)));
     }
 
     public static AgentSpec crossoverBBV6(int computeUnits) {
-        return new AgentSpec("CrossoverBB", seed -> new CrossoverBBAgent(seed, expParamsV6(5, computeUnits)));
+        return new AgentSpec("CrossoverBB", seed -> new CrossoverBBAgent(
+                seed, expParamsV6("CrossoverBB", -1, 5, computeUnits)));
     }
 
     public static AgentSpec crossoverComboV6(int ratio, int computeUnits) {
-        return new AgentSpec("CrossoverCombo", seed -> new CrossoverComboAgent(seed, expParamsV6(ratio, computeUnits)));
+        return new AgentSpec("CrossoverCombo", seed -> new CrossoverComboAgent(
+                seed, expParamsV6("CrossoverCombo", ratio, ratio, computeUnits)));
     }
 
+    /** The budget level whose weights price a STOP_TIME run when the caller does not say. */
+    public static final int DEFAULT_PROFILE_UNITS = RunExperimentV6.DEFAULT_COMPUTE_LEVELS[0];
+
     public static AgentSpec emctsV6Time(int searchMillis) {
+        return emctsV6Time(searchMillis, DEFAULT_PROFILE_UNITS);
+    }
+
+    public static AgentSpec emctsV6Time(int searchMillis, int profileUnits) {
         return new AgentSpec("EMCTS", seed -> {
-            EMCTSParams p = emctsParamsV6(0);
+            EMCTSParams p = emctsParamsV6(profileUnits);
             p.stop_type = p.STOP_TIME;
+            p.num_computeUnits = 0;
             p.num_timeMillis = searchMillis;
             return new EMCTSAgent(seed, p);
         });
     }
 
     public static AgentSpec crossoverExpansionV6Time(int ratio, int searchMillis) {
-        return new AgentSpec("CrossoverExpansion", seed -> new CrossoverExpansionAgent(seed, expParamsV6Time(ratio, searchMillis)));
+        return crossoverExpansionV6Time(ratio, searchMillis, DEFAULT_PROFILE_UNITS);
+    }
+
+    public static AgentSpec crossoverExpansionV6Time(int ratio, int searchMillis, int profileUnits) {
+        return new AgentSpec("CrossoverExpansion", seed -> new CrossoverExpansionAgent(
+                seed, expParamsV6Time("CrossoverExpansion", ratio, ratio, searchMillis, profileUnits)));
     }
 
     public static AgentSpec crossoverBBV6Time(int searchMillis) {
-        return new AgentSpec("CrossoverBB", seed -> new CrossoverBBAgent(seed, expParamsV6Time(5, searchMillis)));
+        return crossoverBBV6Time(searchMillis, DEFAULT_PROFILE_UNITS);
+    }
+
+    public static AgentSpec crossoverBBV6Time(int searchMillis, int profileUnits) {
+        return new AgentSpec("CrossoverBB", seed -> new CrossoverBBAgent(
+                seed, expParamsV6Time("CrossoverBB", -1, 5, searchMillis, profileUnits)));
     }
 
     public static AgentSpec crossoverComboV6Time(int ratio, int searchMillis) {
-        return new AgentSpec("CrossoverCombo", seed -> new CrossoverComboAgent(seed, expParamsV6Time(ratio, searchMillis)));
+        return crossoverComboV6Time(ratio, searchMillis, DEFAULT_PROFILE_UNITS);
+    }
+
+    public static AgentSpec crossoverComboV6Time(int ratio, int searchMillis, int profileUnits) {
+        return new AgentSpec("CrossoverCombo", seed -> new CrossoverComboAgent(
+                seed, expParamsV6Time("CrossoverCombo", ratio, ratio, searchMillis, profileUnits)));
     }
 
     private static EMCTSParams emctsParamsV6(int computeUnits) {
@@ -295,6 +342,7 @@ public class ExpAgents {
         p.heuristic_method = p.SIMPLE_HEURISTIC;
         p.depth = DEPTH;
         p.randomInitialSequence = false;   // greedy 1-ply init
+        p.computeProfile = ComputeMeter.profileKey("EMCTS", -1, computeUnits);
         return p;
     }
 }

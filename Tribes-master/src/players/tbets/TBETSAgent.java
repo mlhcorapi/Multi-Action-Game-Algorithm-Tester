@@ -283,6 +283,9 @@ public class TBETSAgent extends Agent {
         uniqueSeqKeys.clear();
         resetLearnedStats();
         ComputeMeter.reset();
+        // Restores the global weights if a v6 agent ran on this thread before us (TBETS has no
+        // calibrated profile of its own, so params.computeProfile is null).
+        ComputeMeter.useProfile(params.computeProfile);
 
         heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
         rootState = gs.copy();

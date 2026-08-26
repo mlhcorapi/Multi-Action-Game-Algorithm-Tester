@@ -40,14 +40,21 @@ bridge-burn tournament cost far more than a mutation iteration.
 We budget on **compute units**, a weighted count of the three operations that dominate planning cost:
 
 ```
-units  =  1.0 · advance()   +   0.16 · copy()   +   0.077 · evaluateState()
+units  =  W_ADVANCE · advance()   +   W_COPY · copy()   +   W_EVAL · evaluateState()
 ```
 
 One compute unit is defined as **the mean wall-clock cost of one forward-model call
-(`GameState.advance()`) on the reference machine**. The weights are the measured per-operation cost
-ratios: a full game-state clone costs about 0.16 of a forward-model call, a heuristic evaluation about
-0.077. A compute unit is therefore an *advance-equivalent* — a common currency in which the three
-kinds of work an agent does can be added up.
+(`GameState.advance()`) in the reference cell on the reference machine** — the reference cell being
+plain EMCTS at the smallest budget level. A compute unit is therefore an *advance-equivalent*: a common
+currency in which the three kinds of work an agent does can be added up.
+
+**The weights are measured per (configuration, budget level), not once.** An advance, a copy and an
+eval do not cost the same for every algorithm — a crossover agent operates on states a mutation-only
+agent never reaches — nor at every budget, since a ten-times-larger tree stops fitting in cache.
+Measured spread of per-advance cost between configurations within one level: **13–18%**. Every weight,
+`W_ADVANCE` included, is therefore a measured ratio against the reference operation rather than a
+definition: an agent whose advances take 1.4× the reference time is charged 1.4 units per advance. On
+the dev laptop the resulting sets are roughly `W_ADVANCE` 0.80–1.00, `W_COPY` ≈ 0.20, `W_EVAL` ≈ 0.04.
 
 This matters for reading the budget numbers. A budget of 13,400 units does **not** mean 13,400
 forward-model calls. It means "as much planning work as 13,400 forward-model calls would cost". An
@@ -130,14 +137,20 @@ entirely, which makes the levels closer to proportional in search effort than in
 what remains.
 
 **The condition this rests on.** Fairness across agents holds if and only if the weights correctly
-describe relative operation cost. That is an empirical claim, not an assumption, and it is tested
-directly: the calibration measures realized units per millisecond *for each agent separately*. If that
-figure is flat across agents, one shared unit budget is equal thinking time for all of them and the
-conversion is a single number. If it varies systematically by agent, the shared budget is not equal
-time, and budgets must instead be calibrated per agent — each agent receiving the operation count it
-completes in T seconds on the reference machine, which makes the fairness criterion direct ("equal
-reference-machine thinking time") and removes the weights from the argument entirely. The experiment
-reports which of these applies rather than assuming the first.
+describe relative operation cost *for that agent*. That is an empirical claim, and it was tested rather
+than assumed — and it failed for a single global weight set: per-advance cost varies 13–18% between
+configurations within one budget level, so the same nominal budget bought measurably different amounts
+of real compute.
+
+The weights are therefore calibrated per (configuration, budget level), which makes the fairness
+criterion direct — equal units are equal reference-machine thinking time — while keeping the budget a
+deterministic operation count, so the search stays reproducible. That is both properties at once; the
+alternative of giving each agent the operation count it completes in T seconds achieves the first by
+turning the budget back into a clock, which is what v5 moved away from.
+
+The claim remains falsifiable, and C0 is where it is falsified: it measures realized units per
+millisecond for each agent separately, and with the profiles in force that figure must be flat across
+agents. Spread there means a profile is stale or missing, not that the design is wrong.
 
 ## S6. What is reported
 
@@ -149,6 +162,8 @@ Every run logs realized spend per turn, so budget adherence is a result rather t
 | `B2_op_mix` | advances/copies/evals per turn per agent, and how much more or less real compute an equal-forward-model-call budget would have given each agent |
 | `B3_reference_conversion` | the units→seconds conversion, its variation across agents and scenario sources, and its stability across repetitions |
 | `B4_init_cost` | the excluded initialization cost by source and branching-factor tertile — the size of the bias that excluding it avoids |
+| `B5_compute_profiles` | the per-(config, level) weights that priced this dataset, the per-operation times behind them, and the spread that made one global weight set untenable |
+| `B6_realized_ms_per_unit` | wall-clock actually spent per 1,000 units in the run itself, by agent and level — corroboration that equal budgets cost equal time |
 
 Overshoot is expected and bounded rather than zero. The ceiling is tested at iteration boundaries, so
 a turn can exceed it by up to the cost of the iteration in flight; that cost is larger for a crossover
@@ -163,10 +178,24 @@ dominated by copies and evaluations, but the accounting is not exhaustive. The c
 units-per-millisecond figure is the residual check: if counted units track measured time closely and
 without agent-specific bias, the uncounted remainder is not distorting the comparison.
 
-**Weight provenance.** The weights are measured on one machine from real searches. Per-operation cost
-is not perfectly constant — state-clone cost grows with game-state size, and forward-model cost may
-vary with action type. The calibration reports the conversion split by scenario source and branching
-factor, which is the check that this variation is not aligned with the study's independent variable.
+**Weight provenance.** The weights are measured on one machine from real searches, on the same
+portfolio positions the experiment plans from. Per-operation cost is not perfectly constant even within
+a cell — state-clone cost grows with game-state size, and forward-model cost varies with action type —
+so a cell's weights are a mean over the positions sampled. What the per-(config, level) calibration
+removes is the *systematic* component of that variation: differences aligned with the agent under study
+and with the budget level. Residual within-cell variation remains, and the calibration reports the
+conversion split by scenario source and branching factor, which is the check that it is not aligned
+with the study's independent variable.
+
+**Weights are part of the dataset.** A compute-unit is only defined relative to them, so
+`compute_weights.properties` and `compute_profiles.csv` are provenance, not scratch files: a run
+reproduced against different weights is a different experiment. The run banners print how many profiles
+were in force, and B5 tables them alongside the results they priced.
+
+**The self-referential step.** Per-operation cost depends on how large the tree grew, which depends on
+the weights in force while measuring. The dependence is second-order — it moves tree size, not the
+shape of the work — and re-running the calibration is the cheap check: a converged calibration
+reproduces its own weights within the coefficient of variation it reports.
 
 **Reproducibility.** A deterministic operation count makes the *budget* reproducible. It does not by
 itself make the *run* reproducible: that additionally requires seeded RNG and no incidental

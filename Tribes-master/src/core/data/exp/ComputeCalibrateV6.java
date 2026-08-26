@@ -5,7 +5,6 @@ import core.data.exp.IsolationPhaseRunner.Scenario;
 import core.game.ComputeMeter;
 import core.game.GameState;
 import players.Agent;
-import players.ExperimentalEMCTS.ExperimentalEMCTSAgent;
 import utils.ElapsedCpuTimer;
 
 import java.io.File;
@@ -14,70 +13,99 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Calibrates the {@link ComputeMeter} weights for THIS machine, and says whether the measurement is
- * trustworthy.
+ * Calibrates the {@link ComputeMeter} weights for this machine <b>per configuration and per budget
+ * level</b>, and says whether the measurement is trustworthy.
  *
- * <p>A v6 compute-unit is {@code advances + W_COPY·copies + W_EVAL·evals}. Those weights are the
- * relative wall-clock costs of the three operations, so they are a property of the machine — its
- * memory subsystem, its caches, its JIT — not of the code. The values compiled into
- * {@link ComputeMeter} came from whichever machine last ran a calibration. Running the experiment on a
- * different machine without re-deriving them means the budget is priced in someone else's currency.
+ * <h2>Why the weights cannot be one global set</h2>
  *
- * <p><b>How this differs from {@link ComputeCalibrate}.</b> The original plays three full games once
- * and prints numbers for a human to copy into source. That is fine as a one-off but it is neither
- * bounded in time, nor repeated, nor checkable, nor applied. This version:
+ * <p>A compute-unit is {@code W_ADVANCE*advances + W_COPY*copies + W_EVAL*evals}, and those weights are
+ * the relative wall-clock costs of the three operations. The original v6 calibration measured them
+ * once, on one configuration at one budget, and applied the result to all twelve configurations at all
+ * three levels. That is only correct if an advance, a copy and an eval cost the same everywhere, and
+ * they measurably do not:
+ *
+ * <ul>
+ *   <li><b>Across configurations.</b> A crossover agent splices two sequences and repairs the result,
+ *       so the states it advances and evaluates are not the states a mutation-only agent reaches. The
+ *       operations have the same names and different costs.</li>
+ *   <li><b>Across budget levels.</b> At ten times the budget the tree is an order of magnitude larger
+ *       and stops fitting in cache. The v6 full-games plan measured the 400,000-unit level at
+ *       <b>26.7x</b> the wall-clock of the 40,000-unit level rather than 10x - a fact about per-op
+ *       cost, recorded there as a curiosity and priced here.</li>
+ * </ul>
+ *
+ * <p>Under one global weight set, a nominal budget of N units therefore buys a different amount of
+ * real compute for each agent and at each level, which is the exact confound the budget exists to
+ * remove. This class measures every {@code (config, level)} cell and writes a weight set for each.
+ *
+ * <h2>What a unit means afterwards</h2>
+ *
+ * <p>Every weight is expressed relative to ONE operation: an advance in the reference cell, EMCTS at
+ * the smallest budget level. So {@code W_ADVANCE} is 1.0 only for the reference; a configuration whose
+ * advances genuinely take 1.4x as long is charged 1.4 units for each of them. Consequences:
+ *
  * <ol>
- *   <li>measures on <b>portfolio scenarios</b>, one turn at a time, so the cost is predictable;</li>
- *   <li><b>warms up and then repeats</b>, so it can report how much the weights move between
- *       repetitions — the difference between a measurement and a single sample;</li>
- *   <li><b>checks its own validity</b> and prints a PASS/FAIL verdict: enough operations of each kind
- *       to divide by, repetition spread inside tolerance, and a machine that was actually idle;</li>
- *   <li><b>writes the weights to a file that the pipeline loads automatically</b>, so applying them is
- *       not a manual step that can be forgotten.</li>
+ *   <li>an equal unit budget is equal wall-clock across configurations - the fairness property the
+ *       budget was introduced for, now true rather than assumed;</li>
+ *   <li>the budget levels become proportional in time: 400,000 units costs ~10x 40,000 units instead
+ *       of 26.7x, because the extra per-op cost at that level is now charged rather than absorbed;</li>
+ *   <li>a unit has a stated wall-clock value on the reference machine, written into the file.</li>
  * </ol>
  *
- * <p><b>Why it must be single-threaded on an idle machine.</b> This is a timing measurement, and it
- * accumulates into process-wide counters ({@code ExperimentalEMCTSAgent.FM_NANOS}) that are not
- * thread-safe. Another load on the machine inflates the per-operation times unevenly — copies and
- * evals are memory-bound and suffer most from a busy machine, advances least — which is precisely the
- * ratio being measured. The verdict below fails if the load average says the machine was busy.
+ * <h2>Method</h2>
  *
- * <p><b>Applying the result.</b> The weights are written to
- * {@code <outDir>/compute_weights.properties} and {@link ComputeMeter} reads that file on startup, so
- * every later job in the pipeline is priced in this machine's units with no further action. An
- * explicit {@code -Dcompute.wCopy=… -Dcompute.wEval=…} still overrides it, and deleting the file
- * restores the compiled defaults.
+ * <ol>
+ *   <li>measures on <b>portfolio scenarios</b>, one turn at a time, with the <b>same scenarios and the
+ *       same seeds for every cell</b>, so cells differ by configuration and budget and by nothing
+ *       else;</li>
+ *   <li><b>warms up and then repeats</b>, and reports how far each per-operation time moves between
+ *       repetitions - the difference between a measurement and a single sample;</li>
+ *   <li><b>checks its own validity</b> per cell and prints a PASS/FAIL verdict: enough operations to
+ *       divide by, repetition spread inside tolerance, plausible weights, and an idle machine;</li>
+ *   <li><b>writes weights the pipeline loads automatically</b>, so applying them is not a manual step
+ *       that can be forgotten, plus a CSV of everything measured for the write-up.</li>
+ * </ol>
  *
- * <p><b>Changing the weights changes what a unit IS.</b> Run this BEFORE the C0 calibration and before
- * the production run, and do not change it mid-experiment: every configuration must be priced in the
- * same currency for the comparison to hold. The written file records the timestamp and machine so a
- * dataset can be traced to the weights that priced it.
+ * <p><b>Why it must be single-threaded on an idle machine.</b> This is a timing measurement. Another
+ * load inflates the per-operation times unevenly - copies and evals are memory-bound and suffer most,
+ * advances least - which is precisely the ratio being measured. The verdict fails if the load average
+ * says the machine was busy.
+ *
+ * <p><b>One round is enough.</b> The measurement is mildly self-referential: per-op costs depend on how
+ * big the tree grew, which depends on the weights in force while measuring. The dependence is
+ * second-order (it moves the tree size, not the shape of the work), and re-running this command is the
+ * cheap way to confirm it - a converged calibration reproduces its own weights within the CV it
+ * reports.
+ *
+ * <p><b>Changing the weights changes what a unit IS.</b> Run this BEFORE C0 and before the production
+ * run, and never mid-experiment. Because the floor level was derived in the old currency, re-run
+ * {@link BudgetFloorProbe} afterwards.
  *
  * <p>Usage: {@code java -cp "out:lib/*" core.data.exp.ComputeCalibrateV6 [portfolioDir] [outDir]
- * [reps] [scenariosPerRep] [warmupTurns]}
+ * [reps] [turnsPerRepCsv] [warmupTurns] [levelsCsv]}
  */
 public final class ComputeCalibrateV6 {
 
-    /** Repetitions of the whole measurement; the spread between them is the stability evidence. */
-    public static final int DEFAULT_REPS = 5;
-    /** Scenarios measured per repetition. */
-    public static final int DEFAULT_SCENARIOS = 6;
-    /** Turns run and discarded first, so JIT compilation is not charged to the timings. */
-    public static final int DEFAULT_WARMUP = 12;
-    /** Budget per measured turn. Large enough that per-op timing is not dominated by turn setup. */
-    public static final int MEASURE_CU = 26_800;
+    /** Repetitions of each cell; the spread between them is the stability evidence. */
+    public static final int DEFAULT_REPS = 3;
+    /**
+     * Turns per repetition, one entry per budget level. Fewer at the top level because a single
+     * 400,000-unit turn already contributes hundreds of thousands of timed operations - the sample
+     * size is in the operations, not in the turns - while costing ~19 s of wall-clock.
+     */
+    public static final String DEFAULT_TURNS_PER_REP = "4,4,2";
+    /** Turns run and discarded before the first measurement, so JIT compilation is not timed. */
+    public static final int DEFAULT_WARMUP = 6;
 
-    /** Coefficient of variation across repetitions above which the calibration is not trustworthy. */
+    /** Coefficient of variation across repetitions above which a cell is not trustworthy. */
     public static final double MAX_CV = 0.10;
     /**
-     * Minimum count of each operation before dividing by it means anything.
+     * Minimum count of each operation in a cell before dividing by it means anything.
      *
-     * <p>A sanity floor, not the quality bar. The three operations occur at different rates — evals
-     * run at roughly half the frequency of advances — so a single absolute threshold set high enough
-     * to be a real sample-size requirement for advances silently demands twice the run length for
-     * evals, and fails an otherwise good calibration on the rarest counter. Stability is measured
-     * directly by {@link #MAX_CV} across repetitions, which is the check that actually establishes
-     * whether the numbers are trustworthy; this one only excludes a degenerate near-empty sample.
+     * <p>A sanity floor, not the quality bar. The three operations occur at different rates, so a
+     * single threshold high enough to be a real sample-size requirement for advances would silently
+     * demand a much longer run for the rarest counter. Stability is measured directly by
+     * {@link #MAX_CV}; this only excludes a degenerate near-empty sample.
      */
     public static final long MIN_OPS = 20_000;
     /** 1-minute load average per core above which the machine was not idle enough to time on. */
@@ -85,15 +113,56 @@ public final class ComputeCalibrateV6 {
 
     /** File the pipeline reads its weights from. */
     public static final String WEIGHTS_FILE = "compute_weights.properties";
+    /** Everything measured, one row per cell, for the analysis and the write-up. */
+    public static final String PROFILES_CSV = "compute_profiles.csv";
+
+    /** The configuration that defines the unit: its advance is 1.0 units at the smallest level. */
+    public static final String REFERENCE_CONFIG = "EMCTS";
 
     private ComputeCalibrateV6() {}
+
+    // ------------------------------------------------------------------ one measured cell
+
+    /** One (config, level) cell: what was counted, what it cost, and the weights that follow. */
+    private static final class Cell {
+        final String config;
+        final int ratio;            // -1 for the configurations without one
+        final int units;            // budget level
+        final String profile;
+        long adv, cop, ev;          // total operations measured
+        final List<double[]> perRep = new ArrayList<>();   // {tAdv, tCopy, tEval} ns per rep
+        double tAdv, tCopy, tEval;  // means across reps
+        double cvAdv, cvCopy, cvEval;
+        double wAdvance, wCopy, wEval;
+        final List<String> failures = new ArrayList<>();
+
+        Cell(String config, int ratio, int units) {
+            this.config = config; this.ratio = ratio; this.units = units;
+            this.profile = ComputeMeter.profileKey(config, ratio, units);
+        }
+
+        AgentSpec spec() {
+            switch (config) {
+                case "EMCTS":              return ExpAgents.emctsV6(units);
+                case "CrossoverBB":        return ExpAgents.crossoverBBV6(units);
+                case "CrossoverExpansion": return ExpAgents.crossoverExpansionV6(ratio, units);
+                case "CrossoverCombo":     return ExpAgents.crossoverComboV6(ratio, units);
+                default: throw new IllegalArgumentException("unknown config " + config);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ main
 
     public static void main(String[] args) throws Exception {
         String portfolioDir = args.length > 0 ? args[0] : RunExperimentV6.BASE + "/_portfolio";
         String outDir       = args.length > 1 ? args[1] : RunExperimentV6.BASE + "/_calibration";
         int reps            = args.length > 2 ? Integer.parseInt(args[2].trim()) : DEFAULT_REPS;
-        int scenarios       = args.length > 3 ? Integer.parseInt(args[3].trim()) : DEFAULT_SCENARIOS;
+        int[] turnsPerRep   = GameLengthProbeV6.parseInts(
+                                    args.length > 3 ? args[3] : DEFAULT_TURNS_PER_REP);
         int warmup          = args.length > 4 ? Integer.parseInt(args[4].trim()) : DEFAULT_WARMUP;
+        int[] levels        = args.length > 5 ? GameLengthProbeV6.parseInts(args[5])
+                                              : RunExperimentV6.DEFAULT_COMPUTE_LEVELS;
 
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
@@ -103,17 +172,25 @@ public final class ComputeCalibrateV6 {
 
         File out = new File(outDir);
         ExpCsv.ensureDir(out);
-        File weightsFile = new File(out, WEIGHTS_FILE);
+
+        List<Cell> cells = new ArrayList<>();
+        for (int level : levels) cells.addAll(cellsForLevel(level));
 
         System.out.println("############################################################");
-        System.out.println("# v6 compute-unit weight calibration");
-        System.out.println("# Measures what a copy and an eval cost RELATIVE TO AN ADVANCE on this");
-        System.out.println("# machine, and writes them where the rest of the pipeline will pick them up.");
+        System.out.println("# v6 compute-unit weight calibration (per config, per budget level)");
+        System.out.println("# Measures what an advance, a copy and an eval cost FOR EACH CONFIGURATION");
+        System.out.println("# AT EACH BUDGET LEVEL, relative to one reference operation, and writes them");
+        System.out.println("# where the rest of the pipeline picks them up.");
         System.out.println("############################################################");
         System.out.println("# SINGLE-THREADED and requires an idle machine: this is a timing measurement.");
         System.out.println("# currently in force: " + ComputeMeter.weightsSummary());
-        System.out.println("# reps=" + reps + "  scenarios/rep=" + scenarios + "  warmup=" + warmup
-                + "  budget/turn=" + MEASURE_CU + " cu");
+        System.out.println("# levels=" + java.util.Arrays.toString(levels)
+                + "  configs=" + (cells.size() / Math.max(1, levels.length))
+                + "  cells=" + cells.size());
+        System.out.println("# reps=" + reps + "  turns/rep per level="
+                + java.util.Arrays.toString(turnsPerRep) + "  warmup=" + warmup);
+        System.out.println("# reference cell = " + REFERENCE_CONFIG + "@" + levels[0]
+                + "  (its advance is 1.000 units by definition)");
         ServerProfile.get().printBanner("compute-unit weight calibration");
 
         double loadBefore = loadPerCore();
@@ -123,83 +200,74 @@ public final class ComputeCalibrateV6 {
         }
 
         List<Scenario> portfolio = IsolationPhaseRunner.loadPortfolio(new File(portfolioDir));
-        int n = Math.min(scenarios, portfolio.size());
-        List<Scenario> sample = new ArrayList<>();
-        for (int i = 0; i < n; i++) sample.add(portfolio.get((int) ((long) i * portfolio.size() / n)));
+        if (portfolio.isEmpty()) {
+            System.out.println("\nNo portfolio at " + portfolioDir + " - build it first (notebook 0.5).");
+            System.exit(1);
+        }
 
-        // Warm up: JIT-compile the hot paths on the same code the measurement will time, then discard.
+        // Warm up once on the reference cell: the hot code (GameState.advance/copy, the heuristic) is
+        // shared by every configuration, so JIT state carries across cells. Each cell still discards
+        // its own first turn, which is what touches that agent's own code paths.
         System.out.println("\n[weights] warmup: " + warmup + " turns (discarded)");
-        for (int i = 0; i < warmup; i++) {
-            timeOneTurn(sample.get(i % sample.size()), 9_000 + i, false);
+        Cell warm = new Cell(REFERENCE_CONFIG, -1, levels[0]);
+        for (int i = 0; i < warmup; i++)
+            runTurn(warm, sampleFor(portfolio, i % Math.max(1, maxOf(turnsPerRep))), 9_000 + i);
+
+        long t0 = System.currentTimeMillis();
+        int done = 0;
+        for (Cell c : cells) {
+            int levelIdx = indexOf(levels, c.units);
+            int turns = turnsPerRep[Math.min(levelIdx, turnsPerRep.length - 1)];
+            measure(c, portfolio, reps, turns);
+            done++;
+            System.out.printf(Locale.ROOT,
+                    "  [%2d/%2d] %-26s advance %8.1f ns  copy %8.1f ns  eval %8.1f ns   "
+                    + "(CV %.1f/%.1f/%.1f%%)%s%n",
+                    done, cells.size(), c.profile, c.tAdv, c.tCopy, c.tEval,
+                    100 * c.cvAdv, 100 * c.cvCopy, 100 * c.cvEval,
+                    c.failures.isEmpty() ? "" : "   <-- " + c.failures.get(0));
+        }
+        System.out.println("  measured in " + ((System.currentTimeMillis() - t0) / 60000) + " min");
+
+        // ---- normalise to the reference cell ------------------------------------------------------
+        Cell ref = null;
+        for (Cell c : cells)
+            if (c.config.equals(REFERENCE_CONFIG) && c.units == levels[0]) ref = c;
+        if (ref == null || ref.tAdv <= 0) {
+            System.out.println("\nVERDICT: FAIL - the reference cell " + REFERENCE_CONFIG + "@" + levels[0]
+                    + " produced no usable timing; nothing written.");
+            RunGuard.finished();
+            return;
+        }
+        for (Cell c : cells) {
+            c.wAdvance = c.tAdv / ref.tAdv;
+            c.wCopy    = c.tCopy / ref.tAdv;
+            c.wEval    = c.tEval / ref.tAdv;
         }
 
-        System.out.printf(Locale.ROOT, "%n  %4s %14s %14s %14s %12s %12s%n",
-                "rep", "advance(ns)", "copy(ns)", "eval(ns)", "W_COPY", "W_EVAL");
-        List<double[]> perRep = new ArrayList<>();   // [tAdv, tCopy, tEval, wCopy, wEval]
-        long totalAdv = 0, totalCop = 0, totalEv = 0;
-
-        for (int rep = 0; rep < reps; rep++) {
-            ExperimentalEMCTSAgent.FM_NANOS = 0;
-            ComputeMeter.PROFILE = true;
-            ExperimentalEMCTSAgent.PROFILE_FM = true;
-            ComputeMeter.reset();
-            ComputeMeter.resetNanos();
-
-            for (int i = 0; i < sample.size(); i++) {
-                timeOneTurn(sample.get(i), 4_000 + rep * 1_000 + i, true);
-            }
-
-            ComputeMeter.PROFILE = false;
-            ExperimentalEMCTSAgent.PROFILE_FM = false;
-
-            long adv = ComputeMeter.advances(), cop = ComputeMeter.copies(), ev = ComputeMeter.evals();
-            totalAdv += adv; totalCop += cop; totalEv += ev;
-            double tAdv = adv > 0 ? ExperimentalEMCTSAgent.FM_NANOS / (double) adv : 0;
-            double tCopy = cop > 0 ? ComputeMeter.copyNanos() / (double) cop : 0;
-            double tEval = ev > 0 ? ComputeMeter.evalNanos() / (double) ev : 0;
-            double wCopy = tAdv > 0 ? tCopy / tAdv : 0;
-            double wEval = tAdv > 0 ? tEval / tAdv : 0;
-            perRep.add(new double[]{tAdv, tCopy, tEval, wCopy, wEval});
-            System.out.printf(Locale.ROOT, "  %4d %14.1f %14.1f %14.1f %12.4f %12.4f%n",
-                    rep + 1, tAdv, tCopy, tEval, wCopy, wEval);
-        }
-
-        double[] wCopyAll = column(perRep, 3), wEvalAll = column(perRep, 4);
-        double wCopy = mean(wCopyAll), wEval = mean(wEvalAll);
-        double cvCopy = cv(wCopyAll), cvEval = cv(wEvalAll);
-        double tAdvMean = mean(column(perRep, 0));
-        double loadAfter = loadPerCore();
-
-        System.out.println("\n=== RESULT ===");
-        System.out.printf(Locale.ROOT, "  W_ADVANCE = 1.0 (by definition)%n");
-        System.out.printf(Locale.ROOT, "  W_COPY    = %.4f   (CV across reps %.1f%%)%n", wCopy, 100 * cvCopy);
-        System.out.printf(Locale.ROOT, "  W_EVAL    = %.4f   (CV across reps %.1f%%)%n", wEval, 100 * cvEval);
-        System.out.printf(Locale.ROOT, "  one compute-unit = one advance = %.1f ns on this machine%n", tAdvMean);
-        System.out.printf(Locale.ROOT, "  compiled default was W_COPY=%.4f W_EVAL=%.4f -> %s%n",
-                0.16, 0.077, describeShift(wCopy, wEval));
+        report(cells, levels, ref);
 
         // ---- validity ----------------------------------------------------------------------------
         List<String> failures = new ArrayList<>();
         List<String> passes = new ArrayList<>();
-        check(totalAdv >= MIN_OPS, "sample size: " + totalAdv + " advances (>= " + MIN_OPS + ")",
-                "only " + totalAdv + " advances measured, need >= " + MIN_OPS, passes, failures);
-        check(totalCop >= MIN_OPS, "sample size: " + totalCop + " copies",
-                "only " + totalCop + " copies measured, need >= " + MIN_OPS, passes, failures);
-        check(totalEv >= MIN_OPS, "sample size: " + totalEv + " evals",
-                "only " + totalEv + " evals measured, need >= " + MIN_OPS, passes, failures);
-        check(cvCopy <= MAX_CV, String.format(Locale.ROOT, "W_COPY stable across reps (CV %.1f%%)", 100 * cvCopy),
-                String.format(Locale.ROOT, "W_COPY varies %.1f%% between reps (max %.0f%%) - machine not quiet?",
-                        100 * cvCopy, 100 * MAX_CV), passes, failures);
-        check(cvEval <= MAX_CV, String.format(Locale.ROOT, "W_EVAL stable across reps (CV %.1f%%)", 100 * cvEval),
-                String.format(Locale.ROOT, "W_EVAL varies %.1f%% between reps (max %.0f%%) - machine not quiet?",
-                        100 * cvEval, 100 * MAX_CV), passes, failures);
-        check(wCopy > 0 && wCopy < 1.0 && wEval > 0 && wEval < 1.0,
-                "weights are plausible (a copy and an eval each cost less than an advance)",
-                String.format(Locale.ROOT, "implausible weights W_COPY=%.3f W_EVAL=%.3f", wCopy, wEval),
+        int badCells = 0;
+        for (Cell c : cells) if (!c.failures.isEmpty()) badCells++;
+        check(badCells == 0, "every cell measured cleanly (" + cells.size() + " cells)",
+                badCells + " of " + cells.size() + " cells failed their own checks (listed above)",
                 passes, failures);
+        boolean plausible = true;
+        for (Cell c : cells)
+            if (!(c.wAdvance > 0 && c.wAdvance < 100 && c.wCopy > 0 && c.wCopy < 100
+                    && c.wEval > 0 && c.wEval < 100)) plausible = false;
+        check(plausible, "weights are plausible in every cell",
+                "at least one cell produced an implausible weight - a broken or mis-attributed timer",
+                passes, failures);
+
+        double loadAfter = loadPerCore();
         if (loadAfter >= 0) {
             check(loadAfter <= MAX_LOAD_PER_CORE + 1.0 / Math.max(1, ServerProfile.get().logicalCpus()),
-                    String.format(Locale.ROOT, "machine was idle (load %.2f per core, this job included)", loadAfter),
+                    String.format(Locale.ROOT, "machine was idle (load %.2f per core, this job included)",
+                            loadAfter),
                     String.format(Locale.ROOT, "load average %.2f per core - something else was running; "
                             + "timings are inflated unevenly", loadAfter), passes, failures);
         } else {
@@ -210,26 +278,127 @@ public final class ComputeCalibrateV6 {
         for (String s : passes) System.out.println("  [ok]   " + s);
         for (String s : failures) System.out.println("  [FAIL] " + s);
 
+        File weightsFile = new File(out, WEIGHTS_FILE);
+        File profilesCsv = new File(out, PROFILES_CSV);
         if (failures.isEmpty()) {
-            writeWeights(weightsFile, wCopy, wEval, tAdvMean, cvCopy, cvEval, reps, sample.size());
+            writeWeights(weightsFile, cells, ref, reps, levels);
+            writeCsv(profilesCsv, cells, ref);
             System.out.println("\n  VERDICT: PASS - calibration is trustworthy.");
-            System.out.println("  Written to " + weightsFile.getPath() + " and picked up automatically by");
-            System.out.println("  every later v6 job. Re-run the smoke test to see the new weights in force.");
-            System.out.println("  NOTE: a compute-unit now means something slightly different, so the budget");
-            System.out.println("        levels must be re-derived (C0 / BudgetFloorProbe) before the real run.");
+            System.out.println("  Weights  -> " + weightsFile.getPath() + "  ("
+                    + cells.size() + " profiles; loaded automatically by every later v6 job)");
+            System.out.println("  Measured -> " + profilesCsv.getPath());
+            System.out.println("  NOTE: a compute-unit now means something different, so the budget levels");
+            System.out.println("        must be re-derived (BudgetFloorProbe) before the real run, and C0");
+            System.out.println("        should now show units/ms FLAT across configurations - that is the");
+            System.out.println("        check that this calibration did its job.");
         } else {
+            writeCsv(profilesCsv, cells, ref);      // keep the measurements even when they are rejected
             System.out.println("\n  VERDICT: FAIL - weights NOT written; the pipeline keeps its current ones.");
+            System.out.println("  The measurements are in " + profilesCsv.getPath() + " for inspection.");
             System.out.println("  Fix the failures above and re-run. The usual cause is other load on the");
             System.out.println("  machine: stop it and try again.");
         }
         RunGuard.finished();
     }
 
-    // ---------------------------------------------------------------------------------------------
+    // ------------------------------------------------------------------ measuring
 
-    /** Plans one turn on the calling thread (the profiling counters are thread-local / process-wide). */
-    private static void timeOneTurn(Scenario sc, long seed, boolean measured) {
-        Agent a = ExpAgents.crossoverComboV6(5, MEASURE_CU).create(seed);
+    /**
+     * Every profile the v6 pipeline expects to find calibrated at these budget levels.
+     *
+     * <p>Used by the run banners: a run that starts with no profiles is not wrong, but every
+     * configuration silently falls back to the global weights and the budget stops being equal
+     * compute - so it has to be visible at the top of the log rather than inferred afterwards.
+     */
+    public static List<String> expectedProfiles(int[] levels) {
+        List<String> out = new ArrayList<>();
+        for (int level : levels) for (Cell c : cellsForLevel(level)) out.add(c.profile);
+        return out;
+    }
+
+    /** One banner line: how many of the expected profiles this JVM actually loaded. */
+    public static String coverageBanner(int[] levels) {
+        List<String> want = expectedProfiles(levels);
+        int have = 0;
+        for (String p : want) if (ComputeMeter.hasProfile(p)) have++;
+        if (have == want.size())
+            return "Compute profiles: " + have + "/" + want.size()
+                    + " calibrated (per-config, per-level weights in force)";
+        if (have == 0)
+            return "Compute profiles: NONE of " + want.size() + " calibrated -- every config falls back"
+                    + " to the global weights, so the budget is NOT equal compute across configs."
+                    + " Run ComputeCalibrateV6.";
+        return "Compute profiles: only " + have + "/" + want.size() + " calibrated -- the rest fall back"
+                + " to the global weights. Re-run ComputeCalibrateV6 for the missing levels.";
+    }
+
+    /** The 12 isolation-phase configurations at one budget level, in the canonical order. */
+    private static List<Cell> cellsForLevel(int units) {
+        List<Cell> out = new ArrayList<>();
+        out.add(new Cell("EMCTS", -1, units));
+        out.add(new Cell("CrossoverBB", -1, units));
+        for (int r : IsolationPhaseRunnerV6.RATIOS) out.add(new Cell("CrossoverExpansion", r, units));
+        for (int r : IsolationPhaseRunnerV6.RATIOS) out.add(new Cell("CrossoverCombo", r, units));
+        return out;
+    }
+
+    /**
+     * Measures one cell: {@code reps} repetitions of {@code turns} turns each.
+     *
+     * <p>The scenarios and the seeds depend on the repetition and the turn index only, never on the
+     * configuration, so every cell is measured on identical work. Without that, a difference between
+     * two configurations' per-op costs could be a difference between the positions they happened to
+     * draw.
+     */
+    private static void measure(Cell c, List<Scenario> portfolio, int reps, int turns) {
+        // One discarded turn so this agent's own code paths are compiled before anything is timed.
+        runTurn(c, sampleFor(portfolio, 0), 9_500);
+
+        for (int rep = 0; rep < reps; rep++) {
+            ComputeMeter.reset();
+            ComputeMeter.resetNanos();
+            ComputeMeter.PROFILE = true;
+            for (int i = 0; i < turns; i++) {
+                Scenario sc = sampleFor(portfolio, rep * turns + i);
+                runTurn(c, sc, IsolationPhaseRunnerV6.visitSeed(sc.id, rep));
+            }
+            ComputeMeter.PROFILE = false;
+
+            long adv = ComputeMeter.advances(), cop = ComputeMeter.copies(), ev = ComputeMeter.evals();
+            c.adv += adv; c.cop += cop; c.ev += ev;
+            c.perRep.add(new double[]{
+                    adv > 0 ? ComputeMeter.advanceNanos() / (double) adv : 0,
+                    cop > 0 ? ComputeMeter.copyNanos() / (double) cop : 0,
+                    ev > 0 ? ComputeMeter.evalNanos() / (double) ev : 0});
+        }
+
+        double[] a = column(c.perRep, 0), cp = column(c.perRep, 1), e = column(c.perRep, 2);
+        c.tAdv = mean(a);   c.cvAdv = cv(a);
+        c.tCopy = mean(cp); c.cvCopy = cv(cp);
+        c.tEval = mean(e);  c.cvEval = cv(e);
+
+        if (c.adv < MIN_OPS) c.failures.add("only " + c.adv + " advances (need " + MIN_OPS + ")");
+        if (c.cop < MIN_OPS) c.failures.add("only " + c.cop + " copies (need " + MIN_OPS + ")");
+        if (c.ev  < MIN_OPS) c.failures.add("only " + c.ev + " evals (need " + MIN_OPS + ")");
+        if (c.cvAdv > MAX_CV) c.failures.add(String.format(Locale.ROOT,
+                "advance time varies %.1f%% between reps", 100 * c.cvAdv));
+        if (c.cvCopy > MAX_CV) c.failures.add(String.format(Locale.ROOT,
+                "copy time varies %.1f%% between reps", 100 * c.cvCopy));
+        if (c.cvEval > MAX_CV) c.failures.add(String.format(Locale.ROOT,
+                "eval time varies %.1f%% between reps", 100 * c.cvEval));
+    }
+
+    /** Deterministic scenario pick: index i spread across the portfolio, identical for every cell. */
+    private static Scenario sampleFor(List<Scenario> portfolio, int i) {
+        int n = portfolio.size();
+        // A stride coprime with most portfolio sizes, so consecutive i land far apart and the sample
+        // covers both sources rather than the first few scenarios.
+        return portfolio.get((int) (((long) i * 37) % n));
+    }
+
+    /** Plans one turn on the calling thread. */
+    private static void runTurn(Cell c, Scenario sc, long seed) {
+        Agent a = c.spec().create(seed);
         ArrayList<Integer> ids = new ArrayList<>();
         for (int k = 0; k < sc.state.getTribes().length; k++) ids.add(k);
         a.setPlayerIDs(sc.state.getActiveTribeID(), ids);
@@ -240,28 +409,144 @@ public final class ComputeCalibrateV6 {
         try { a.act(gs, ect); } catch (Throwable ignore) { }
     }
 
-    private static void writeWeights(File f, double wCopy, double wEval, double tAdvNs,
-                                     double cvCopy, double cvEval, int reps, int scenarios) {
-        String body = "# v6 ComputeMeter weights, measured on this machine.\n"
-                + "# Loaded automatically by core.game.ComputeMeter. Delete this file to fall back to\n"
-                + "# the compiled defaults; -Dcompute.wCopy / -Dcompute.wEval still override it.\n"
-                + "# A compute-unit = one advance = " + String.format(Locale.ROOT, "%.1f", tAdvNs) + " ns here.\n"
-                + "# machine=" + ServerProfile.get().cpuModel().replace('\n', ' ') + "\n"
-                + "# cores=" + ServerProfile.get().physicalCores() + " physical / "
-                + ServerProfile.get().logicalCpus() + " logical\n"
-                + "# java=" + System.getProperty("java.version") + "\n"
-                + "# measured=" + new java.util.Date() + "\n"
-                + "# reps=" + reps + " scenarios/rep=" + scenarios
-                + String.format(Locale.ROOT, " cvCopy=%.4f cvEval=%.4f%n", cvCopy, cvEval)
-                + String.format(Locale.ROOT, "compute.wCopy=%.6f%n", wCopy)
-                + String.format(Locale.ROOT, "compute.wEval=%.6f%n", wEval);
-        RunGuard.atomicWrite(f, body);
+    // ------------------------------------------------------------------ reporting
+
+    /**
+     * The result, and the evidence that per-cell weights were needed at all: how far apart the
+     * configurations are within a level, and how much wall-clock a single global weight set would have
+     * mis-allocated between them.
+     */
+    private static void report(List<Cell> cells, int[] levels, Cell ref) {
+        System.out.println("\n=== RESULT: weights per profile (relative to one advance in "
+                + ref.profile + " = " + String.format(Locale.ROOT, "%.1f ns", ref.tAdv) + ") ===");
+        System.out.printf(Locale.ROOT, "  %-26s %10s %10s %10s %12s%n",
+                "profile", "W_ADVANCE", "W_COPY", "W_EVAL", "ns/advance");
+        for (Cell c : cells)
+            System.out.printf(Locale.ROOT, "  %-26s %10.4f %10.4f %10.4f %12.1f%n",
+                    c.profile, c.wAdvance, c.wCopy, c.wEval, c.tAdv);
+
+        System.out.println("\n=== DOES AN OPERATION COST THE SAME FOR EVERY CONFIGURATION? ===");
+        System.out.println("  (this is the question the old single-weight calibration assumed the answer to)");
+        System.out.printf(Locale.ROOT, "  %10s %26s %26s %14s%n",
+                "level", "cheapest advance", "dearest advance", "spread");
+        for (int level : levels) {
+            Cell lo = null, hi = null;
+            for (Cell c : cells) {
+                if (c.units != level || c.tAdv <= 0) continue;
+                if (lo == null || c.tAdv < lo.tAdv) lo = c;
+                if (hi == null || c.tAdv > hi.tAdv) hi = c;
+            }
+            if (lo == null) continue;
+            System.out.printf(Locale.ROOT, "  %10d %18s %6.1f %18s %6.1f %13.1f%%%n",
+                    level, lo.config + ratioTag(lo.ratio), lo.tAdv, hi.config + ratioTag(hi.ratio),
+                    hi.tAdv, 100 * (hi.tAdv / lo.tAdv - 1));
+        }
+
+        System.out.println("\n  Same question across levels, for the reference configuration:");
+        for (int level : levels)
+            for (Cell c : cells)
+                if (c.units == level && c.config.equals(REFERENCE_CONFIG) && c.ratio < 0)
+                    System.out.printf(Locale.ROOT,
+                            "    %8d units: %7.1f ns/advance  (%.2fx the floor level)%n",
+                            level, c.tAdv, ref.tAdv > 0 ? c.tAdv / ref.tAdv : 0);
+
+        System.out.println("\n=== WHAT THE OLD GLOBAL WEIGHTS WOULD HAVE MIS-ALLOCATED ===");
+        System.out.println("  Wall-clock a nominal 1,000-unit budget would really have bought, priced with");
+        System.out.println("  one global weight set (advance=1, copy=0.16, eval=0.077) against each cell's");
+        System.out.println("  own realized operation mix. Equal columns = the old scheme was already fair.");
+        System.out.printf(Locale.ROOT, "  %10s %12s %12s %14s%n",
+                "level", "min (ms)", "max (ms)", "unfairness");
+        for (int level : levels) {
+            double lo = Double.MAX_VALUE, hi = 0;
+            String loName = "", hiName = "";
+            for (Cell c : cells) {
+                if (c.units != level || c.adv == 0) continue;
+                double oldUnits = c.adv + 0.16 * c.cop + 0.077 * c.ev;
+                double nanos = c.adv * c.tAdv + c.cop * c.tCopy + c.ev * c.tEval;
+                double msPerKUnit = oldUnits > 0 ? (1000.0 * nanos / oldUnits) / 1e6 : 0;
+                if (msPerKUnit < lo) { lo = msPerKUnit; loName = c.profile; }
+                if (msPerKUnit > hi) { hi = msPerKUnit; hiName = c.profile; }
+            }
+            if (hi > 0)
+                System.out.printf(Locale.ROOT, "  %10d %12.3f %12.3f %13.1f%%   (%s vs %s)%n",
+                        level, lo, hi, 100 * (hi / lo - 1), loName, hiName);
+        }
+        System.out.println("  A large percentage here is the bias the per-profile weights remove: the same");
+        System.out.println("  nominal budget was buying that much more compute for one agent than another.");
     }
 
-    private static String describeShift(double wCopy, double wEval) {
-        double dc = 100 * (wCopy / 0.16 - 1), de = 100 * (wEval / 0.077 - 1);
-        return String.format(Locale.ROOT, "copy %+.0f%%, eval %+.0f%% versus the compiled values", dc, de);
+    private static String ratioTag(int ratio) { return ratio > 0 ? "@" + ratio : ""; }
+
+    // ------------------------------------------------------------------ output
+
+    private static void writeWeights(File f, List<Cell> cells, Cell ref, int reps, int[] levels) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("# v6 ComputeMeter weights, measured on this machine, PER CONFIGURATION PER BUDGET LEVEL.\n");
+        sb.append("# Loaded automatically by core.game.ComputeMeter. Delete this file to fall back to the\n");
+        sb.append("# compiled defaults; -Dcompute.wCopy / -Dcompute.wEval still override the globals.\n");
+        sb.append("#\n");
+        sb.append("# One compute-unit = one advance in ").append(ref.profile).append(" = ")
+          .append(String.format(Locale.ROOT, "%.1f", ref.tAdv)).append(" ns here. Every weight below is\n");
+        sb.append("# relative to THAT, so W_ADVANCE is 1.0 only for the reference cell: an advance that\n");
+        sb.append("# really takes 1.4x as long is charged 1.4 units. Equal unit budgets are therefore\n");
+        sb.append("# equal wall-clock across configurations and proportional across levels.\n");
+        sb.append("#\n");
+        sb.append("# machine=").append(ServerProfile.get().cpuModel().replace('\n', ' ')).append('\n');
+        sb.append("# cores=").append(ServerProfile.get().physicalCores()).append(" physical / ")
+          .append(ServerProfile.get().logicalCpus()).append(" logical\n");
+        sb.append("# java=").append(System.getProperty("java.version")).append('\n');
+        sb.append("# measured=").append(new java.util.Date()).append('\n');
+        sb.append("# reps=").append(reps).append(" levels=")
+          .append(java.util.Arrays.toString(levels)).append('\n');
+        sb.append("compute.reference=").append(ref.profile).append('\n');
+        sb.append(String.format(Locale.ROOT, "compute.referenceAdvanceNanos=%.3f%n", ref.tAdv));
+        sb.append("\n# Global fallback: the reference cell's weights. Used by anything with no profile\n");
+        sb.append("# of its own (other agent families, probes, uncalibrated budgets).\n");
+        sb.append(String.format(Locale.ROOT, "compute.wAdvance=%.6f%n", ref.wAdvance));
+        sb.append(String.format(Locale.ROOT, "compute.wCopy=%.6f%n", ref.wCopy));
+        sb.append(String.format(Locale.ROOT, "compute.wEval=%.6f%n", ref.wEval));
+        sb.append("\n# Per-profile weights. Key: compute.profile.<config>[_r<ratio>]@<budgetUnits>.<op>\n");
+        for (Cell c : cells) {
+            String p = "compute.profile." + c.profile + ".";
+            sb.append(String.format(Locale.ROOT, "%swAdvance=%.6f%n", p, c.wAdvance));
+            sb.append(String.format(Locale.ROOT, "%swCopy=%.6f%n", p, c.wCopy));
+            sb.append(String.format(Locale.ROOT, "%swEval=%.6f%n", p, c.wEval));
+            sb.append(String.format(Locale.ROOT, "%sadvanceNanos=%.3f%n", p, c.tAdv));
+        }
+        RunGuard.atomicWrite(f, sb.toString());
     }
+
+    /**
+     * One row per cell.
+     *
+     * <p>{@code MsPerKiloUnitOld} is what 1,000 nominal units really cost this cell under the OLD
+     * global weights, given its own realized operation mix: the column whose spread across cells is
+     * the unfairness the per-profile weights remove. Under the new weights that same quantity is
+     * {@code 1000 x referenceAdvanceNanos} for every cell by construction - the constancy IS the fix -
+     * so it is reported once as {@code MsPerKiloUnitNew} rather than varying per row.
+     */
+    private static void writeCsv(File f, List<Cell> cells, Cell ref) {
+        StringBuilder sb = new StringBuilder(
+                "Profile,Config,Ratio,BudgetUnits,Advances,Copies,Evals,"
+                + "AdvanceNanos,CopyNanos,EvalNanos,CvAdvance,CvCopy,CvEval,"
+                + "W_ADVANCE,W_COPY,W_EVAL,MsPerKiloUnitNew,MsPerKiloUnitOld,Status\n");
+        for (Cell c : cells) {
+            double oldUnits = c.adv + 0.16 * c.cop + 0.077 * c.ev;
+            double nanos = c.adv * c.tAdv + c.cop * c.tCopy + c.ev * c.tEval;
+            double msPerKiloOld = oldUnits > 0 ? (1000.0 * nanos / oldUnits) / 1e6 : 0;
+            sb.append(String.format(Locale.ROOT,
+                    "%s,%s,%s,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.5f,%.5f,%.5f,%.6f,%.6f,%.6f,%.5f,%.5f,%s%n",
+                    c.profile, c.config, c.ratio > 0 ? String.valueOf(c.ratio) : "NA", c.units,
+                    c.adv, c.cop, c.ev, c.tAdv, c.tCopy, c.tEval,
+                    c.cvAdv, c.cvCopy, c.cvEval, c.wAdvance, c.wCopy, c.wEval,
+                    1000.0 * ref.tAdv / 1e6, msPerKiloOld,
+                    c.failures.isEmpty() ? "ok" : "PROBLEM: " + String.join("; ", c.failures)
+                            .replace(',', ';')));
+        }
+        RunGuard.atomicWrite(f, sb.toString());
+    }
+
+    // ------------------------------------------------------------------ helpers
 
     private static void check(boolean ok, String okMsg, String failMsg,
                               List<String> passes, List<String> failures) {
@@ -278,6 +563,17 @@ public final class ComputeCalibrateV6 {
         } catch (Exception e) {
             return -1;
         }
+    }
+
+    private static int indexOf(int[] arr, int v) {
+        for (int i = 0; i < arr.length; i++) if (arr[i] == v) return i;
+        return 0;
+    }
+
+    private static int maxOf(int[] arr) {
+        int m = 1;
+        for (int v : arr) m = Math.max(m, v);
+        return m;
     }
 
     private static double[] column(List<double[]> rows, int idx) {

@@ -28,9 +28,20 @@ import java.util.Map;
  * time on the reference machine and the resulting operation counts are recorded: advances, state
  * copies, heuristic evals, weighted compute-units, and the greedy-initialization cost separately. From
  * that the analysis derives (a) the units→seconds conversion the paper reports, (b) whether that
- * conversion is agent-invariant — which decides whether v6 uses one shared compute-unit budget or a
- * per-agent budget calibrated to reference-machine time, and (c) whether it is invariant across
- * scenario source and branching factor, which is the H5 confound check.
+ * conversion is agent-invariant, and (c) whether it is invariant across scenario source and branching
+ * factor, which is the H5 confound check.
+ *
+ * <p><b>(b) is now a CHECK, not an open question.</b> {@link ComputeCalibrateV6} measures each
+ * configuration's per-operation costs at each budget level and prices each one with its own weights,
+ * precisely so that a unit means the same wall-clock everywhere. If that worked, {@code SearchUnits /
+ * SearchMillis} is FLAT across the 12 configurations here; if it is not flat, the weights are stale or
+ * were measured on a different machine, and the budget is not equal compute. C0 is where that shows
+ * up, because C0 is the only v6 job that holds time fixed and lets the work vary.
+ *
+ * <p>Units are priced by the profile of ONE budget level, named in the {@code ProfileLevel} column and
+ * settable as the seventh argument (default: the smallest level). A target far from that level's scale
+ * will drift, because per-operation costs grow with tree size - which is the same effect the per-level
+ * profiles exist to price, seen from the other side.
  *
  * <p><b>Why STOP_TIME here and only here.</b> The question C0 asks is literally "what does this agent
  * do in T seconds", so the calibration must be timed. The experiment it configures is not: it runs on a
@@ -50,7 +61,7 @@ import java.util.Map;
  * INSIDE the timed budget.
  *
  * <p>Usage: {@code java -cp "out:lib/*" core.data.exp.CalibrationRunnerV6 [portfolioDir] [outDir]
- * [targetsMsCsv] [perSource] [reps] [warmup]}
+ * [targetsMsCsv] [perSource] [reps] [warmup] [profileUnits]}
  */
 public class CalibrationRunnerV6 {
 
@@ -70,7 +81,7 @@ public class CalibrationRunnerV6 {
     public static final int[] RATIOS = IsolationPhaseRunnerV6.RATIOS;
 
     public static final String HEADER =
-            "TargetMillis,Config,Ratio,ScenarioId,Source,BranchingFactor,Rep,"
+            "TargetMillis,ProfileLevel,Config,Ratio,ScenarioId,Source,BranchingFactor,Rep,"
             + "PlanMillis,InitMillis,SearchMillis,"
             + "InitUnits,InitAdvances,InitCopies,InitEvals,InitFmCalls,"
             + "SearchUnits,SearchAdvances,SearchCopies,SearchEvals,SearchFmCalls,"
@@ -85,6 +96,11 @@ public class CalibrationRunnerV6 {
         int perSource       = args.length > 3 ? Integer.parseInt(args[3].trim()) : DEFAULT_PER_SOURCE;
         int reps            = args.length > 4 ? Integer.parseInt(args[4].trim()) : DEFAULT_REPS;
         int warmup          = args.length > 5 ? Integer.parseInt(args[5].trim()) : DEFAULT_WARMUP;
+        // Which budget level's weight profile prices the units reported here. C0 measures time, so the
+        // profile does not bound its search; it decides what a "unit" in this CSV is worth, and the
+        // whole units/ms flatness check is meaningless without saying which one was used.
+        int profileUnits    = args.length > 6 ? Integer.parseInt(args[6].trim())
+                                              : ExpAgents.DEFAULT_PROFILE_UNITS;
 
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
@@ -108,6 +124,12 @@ public class CalibrationRunnerV6 {
         System.out.println("# v6 C0 — thinking-time calibration   (output=" + csv.getPath() + ")");
         System.out.println("# targets(ms)=" + Arrays.toString(targets) + "  perSource=" + perSource
                 + "  reps=" + reps + "  warmup=" + warmup);
+        System.out.println("# units priced by the " + profileUnits + "cu weight profiles"
+                + (core.game.ComputeMeter.hasProfile(
+                        core.game.ComputeMeter.profileKey("EMCTS", -1, profileUnits))
+                   ? " (calibrated)"
+                   : " (NOT calibrated -- falling back to the global weights; run ComputeCalibrateV6"
+                     + " first or units/ms cannot be read as a fairness check)"));
         System.out.println("# SINGLE-THREADED by design: this machine is the reference machine.");
         System.out.println("# provenance: java=" + System.getProperty("java.version")
                 + "  vm=" + System.getProperty("java.vm.name")
@@ -143,7 +165,7 @@ public class CalibrationRunnerV6 {
             for (int i = 0; i < warmup; i++) {
                 Cfg c = configs.get(i % configs.size());
                 Scenario sc = sample.get(i % sample.size());
-                runOneTurn(c, 250, sc, 9_000 + i);
+                runOneTurn(c, 250, sc, 9_000 + i, profileUnits);
             }
         }
 
@@ -168,10 +190,11 @@ public class CalibrationRunnerV6 {
             for (int rep = 0; rep < reps; rep++) {
                 for (Scenario sc : sample) {
                     for (Cfg cfg : configs) {
-                        Row r = runOneTurn(cfg, target, sc, rep);
+                        Row r = runOneTurn(cfg, target, sc, rep, profileUnits);
                         if (r != null) {
                             rows.add(String.join(",",
-                                    String.valueOf(target), cfg.name, cfg.ratio < 0 ? "NA" : String.valueOf(cfg.ratio),
+                                    String.valueOf(target), String.valueOf(profileUnits),
+                                    cfg.name, cfg.ratio < 0 ? "NA" : String.valueOf(cfg.ratio),
                                     String.valueOf(sc.id), sc.source, String.valueOf(bfById.getOrDefault(sc.id, -1)),
                                     String.valueOf(rep),
                                     String.valueOf(r.planMillis), String.valueOf(r.initMillis),
@@ -219,20 +242,20 @@ public class CalibrationRunnerV6 {
         return cfgs;
     }
 
-    private static AgentSpec specFor(Cfg cfg, int searchMillis) {
+    private static AgentSpec specFor(Cfg cfg, int searchMillis, int profileUnits) {
         switch (cfg.name) {
-            case "EMCTS":              return ExpAgents.emctsV6Time(searchMillis);
-            case "CrossoverBB":        return ExpAgents.crossoverBBV6Time(searchMillis);
-            case "CrossoverExpansion": return ExpAgents.crossoverExpansionV6Time(cfg.ratio, searchMillis);
-            case "CrossoverCombo":     return ExpAgents.crossoverComboV6Time(cfg.ratio, searchMillis);
+            case "EMCTS":              return ExpAgents.emctsV6Time(searchMillis, profileUnits);
+            case "CrossoverBB":        return ExpAgents.crossoverBBV6Time(searchMillis, profileUnits);
+            case "CrossoverExpansion": return ExpAgents.crossoverExpansionV6Time(cfg.ratio, searchMillis, profileUnits);
+            case "CrossoverCombo":     return ExpAgents.crossoverComboV6Time(cfg.ratio, searchMillis, profileUnits);
             default: throw new IllegalArgumentException("unknown config " + cfg.name);
         }
     }
 
     /** Runs ONE search turn and extracts its spend telemetry. Returns null if the turn produced none. */
-    private static Row runOneTurn(Cfg cfg, int searchMillis, Scenario scenario, int rep) {
+    private static Row runOneTurn(Cfg cfg, int searchMillis, Scenario scenario, int rep, int profileUnits) {
         long seed = IsolationPhaseRunnerV6.visitSeed(scenario.id, rep);
-        Agent agent = specFor(cfg, searchMillis).create(seed);
+        Agent agent = specFor(cfg, searchMillis, profileUnits).create(seed);
         GameState gs = scenario.state.copy();
         gs.setRandomGenerator(new java.util.Random(seed));
         int activeTribeId = gs.getActiveTribeID();

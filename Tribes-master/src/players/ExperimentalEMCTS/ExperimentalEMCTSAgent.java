@@ -221,6 +221,10 @@ public class ExperimentalEMCTSAgent extends Agent {
         xoBestGainSum = xoChildVsBestParentSum = xoChildVsMeanParentSum = xoParentSimilaritySum = 0.0;
         bbTournaments = bbPoolSizeSum = bbFullBrackets = 0;
         core.game.ComputeMeter.reset(); // deterministic compute-unit budget (STOP_COMPUTE)
+        // Price this turn with THIS configuration's measured weights. Worker threads are reused across
+        // configurations, so this is set every episode - including to null, which restores the global
+        // weights rather than leaving the previous turn's profile in place.
+        core.game.ComputeMeter.useProfile(params.computeProfile);
         this.heuristic = params.getStateHeuristic(playerID, allPlayerIDs);
 
         old_gs = gs.copy();

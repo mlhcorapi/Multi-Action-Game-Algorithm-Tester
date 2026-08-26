@@ -134,10 +134,166 @@ public class NewExperimentSmokeTestV6 {
         System.out.println("\n==================== 8. Thread-count invariance (1 thread == N threads) ====================");
         boolean threadOk = verifyThreadInvariance(portfolio);
 
+        System.out.println("\n==================== 9. Per-config compute-unit weight profiles ====================");
+        boolean profileOk = verifyComputeProfiles(portfolio.get(0));
+
         boolean allOk = roundTripOk && allValid && sharedInitOk && acrossCuOk && layoutOk && teleOk
-                && budgetOk && threadOk;
+                && budgetOk && threadOk && profileOk;
         System.out.println("\nTotal smoke_v6 time: " + (System.currentTimeMillis() - t0) / 1000.0 + "s");
         System.out.println(allOk ? "PASS: v6 pipeline sound." : "FAIL: see checks above.");
+    }
+
+    /**
+     * Section 9. An advance, a copy and an eval do not cost the same for every configuration or at
+     * every budget level, so each configuration is priced by its own measured weights
+     * ({@link ComputeCalibrateV6}). This checks the machinery that carries those weights from the
+     * calibration file to the search, because every way it can fail is silent: a mistyped profile key,
+     * an agent that never installs its profile, or a profile left behind on a pooled worker thread all
+     * produce a run that looks normal and is priced wrong.
+     *
+     * <p>Four properties, in order of how quietly they would break:
+     *
+     * <ol>
+     *   <li><b>Every configuration asks for the key the calibration writes.</b> Built from
+     *       {@code ComputeMeter.profileKey} on both sides, so this is really a check that the factories
+     *       pass the right config name, ratio and budget - CrossoverBB in particular carries a ratio
+     *       field its search never reads and must NOT appear in its key.</li>
+     *   <li><b>Pricing follows the active weights.</b> A known weight set gives exactly the compute
+     *       units the counts imply.</li>
+     *   <li><b>Profiles do not leak between turns.</b> A worker thread runs many configurations in
+     *       sequence; installing one profile and then planning a turn must leave the thread on the
+     *       turn's own profile, not the previous one.</li>
+     *   <li><b>Coverage, when a calibration exists.</b> If the file is present it must define every
+     *       (config, level) the run will ask for; a partly-calibrated file silently mixes two
+     *       currencies. On an uncalibrated checkout this reports rather than fails - the fallback to
+     *       global weights is legitimate for a smoke test, and is exactly what the run banner warns
+     *       about.</li>
+     * </ol>
+     */
+    private static boolean verifyComputeProfiles(Scenario sc) {
+        boolean ok = true;
+
+        // (1) keys the factories actually install, against the keys the calibrator writes.
+        int[] levels = RunExperimentV6.DEFAULT_COMPUTE_LEVELS;
+        int cu = levels[0];
+        String[][] expect = {
+                {"EMCTS", core.game.ComputeMeter.profileKey("EMCTS", -1, cu)},
+                {"CrossoverBB", core.game.ComputeMeter.profileKey("CrossoverBB", -1, cu)},
+                {"CrossoverExpansion", core.game.ComputeMeter.profileKey("CrossoverExpansion", 5, cu)},
+                {"CrossoverCombo", core.game.ComputeMeter.profileKey("CrossoverCombo", 20, cu)},
+        };
+        String[] got = {
+                profileOf(ExpAgents.emctsV6(cu).create(1)),
+                profileOf(ExpAgents.crossoverBBV6(cu).create(1)),
+                profileOf(ExpAgents.crossoverExpansionV6(5, cu).create(1)),
+                profileOf(ExpAgents.crossoverComboV6(20, cu).create(1)),
+        };
+        for (int i = 0; i < expect.length; i++) {
+            boolean match = expect[i][1].equals(got[i]);
+            System.out.println("  9a " + expect[i][0] + " asks for profile '" + got[i] + "'"
+                    + (match ? "  OK" : "  MISMATCH, expected '" + expect[i][1] + "'"));
+            ok &= match;
+        }
+        boolean bbClean = !got[1].contains("_r");
+        System.out.println("  9a CrossoverBB's key carries no ratio: " + bbClean);
+        ok &= bbClean;
+
+        // (2) the weights in force are the ones that price the units.
+        core.game.ComputeMeter.useProfile(null);
+        core.game.ComputeMeter.reset();
+        double[] w = core.game.ComputeMeter.activeWeights();
+        GameState probe = sc.state.copy();
+        probe.copy();                                   // one counted copy
+        long adv = core.game.ComputeMeter.advances();
+        long cop = core.game.ComputeMeter.copies();
+        long ev = core.game.ComputeMeter.evals();
+        double expectUnits = adv * w[0] + cop * w[1] + ev * w[2];
+        boolean pricingOk = Math.abs(core.game.ComputeMeter.computeUnits() - expectUnits) < 1e-9;
+        System.out.println("  9b units follow the active weights (" + adv + " adv, " + cop + " copy, "
+                + ev + " eval -> " + String.format(java.util.Locale.ROOT, "%.3f", expectUnits)
+                + " units): " + pricingOk);
+        ok &= pricingOk;
+
+        // (3) a turn re-installs its own profile over whatever the thread was left on.
+        core.game.ComputeMeter.useProfile("CrossoverCombo_r50@" + levels[levels.length - 1]);
+        // At a CALIBRATED level on purpose: the assertion is then that the thread ends on this turn's
+        // own profile rather than merely off the leaked one.
+        Agent a = ExpAgents.emctsV6(cu).create(7);
+        java.util.ArrayList<Integer> ids = new java.util.ArrayList<>();
+        for (int k = 0; k < sc.state.getTribes().length; k++) ids.add(k);
+        a.setPlayerIDs(sc.state.getActiveTribeID(), ids);
+        GameState gs = sc.state.copy();
+        gs.setRandomGenerator(new java.util.Random(7));
+        ElapsedCpuTimer ect = new ElapsedCpuTimer();
+        ect.setMaxTimeMillis(Constants.TURN_TIME_MILLIS);
+        try { a.act(gs, ect); } catch (Throwable ignore) { }
+        String after = core.game.ComputeMeter.activeProfile();
+        String wantAfter = core.game.ComputeMeter.hasProfile(
+                core.game.ComputeMeter.profileKey("EMCTS", -1, cu))
+                ? core.game.ComputeMeter.profileKey("EMCTS", -1, cu)
+                : "global";
+        boolean noLeak = after.equals(wantAfter);
+        System.out.println("  9c the turn's own profile is in force afterwards ('" + after
+                + "', not the one left on the thread): " + noLeak);
+        ok &= noLeak;
+        core.game.ComputeMeter.useProfile(null);
+
+        // (4) coverage, if this machine has been calibrated at all.
+        int have = 0;
+        java.util.List<String> want = ComputeCalibrateV6.expectedProfiles(levels);
+        for (String p : want) if (core.game.ComputeMeter.hasProfile(p)) have++;
+        if (have == 0) {
+            System.out.println("  9d no calibration file yet: every config falls back to the global "
+                    + "weights (" + core.game.ComputeMeter.weightsSummary() + ").");
+            System.out.println("     Run ComputeCalibrateV6 before the real run - NOT a smoke-test failure.");
+        } else if (have == want.size()) {
+            System.out.println("  9d all " + have + " expected profiles are calibrated.");
+            double[] e = weightsFor(core.game.ComputeMeter.profileKey("EMCTS", -1, cu));
+            double[] c = weightsFor(core.game.ComputeMeter.profileKey("CrossoverCombo", 50, cu));
+            boolean differ = Math.abs(e[0] - c[0]) > 1e-9 || Math.abs(e[1] - c[1]) > 1e-9
+                    || Math.abs(e[2] - c[2]) > 1e-9;
+            System.out.println("     EMCTS and CrossoverCombo@50 are priced differently at " + cu
+                    + "cu: " + differ + (differ ? "" : "  <-- identical weights; is the file stale?"));
+        } else {
+            System.out.println("  9d ONLY " + have + "/" + want.size() + " profiles calibrated - the rest "
+                    + "would silently fall back to the global weights.");
+            ok = false;
+        }
+        return ok;
+    }
+
+    /** The weight set a calibrated profile carries, read through the same path the search uses. */
+    private static double[] weightsFor(String profile) {
+        core.game.ComputeMeter.useProfile(profile);
+        double[] w = core.game.ComputeMeter.activeWeights();
+        core.game.ComputeMeter.useProfile(null);
+        return w;
+    }
+
+    /**
+     * The profile an agent will install, read back off its params. The field sits at a different
+     * depth for the plain and experimental agent families, so both hierarchies are walked.
+     */
+    private static String profileOf(Agent a) {
+        try {
+            Object p = field(a, "params");
+            Object v = p == null ? null : field(p, "computeProfile");
+            return v == null ? "(none)" : v.toString();
+        } catch (Exception e) {
+            return "(unreadable: " + e + ")";
+        }
+    }
+
+    /** One field by name, from anywhere in the object's class hierarchy. */
+    private static Object field(Object o, String name) throws IllegalAccessException {
+        for (Class<?> c = o.getClass(); c != null; c = c.getSuperclass()) {
+            try {
+                java.lang.reflect.Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                return f.get(o);
+            } catch (NoSuchFieldException ignore) { /* keep walking up */ }
+        }
+        return null;
     }
 
     /**
