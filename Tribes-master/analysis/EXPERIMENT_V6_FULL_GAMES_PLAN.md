@@ -31,12 +31,12 @@ the horizon, not about the operator.
 
 | | |
 |---|---|
-| Matchups | EMCTS vs each of 11 experimental configs, **plus EMCTS vs EMCTS as a control** |
+| Matchups | EMCTS vs each of 11 experimental configs — **no self-play control arm**, see §3G |
 | Configs | CrossoverBB, CrossoverExpansion@{2,5,10,20,50}, CrossoverCombo@{2,5,10,20,50} |
 | Budgets | 40,000 / 80,000 / 400,000 compute-units per turn (identical to the isolation phase) |
-| Games | 200 per matchup → 12 × 3 × 200 = **7,200 games** |
-| Maps | 20 fixed maps, shared by every matchup and every budget |
-| Schedule | each map played 10 times: **5 per orientation** |
+| Games | 100 per matchup → 11 × 3 × 100 = **3,300 games** |
+| Maps | 25 fixed maps, shared by every matchup and every budget |
+| Schedule | each map played 4 times: **2 per orientation** |
 | Mode | CAPITALS, turn cap set by `GameLengthProbeV6` (§5) |
 | Tribes | IMPERIUS2 vs IMPERIUS — a mirror pair |
 | Recorded | winner, both scores, map, orientation, end tick, how it was decided |
@@ -49,7 +49,7 @@ columns. The whole dataset is well under 2 MB.
 ## 3. Fairness, source by source
 
 The design is a list of biases and what removes each. This section is the one the write-up should
-draw on, because "we played 200 games and counted" is not by itself a fair comparison.
+draw on, because "we played 100 games and counted" is not by itself a fair comparison.
 
 ### 3A. Tribe — mirror pair
 
@@ -60,10 +60,10 @@ and `Phase2Runner` already used the pairing. Tribe identity therefore contribute
 
 ### 3B. Map — fixed and shared
 
-20 maps, the same 20 in every matchup and at every budget level. This does two distinct things:
+25 maps, the same 25 in every matchup and at every budget level. This does two distinct things:
 
 - *Within a matchup*, it removes map sampling from the comparison.
-- *Between matchups*, it makes all 36 matchups **paired with one another**. A difference between
+- *Between matchups*, it makes all 33 matchups **paired with one another**. A difference between
   CrossoverExpansion@5 and CrossoverExpansion@20 is a difference between the agents, not between the
   maps each happened to draw. This is the full-game analogue of the isolation phase's shared
   `visitSeed(scenario, visit)` across all 12 configs.
@@ -87,23 +87,25 @@ regenerated, nothing is approximated, and the board does not need to be cached o
 There is a bonus. The seat index — which is turn order — comes from the **row-major scan order of the
 capital tiles** in the generated level (`LevelLoader.extractTribes`). Exchanging capitals therefore
 exchanges seats too. **Position and first-move advantage swap together**, and both are balanced by
-the same 5-and-5 schedule.
+the same even-per-orientation schedule.
 
-`NewExperimentSmokeTestV6Full` §2 asserts all three properties on all 20 maps: identical board,
-exchanged capitals, exchanged seats.
+`NewExperimentSmokeTestV6Full` §2 asserts all three properties on all 25 maps: identical board,
+exchanged capitals, exchanged seats. With no control arm downstream (§3G), that assertion is the
+primary evidence that position and first-move advantage cancel, so it is worth reading as a claim in
+its own right rather than as plumbing.
 
 **This is why map asymmetry is measured but not filtered.** The generator grows territory outward
 from each capital, so two starting areas are never exactly equal — the measured start-resource
-asymmetry across the 20 maps ranges 0 to 11. With each map played 5 times per orientation, a map bias
-of any size cancels exactly within that map. Filtering on balance would narrow the map distribution
+asymmetry across the map set ranges 0 to 11. With each map played the same number of times in each
+orientation, a map bias of any size cancels exactly within that map. Filtering on balance would narrow the map distribution
 the result generalises over while removing a bias the schedule already removes. `_maps/maps.csv`
 records capital positions, capital distance, and per-start terrain and resource counts so the write-up
 can state what the maps looked like.
 
 ### 3D. Position sampling — one shared seed grid
 
-The `(map, gameSeed, agentSeed)` grid does not depend on the matchup or the budget level. All 36
-matchups are played over an identical set of 200 starting conditions.
+The `(map, gameSeed, agentSeed)` grid does not depend on the matchup or the budget level. All 33
+matchups are played over an identical set of 100 starting conditions.
 
 ### 3E. Mirror pairs
 
@@ -122,41 +124,60 @@ identical work whether it runs alone or alongside ninety others: the thread coun
 and nothing else. `NewExperimentSmokeTestV6Full` §6 asserts this directly — the same games replay
 byte-identically across a thread pool.
 
-### 3G. Everything else — the control arm
+### 3G. Everything else — without a control arm
 
-`EMCTS vs EMCTS` at each budget, on the same maps with the same swap schedule, **must return 50%
-within noise**. If it does not, some asymmetry survived §3A–§3F and that level's other numbers are
-not readable. It runs **first** at each level: it is the cheapest matchup and the most informative
-failure, so it completes while there is still time to react.
+Earlier versions of this plan played `EMCTS vs EMCTS` at each budget and required it to return 50%
+within noise: a single arm whose only job was to falsify §3A–§3F after the fact. It is **not part of
+the schedule any more**, and the 300 games it cost go to matchups that answer the question. What
+replaces it is three checks that are each cheaper and sharper than a win rate:
 
-There is one known residual it is watching for. `TribeResult.compareTo` breaks a total tie — equal
+1. **The swap is asserted, not estimated.** `NewExperimentSmokeTestV6Full` §2 shows on every map that
+   the two orientations produce a byte-identical board with the capitals and the seats exchanged. A
+   control arm could only have detected a broken swap through 300 noisy games; this proves the
+   mechanism directly, in a second.
+2. **The realized schedule is verified.** `VerifyV6FullOutput` checks that each map was played the
+   same number of times in each orientation and that each agent held each seat equally often. A
+   matchup that drifted off the schedule looks like ordinary data in a win rate, and this is what
+   catches it.
+3. **Balance is reported for every arm, not one.** `W6_balance` gives each matchup's win rate by
+   orientation and by seat, so a residual seat advantage would show as a *systematic* gap in the same
+   direction across all 33 arms. That is strictly more evidence than one arm at 50%, and the analysis
+   prints it where the control table used to be.
+
+There is one known residual these are watching for. `TribeResult.compareTo` breaks a total tie — equal
 score, techs, cities, production, wars, stars — on **tribe id**, i.e. seat order
 ([TribeResult.java:90](../src/core/game/TribeResult.java#L90)). Exact ties should be vanishingly rare
-across a full game, and the orientation swap balances the seat anyway, but the control is what would
-show it if the reasoning is wrong.
+across a full game, and the orientation swap balances the seat anyway; a systematic seat-0 skew in
+`W6_balance` is what would show it if that reasoning is wrong.
 
 ---
 
-## 4. Why 200 games, and what that buys
+## 4. Why 100 games, and what that buys
 
-200 games gives a 95% confidence interval of roughly **±6.9 pp** on a win rate near 50% — *if games
-were independent, which they are not*: ten games share a map. So the per-matchup interval is the
+100 games gives a 95% confidence interval of roughly **±9.8 pp** on a win rate near 50% — *if games
+were independent, which they are not*: four games share a map. So the per-matchup interval is the
 optimistic bound, and the analysis clusters on map (§7).
+
+The count came down from 200 with the budget for the phase. Where it was spent back matters: the
+games freed were put into **more maps** (20 → 25) rather than more repetitions, because at a fixed
+game count the variance of a win rate is dominated by the between-map term — 25 maps × 4 games
+estimates the same 100-game rate more precisely than 20 × 5 would, and 5 per map cannot be split
+evenly between the two orientations in any case.
 
 That is enough to detect a decisive effect and not enough to resolve a small one, which is the right
 trade given the isolation phase already measures small effects with far more power. Two things
 recover the power where it matters:
 
-- **Pooling within a family.** The five ratios of CrossoverExpansion pool to 1,000 games (±3.1 pp),
+- **Pooling within a family.** The five ratios of CrossoverExpansion pool to 500 games (±4.4 pp),
   likewise CrossoverCombo. This is the headline test — *does crossover expansion beat EMCTS at this
   budget* — with per-ratio rates as the breakdown beneath it.
-- **Pairing.** 100 mirror pairs per matchup, analysed as pairs rather than 200 independent games
+- **Pairing.** 50 mirror pairs per matchup, analysed as pairs rather than 100 independent games
   (§7).
 
 The v6 plan warns that greedy initialization should be expected to **compress effect sizes** relative
-to v4/v5, because the operators now have to improve on a strong start. A null result at 200 games is
-therefore a real possibility and should be reported as one, with its interval, rather than presented
-as evidence of no effect.
+to v4/v5, because the operators now have to improve on a strong start. A null result is therefore a
+real possibility — likelier at 100 games than it was at 200 — and should be reported as one, with its
+interval, rather than presented as evidence of no effect.
 
 ---
 
@@ -198,13 +219,13 @@ Measured on the dev machine, single-threaded, at the real budgets:
 
 400,000 costs **26.7× the 40,000 level, not 10×** — the tree outgrows cache and the collector starts
 charging rent. That shape dominates the plan: at ~45 planning episodes per game (Phase 2's measured
-mean length), 2,400 games per level works out at roughly
+mean length), 1,100 games per level works out at roughly
 
-- 40k ≈ 21 CPU-h, 80k ≈ 38 CPU-h, **400k ≈ 563 CPU-h**
+- 40k ≈ 10 CPU-h, 80k ≈ 17 CPU-h, **400k ≈ 258 CPU-h**
 
-≈ 620 CPU-hours at early-game rates, and more like **900–1,250 CPU-hours** once late-game states —
+≈ 285 CPU-hours at early-game rates, and more like **410–575 CPU-hours** once late-game states —
 more units, more cities, costlier `copy()` and `advance()` — are accounted for. On the R7615 at ~93
-workers with all-core clock derating, that is **on the order of a day**.
+workers with all-core clock derating, that is **on the order of half a day**.
 
 Two consequences worth acting on:
 
@@ -224,18 +245,19 @@ Two consequences worth acting on:
 | `W1_win_rates` | win rate per matchup with a **map-clustered** 95% CI, and the conquest/score split |
 | `W2_pooled` | the headline test: each family (Expansion, Combo, BB) vs EMCTS, pooled over ratios, per budget |
 | `W3_by_ratio` | win rate vs ratio per budget — the curve that answers "which ratio" |
-| `W4_control` | EMCTS-vs-EMCTS per budget, with its CI. **Read this first.** |
+| `W4_control` | EMCTS-vs-EMCTS per budget — empty under this schedule, kept so a tree that does contain self-play rows still reports them |
 | `W5_mirror_pairs` | the paired analysis: per mirror pair, won-both / split / lost-both, with a sign test |
-| `W6_balance` | win rate by orientation and by seat, per matchup — the residual-bias diagnostic |
+| `W6_balance` | win rate by orientation and by seat, per matchup — the residual-bias diagnostic. **Read this first** (§3G) |
 | `W7_game_length` | end-tick distribution and cap-bind rate per level |
 
 Two statistical notes:
 
-- **Clustered CIs, not binomial.** Ten games share a map, so a naive binomial interval understates
-  the uncertainty. `W1` uses a cluster-robust interval with the map as the cluster.
+- **Clustered CIs, not binomial.** Four games share a map, so a naive binomial interval understates
+  the uncertainty. `W1` uses a cluster-robust interval with the map as the cluster — and 25 clusters
+  of 4 is a better-conditioned estimate than 20 of 10 was.
 - **The paired test is the sharper one.** Within a mirror pair the position and all seeds are
   identical, so a pair where an agent wins both sides is strong evidence and a split is a tie. `W5`
-  is a sign test over the 100 pairs and should be quoted alongside the raw rate.
+  is a sign test over the 50 pairs and should be quoted alongside the raw rate.
 
 ---
 
@@ -252,19 +274,22 @@ best *sustained* throughput. Its one honest limitation is that the games it time
 therefore early-game, so its per-task heap estimate is low; it applies a 2× derate before gating, and
 the live `LoadGovernor` is the real protection.
 
-Notebook: `analysis/run_v6_full_games_jupyter.ipynb`.
+Notebook: **Part B of `analysis/run_v6_jupyter.ipynb`** — the two phases share a notebook because
+they share a machine, a build and a compute-unit currency. Part 0 (environment, build, machine policy,
+compute-unit weights) is run once and serves both; Part A is the isolation phase. The two runs must
+never be in flight at the same time: separate trees and separate locks, so nothing corrupts, but they
+would compete for the same cores and every throughput number either measured would be meaningless.
 
 ```
-0   environment check
-1   build
-2   smoke test            NewExperimentSmokeTestV6Full   (~1 min, 32 checks)
-3   map set               FullGameMapSetV6               (instant; writes _maps/maps.csv)
-4   game-length probe     GameLengthProbeV6              -> sets TURN_LIMIT
-5   thread calibration    ThreadCalibrationV6Full        (per budget level)
-6   run                   RunV6FullGames                 (also the RESUME cell)
-7   progress              read-only view over the output tree
-8   verify                VerifyV6FullOutput
-9   analyse               analyze_v6_full_games.py
+0.1-0.4  shared setup     environment, build, ServerProfile, ComputeCalibrateV6
+B1       smoke test       NewExperimentSmokeTestV6Full   (~1 min, 32 checks)
+B2       map set          FullGameMapSetV6               (instant; writes _maps/maps.csv)
+B3       length probe     GameLengthProbeV6              -> sets TURN_LIMIT
+B4       thread calib     ThreadCalibrationV6Full        (per budget level)
+B5       run              RunV6FullGames                 (also the RESUME cell)
+B5b      progress         read-only view over the output tree
+B6       verify           VerifyV6FullOutput
+B7       analyse          analyze_v6_full_games.py       (+ the W6 balance check)
 ```
 
 **Restartability.** Re-running the run cell resumes: finished matchups are skipped whole, a partial
@@ -276,10 +301,12 @@ with SIGTERM, never `kill -9`.
 
 ## 9. Decisions taken, and what would change them
 
-1. **200 games per matchup.** Keeps the spec; power comes from pooling and pairing (§4). Raise it at
-   40k/80k if the pooled intervals straddle 50% — those levels are ~2 hours of the run.
-2. **EMCTS-vs-EMCTS control at all three levels.** ~3% of runtime for the only check that can falsify
-   the fairness argument.
+1. **100 games per matchup, over 25 maps.** Power comes from pooling and pairing (§4), and the map
+   count is where the freed games went (§4). Raise the count at 40k/80k if the pooled intervals
+   straddle 50% — those levels are ~1 hour of the run between them.
+2. **No EMCTS-vs-EMCTS control arm.** The fairness argument is falsifiable without one, in three
+   places that are cheaper and cover all 33 arms rather than one (§3G). Re-add it as a single line in
+   `FullGameRunnerV6.matchups` if a future run wants the belt as well as the braces.
 3. **Turn cap from the probe, not inherited.** §5.
 4. **Map asymmetry measured, not filtered.** §3C.
 5. **Win rate only.** Per-game rows carry scores, end tick and decision type because they cost nothing
@@ -287,9 +314,9 @@ with SIGTERM, never `kill -9`.
 
 ## 10. One finding from building this, which applies beyond it
 
-The first version of the map set drew level seeds consecutively (`BASE, BASE+1, …`). All 20 maps came
-out with **one capital on the identical tile and an identical capital-to-capital distance**: the maps
-varied in terrain but not in geometry.
+The first version of the map set drew level seeds consecutively (`BASE, BASE+1, …`). All 20 maps of
+that set came out with **one capital on the identical tile and an identical capital-to-capital
+distance**: the maps varied in terrain but not in geometry.
 
 The cause is `java.util.Random`'s correlation across nearby seeds. Measured on this project's own seed
 range: the first `nextDouble()` fell on the same side of 0.5 for **twelve consecutive seeds**, and the

@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p><b>Why a calibrated thread count is not enough.</b> {@link ThreadCalibrationV6} picks a thread
  * count from a short sweep on a sample of the portfolio. The real run is neither short nor a sample:
- * it crosses 200 scenarios whose branching factors differ several-fold, and search-tree size tracks
+ * it crosses the whole portfolio, whose branching factors differ several-fold, and search-tree size tracks
  * branching factor. A thread count that is comfortable on the average scenario can be over-committed
  * on a run of wide ones — and the failure mode is not a graceful slowdown, it is the whole run
  * degrading into back-to-back full GCs, or dying with an {@code OutOfMemoryError} after two days.

@@ -76,9 +76,23 @@ import java.util.concurrent.Future;
  */
 public class BuildV6Portfolio {
 
-    /** Scenario counts, re-exported so v6 code never has to reach into the v5 class for them. */
-    public static final int NUM_SINGLE_SCENARIOS = BuildV5Portfolio.NUM_SINGLE_SCENARIOS;
-    public static final int NUM_DUAL_SCENARIOS   = BuildV5Portfolio.NUM_DUAL_SCENARIOS;
+    /**
+     * Scenario counts: <b>50 single + 50 dual</b>, half of v5's 100 + 100.
+     *
+     * <p>The halving buys wall-clock, and it is taken out of the portfolio rather than out of the
+     * visits because the two are not equivalent. Turns per cell fall from 10,000 to 5,000 either way,
+     * but the independent replicate in the analysis is the SCENARIO â€” the 50 visits of a scenario
+     * share a board, a position and a greedy root, so {@code v6_significance.py} averages them first
+     * and tests on n scenarios. Cutting visits would leave n untouched and quietly make each
+     * scenario's mean noisier; cutting scenarios states the cost where it is paid, n = 200 -> 100,
+     * roughly a sqrt(2) widening of the paired test's resolution.
+     *
+     * <p>The single/dual split stays even so the branching-factor contrast the H5 confound check
+     * rests on is untouched. v5's constants are deliberately NOT changed: v5's dataset is already on
+     * disk and its analysis reads its own portfolio size.
+     */
+    public static final int NUM_SINGLE_SCENARIOS = 50;
+    public static final int NUM_DUAL_SCENARIOS   = 50;
 
     /** In-flight attempts per worker. >1 so a slow game never starves the pool, bounded so a build
      *  that is about to hit its target does not speculatively run hundreds of useless games. */

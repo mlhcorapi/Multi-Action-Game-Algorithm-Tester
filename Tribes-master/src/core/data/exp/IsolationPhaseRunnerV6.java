@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * v6 Isolation Phase runner. For ONE budget level, runs every agent configuration over the full
- * 200-scenario portfolio × {@link #VISITS_PER_SCENARIO} visits — a single search turn per game — and
+ * 100-scenario portfolio × {@link #VISITS_PER_SCENARIO} visits — a single search turn per game — and
  * writes per-(agent, ratio, budget) CSVs in the v6 folder layout:
  *
  * <pre>
@@ -63,7 +63,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class IsolationPhaseRunnerV6 {
 
-    /** Visits per scenario. 200 × 50 = 10000 turns per agent per budget level. */
+    /** Visits per scenario. 100 scenarios × 50 = 5000 turns per agent per budget level. */
     public static final int VISITS_PER_SCENARIO = 50;
 
     /** CrossoverExpansion / Combo ratios swept at every budget level. */

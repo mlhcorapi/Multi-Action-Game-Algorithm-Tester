@@ -50,12 +50,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p><b>Mirror pairs.</b> Game {@code (map m, pair p, orientation 0)} and {@code (map m, pair p,
  * orientation 1)} use the SAME level seed, the SAME game seed and the SAME per-seat agent seeds. The
  * two games are therefore identical in every respect except which agent sits in which seat. Agent
- * seeds attach to the SEAT, not to the agent, which is what makes that true. A matchup is 100 such
- * pairs, and pairing them in the analysis is materially tighter than treating 200 games as
+ * seeds attach to the SEAT, not to the agent, which is what makes that true. A matchup is 50 such
+ * pairs, and pairing them in the analysis is materially tighter than treating 100 games as
  * independent.
  *
  * <p><b>Shared seed grid.</b> The (map, gameSeed, agentSeed) grid does not depend on the matchup or
- * the budget level, so all 36 matchups are played over an identical set of 200 starting conditions.
+ * the budget level, so all 33 matchups are played over an identical set of 100 starting conditions.
  * A difference between two ratios is then a difference between the agents rather than between the
  * positions they happened to draw — the full-game analogue of the isolation phase's shared
  * {@code visitSeed} across configs.
@@ -66,8 +66,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <h2>Scheduling</h2>
  *
  * <p>Every game of a budget level goes into ONE pool rather than a pool per matchup. A matchup is
- * only 200 games, so a per-matchup pool on a 93-worker machine spends its last wave mostly idle and
- * its tail waiting on the single longest game; flattening the level's 2,400 games into one queue
+ * only 100 games, so a per-matchup pool on a 93-worker machine spends its last wave mostly idle and
+ * its tail waiting on the single longest game; flattening the level's 1,100 games into one queue
  * removes both. Concurrency is gated by a {@link LoadGovernor} because an in-flight game holds a
  * search tree whose size grows with the budget.
  *
@@ -82,8 +82,14 @@ public final class FullGameRunnerV6 {
 
     private FullGameRunnerV6() {}
 
-    /** Games per matchup = {@value FullGameMapSetV6#NUM_MAPS} maps x {@value #GAMES_PER_MAP}. */
-    public static final int GAMES_PER_MAP = 10;
+    /**
+     * Games per matchup = {@value FullGameMapSetV6#NUM_MAPS} maps x {@value #GAMES_PER_MAP} = 100.
+     *
+     * <p>Must stay EVEN: {@link #GAMES_PER_ORIENTATION} is half of it, and an odd value would leave
+     * one game of each map unpaired — which breaks both the exact within-map cancellation of position
+     * bias and the mirror-pair sign test that reads the two orientations as one observation.
+     */
+    public static final int GAMES_PER_MAP = 4;
     /** Games per map in EACH orientation. Half of {@link #GAMES_PER_MAP}, by construction. */
     public static final int GAMES_PER_ORIENTATION = GAMES_PER_MAP / 2;
     public static final int GAMES_PER_MATCHUP = FullGameMapSetV6.NUM_MAPS * GAMES_PER_MAP;
@@ -114,7 +120,7 @@ public final class FullGameRunnerV6 {
 
     /** One opponent for EMCTS at one budget level. */
     public static final class Matchup {
-        public final String opponent;   // "EMCTS" (control), "CrossoverBB", "CrossoverExpansion", "CrossoverCombo"
+        public final String opponent;   // "CrossoverBB", "CrossoverExpansion", "CrossoverCombo" ("EMCTS" = self-play, smoke test only)
         public final int ratio;         // -1 when the config has no ratio (EMCTS, CrossoverBB)
         public final int computeUnits;
         public final String levelName;  // e.g. "40000cu"
@@ -150,17 +156,26 @@ public final class FullGameRunnerV6 {
     }
 
     /**
-     * The 12 matchups at one budget level: the EMCTS-vs-EMCTS control first, then the 11 experimental
-     * configurations.
+     * The 11 experimental matchups at one budget level.
      *
-     * <p>The control runs first on purpose. It should return 50% within noise; if it does not, some
-     * seat or spawn asymmetry survived the orientation swap and every other number at this level is
-     * suspect. Cheapest config, most informative failure — so it is the one that runs while there is
-     * still time to react.
+     * <p><b>No EMCTS-vs-EMCTS control arm.</b> Earlier versions scheduled one and read its win rate as
+     * a validity check on the seat and spawn balance; it is not scheduled any more, and the checks it
+     * stood for are made where they are cheaper and sharper:
+     * <ul>
+     *   <li>the orientation swap is asserted directly — identical board, capitals exchanged, seats
+     *       exchanged, on every map — by {@code NewExperimentSmokeTestV6Full} §2, which is a proof of
+     *       the mechanism rather than a 300-game estimate of its consequence;</li>
+     *   <li>{@code VerifyV6FullOutput} checks the realized schedule, so a matchup that played one
+     *       orientation more often than the other is caught in the data;</li>
+     *   <li>{@code analyze_v6_full_games.py} W6 reports every matchup's win rate by orientation and
+     *       by seat, so a residual seat advantage is visible in all 33 arms rather than in one.</li>
+     * </ul>
+     * {@code Matchup} still accepts {@code "EMCTS"} as an opponent — the smoke test plays self-play
+     * games to check that a winner is read from the seat and not from the agent's name — so a control
+     * arm can be re-added here as one line if a future run wants it.
      */
     public static List<Matchup> matchups(int computeUnits) {
         List<Matchup> ms = new ArrayList<>();
-        ms.add(new Matchup("EMCTS", -1, computeUnits));           // control: expect 50%
         ms.add(new Matchup("CrossoverBB", -1, computeUnits));
         for (int r : RATIOS) ms.add(new Matchup("CrossoverExpansion", r, computeUnits));
         for (int r : RATIOS) ms.add(new Matchup("CrossoverCombo", r, computeUnits));
@@ -403,10 +418,11 @@ public final class FullGameRunnerV6 {
         // score fallback only fires if that invariant is ever violated.
         if (emctsWon == oppWon) emctsWon = scores[emctsSeat] >= scores[oppSeat];
 
-        // Winner is a ROLE, not an agent name. In the EMCTS-vs-EMCTS control arm both sides are called
-        // "EMCTS", so a name here would make that matchup read as a 100% EMCTS win rate — in the one
-        // arm whose entire purpose is to come out at 50%. Which config the opponent was is already
-        // fully determined by the Opponent and Ratio columns.
+        // Winner is a ROLE, not an agent name. A name would be wrong the moment both sides carry the
+        // same one: an EMCTS-vs-EMCTS matchup would read as a 100% EMCTS win rate. The tournament no
+        // longer schedules that arm, but the smoke test plays it precisely to hold this line honest,
+        // and which config the opponent was is already fully determined by the Opponent and Ratio
+        // columns.
         return String.format(Locale.ROOT, "%s,%s,%s,%d,%d,%d,%d,%d,%d,%d,%s,%d,%d,%d,%d,%s,%d",
                 m.levelName, m.opponent, m.ratio > 0 ? String.valueOf(m.ratio) : "NA",
                 gameId, map.index, map.levelSeed, orientation, pairIndexOf(gameId),

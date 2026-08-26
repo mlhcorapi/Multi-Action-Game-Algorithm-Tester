@@ -85,8 +85,8 @@ public final class BudgetFloorProbe {
      *
      * <p>Deliberately modest. At ratio 50 the operator is <i>designed</i> to be rare — rarity is the
      * treatment being tested, not a defect — so the bar here is "fires reliably within every turn",
-     * not "fires often". With 10,000 turns behind each cell, five events per turn is fifty thousand
-     * crossovers behind that cell's estimate, which is ample. The failure worth excluding is a cell
+     * not "fires often". With 5,000 turns behind each cell, five events per turn is twenty-five
+     * thousand crossovers behind that cell's estimate, which is ample. The failure worth excluding is a cell
      * where the operator never fires and the configuration is silently plain EMCTS.
      */
     public static final double MIN_EXPANSION_XO = 5.0;

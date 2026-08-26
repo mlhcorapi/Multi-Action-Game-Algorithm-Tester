@@ -29,7 +29,7 @@ import java.util.Map;
  *       the city bound and a mountain chokepoint is not the same game as an open plain. Playing a
  *       known set of maps a known number of times each removes map sampling from the comparison.</li>
  *   <li><i>Between matchups</i>, using the SAME maps (and the same seed grid, see
- *       {@link FullGameRunnerV6}) makes the 36 matchups paired with one another. A difference between
+ *       {@link FullGameRunnerV6}) makes the 33 matchups paired with one another. A difference between
  *       CrossoverExpansion@5 and CrossoverExpansion@20 is then a difference between the agents, not
  *       between the maps each happened to draw. This is the full-game analogue of v6's shared
  *       {@code visitSeed(scenario, visit)} across all 12 configs.</li>
@@ -60,8 +60,19 @@ public final class FullGameMapSetV6 {
 
     private FullGameMapSetV6() {}
 
-    /** Maps in the set. Each is played 10 times per matchup (5 per orientation). */
-    public static final int NUM_MAPS = 20;
+    /**
+     * Maps in the set. Each is played {@value FullGameRunnerV6#GAMES_PER_MAP} times per matchup
+     * ({@value FullGameRunnerV6#GAMES_PER_ORIENTATION} per orientation).
+     *
+     * <p>Raised from 20 when a matchup went from 200 games to 100. At a fixed game count the variance
+     * of a win rate is dominated by the BETWEEN-map term, which falls with the number of maps and not
+     * with the repetitions per map, so 25x4 estimates the same 100-game win rate more precisely than
+     * 20x5 would — and 5 per map cannot be split evenly between the two orientations anyway.
+     *
+     * <p>Seeds are taken in index order, so maps 0-19 are exactly the ones the 20-map set used and
+     * the five new maps are appended: the set grew, it was not replaced.
+     */
+    public static final int NUM_MAPS = 25;
 
     /**
      * Base of the level-seed sequence. Seed {@code i} is {@code scramble(BASE + i)}, filtered to those
@@ -84,9 +95,9 @@ public final class FullGameMapSetV6 {
      *       rather than scattering.</li>
      * </ul>
      *
-     * <p>The visible symptom was that all 20 maps put one capital on the identical tile and produced
-     * an identical capital-to-capital distance: the maps varied in terrain but not in geometry, so
-     * "20 maps" sampled far less of the map space than the count suggests. Passing the counter through
+     * <p>The visible symptom was that EVERY map in the set put one capital on the identical tile and
+     * produced an identical capital-to-capital distance: the maps varied in terrain but not in
+     * geometry, so the set sampled far less of the map space than its count suggests. Passing the counter through
      * a SplitMix64 finalizer first — full avalanche, so adjacent inputs give unrelated outputs — makes
      * consecutive indices behave like independent draws.
      *

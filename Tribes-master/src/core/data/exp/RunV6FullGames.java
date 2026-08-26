@@ -11,9 +11,8 @@ import java.util.Set;
 /**
  * v6 FULL GAMES — the tournament phase. Single entry point.
  *
- * <p>EMCTS plays 200 complete games against each of the 11 experimental configurations (plus itself,
- * as a control) at each of three compute budgets: <b>36 matchups, 7,200 games</b>. The only outcome
- * recorded is who won. Detailed search telemetry is what the v6 isolation phase is for; this phase
+ * <p>EMCTS plays 100 complete games against each of the 11 experimental configurations at each of
+ * three compute budgets: <b>33 matchups, 3,300 games</b>. The only outcome recorded is who won. Detailed search telemetry is what the v6 isolation phase is for; this phase
  * answers the question that one deliberately cannot — the isolation phase measures the value of the
  * best sequence found in one turn from a captured position, which is search quality, and a win rate
  * is playing strength.
@@ -33,12 +32,15 @@ import java.util.Set;
  *       swap exchanges capitals AND seats, so position and first-move advantage cancel within every
  *       map.</li>
  *   <li><b>Position sampling.</b> The seed grid is identical across matchups and budgets, so every
- *       matchup is played over the same 200 starting conditions.</li>
+ *       matchup is played over the same 100 starting conditions.</li>
  *   <li><b>Compute.</b> A deterministic per-turn compute-unit budget (STOP_COMPUTE), identical for
  *       both sides, bounding search after a common greedy initialization — the same currency and the
  *       same three levels as the isolation phase.</li>
- *   <li><b>Residual anything.</b> The EMCTS-vs-EMCTS control at each level should return 50%. If it
- *       does not, something in the above is wrong and the level's other numbers are not readable.</li>
+ *   <li><b>Residual anything.</b> There is no self-play control arm; see
+ *       {@link FullGameRunnerV6#matchups}. The swap is asserted directly by
+ *       {@link NewExperimentSmokeTestV6Full} §2, the realized schedule is checked by
+ *       {@link VerifyV6FullOutput}, and W6 of the analysis reports every matchup's win rate by
+ *       orientation and by seat — so residual asymmetry shows up in all 33 arms.</li>
  * </ol>
  *
  * <h2>Restartability</h2>
@@ -202,7 +204,7 @@ public final class RunV6FullGames {
           .append(java.util.Arrays.toString(cuLevels)).append('\n');
         sb.append("computeWeights=").append(ComputeMeter.weightsSummary()).append('\n');
         sb.append("ratios=").append(java.util.Arrays.toString(FullGameRunnerV6.RATIOS)).append('\n');
-        sb.append("opponents=EMCTS(control),CrossoverBB,CrossoverExpansion@ratio,CrossoverCombo@ratio\n");
+        sb.append("opponents=CrossoverBB,CrossoverExpansion@ratio,CrossoverCombo@ratio (no self-play control)\n");
         sb.append("seedGrid: every seed is scramble(structuredKey) - SplitMix64 finalizer, because\n")
           .append("  java.util.Random is correlated across nearby seeds. levelSeed=scramble(")
           .append(FullGameMapSetV6.LEVEL_SEED_BASE).append("+mapIndex), gameSeed=scramble(")

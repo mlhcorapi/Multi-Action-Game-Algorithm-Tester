@@ -39,7 +39,7 @@ v5's numbers do not transfer.
 | B | Greedy shared initial sequence, replacing the uniformly-random one | Requires §5 resolution |
 | C | 50 visits per scenario (was 100) | Straightforward |
 | D | Notebook-driven with a progress cell | Mirrors v5 notebook |
-| E | Same 200-scenario portfolio, same 12 configs, same telemetry | Unchanged |
+| E | Portfolio halved to 100 scenarios (50 single / 50 dual); same 12 configs, same telemetry | Scenario count halved |
 
 ---
 
@@ -116,11 +116,12 @@ and **is kept for v6**, renamed to reflect that it now guards a greedy root.
    that headroom deliberately: v6 measures whether the operators improve on a *strong* start, which is the
    more realistic and more demanding question, but effect sizes should be expected to compress relative to v4/v5.
 
-### C. 50 visits per scenario
+### C. 50 visits per scenario, over a 100-scenario portfolio
 
-`IsolationPhaseRunnerV5.VISITS_PER_SCENARIO` 100 → 50. Total turns per budget level:
-200 scenarios × 50 visits × 12 configs = **120,000** (v5: 240,000). Across three budget levels,
-**360,000 turns** total (v5: 720,000).
+`IsolationPhaseRunnerV5.VISITS_PER_SCENARIO` 100 → 50, and `BuildV6Portfolio` 200 scenarios → **100**
+(50 single / 50 dual). Total turns per budget level: 100 scenarios × 50 visits × 12 configs =
+**60,000** (v5: 240,000). Across three budget levels, **180,000 turns** total (v5: 720,000) — but each
+turn carries roughly 3× v5's budget.
 
 Justification for the paper: the design is paired at (scenario, visit) and greedy init removes the
 starting-point variance component (§3B), so the residual being averaged is smaller than in v5. The
@@ -128,10 +129,22 @@ per-scenario-unit significance analysis from v4 (Fig5 at n=100) should be re-run
 comparisons of interest remain adequately powered — **this is a check to perform on the Part I data
 before committing**, not an assumption.
 
+**Why the second cut came out of scenarios rather than out of visits.** Both halve the turn count and
+therefore the wall-clock, but they are not the same cut. The independent replicate is the *scenario*:
+the 50 visits of one scenario share a board, a captured position, a branching factor and a greedy
+root, and `v6_significance.py` averages them before testing anything. Halving the visits would have
+left the reported n untouched while making each scenario's mean noisier — a cost that never appears in
+a table. Halving the scenarios puts the cost where it is read: n goes 200 → 100, about a √2 widening
+of the paired Wilcoxon's resolution, with each scenario mean as precise as before. The 50/50
+single-dual split is kept so the branching-factor contrast H5 rests on is untouched.
+
 ### D. Notebook-driven
 
-`analysis/run_v6_jupyter.ipynb`, mirroring the 6-section structure of
-[run_v5_jupyter.ipynb](run_v5_jupyter.ipynb):
+`analysis/run_v6_jupyter.ipynb`. Since the tournament phase joined it, **one notebook covers both
+phases**: Part 0 is the shared setup (environment, build, machine policy, compute-unit weights — both
+phases price budgets in the same units, from the same file), Part A is this phase, Part B is the full
+games ([EXPERIMENT_V6_FULL_GAMES_PLAN.md](EXPERIMENT_V6_FULL_GAMES_PLAN.md)). The table below is Part
+A, which keeps the section structure of [run_v5_jupyter.ipynb](run_v5_jupyter.ipynb):
 
 | section | contents |
 |---|---|
@@ -152,7 +165,7 @@ survives an interruption — is documented separately in
 [V6_SERVER_RUNBOOK.md](V6_SERVER_RUNBOOK.md).
 
 The progress cell (5) reports, without touching the running job: per-(agent, ratio, budget) checkpoint
-completion from `_completed.txt`; per-leaf row counts vs. expected (200 × 50); turns/minute and projected
+completion from `_completed.txt`; per-leaf row counts vs. expected (100 × 50); turns/minute and projected
 finish; live thread count and RSS; and the tail of the run log. Everything it needs is already written by
 the resumable runner — it is a read-only view over the output tree.
 
@@ -268,8 +281,10 @@ or raise the budget levels so init is a modest share. **Decide from the C0 numbe
 
 Unchanged from v5 except where noted:
 
-- **Portfolio:** the same 200 scenarios (100 single / 100 dual), rebuilt by `BuildV6Portfolio` with the same
-  action-composition columns v5 added for H5. Resumable, skipped if `_portfolio_complete.txt` exists.
+- **Portfolio:** 100 scenarios (50 single / 50 dual) — half of v5's, see §3C — rebuilt by
+  `BuildV6Portfolio` with the same generation rules and the same action-composition columns v5 added
+  for H5. Resumable, skipped if `_portfolio_complete.txt` exists; the completion marker records the
+  counts it was built for, so a changed count forces a rebuild rather than reusing the wrong set.
 - **Configs (12):** EMCTS, CrossoverBB, CrossoverExpansion@{2,5,10,20,50}, CrossoverCombo@{2,5,10,20,50}.
   EMCTS and CrossoverBB log zero crossover events by construction — they are the mutation baseline.
 - **Visits:** 50 per scenario, shared `visitSeed(scenarioId, visitId)` across all 12 configs (the paired
@@ -358,6 +373,6 @@ E17–E21 (operator credit, blend coherence, repair disruption, pool collapse, a
 1. C0 harness + `InitUnits`/spend logging → run C0 (~2.6 h) → read §4.4 outputs.
 2. Resolve decisions 1–3 from the C0 data.
 3. `BuildV6Portfolio`, `IsolationPhaseRunnerV6`, `RunExperimentV6`, `NewExperimentSmokeTestV6`.
-4. `run_v6_jupyter.ipynb`.
+4. `run_v6_jupyter.ipynb` (Part 0 + Part A; Part B is the tournament phase).
 5. Run v6.
 6. `analyze_v6_full.py`.

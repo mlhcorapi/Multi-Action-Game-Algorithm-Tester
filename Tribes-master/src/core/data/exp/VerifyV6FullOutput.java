@@ -24,19 +24,23 @@ import java.util.TreeMap;
  * <ul>
  *   <li>every row has the right field count, and the Level / Opponent / Ratio columns agree with the
  *       directory the file sits in;</li>
- *   <li>GameIds are exactly {@code 0..199} — no duplicates, no gaps;</li>
+ *   <li>GameIds are exactly {@code 0..}{@value FullGameRunnerV6#GAMES_PER_MATCHUP}{@code -1} — no
+ *       duplicates, no gaps;</li>
  *   <li>each map appears {@value FullGameRunnerV6#GAMES_PER_MAP} times and each (map, orientation)
  *       {@value FullGameRunnerV6#GAMES_PER_ORIENTATION} times;</li>
  *   <li>{@code Winner} is a role and {@code EmctsWon} agrees with it;</li>
  *   <li>each agent occupies each seat equally often.</li>
  * </ul>
  *
- * <p>It also prints the three headline diagnostics — the control arm's win rate, the conquest share
- * and the cap-bind rate — because those decide whether the dataset is readable at all, and finding
- * out at analysis time is finding out late.
+ * <p>It also prints the headline diagnostics — the conquest share and the cap-bind rate — because
+ * those decide whether the dataset is readable at all, and finding out at analysis time is finding
+ * out late. The self-play control arm is no longer part of the schedule
+ * ({@link FullGameRunnerV6#matchups}); its win rate is still reported if a tree happens to contain
+ * one, and nothing is expected when it does not.
  *
  * <p>{@code --repair} rewrites leaves to drop duplicate and torn rows. It never invents rows: a leaf
- * short of 200 games is reported and left for the runner to finish on the next resume.
+ * short of {@value FullGameRunnerV6#GAMES_PER_MATCHUP} games is reported and left for the runner to
+ * finish on the next resume.
  *
  * <p>Usage: {@code java -cp "out:lib/*" core.data.exp.VerifyV6FullOutput [baseDir] [--repair]}
  */
@@ -119,9 +123,9 @@ public final class VerifyV6FullOutput {
         }
 
         System.out.println();
-        System.out.println("--- control arm (EMCTS vs EMCTS) — expect ~50% ---");
+        System.out.println("--- self-play arm (EMCTS vs EMCTS) — expect ~50% if present ---");
         if (controlByLevel.isEmpty()) {
-            System.out.println("  not present yet");
+            System.out.println("  none in this tree (the v6 schedule has no self-play control arm)");
         } else {
             for (Map.Entry<String, int[]> e : controlByLevel.entrySet()) {
                 int w = e.getValue()[0], n = e.getValue()[1];
