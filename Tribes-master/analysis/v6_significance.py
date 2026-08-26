@@ -71,12 +71,12 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import analyze_v5_full as v5   # loaders, LEAF_RE, ORDER, COLORS
+import analyze_v6_base as base   # loaders, LEAF_RE, ORDER, COLORS
 
 ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('test_results/v6')
 OUT = Path('analysis/v6_significance'); OUT.mkdir(parents=True, exist_ok=True)
 ALPHA = 0.05
-RATIOS = v5.RATIOS
+RATIOS = base.RATIOS
 VALUE = 'FinalSequenceValue'
 
 
@@ -87,15 +87,15 @@ def load_per_scenario():
 
     Also returns the per-turn frame, so the clustering comparison can show what pooling visits would
     have claimed."""
-    v5.ROOT = ROOT
-    burn = v5.load_all()
+    base.ROOT = ROOT
+    burn = base.load_all()
     burn['ThinkingMs'] = burn['ThinkingMs'].astype(int)
-    turn = v5.per_turn(burn)
+    turn = base.per_turn(burn)
     if 'InitialSequenceValue' not in turn.columns:
         raise SystemExit('results.csv has no InitialSequenceValue column — wrong tree?')
     turn['Gain'] = turn[VALUE] - turn['InitialSequenceValue']
 
-    portfolio = v5.load_portfolio()
+    portfolio = base.load_portfolio()
     if not portfolio.empty:
         turn = turn.merge(portfolio[['ScenarioId', 'Source', 'BranchingFactor']],
                           on='ScenarioId', how='left')
@@ -247,7 +247,7 @@ def bh(pvals):
 
 def vs_emcts(scen, budgets, sources):
     """Each of the 11 non-baseline configs against EMCTS, per budget, per split."""
-    configs = [c for c in v5.ORDER if c != 'EMCTS']
+    configs = [c for c in base.ORDER if c != 'EMCTS']
     rows = []
     for budget in budgets:
         for source in sources:
@@ -354,12 +354,12 @@ def operator_activity(turn_burn, budgets):
       tournament. Checking BB against `XoEvents` would report every BB config as dead, which is how
       this check first read them.
     """
-    tele = v5.load_telemetry()
+    tele = base.load_telemetry()
     rows = []
     for budget in budgets:
         t = tele[tele.ThinkingMs == budget] if not tele.empty else pd.DataFrame()
         burns = turn_burn[turn_burn.ThinkingMs == budget]
-        for cfg in v5.ORDER:
+        for cfg in base.ORDER:
             expects_exp = cfg.startswith('CrossoverExpansion') or cfg.startswith('CrossoverCombo')
             expects_bb = cfg in ('CrossoverBB',) or cfg.startswith('CrossoverCombo')
             rec = dict(Budget=budget, Config=cfg,
@@ -428,7 +428,7 @@ def clustering_comparison(turn, scen, budgets):
         emcts_turn = (turn[(turn.Config == 'EMCTS') & (turn.ThinkingMs == budget)]
                       [['ScenarioId', 'VisitId', VALUE]]
                       .rename(columns={VALUE: 'emcts'}))
-        for cfg in [c for c in v5.ORDER if c != 'EMCTS']:
+        for cfg in [c for c in base.ORDER if c != 'EMCTS']:
             t = turn[(turn.Config == cfg) & (turn.ThinkingMs == budget)]
             if t.empty:
                 continue
@@ -459,11 +459,11 @@ def fig_vs_emcts(res, budgets):
     fig, axes = plt.subplots(1, len(budgets), figsize=(5.2 * len(budgets), 6), squeeze=False)
     for ax, budget in zip(axes[0], budgets):
         s = sub[sub.Budget == budget].set_index('Config').reindex(
-            [c for c in v5.ORDER if c != 'EMCTS']).dropna(subset=['mean'])
+            [c for c in base.ORDER if c != 'EMCTS']).dropna(subset=['mean'])
         if s.empty: continue
         ys = np.arange(len(s))
         ax.barh(ys, s['mean'], xerr=s['ci95'], capsize=2, error_kw=dict(lw=0.8),
-                color=[v5.COLORS.get(c, '#888') for c in s.index],
+                color=[base.COLORS.get(c, '#888') for c in s.index],
                 edgecolor='black', linewidth=0.4)
         for y, (_, row) in zip(ys, s.iterrows()):
             if row.get('significant', False):

@@ -1,13 +1,14 @@
 """
 analyze_v6_full.py — comprehensive v6 analysis.
 
-Produces **the same tables and figures as v5**, plus a new budget-adherence section (B1-B4) that
-turns "the budget was equalised across agents" from a claim into a reported result.
+Produces **the same tables and figures as v5**, plus the budget sections B1-B6, which turn "the
+budget was equalised across agents" from a claim into a reported result.
 
-Rather than forking 1400 lines, this imports `analyze_v5_full` and re-points its module globals at
-the v6 output tree. Every v5 analysis therefore runs on v6 data by *identical* code — which is what
-makes a v5-vs-v6 comparison meaningful, and means the figures keep their v5 layout, colours and
-naming (fig3-fig8, T1-T8, E1-E16, and the hypothesis battery E17-E21).
+Rather than forking 1400 lines, this imports `analyze_v6_base` — the v5 analysis engine, vendored
+into v6 — and re-points its module globals at the v6 output tree. Every v5 analysis therefore runs on
+v6 data by *identical* code, which is what makes a v5-vs-v6 comparison meaningful and what keeps the
+figures' v5 layout, colours and naming (fig3-fig8, T1-T8, E1-E16, and the hypothesis battery
+E17-E21). See that file's header for why it lives here rather than under its original name.
 
 Two v6-specific data fixes are applied in the loader before any of that runs:
 
@@ -33,7 +34,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import analyze_v5_full as v5   # noqa: E402  (path must be set first)
+import analyze_v6_base as base   # noqa: E402  (path must be set first)
 
 
 ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('test_results/v6')
@@ -58,17 +59,17 @@ def detect_levels(root):
 
 def install_v6_context():
     """Re-point the v5 module at the v6 tree and patch its two schema differences."""
-    v5.ROOT = ROOT
-    v5.FIGS = FIGS
-    v5.TABLES = TABLES
+    base.ROOT = ROOT
+    base.FIGS = FIGS
+    base.TABLES = TABLES
 
     levels = detect_levels(ROOT)
     if levels:
-        v5.MS_LEVELS = levels
-    print(f'  budget levels detected: {v5.MS_LEVELS}')
+        base.MS_LEVELS = levels
+    print(f'  budget levels detected: {base.MS_LEVELS}')
 
-    _load_all = v5.load_all
-    _per_turn = v5.per_turn
+    _load_all = base.load_all
+    _per_turn = base.per_turn
 
     def load_all_v6():
         df = _load_all()
@@ -84,8 +85,8 @@ def install_v6_context():
         # Fix 2: ComputeUnitsElapsed is per-burn, like FmCallsElapsed.
         return out.drop(columns=['ComputeUnitsElapsed'], errors='ignore')
 
-    v5.load_all = load_all_v6
-    v5.per_turn = per_turn_v6
+    base.load_all = load_all_v6
+    base.per_turn = per_turn_v6
 
 
 # ==================================================================== budget adherence (new) ==
@@ -130,31 +131,31 @@ def b1_budget_adherence(turn_df, df_burn):
 
     print('\n  B1 realized SEARCH spend vs target budget (ratio 1.00 = exactly on budget):')
     print(g.pivot(index='Config', columns='ThinkingMs', values='ratio_mean')
-           .reindex(v5.ORDER).round(3).to_string())
+           .reindex(base.ORDER).round(3).to_string())
     spread = g.groupby('ThinkingMs').ratio_mean.agg(['min', 'max'])
     print('\n  spread of mean spend across the 12 configs (tight = the budget is equalised):')
     print(spread.round(3).to_string())
 
     # Figure: left = realized/target per config; right = per-phase pacing (should be ~linear in phase).
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.8))
-    x = np.arange(len(v5.ORDER))
-    width = 0.8 / max(1, len(v5.MS_LEVELS))
-    for i, ms in enumerate(v5.MS_LEVELS):
-        sub = g[g.ThinkingMs == ms].set_index('Config').reindex(v5.ORDER)
-        axes[0].bar(x + (i - (len(v5.MS_LEVELS) - 1) / 2) * width, sub.ratio_mean.values, width,
+    x = np.arange(len(base.ORDER))
+    width = 0.8 / max(1, len(base.MS_LEVELS))
+    for i, ms in enumerate(base.MS_LEVELS):
+        sub = g[g.ThinkingMs == ms].set_index('Config').reindex(base.ORDER)
+        axes[0].bar(x + (i - (len(base.MS_LEVELS) - 1) / 2) * width, sub.ratio_mean.values, width,
                     label=f'{ms} cu')
     axes[0].axhline(1.0, color='black', lw=1, ls='--')
-    axes[0].set_xticks(x); axes[0].set_xticklabels(v5.ORDER, rotation=45, ha='right', fontsize=7)
+    axes[0].set_xticks(x); axes[0].set_xticklabels(base.ORDER, rotation=45, ha='right', fontsize=7)
     axes[0].set_ylabel('realized SEARCH units / target'); axes[0].legend(fontsize=7)
     axes[0].set_title('Budget adherence per config', fontsize=10)
 
     if 'ComputeUnitsElapsed' in df_burn.columns:
         for cfg in ('EMCTS', 'CrossoverBB', 'CrossoverCombo@5'):
-            sub = df_burn[(df_burn.Config == cfg) & (df_burn.ThinkingMs == v5.MS_LEVELS[-1])]
+            sub = df_burn[(df_burn.Config == cfg) & (df_burn.ThinkingMs == base.MS_LEVELS[-1])]
             if sub.empty: continue
             pace = sub.groupby('BridgeBurningPhaseNumber').ComputeUnitsElapsed.mean()
-            axes[1].plot(pace.index, pace.values / v5.MS_LEVELS[-1], marker='o', ms=3,
-                         label=cfg, color=v5.COLORS.get(cfg))
+            axes[1].plot(pace.index, pace.values / base.MS_LEVELS[-1], marker='o', ms=3,
+                         label=cfg, color=base.COLORS.get(cfg))
         axes[1].plot([0, 20], [0, 1], color='black', lw=1, ls='--', label='even pacing')
         axes[1].set_xlabel('bridge-burn phase'); axes[1].set_ylabel('cumulative spend / budget')
         axes[1].legend(fontsize=7); axes[1].set_title('Within-turn pacing', fontsize=10)
@@ -197,21 +198,21 @@ def b2_op_mix(turn_df):
 
     print('\n  B2 operation mix per turn (at equal compute-unit budget):')
     print(g.pivot(index='Config', columns='ThinkingMs', values='units_per_advance')
-           .reindex(v5.ORDER).round(3).to_string())
+           .reindex(base.ORDER).round(3).to_string())
     print('\n  B2 what an EQUAL-FMCALLS budget would have given each agent, relative to EMCTS')
     print('     (1.00 = fair; >1 = that agent would have received more real compute):')
     print(g.pivot(index='Config', columns='ThinkingMs', values='equal_fmcalls_compute_ratio')
-           .reindex(v5.ORDER).round(3).to_string())
+           .reindex(base.ORDER).round(3).to_string())
 
     fig, ax = plt.subplots(figsize=(9, 4.6))
-    x = np.arange(len(v5.ORDER))
-    width = 0.8 / max(1, len(v5.MS_LEVELS))
-    for i, ms in enumerate(v5.MS_LEVELS):
-        sub = g[g.ThinkingMs == ms].set_index('Config').reindex(v5.ORDER)
-        ax.bar(x + (i - (len(v5.MS_LEVELS) - 1) / 2) * width,
+    x = np.arange(len(base.ORDER))
+    width = 0.8 / max(1, len(base.MS_LEVELS))
+    for i, ms in enumerate(base.MS_LEVELS):
+        sub = g[g.ThinkingMs == ms].set_index('Config').reindex(base.ORDER)
+        ax.bar(x + (i - (len(base.MS_LEVELS) - 1) / 2) * width,
                sub.equal_fmcalls_compute_ratio.values, width, label=f'{ms} cu')
     ax.axhline(1.0, color='black', lw=1, ls='--')
-    ax.set_xticks(x); ax.set_xticklabels(v5.ORDER, rotation=45, ha='right', fontsize=7)
+    ax.set_xticks(x); ax.set_xticklabels(base.ORDER, rotation=45, ha='right', fontsize=7)
     ax.set_ylabel('relative real compute under an equal-fmcalls budget')
     ax.legend(fontsize=7)
     ax.set_title('B2 — the unfairness a forward-model-call budget would have introduced',
@@ -274,10 +275,10 @@ def b3_reference_conversion():
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.6))
     for ms in sorted(c.TargetMillis.unique()):
-        sub = by_cfg[ms].reindex([c for c in v5.ORDER if c in by_cfg.index])
+        sub = by_cfg[ms].reindex([c for c in base.ORDER if c in by_cfg.index])
         axes[0].plot(range(len(sub)), sub.values, marker='o', ms=4, label=f'{ms} ms')
     axes[0].set_xticks(range(len(by_cfg.index)))
-    axes[0].set_xticklabels([c for c in v5.ORDER if c in by_cfg.index], rotation=45, ha='right', fontsize=7)
+    axes[0].set_xticklabels([c for c in base.ORDER if c in by_cfg.index], rotation=45, ha='right', fontsize=7)
     axes[0].set_ylabel('compute-units per ms'); axes[0].legend(fontsize=7)
     axes[0].set_title('Conversion by config (flat = shared budget is fair)', fontsize=10)
 
@@ -355,7 +356,7 @@ def b6_realized_time_per_unit(turn_df):
 
     piv = g.pivot(index='Config', columns='ThinkingMs', values='median')
     print('\n  B6 realized ms per 1,000 SEARCH units (median), by config x budget level:')
-    print(piv.reindex([c for c in v5.ORDER if c in piv.index]).round(3).to_string())
+    print(piv.reindex([c for c in base.ORDER if c in piv.index]).round(3).to_string())
     spread = (piv.max() / piv.min() - 1) * 100
     print('\n  spread across configs within a level:')
     for lvl, v in spread.items():
@@ -437,15 +438,15 @@ def main():
     install_v6_context()
 
     # Every v5 table and figure, produced by v5's own code against the v6 tree.
-    v5.main()
+    base.main()
 
     # The v6-specific budget section.
     print('\n' + '=' * 78)
     print('BUDGET ADHERENCE (v6 additions)')
     print('=' * 78)
-    df_burn = v5.load_all()
-    turn_df = v5.per_turn(df_burn)
-    portfolio = v5.load_portfolio()
+    df_burn = base.load_all()
+    turn_df = base.per_turn(df_burn)
+    portfolio = base.load_portfolio()
 
     print('\nB1: budget adherence');        b1_budget_adherence(turn_df, df_burn)
     print('\nB2: operation mix');           b2_op_mix(turn_df)
