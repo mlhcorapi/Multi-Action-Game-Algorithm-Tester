@@ -31,6 +31,17 @@ public class AlgParams
     // gets exactly T ms of SEARCH regardless of how long its greedy initialization took.
     public int num_timeMillis = 0;
     public int num_time = 40;
+    /**
+     * ComputeMeter weight profile for this agent, e.g. {@code CrossoverCombo_r5@400000}, built by
+     * {@code ComputeMeter.profileKey}. An advance, a copy and an eval do not cost the same for every
+     * configuration or at every budget level, so a compute-unit budget is only equal compute if each
+     * configuration is priced by its own measured weights; the agent installs this on its own thread
+     * at the start of each planning episode.
+     *
+     * <p>Null (the default) means the global weights, which is what every non-v6 agent uses and what
+     * the whole pipeline falls back to when no calibration file is present.
+     */
+    public String computeProfile = null;
     public int FORCE_TURN_END = 5;
     public boolean PRIORITIZE_ROOT = false;
 

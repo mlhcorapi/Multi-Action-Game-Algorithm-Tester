@@ -338,6 +338,24 @@ public class GameState implements Serializable {
     public void advance(Action action, boolean computeActions)
     {
         ComputeMeter.onAdvance();
+        // Timing an advance is opt-in (ComputeCalibrateV6 turns PROFILE on for a few thousand turns on
+        // an idle machine) because the nanoTime pair is a real cost in the innermost loop of the search.
+        // It lives HERE, next to the count, rather than in an agent's forward-model wrapper: an advance
+        // has to be timed identically for every agent, or a per-agent weight calibration would be
+        // measuring the wrapper as much as the operation. ExperimentalEMCTSAgent.FM_NANOS still exists
+        // for FmComputeProbe, but it is a process-wide static that only that agent family maintains.
+        if (ComputeMeter.PROFILE) {
+            long __t0 = System.nanoTime();
+            advanceInternal(action, computeActions);
+            ComputeMeter.addAdvanceNanos(System.nanoTime() - __t0);
+            return;
+        }
+        advanceInternal(action, computeActions);
+    }
+
+    /** The advance itself. Split out only so {@link #advance} can time it without re-indenting. */
+    private void advanceInternal(Action action, boolean computeActions)
+    {
         if(action != null)
         {
             boolean executed = false;

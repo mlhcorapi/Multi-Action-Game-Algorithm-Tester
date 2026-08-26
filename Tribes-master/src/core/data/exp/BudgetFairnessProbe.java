@@ -18,29 +18,30 @@ import java.util.Map;
 /**
  * Is the compute-unit budget FAIR between the agents it compares?
  *
- * <p>v6 gives every configuration the same number of compute-units, where
- * {@code units = advances + 0.16·copies + 0.077·evals} (the weights live in {@link ComputeMeter}).
- * That is a fair currency only if two things hold, and neither is guaranteed by construction:
+ * <p>v6 gives every configuration the same number of compute-units, where a unit is
+ * {@code W_ADVANCE·advances + W_COPY·copies + W_EVAL·evals}. Since the weights became per
+ * (configuration, budget level) - see {@link ComputeCalibrateV6} - that currency is fair by
+ * construction ON THE MACHINE THAT WAS CALIBRATED: each configuration is priced by its own measured
+ * per-operation costs, so equal units are equal wall-clock.
+ *
+ * <p>Two things can still break it, and this probe measures both:
  *
  * <ol>
- *   <li><b>The weights match this machine.</b> They are wall-clock ratios measured by
- *       {@link ComputeCalibrateV6}. A copy costs 0.16 of an advance on the machine that last ran a
- *       calibration; on a different memory subsystem it might cost 0.25. Unless a calibration has been
- *       run here, the values in force are the compiled defaults — i.e. someone else's machine.</li>
- *   <li><b>Any weight error is harmless because the agents spend alike.</b> If every config used
- *       operations in the same proportions, a wrong weight would rescale all budgets identically and
- *       cancel out of a paired comparison. It only becomes unfairness to the extent that the configs'
- *       operation MIXES differ — and crossover tournaments are copy- and eval-heavy relative to plain
- *       MCTS iterations, which is exactly the direction that would matter.</li>
+ *   <li><b>The profiles are missing or stale.</b> An agent whose profile is not in the calibration
+ *       file silently falls back to the global weights - no error, no crash, just a budget that is no
+ *       longer equal compute. The probe prints which profile priced each configuration, so "the
+ *       weights I think are in force" is checked rather than assumed.</li>
+ *   <li><b>The configurations spend differently.</b> This is what makes per-config weights necessary
+ *       in the first place: if every configuration used operations in the same proportions, one weight
+ *       set would price them all correctly and the profiles would be redundant. Crossover tournaments
+ *       are copy- and eval-heavy relative to plain mutation iterations, so they do not.</li>
  * </ol>
  *
- * <p>This probe measures the second condition directly, and reports how much the first one could
- * distort the comparison. For each configuration it runs a fixed compute budget over a sample of
- * scenarios, records the realized operation mix, and then re-prices every config's work under
- * alternative weights. The output is the <b>spread</b>: if the most and least affected configs move by
- * a fraction of a percent when the copy weight is doubled, the budget is fair regardless of calibration
- * error; if they move by 10%, the weights must be re-calibrated on the run machine before the
- * experiment is trusted.
+ * <p>The re-pricing table below therefore reads differently than it used to. It re-prices every
+ * configuration's realized work under alternative weights and reports the <b>spread</b>: how far apart
+ * the configurations move when a weight is wrong. That number is the size of the bias the per-config
+ * profiles remove - a large spread means the profiles are doing real work and a run without them is
+ * measurably unfair, not that the experiment is broken.
  *
  * <p>It also reports realized-vs-target adherence and the within-turn overshoot, which is the other
  * half of "reliable": a budget nobody actually stops at is not a budget.
@@ -242,26 +243,39 @@ public final class BudgetFairnessProbe {
             if (spread > worstSpread) { worstSpread = spread; worstLabel = labels[i]; }
         }
 
+        System.out.println("\n=== WHICH WEIGHTS PRICED EACH CONFIGURATION ===");
+        int profiled = 0;
+        for (Row r : rows) {
+            String profile = ComputeMeter.profileKey(
+                    r.name, r.name.startsWith("Crossover") && r.ratio > 0 ? r.ratio : -1, budget);
+            boolean have = ComputeMeter.hasProfile(profile);
+            if (have) profiled++;
+            System.out.printf(Locale.ROOT, "  %-26s %s%n", shortLabel(r),
+                    have ? ComputeMeter.profileSummary(profile)
+                         : profile + ": NOT CALIBRATED -- priced with the global weights");
+        }
+
         System.out.println("\n=== VERDICT ===");
         System.out.printf(Locale.ROOT,
                 "  Worst-case distortion across the weightings tried: %.2f percentage points (%s).%n",
                 worstSpread, worstLabel);
-        if (worstSpread < 1.0) {
-            System.out.println("  The configs spend alike enough that weight error rescales them all together");
-            System.out.println("  and cancels out of the paired comparison. The budget is FAIR as it stands;");
-            System.out.println("  re-calibrating the weights on the run machine would change wall-clock, not");
-            System.out.println("  the relative treatment of the agents.");
-        } else if (worstSpread < 5.0) {
-            System.out.println("  Small but not negligible. Re-run ComputeCalibrate on the run machine and bake");
-            System.out.println("  the printed W_COPY / W_EVAL into ComputeMeter before the production run, then");
-            System.out.println("  re-derive the budget levels from C0. Report the residual as a limitation.");
+        if (profiled == rows.size()) {
+            System.out.println("  Every configuration is priced by its own calibrated profile, so that");
+            System.out.println("  distortion is what the profiles REMOVE rather than a residual risk: a wrong");
+            System.out.println("  single weight set would have handed one agent that much more compute than");
+            System.out.println("  another for the same nominal budget.");
         } else {
-            System.out.println("  LARGE. The configs' operation mixes differ enough that the compute-unit budget");
-            System.out.println("  is only fair if the weights are right for the run machine. Re-calibrate with");
-            System.out.println("  ComputeCalibrate BEFORE C0 and the production run, and report the sensitivity.");
+            System.out.println("  " + (rows.size() - profiled) + " of " + rows.size() + " configurations have"
+                    + " NO calibrated profile and fall back to the");
+            System.out.println("  global weights. The distortion above is then a live bias in the experiment,");
+            System.out.println("  not a removed one. Run ComputeCalibrateV6 before C0 and the production run.");
         }
-        System.out.println("  (C0's units/ms table is the direct empirical check of the same question: if");
-        System.out.println("   units/ms is flat across configs on the run machine, the currency is fair there.)");
+        if (worstSpread < 1.0) {
+            System.out.println("  (The spread is small here, so this budget level would have been nearly fair");
+            System.out.println("   even under one global weight set.)");
+        }
+        System.out.println("  (C0's units/ms table is the direct empirical check: with the profiles in force");
+        System.out.println("   it should be FLAT across configurations on the run machine.)");
     }
 
     private static String shortLabel(Row r) {

@@ -115,6 +115,7 @@ public final class RunV6FullGames {
         System.out.println("# Tribes: " + FullGameMapSetV6.TRIBES[0] + " vs " + FullGameMapSetV6.TRIBES[1]
                 + " (mirror pair), swapped every " + FullGameRunnerV6.GAMES_PER_ORIENTATION + " games");
         System.out.println("# Compute weights: " + ComputeMeter.weightsSummary());
+        System.out.println("# " + ComputeCalibrateV6.coverageBanner(cuLevels));
         System.out.println("# " + machine.summary());
         System.out.println("############################################################");
         System.out.println();

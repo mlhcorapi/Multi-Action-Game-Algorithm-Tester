@@ -68,16 +68,34 @@ v6 fixes both halves:
 All are observation-only: reading the meter performs no `advance`/`copy`/`eval`, so trajectories are
 unchanged, exactly as with the existing v5 telemetry.
 
-**Why the budget rule is not pre-decided.** Two schemes are live, and they differ only by the size of the
+**How the budget rule was settled.** Two schemes were live, and they differed only by the size of the
 cost-model error:
 
-- *Shared scalar* (v5): every agent gets the same unit budget. Fair **iff** the weights are right;
-  a weight error biases whichever agent has the most divergent op mix, and more samples do not fix it.
-- *Per-agent calibrated* : each agent gets the op count it completes in T seconds on the reference
-  machine. Fairness criterion is direct ("equal reference-machine thinking time"), no weights to defend,
-  and the residual error is calibration noise — which shrinks with repetitions. If this wins, the
-  currency can be plain forward-model calls (`STOP_FMCALLS`, already implemented, and the standard
-  currency in the Tribes literature), since fmcalls then only need to be a monotone stopping clock.
+- *Shared scalar* (v5): every agent gets the same unit budget under one global weight set. Fair **iff**
+  those weights are right for every agent; a weight error biases whichever agent has the most divergent
+  op mix, and more samples do not fix it.
+- *Per-agent calibrated*: each agent gets the op count it completes in T seconds on the reference
+  machine. The fairness criterion is direct ("equal reference-machine thinking time"), but the budget
+  stops being a deterministic count and becomes a clock — which is exactly what v5 moved away from,
+  because wall-clock on a loaded 90-worker server is not reproducible.
+
+**v6 takes the third option, which has both properties: keep the shared scalar, and calibrate the
+WEIGHTS per (configuration, budget level).** `ComputeCalibrateV6` measures what an advance, a copy and
+an eval actually cost for each of the 12 configurations at each of the 3 levels, and expresses all of
+them relative to one reference operation (an advance in `EMCTS@40000`). Every weight, `W_ADVANCE`
+included, is then a real cost ratio rather than a definition, so:
+
+- an equal unit budget is equal reference-machine thinking time — the per-agent scheme's fairness
+  criterion, obtained without a clock;
+- the budget stays a deterministic count, so the search is still reproducible run-for-run;
+- the levels become proportional *in time*: measured per-op cost grows with tree size, which is why the
+  400,000-unit level cost 26.7× the 40,000-unit level rather than 10× under one weight set. Charging
+  that cost makes it ~10×.
+
+The measurement that forced this: per-advance cost varies **13–18% between configurations within a
+level** (dev laptop, `compute_profiles.csv`), and priced with one global weight set the same nominal
+budget bought up to ~16% more wall-clock for one agent than another. That is an order of magnitude
+larger than the effects the experiment is trying to resolve.
 
 Part I measures which is warranted. The deciding statistic is **ms-per-unit variation between agents vs.
 within an agent across scenarios** (§4.4).
@@ -144,27 +162,33 @@ single-dual split is kept so the branching-factor contrast H5 rests on is untouc
 phases**: Part 0 is the shared setup (environment, build, machine policy, compute-unit weights — both
 phases price budgets in the same units, from the same file), Part A is this phase, Part B is the full
 games ([EXPERIMENT_V6_FULL_GAMES_PLAN.md](EXPERIMENT_V6_FULL_GAMES_PLAN.md)). The table below is Part
-A, which keeps the section structure of [run_v5_jupyter.ipynb](run_v5_jupyter.ipynb):
+A:
 
 | section | contents |
 |---|---|
-| 0 | Environment check (java, CPU topology, memory, disk, stray processes and run locks) |
-| 1 | Build (`javac @sources.txt`) |
-| 1b | **Machine policy** — `ServerProfile` prints the worker ceiling and thread ladder, running no work |
-| 2 | Smoke test — `NewExperimentSmokeTestV6`, pipeline correctness in ~10 s |
-| 3 | Portfolio build — parallel, journalled, restartable |
-| 4 | **Calibration run (C0)** — new for v6; writes `test_results/v6/_calibration/` |
-| 5 | Run v6 (background + log) — also the RESUME cell |
-| 6 | **Progress cell** — re-run to refresh; see below |
-| 6b | Thread-calibration curve — sustained throughput, throttling and clock drop per level |
-| 6c | Graceful stop (`SIGTERM`, never `kill -9`) |
-| 7 | Analyse |
+| 0.1 | Environment check (java, CPU topology, memory, disk, stray processes and run locks in both trees) |
+| 0.2 | Build (`javac @sources.txt`) |
+| 0.3 | **Machine policy** — `ServerProfile` prints the worker ceiling and thread ladder, running no work |
+| 0.4 | Portfolio build — parallel, journalled, restartable. **Shared**: §0.5 measures on it |
+| 0.5 | **Compute-unit weights per (config, level)** — `ComputeCalibrateV6`, ~35 min; writes the weights both phases price their budgets with |
+| A1 | Smoke test — `NewExperimentSmokeTestV6`, pipeline correctness plus the weight-profile plumbing |
+| A2 | Budget fairness probe — realized op mix, which profile priced each config, weight sensitivity |
+| A3 | Budget floor probe — the smallest level at which the operators structurally run |
+| A4 | **Calibration run (C0)** — the units→ms conversion, and the flatness check on §0.5 |
+| A5 | Run v6 (background + log) — also the RESUME cell; progress, thread curve and graceful stop |
+| A6 | Output integrity (`VerifyV6Output`) |
+| A7 | Analyse (`analyze_v6_full.py`) |
+| A8 | Significance (`v6_significance.py`) |
+
+The portfolio build and the weight calibration sit in Part 0 rather than Part A because both phases
+depend on them: the tournament prices its budgets with the same weights, and those weights have to be
+measured on real portfolio positions rather than on fresh-game states.
 
 Server placement — the thread ceiling, the per-level calibration, the runtime load governor and what
 survives an interruption — is documented separately in
 [V6_SERVER_RUNBOOK.md](V6_SERVER_RUNBOOK.md).
 
-The progress cell (5) reports, without touching the running job: per-(agent, ratio, budget) checkpoint
+The progress cell (A5b) reports, without touching the running job: per-(agent, ratio, budget) checkpoint
 completion from `_completed.txt`; per-leaf row counts vs. expected (100 × 50); turns/minute and projected
 finish; live thread count and RSS; and the tail of the run log. Everything it needs is already written by
 the resumable runner — it is a read-only view over the output tree.
@@ -225,18 +249,20 @@ not wall-clock seconds).
 
 | output | question it answers |
 |---|---|
-| Per-agent op counts per target, with CI | the candidate per-agent budgets |
-| **ms per compute-unit, by agent** | is the shared composite agent-invariant? → **decides shared vs. per-agent budget** |
+| Per-agent op counts per target, with CI | what each agent completes in T ms |
+| **ms per compute-unit, by agent** | **verifies the per-config weights**: a unit is defined as fixed wall-clock, so this must be FLAT across agents. Spread means stale or missing profiles |
 | ms per compute-unit, by scenario source and BF tertile | the H5 confound: does a fixed unit budget buy different real compute in single vs. dual? |
 | Op mix by phase index | within-turn drift as the tree grows |
 | Op mix by target time | does composition differ at 500 ms vs. 5000 ms? |
 | CV across repetitions | validates the reference-machine stability assumption |
 | **`InitUnits` by source and BF tertile** | resolves §5 |
 
-**Decision rule.** If ms-per-unit is agent-invariant → keep v5's shared scalar and simply report the
-conversion. If it varies between agents but is stable within them → per-agent calibrated budgets, and
-fmcalls suffice as the currency. If it varies substantially *within* an agent across scenarios → keep the
-composite (it absorbs mix drift) and calibrate per agent on top of it.
+**Decision rule.** Settled in §3A: the composite is kept and the *weights* are calibrated per
+(configuration, level), so ms-per-unit being agent-invariant is now the pass condition rather than the
+decision. If C0 still shows spread between agents, the cause is a stale or missing profile, not a design
+question — re-run `ComputeCalibrateV6` on the run machine and re-derive the levels. If ms-per-unit
+varies substantially *within* an agent across scenarios, the composite is still the right currency (it
+absorbs mix drift) and the residual is reported as a limitation.
 
 ---
 

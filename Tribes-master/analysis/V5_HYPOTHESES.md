@@ -93,7 +93,10 @@ fixed BF; the source label adds little once composition is controlled. → **E21
   (mutation baseline); the smoke test (`NewExperimentSmokeTestV5`, section 5) asserts the telemetry
   is present and sane before a full run.
 
-## Analysis outputs (analyze_v5_full.py)
+## Analysis outputs (`analyze_v6_base.py`, driven by `analyze_v6_full.py`)
+
+*(This battery was written for v5 as `analyze_v5_full.py`; that file is now vendored into the v6
+analysis as `analyze_v6_base.py` and produces these same tables from the v6 tree.)*
 
 | figure/table | hypothesis | discriminating signal |
 |---|---|---|
