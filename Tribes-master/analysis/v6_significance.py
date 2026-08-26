@@ -6,13 +6,14 @@ tests it, and it exists because two things in the descriptive analysis are not e
 claim in a thesis.
 
 **1. The unit of analysis is the scenario, not the turn.**
-The descriptive E1 table computes a 95% CI as `1.96·sd/sqrt(n)` over every turn — n ≈ 10,000 per
+The descriptive E1 table computes a 95% CI as `1.96·sd/sqrt(n)` over every turn — n ≈ 5,000 per
 cell. That treats the 50 visits of a scenario as 50 independent observations, and they are not: they
 share a board, a captured position, a branching factor and a greedy root. The independent replicate
-is the SCENARIO (n = 200), and pooling visits understates the standard error by up to sqrt(50) ≈ 7×.
-At that precision every difference looks significant, including ones far too small to matter. Here
-the 50 visits of a scenario are AVERAGED first, and the test runs on the 200 per-scenario paired
-differences.
+is the SCENARIO (n = 100 in the v6 portfolio), and pooling visits understates the standard error by
+up to sqrt(50) ≈ 7×. At that precision every difference looks significant, including ones far too
+small to matter. Here the 50 visits of a scenario are AVERAGED first, and the test runs on the
+per-scenario paired differences. Every n below is read from the data, so a re-sized portfolio needs
+no change here.
 
 **2. The 12 configurations are a 2x2 factorial, and nobody was reading it as one.**
 
@@ -42,8 +43,8 @@ are heavy-tailed across a portfolio whose branching factor spans several-fold; s
 kurtosis are reported per comparison so that choice is visible rather than asserted.
 
 The test is implemented here in numpy (normal approximation with tie and zero corrections, which at
-n = 200 is indistinguishable from the exact distribution) rather than taken from scipy, so the script
-has no dependency beyond what the descriptive analysis already needs.
+n = 100 is already indistinguishable from the exact distribution) rather than taken from scipy, so
+the script has no dependency beyond what the descriptive analysis already needs.
 
 Effects are also reported as a percentage of **EMCTS's own search gain** on the same scenarios
 (`FinalSequenceValue − InitialSequenceValue`, where the initial value is the shared greedy root and
@@ -126,11 +127,11 @@ def paired(scen, cfg_a, cfg_b, budget, source=None):
 
 def cliffs_delta(x, y):
     """Non-parametric effect size: P(x>y) − P(x<y), in [−1, 1]. Reported because a significant
-    Wilcoxon on n=200 says the sign is reliable, not that the effect is large."""
+    Wilcoxon on a hundred-odd scenarios says the sign is reliable, not that the effect is large."""
     x = np.asarray(x); y = np.asarray(y)
     if len(x) == 0 or len(y) == 0:
         return np.nan
-    # Pairwise comparison; n=200 so the O(n^2) form is fine and exact.
+    # Pairwise comparison; n is in the hundreds, so the O(n^2) form is fine and exact.
     gt = sum((xi > y).sum() for xi in x)
     lt = sum((xi < y).sum() for xi in x)
     return (gt - lt) / (len(x) * len(y))
@@ -155,7 +156,7 @@ def wilcoxon_signed_rank(d):
     """Two-sided Wilcoxon signed-rank p-value, normal approximation with tie and zero corrections.
 
     Zero differences are dropped (Wilcoxon's own handling) and the variance is reduced by the tie
-    correction term, which matters here because per-scenario deltas can repeat. At n = 200 the normal
+    correction term, which matters here because per-scenario deltas can repeat. At n = 100 the normal
     approximation agrees with the exact distribution to well beyond the precision anyone reads.
     Returns (p, n_used)."""
     d = np.asarray(d, dtype=float)
@@ -472,7 +473,8 @@ def fig_vs_emcts(res, budgets):
         ax.axvline(0, color='black', lw=0.8)
         ax.set_title(f'{budget} cu')
         ax.set_xlabel('per-scenario paired Δ vs EMCTS (±95% CI)')
-    fig.suptitle('Δ vs EMCTS — scenario-clustered (n=200), * = BH-adjusted p < 0.05',
+    n_scen = int(sub['n'].median()) if 'n' in sub.columns and len(sub) else 0
+    fig.suptitle(f'Δ vs EMCTS — scenario-clustered (n={n_scen}), * = BH-adjusted p < 0.05',
                  fontweight='bold')
     fig.tight_layout(); fig.savefig(OUT / 'F1_vs_emcts.png'); plt.close(fig)
 
@@ -592,7 +594,7 @@ def write_report(res, fac, clus, act, budgets):
     L.append('game-playing strength; that requires the tournament phase.\n')
     L.append('- Effects are heuristic-value units on the SIMPLE_HEURISTIC scale. The ')
     L.append('`% of EMCTS gain` column is the interpretable version.\n')
-    L.append('- Significance at n=200 scenarios says the SIGN is reliable. Cliff\'s δ says whether the ')
+    L.append('- Significance says the SIGN is reliable, at whatever scenario count the tables report. Cliff\'s δ says whether the ')
     L.append('effect is large enough to matter; a "negligible" δ with p < 0.001 is a real but tiny effect.\n')
 
     (OUT / 'SIGNIFICANCE_V6.md').write_text('\n'.join(L), encoding='utf-8')

@@ -13,7 +13,7 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * v6 Isolation Phase — single entry point. Greedy-initialization rebuild of v5 (200-scenario
+ * v6 Isolation Phase — single entry point. Greedy-initialization rebuild of v5 (100-scenario
  * portfolio, 50 visits, ratios {2,5,10,20,50}, deterministic STOP_COMPUTE budget bounding SEARCH only).
  *
  * <p>See {@code analysis/EXPERIMENT_V6_PLAN.md}. The C0 calibration
@@ -105,8 +105,10 @@ public class RunExperimentV6 {
 
         System.out.println("############################################################");
         System.out.println("# EXPERIMENT v6 — Isolation Phase   (output=" + BASE + ")");
-        System.out.println("# 200 scenarios × " + IsolationPhaseRunnerV6.VISITS_PER_SCENARIO + " visits = "
-                + (200 * IsolationPhaseRunnerV6.VISITS_PER_SCENARIO) + " turns / config / budget");
+        System.out.println("# " + (numSingle + numDual) + " scenarios × "
+                + IsolationPhaseRunnerV6.VISITS_PER_SCENARIO + " visits = "
+                + ((numSingle + numDual) * IsolationPhaseRunnerV6.VISITS_PER_SCENARIO)
+                + " turns / config / budget");
         System.out.println("# Budgets: " + java.util.Arrays.toString(cuLevels)
                 + " compute-units of SEARCH (STOP_COMPUTE; greedy init excluded)");
         System.out.println("# Init: GREEDY 1-ply, shared across all configs per (scenario, visit)");

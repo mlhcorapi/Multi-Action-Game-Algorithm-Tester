@@ -29,7 +29,13 @@ import java.util.concurrent.Future;
  * <p>Every check here corresponds to a claim the write-up will make. In particular §2 is the claim
  * that the orientation swap is a real exchange of starting positions rather than a relabelling, and
  * §1c is the check that caught a live bug: with consecutive level seeds, {@code java.util.Random}'s
- * cross-seed correlation put one capital on the identical tile on all 20 maps.
+ * cross-seed correlation put one capital on the identical tile on every map in the set.
+ *
+ * <p>§2 carries more weight than it used to. The tournament no longer plays an EMCTS-vs-EMCTS control
+ * arm whose win rate would have shown a surviving seat or spawn bias after the fact, so the assertion
+ * that the swap is exact — same board, capitals exchanged, seats exchanged — is now the primary
+ * evidence for it. §5h still plays self-play games, but as a check that a winner is read from the
+ * seat rather than from the agent's name.
  *
  * <p>Usage: {@code java -Xmx4g -cp "out:lib/*" core.data.exp.NewExperimentSmokeTestV6Full}
  */
@@ -73,7 +79,7 @@ public final class NewExperimentSmokeTestV6Full {
 
     private static void section1_mapSet(List<FullGameMapSetV6.MapInfo> maps) {
         System.out.println("\n--- §1 map set ---");
-        check("20 maps built", maps.size() == FullGameMapSetV6.NUM_MAPS,
+        check(FullGameMapSetV6.NUM_MAPS + " maps built", maps.size() == FullGameMapSetV6.NUM_MAPS,
                 "got " + maps.size());
 
         Set<Long> seeds = new HashSet<>();
@@ -160,9 +166,9 @@ public final class NewExperimentSmokeTestV6Full {
 
     // ---------------------------------------------------------------- §3 schedule
 
-    /** Over a matchup's 200 game ids, every map and every (map, orientation) must appear equally. */
+    /** Over a matchup's game ids, every map and every (map, orientation) must appear equally. */
     private static void section3_schedule() {
-        System.out.println("\n--- §3 the 200-game schedule is balanced ---");
+        System.out.println("\n--- §3 the " + FullGameRunnerV6.GAMES_PER_MATCHUP + "-game schedule is balanced ---");
         Map<Integer, Integer> perMap = new HashMap<>();
         Map<String, Integer> perMapOrientation = new HashMap<>();
         Set<String> triples = new HashSet<>();
@@ -267,9 +273,10 @@ public final class NewExperimentSmokeTestV6Full {
         check("§5g orientation 1 puts EMCTS in the other seat",
                 !f[8].equals(f1[8]), "seat " + f[8] + " in both orientations");
 
-        // The control arm is the one place a name-based winner silently breaks: both sides are called
-        // "EMCTS", so a name would make EmctsWon identically 1 in the very matchup whose purpose is to
-        // come out at 50%. Play enough control games that a stuck column cannot pass by chance.
+        // Self-play is the one place a name-based winner silently breaks: both sides are called
+        // "EMCTS", so a name would make EmctsWon identically 1. The tournament does not schedule this
+        // matchup any more, but the seat-based winner logic it exercises is the same code every real
+        // matchup uses. Play enough games that a stuck column cannot pass by chance.
         FullGameRunnerV6.Matchup control = new FullGameRunnerV6.Matchup("EMCTS", -1, SMOKE_UNITS);
         int wins = 0, n = 12;
         for (int g = 0; g < n; g++) {
@@ -277,7 +284,7 @@ public final class NewExperimentSmokeTestV6Full {
                     control, maps.get(FullGameRunnerV6.mapIndexOf(g)), g, 0).split(",", -1);
             if (cf[11].equals("1")) wins++;
         }
-        check("§5h the EMCTS-vs-EMCTS control can report losses", wins > 0 && wins < n,
+        check("§5h EMCTS-vs-EMCTS self-play can report losses", wins > 0 && wins < n,
                 "EMCTS won " + wins + "/" + n + " — 0 or " + n
                 + " means the winner is being read from the agent NAME, which is identical on both sides");
     }
@@ -398,7 +405,7 @@ public final class NewExperimentSmokeTestV6Full {
                 + " — a preceding thread calibration would leak its tick cap into the real games");
         check("§8b REMOVE_FISHING is set (maps are water-free)",
                 core.Constants.REMOVE_FISHING, "");
-        check("§8c VERBOSE is off (7,200 games would otherwise flood the log)",
+        check("§8c VERBOSE is off (3,300 games would otherwise flood the log)",
                 !core.Constants.VERBOSE, "");
     }
 

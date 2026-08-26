@@ -86,7 +86,7 @@ machine that comfortably ran 15.)
 
 ### `LoadGovernor` — throttling during the run
 
-The calibration measures a *sample*. The real run crosses 200 scenarios whose branching factors differ
+The calibration measures a *sample*. The real run crosses the whole portfolio, whose branching factors differ
 several-fold, and search-tree size tracks branching factor, so a thread count that is comfortable on the
 average scenario can be over-committed on a run of wide ones. The governor caps how many turns are
 in flight and lowers that cap when the JVM shows pressure:
@@ -273,7 +273,7 @@ the state (attack / move / other unit / city / tribe action counts) that hypothe
 ## 5b. Is the compute-unit budget reliable, and is it fair?
 
 Two separate questions. Both are now measured rather than assumed, by
-`core.data.exp.BudgetFairnessProbe` (run it from notebook §3b).
+`core.data.exp.BudgetFairnessProbe` (run it from notebook §A2b).
 
 ### Reliable — yes
 
@@ -341,12 +341,12 @@ Three things were missing, and are now in place:
 
 1. **The interaction was never computed.** `analysis/v6_significance.py` adds it, per ratio per budget,
    alongside the two main effects and `Combo vs best single`.
-2. **The statistics pooled visits as independent.** The descriptive CI treats ~10,000 turns per cell as
+2. **The statistics pooled visits as independent.** The descriptive CI treats ~5,000 turns per cell as
    independent replicates, but the 50 visits of a scenario share a board and a root; the replicate is
-   the scenario (n=200). Pooling understates the SE by up to √50 ≈ 7×. The significance script averages
+   the scenario (n=100). Pooling understates the SE by up to √50 ≈ 7×. The significance script averages
    visits first, then runs a paired Wilcoxon signed-rank with Benjamini–Hochberg correction and reports
-   Cliff's δ so that "significant" and "large" stay separate — at n=200 with this much power, they are
-   very different claims.
+   Cliff's δ so that "significant" and "large" stay separate — with this much power they are very
+   different claims.
 3. **Nothing checked that the operator actually fired** — and it was not firing. This turned out to be
    the most consequential finding of the review; it is why the budget levels changed. See §5d.
 

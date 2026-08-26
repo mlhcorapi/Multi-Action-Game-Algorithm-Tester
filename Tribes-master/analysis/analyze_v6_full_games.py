@@ -8,12 +8,12 @@ isolation phase (`analyze_v6_full.py`), which measures it at these same budgets 
 
 Three things here are not the obvious defaults, and each exists for a reason:
 
-  * Confidence intervals CLUSTER ON MAP. Ten of a matchup's 200 games share a map and are therefore
-    correlated; a plain binomial interval treats them as ten independent observations and understates
+  * Confidence intervals CLUSTER ON MAP. Four of a matchup's 100 games share a map and are therefore
+    correlated; a plain binomial interval treats them as four independent observations and understates
     the uncertainty. W1 reports a cluster-robust interval with the map as the cluster.
 
-  * The headline test POOLS over ratios. 200 games gives about +/- 7pp at 50%, which cannot resolve a
-    small effect. Pooling the five ratios of a family gives 1,000 games and about +/- 3pp, and "does
+  * The headline test POOLS over ratios. 100 games gives about +/- 10pp at 50%, which cannot resolve a
+    small effect. Pooling the five ratios of a family gives 500 games and about +/- 4pp, and "does
     crossover expansion beat EMCTS at this budget" is the question the write-up actually asks.
 
   * A PAIRED test is reported alongside the raw rate. Games are generated as mirror pairs: the same
@@ -21,8 +21,13 @@ Three things here are not the obvious defaults, and each exists for a reason:
     who sits where is identical, so winning both sides is strong evidence and splitting is a tie.
     W5 is a sign test over those pairs and is the sharper of the two tests.
 
-Read W4 (the EMCTS-vs-EMCTS control) FIRST. It should sit at 50%. If it does not, some asymmetry
-survived the design and that budget level's other numbers are not interpretable.
+There is no EMCTS-vs-EMCTS control arm in the v6 schedule, so W4 is normally empty. What it stood for
+-- evidence that no seat or spawn asymmetry survived the orientation swap -- is covered by
+NewExperimentSmokeTestV6Full §2 (the swap asserted directly on every map), VerifyV6FullOutput (the
+realized schedule) and W6 below, which reports every matchup's win rate by orientation and by seat.
+Read W6 in the place the control used to hold: a systematic orientation gap across all 33 arms means
+the same thing a control arm off 50% would have meant. W4 still fills in if a tree does contain
+self-play rows.
 
 Usage:  python3 analysis/analyze_v6_full_games.py [test_results/v6_full] [--outdir analysis/v6_full_games]
 """
@@ -45,6 +50,11 @@ except Exception:                                    # figures are a bonus; tabl
     HAVE_PLT = False
 
 Z = 1.959963984540054                                # two-sided 95%
+
+# Games in a complete matchup: FullGameRunnerV6.GAMES_PER_MATCHUP (25 maps x 4 games). Used only to
+# flag matchups that are still short, never in an estimate -- every table computes from the rows it
+# actually has, so a partially-complete tree analyses correctly, just with wider intervals.
+EXPECTED_GAMES_PER_MATCHUP = 100
 
 
 # ----------------------------------------------------------------------------- loading
@@ -212,7 +222,7 @@ def w3_by_ratio(df, out):
 
 
 def w4_control(df, out):
-    """The validity check. Read this before anything else."""
+    """Self-play rows, if any. Empty under the v6 schedule -- see the module docstring and W6."""
     rows = []
     for cu, g in df[df["IsControl"]].groupby("ComputeUnits", sort=True):
         p, lo, hi, nmaps = clustered_ci(g)
@@ -358,8 +368,10 @@ def figures(w1, w3, w4, out):
             ax.set_yticklabels(sub["Config"], fontsize=8)
             ax.set_xlabel("opponent win rate vs EMCTS (%)")
             ax.set_title(f"{cu:,} compute-units")
-        fig.suptitle("v6 full games - opponent win rate against EMCTS "
-                     "(grey = EMCTS-vs-EMCTS control, expect 50%)")
+        title = "v6 full games - opponent win rate against EMCTS"
+        if (w1["Config"] == "EMCTS").any():          # only if a self-play arm is in the tree
+            title += " (grey = EMCTS-vs-EMCTS self-play, expect 50%)"
+        fig.suptitle(title)
         fig.tight_layout()
         fig.savefig(os.path.join(fig_dir, "F2_forest.png"), dpi=150)
         plt.close(fig)
@@ -367,20 +379,35 @@ def figures(w1, w3, w4, out):
 
 # ----------------------------------------------------------------------------- report
 
-def report(df, w1, w2, w3, w4, w5, w7, out):
+def report(df, w1, w2, w3, w4, w5, w6, w7, out):
     lines = []
     a = lines.append
     a("# v6 Full Games — results\n")
     a(f"{len(df):,} games across {df['Config'].nunique()} configurations "
       f"and {df['ComputeUnits'].nunique()} budget levels.\n")
 
-    a("\n## The control arm — read this first\n")
-    a("EMCTS vs EMCTS on the same maps with the same swap schedule. It should sit at 50%. "
-      "If a level's interval excludes 50%, some asymmetry survived the design and that level's "
-      "other numbers are not interpretable.\n")
-    if w4.empty:
-        a("\n_Control arm not present in this dataset._\n")
+    a("\n## Balance — read this first\n")
+    a("The v6 schedule has no EMCTS-vs-EMCTS control arm. What it stood for — evidence that no seat "
+      "or spawn advantage survived the orientation swap — is reported here instead, and across every "
+      "arm rather than in one: each map is played the same number of times in each orientation, and "
+      "the two games of a mirror pair differ only in who sits where. A **systematic** gap in the "
+      "same direction across the arms means what a control arm off 50% would have meant. Gaps of "
+      "either sign, scattered, are sampling noise — at 50 games per orientation, one standard error "
+      "is about 7pp.\n")
+    if w6.empty or "OrientationGapPP" not in w6.columns:
+        a("\n_No balance table available._\n")
     else:
+        b = w6.dropna(subset=["OrientationGapPP"])
+        a("\n| budget | arms | median orientation gap | widest arm | median seat-0 win rate |")
+        a("|---|---|---|---|---|")
+        for cu, g in b.groupby("ComputeUnits", sort=True):
+            worst = g.loc[g.OrientationGapPP.idxmax()]
+            a(f"| {int(cu):,} | {len(g)} | {g.OrientationGapPP.median():.1f} pp | "
+              f"{worst.Config} ({worst.OrientationGapPP:.1f} pp) | {g.Win_seat0.median():.3f} |")
+        a("\nPer-matchup detail is in `W6_balance.csv`.\n")
+    if not w4.empty:
+        a("\n### Self-play rows in this tree\n")
+        a("This dataset also contains EMCTS-vs-EMCTS games, which should sit at 50%.\n")
         a("\n| budget | games | EMCTS win rate | 95% CI | 50% in CI? |")
         a("|---|---|---|---|---|")
         for _, r in w4.iterrows():
@@ -424,7 +451,8 @@ def report(df, w1, w2, w3, w4, w5, w7, out):
       "see `GameLengthProbeV6` and `RunV6FullGames.TURN_LIMIT`.\n")
 
     a("\n## Method notes\n")
-    a("- Intervals cluster on map: 10 games share each map, so a plain binomial interval "
+    per_map = int(df.groupby(["ComputeUnits", "Config", "MapIndex"]).size().median())
+    a(f"- Intervals cluster on map: {per_map} games share each map, so a plain binomial interval "
       "understates uncertainty.\n")
     a("- The sign test is over mirror pairs — the same map and seeds with the agents swapped "
       "between seats. Split pairs are ties and are discarded.\n")
@@ -448,10 +476,10 @@ def main():
     print(f"Loaded {len(df):,} games from {args.base}")
 
     incomplete = df.groupby(["ComputeUnits", "Config"]).size()
-    partial = incomplete[incomplete < 200]
+    partial = incomplete[incomplete < EXPECTED_GAMES_PER_MATCHUP]
     if len(partial):
-        print(f"  [warn] {len(partial)} matchup(s) have fewer than 200 games — "
-              f"results below are provisional:")
+        print(f"  [warn] {len(partial)} matchup(s) have fewer than "
+              f"{EXPECTED_GAMES_PER_MATCHUP} games — results below are provisional:")
         for k, v in partial.items():
             print(f"         {k}: {v}")
 
@@ -463,18 +491,27 @@ def main():
     w6 = w6_balance(df, args.outdir)
     w7 = w7_game_length(df, args.outdir)
     figures(w1, w3, w4, args.outdir)
-    path = report(df, w1, w2, w3, w4, w5, w7, args.outdir)
+    path = report(df, w1, w2, w3, w4, w5, w6, w7, args.outdir)
 
     print(f"\nTables  -> {args.outdir}/W*.csv")
     print(f"Figures -> {args.outdir}/figures/")
     print(f"Report  -> {path}")
 
     if not w4.empty:
-        print("\nCONTROL ARM (must be ~50%):")
+        print("\nSELF-PLAY ROWS (must be ~50%):")
         for _, r in w4.iterrows():
             flag = "ok" if r.FiftyPctInCI else "  <-- 50% OUTSIDE THE CI; investigate"
             print(f"  {int(r.ComputeUnits):>7,} units: {100*r.EmctsWinRate:5.1f}% "
                   f"[{100*r.CI_lo:.1f}, {100*r.CI_hi:.1f}]  {flag}")
+    elif not w6.empty and "OrientationGapPP" in w6.columns:
+        # W6 is what stands in for a control arm, so print its headline rather than leaving the
+        # check to whoever remembers to open the report.
+        b = w6.dropna(subset=["OrientationGapPP"])
+        print("\nBALANCE (no control arm; a systematic orientation gap is the thing to catch):")
+        for cu, g in b.groupby("ComputeUnits", sort=True):
+            print(f"  {int(cu):>7,} units: median gap {g.OrientationGapPP.median():4.1f} pp, "
+                  f"widest {g.OrientationGapPP.max():4.1f} pp, "
+                  f"median seat-0 win rate {g.Win_seat0.median():.3f}")
 
 
 if __name__ == "__main__":

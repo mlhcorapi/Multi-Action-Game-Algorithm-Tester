@@ -39,8 +39,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * their share is exactly the statistic that matters, and it is reported as such.
  *
  * <p>Three opponents are sampled per level rather than one, because game length is a property of the
- * MATCHUP, not of a single agent: EMCTS vs EMCTS (the control, where neither side has an edge),
- * CrossoverExpansion@5 and CrossoverCombo@5.
+ * MATCHUP, not of a single agent: one from each family — CrossoverBB, CrossoverExpansion@5 and
+ * CrossoverCombo@5. All three are matchups the tournament actually plays.
  *
  * <h2>Reading the output</h2>
  *
@@ -74,7 +74,7 @@ public final class GameLengthProbeV6 {
     /** The matchups sampled at each level. Ratio -1 means the config takes no ratio. */
     private static List<FullGameRunnerV6.Matchup> probeMatchups(int cu) {
         return Arrays.asList(
-                new FullGameRunnerV6.Matchup("EMCTS", -1, cu),
+                new FullGameRunnerV6.Matchup("CrossoverBB", -1, cu),
                 new FullGameRunnerV6.Matchup("CrossoverExpansion", 5, cu),
                 new FullGameRunnerV6.Matchup("CrossoverCombo", 5, cu));
     }
@@ -147,9 +147,10 @@ public final class GameLengthProbeV6 {
     /**
      * Plays {@code gamesPerMatchup} games for each sampled matchup at one budget level.
      *
-     * <p>Game indices are spread across the full 200-game grid ({@code stride}) rather than taken from
-     * its front, so the sample covers all {@value FullGameMapSetV6#NUM_MAPS} maps and both
-     * orientations instead of the first few maps only.
+     * <p>Game indices are spread across the full {@value FullGameRunnerV6#GAMES_PER_MATCHUP}-game grid
+     * ({@code stride}) rather than taken from its front, so the sample covers as many of the
+     * {@value FullGameMapSetV6#NUM_MAPS} maps and both orientations as the sample size allows,
+     * instead of the first few maps only.
      */
     private static List<Row> runLevel(int cu, int gamesPerMatchup, List<FullGameMapSetV6.MapInfo> maps,
                                       int threads, int safetyCap) throws Exception {
