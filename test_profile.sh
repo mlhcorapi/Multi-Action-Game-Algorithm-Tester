@@ -1,1 +1,0 @@
-sed -i 's/if (!capitalCells.contains(candidate)/boolean[] isCap = new boolean[mapSize*mapSize]; for(int c : capitalCells) isCap[c]=true; if (!isCap[candidate]/' Tribes-master/src/core/levelgen/LevelGenerator.java

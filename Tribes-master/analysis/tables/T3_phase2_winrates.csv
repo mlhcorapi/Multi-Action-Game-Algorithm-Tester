@@ -1,9 +1,0 @@
-Level,Config,EMCTS,MCTS,OEP
-1000ms,CrossoverBB,0.51,0.98,0.66
-1000ms,CrossoverCombo@r5,0.59,0.99,0.65
-1000ms,CrossoverExpansion@r5,0.64,0.97,0.65
-500ms,CrossoverBB,0.51,1.0,0.5
-500ms,CrossoverCombo@r10,0.54,0.98,0.57
-500ms,CrossoverCombo@r5,0.56,0.99,0.51
-500ms,CrossoverExpansion@r10,0.45,0.98,0.51
-500ms,CrossoverExpansion@r5,0.51,0.99,0.52

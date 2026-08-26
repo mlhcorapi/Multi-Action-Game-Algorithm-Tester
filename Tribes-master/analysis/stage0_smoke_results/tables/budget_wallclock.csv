@@ -1,2 +1,0 @@
-Budget,Turns,MeanPlanMillis,MedianPlanMillis,P90PlanMillis,MeanInitMillis,MeanSearchUnits,MeanSearchFmCalls,MeanUniqueSequences,MedianEventsPerTurn
-6000,7,287.0,277.0,359.8,18.0,5998.149714285714,5418.428571428572,256.85714285714283,413.0

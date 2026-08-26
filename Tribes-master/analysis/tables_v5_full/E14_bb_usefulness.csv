@@ -1,8 +1,0 @@
-Config,n,improved,no_change,worse
-CrossoverBB,873509,0.1694,0.398,0.4326
-CrossoverCombo@2,875543,0.0628,0.8187,0.1186
-CrossoverCombo@5,843833,0.0944,0.6773,0.2283
-CrossoverCombo@10,847462,0.1127,0.5692,0.3181
-CrossoverCombo@20,857023,0.1274,0.4858,0.3868
-CrossoverCombo@50,867189,0.1431,0.4201,0.4368
-all CBB (pooled),5164559,0.1184,0.5613,0.3203

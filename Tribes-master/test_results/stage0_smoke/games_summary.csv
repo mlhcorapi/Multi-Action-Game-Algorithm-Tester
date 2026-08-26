@@ -1,2 +1,0 @@
-Budget,GameId,MapIndex,LevelSeed,AgentSeed,Opponent,TrackedWon,TrackedScore,OppScore,EndTick,Ticks,Events,DroppedEvents,OrphanEvents,GameMillis
-6000,0,0,75402979763234274,2219299541347952521,passive,1,1105,390,7,7,2917,0,0,2058

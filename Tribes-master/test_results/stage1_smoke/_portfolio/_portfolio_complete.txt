@@ -1,1 +1,0 @@
-single=4 dual=2

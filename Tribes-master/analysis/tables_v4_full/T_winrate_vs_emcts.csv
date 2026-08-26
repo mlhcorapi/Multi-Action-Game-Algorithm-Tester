@@ -1,7 +1,0 @@
-agent,thinking_ms,winrate_vs_EMCTS
-CBB,500,0.51
-CBB,1000,0.51
-CE@5,500,0.51
-CE@5,1000,0.64
-CC@5,500,0.56
-CC@5,1000,0.59

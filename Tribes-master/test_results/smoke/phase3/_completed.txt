@@ -1,6 +1,0 @@
-level=40ms;agent=EMCTS;ratio=NA
-level=40ms;agent=CrossoverBB;ratio=NA
-level=40ms;agent=CrossoverExpansion;ratio=5
-level=40ms;agent=CrossoverExpansion;ratio=20
-level=40ms;agent=CrossoverCombo;ratio=5
-level=40ms;agent=CrossoverCombo;ratio=20
