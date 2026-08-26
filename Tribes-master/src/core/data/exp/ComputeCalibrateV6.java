@@ -58,8 +58,9 @@ import java.util.Locale;
  *   <li>measures on <b>portfolio scenarios</b>, one turn at a time, with the <b>same scenarios and the
  *       same seeds for every cell</b>, so cells differ by configuration and budget and by nothing
  *       else;</li>
- *   <li><b>warms up and then repeats</b>, and reports how far each per-operation time moves between
- *       repetitions - the difference between a measurement and a single sample;</li>
+ *   <li><b>warms up and then repeats identical work</b>, and reports how far each per-operation time
+ *       moves between repetitions - which, because the work is identical, is a statement about the
+ *       machine rather than about the portfolio;</li>
  *   <li><b>checks its own validity</b> per cell and prints a PASS/FAIL verdict: enough operations to
  *       divide by, repetition spread inside tolerance, plausible weights, and an idle machine;</li>
  *   <li><b>writes weights the pipeline loads automatically</b>, so applying them is not a manual step
@@ -89,13 +90,27 @@ public final class ComputeCalibrateV6 {
     /** Repetitions of each cell; the spread between them is the stability evidence. */
     public static final int DEFAULT_REPS = 3;
     /**
-     * Turns per repetition, one entry per budget level. Fewer at the top level because a single
-     * 400,000-unit turn already contributes hundreds of thousands of timed operations - the sample
-     * size is in the operations, not in the turns - while costing ~19 s of wall-clock.
+     * Turns per repetition, one entry per budget level - equivalently, how many distinct positions
+     * each cell is measured on.
+     *
+     * <p>The same count at every level by default, because a weight only means anything relative to
+     * the reference cell's, which sits at the smallest level: measuring the levels on different
+     * positions would put a position difference into the cross-level ratio that anchors the unit.
+     * That costs wall-clock at the top level, where one turn is ~19 s - roughly an hour for the whole
+     * calibration on a server.
+     *
+     * <p>Pass e.g. {@code 4,4,2} to halve the 400,000-unit level's cost. The within-level comparisons
+     * stay exact; the cross-level ratio then rests on a spread subset of the same positions
+     * (see {@link #scenarioFor}) rather than on all of them.
      */
-    public static final String DEFAULT_TURNS_PER_REP = "4,4,2";
+    public static final String DEFAULT_TURNS_PER_REP = "4,4,4";
     /** Turns run and discarded before the first measurement, so JIT compilation is not timed. */
     public static final int DEFAULT_WARMUP = 6;
+    /**
+     * Size of the scenario pool a cell's turns are drawn from. Levels that run fewer turns take a
+     * spread subset of this same pool, so every cell at every level sees the same positions.
+     */
+    public static final int SCENARIO_POOL = 8;
 
     /** Coefficient of variation across repetitions above which a cell is not trustworthy. */
     public static final double MAX_CV = 0.10;
@@ -129,7 +144,8 @@ public final class ComputeCalibrateV6 {
         final int ratio;            // -1 for the configurations without one
         final int units;            // budget level
         final String profile;
-        long adv, cop, ev;          // total operations measured
+        long adv, cop, ev;          // total operations timed, summed over repetitions
+        int scenarios;              // distinct positions behind this cell
         final List<double[]> perRep = new ArrayList<>();   // {tAdv, tCopy, tEval} ns per rep
         double tAdv, tCopy, tEval;  // means across reps
         double cvAdv, cvCopy, cvEval;
@@ -187,8 +203,10 @@ public final class ComputeCalibrateV6 {
         System.out.println("# levels=" + java.util.Arrays.toString(levels)
                 + "  configs=" + (cells.size() / Math.max(1, levels.length))
                 + "  cells=" + cells.size());
-        System.out.println("# reps=" + reps + "  turns/rep per level="
+        System.out.println("# reps=" + reps + "  turns(=positions)/rep per level="
                 + java.util.Arrays.toString(turnsPerRep) + "  warmup=" + warmup);
+        System.out.println("# A repetition repeats the SAME positions with the SAME seeds, so the CV"
+                + " across reps measures the machine, not the portfolio.");
         System.out.println("# reference cell = " + REFERENCE_CONFIG + "@" + levels[0]
                 + "  (its advance is 1.000 units by definition)");
         ServerProfile.get().printBanner("compute-unit weight calibration");
@@ -210,8 +228,10 @@ public final class ComputeCalibrateV6 {
         // its own first turn, which is what touches that agent's own code paths.
         System.out.println("\n[weights] warmup: " + warmup + " turns (discarded)");
         Cell warm = new Cell(REFERENCE_CONFIG, -1, levels[0]);
+        ComputeMeter.PROFILE = true;          // warm the TIMED code path, not the untimed one
         for (int i = 0; i < warmup; i++)
-            runTurn(warm, sampleFor(portfolio, i % Math.max(1, maxOf(turnsPerRep))), 9_000 + i);
+            runTurn(warm, scenarioFor(portfolio, i % SCENARIO_POOL, SCENARIO_POOL), 9_000 + i);
+        ComputeMeter.PROFILE = false;
 
         long t0 = System.currentTimeMillis();
         int done = 0;
@@ -221,7 +241,7 @@ public final class ComputeCalibrateV6 {
             measure(c, portfolio, reps, turns);
             done++;
             System.out.printf(Locale.ROOT,
-                    "  [%2d/%2d] %-26s advance %8.1f ns  copy %8.1f ns  eval %8.1f ns   "
+                    "  [%2d/%2d] %-30s advance %7.1f ns  copy %7.1f ns  eval %7.1f ns   "
                     + "(CV %.1f/%.1f/%.1f%%)%s%n",
                     done, cells.size(), c.profile, c.tAdv, c.tCopy, c.tEval,
                     100 * c.cvAdv, 100 * c.cvCopy, 100 * c.cvEval,
@@ -343,34 +363,62 @@ public final class ComputeCalibrateV6 {
     }
 
     /**
-     * Measures one cell: {@code reps} repetitions of {@code turns} turns each.
+     * Measures one cell: {@code reps} repetitions of the same {@code turns} turns.
      *
-     * <p>The scenarios and the seeds depend on the repetition and the turn index only, never on the
-     * configuration, so every cell is measured on identical work. Without that, a difference between
-     * two configurations' per-op costs could be a difference between the positions they happened to
-     * draw.
+     * <p><b>Counts and nanoseconds must cover the same span, and getting that wrong is silent.</b> An
+     * agent calls {@link ComputeMeter#reset()} twice per planning episode - once at the start, once
+     * after greedy initialization, so the phase ceilings bound search only - which clears the COUNTS
+     * but not the nanosecond accumulators. Reading {@code ComputeMeter.advances()} after a loop of
+     * turns therefore returns the LAST turn's search count, while {@code advanceNanos()} holds every
+     * turn's. Dividing one by the other inflated every per-operation time by roughly the number of
+     * turns in the repetition, and made the repetition-to-repetition spread a measure of which
+     * scenario happened to land last rather than of anything about the machine.
+     *
+     * <p>So the accumulation is per TURN: nanoseconds are reset before each turn, and the operation
+     * counts come from that turn's own telemetry ({@code TurnData}), summing the initialization and
+     * search phases because the nanoseconds cover both. Both sides then describe exactly one planning
+     * episode.
+     *
+     * <p><b>A repetition is a repetition.</b> Every rep runs the same scenarios with the same seeds,
+     * so the work is byte-identical and the counts come out identical; only the timings differ. The CV
+     * across reps is then a pure machine-quietness statistic - which is what the gate is for - rather
+     * than a mixture of that and real position-to-position cost variation.
+     *
+     * <p>The scenarios depend on the turn index only - never on the configuration, the repetition or
+     * the budget level - so every one of the 36 cells is measured on identical work. Without that, a
+     * difference between two cells' per-op costs could be a difference between the positions they
+     * happened to draw, and the cross-level ratios that anchor the unit would be meaningless.
      */
     private static void measure(Cell c, List<Scenario> portfolio, int reps, int turns) {
-        // One discarded turn so this agent's own code paths are compiled before anything is timed.
-        runTurn(c, sampleFor(portfolio, 0), 9_500);
+        // One discarded turn, profiled, so this agent's own code paths are JIT-compiled in the shape
+        // they will be measured in - the timed branch inside advance()/copy()/eval() included.
+        ComputeMeter.PROFILE = true;
+        runTurn(c, scenarioFor(portfolio, 0, turns), 9_500);
+        ComputeMeter.PROFILE = false;
 
         for (int rep = 0; rep < reps; rep++) {
-            ComputeMeter.reset();
-            ComputeMeter.resetNanos();
-            ComputeMeter.PROFILE = true;
+            long adv = 0, cop = 0, ev = 0;
+            long nsAdv = 0, nsCop = 0, nsEv = 0;
             for (int i = 0; i < turns; i++) {
-                Scenario sc = sampleFor(portfolio, rep * turns + i);
-                runTurn(c, sc, IsolationPhaseRunnerV6.visitSeed(sc.id, rep));
+                Scenario sc = scenarioFor(portfolio, i, turns);
+                ComputeMeter.resetNanos();
+                ComputeMeter.PROFILE = true;
+                // visitId 0 for every rep: a repetition must repeat, or the CV below stops being a
+                // statement about the machine.
+                long[] ops = runTurn(c, sc, IsolationPhaseRunnerV6.visitSeed(sc.id, 0));
+                ComputeMeter.PROFILE = false;
+                adv += ops[0]; cop += ops[1]; ev += ops[2];
+                nsAdv += ComputeMeter.advanceNanos();
+                nsCop += ComputeMeter.copyNanos();
+                nsEv += ComputeMeter.evalNanos();
             }
-            ComputeMeter.PROFILE = false;
-
-            long adv = ComputeMeter.advances(), cop = ComputeMeter.copies(), ev = ComputeMeter.evals();
             c.adv += adv; c.cop += cop; c.ev += ev;
             c.perRep.add(new double[]{
-                    adv > 0 ? ComputeMeter.advanceNanos() / (double) adv : 0,
-                    cop > 0 ? ComputeMeter.copyNanos() / (double) cop : 0,
-                    ev > 0 ? ComputeMeter.evalNanos() / (double) ev : 0});
+                    adv > 0 ? nsAdv / (double) adv : 0,
+                    cop > 0 ? nsCop / (double) cop : 0,
+                    ev > 0 ? nsEv / (double) ev : 0});
         }
+        c.scenarios = turns;
 
         double[] a = column(c.perRep, 0), cp = column(c.perRep, 1), e = column(c.perRep, 2);
         c.tAdv = mean(a);   c.cvAdv = cv(a);
@@ -388,16 +436,33 @@ public final class ComputeCalibrateV6 {
                 "eval time varies %.1f%% between reps", 100 * c.cvEval));
     }
 
-    /** Deterministic scenario pick: index i spread across the portfolio, identical for every cell. */
-    private static Scenario sampleFor(List<Scenario> portfolio, int i) {
-        int n = portfolio.size();
-        // A stride coprime with most portfolio sizes, so consecutive i land far apart and the sample
-        // covers both sources rather than the first few scenarios.
-        return portfolio.get((int) (((long) i * 37) % n));
+    /**
+     * Scenario for turn {@code i} of {@code turns}, drawn from a fixed pool that does not depend on
+     * the budget level.
+     *
+     * <p>Levels may run different numbers of turns (a 400,000-unit turn costs ~19 s), but they must
+     * still measure the same POSITIONS, because a weight's whole meaning is its ratio to the reference
+     * cell's - which sits at another level. A level running fewer turns therefore takes a spread
+     * subset of the same pool rather than a different stretch of the portfolio.
+     *
+     * <p>The stride is coprime with most portfolio sizes so consecutive slots land far apart and the
+     * sample covers both scenario sources rather than the first few scenarios.
+     */
+    private static Scenario scenarioFor(List<Scenario> portfolio, int i, int turns) {
+        int slot = (int) ((long) i * SCENARIO_POOL / Math.max(1, turns));
+        return portfolio.get((int) (((long) slot * 37) % portfolio.size()));
     }
 
-    /** Plans one turn on the calling thread. */
-    private static void runTurn(Cell c, Scenario sc, long seed) {
+    /**
+     * Plans one turn on the calling thread and returns its operation counts as
+     * {@code {advances, copies, evals}} for the WHOLE planning episode - initialization plus search,
+     * because that is the span the nanosecond accumulators cover.
+     *
+     * <p>The counts come from the turn's own telemetry rather than from the live meter: the agent
+     * resets the meter's counters twice inside this call, so by the time it returns they describe the
+     * search phase only. Returns zeros if the turn produced no telemetry.
+     */
+    private static long[] runTurn(Cell c, Scenario sc, long seed) {
         Agent a = c.spec().create(seed);
         ArrayList<Integer> ids = new ArrayList<>();
         for (int k = 0; k < sc.state.getTribes().length; k++) ids.add(k);
@@ -407,6 +472,14 @@ public final class ComputeCalibrateV6 {
         ElapsedCpuTimer ect = new ElapsedCpuTimer();
         ect.setMaxTimeMillis(Constants.TURN_TIME_MILLIS);
         try { a.act(gs, ect); } catch (Throwable ignore) { }
+
+        java.util.List<core.data.dto.TurnData> log = a.getTurnDataLog();
+        if (log == null || log.isEmpty()) return new long[3];
+        core.data.dto.TurnData t = log.get(0);
+        return new long[]{
+                t.getAdvances() + t.getInitAdvances(),
+                t.getCopies() + t.getInitCopies(),
+                t.getEvals() + t.getInitEvals()};
     }
 
     // ------------------------------------------------------------------ reporting
@@ -424,6 +497,11 @@ public final class ComputeCalibrateV6 {
         for (Cell c : cells)
             System.out.printf(Locale.ROOT, "  %-26s %10.4f %10.4f %10.4f %12.1f%n",
                     c.profile, c.wAdvance, c.wCopy, c.wEval, c.tAdv);
+
+        int scen = cells.isEmpty() ? 0 : cells.get(0).scenarios;
+        System.out.println("\n  Each cell above: " + scen + " distinct position(s), each replanned once"
+                + " per repetition. Identical positions and seeds in every cell, so the ratios between"
+                + " cells are paired.");
 
         System.out.println("\n=== DOES AN OPERATION COST THE SAME FOR EVERY CONFIGURATION? ===");
         System.out.println("  (this is the question the old single-weight calibration assumed the answer to)");
@@ -527,7 +605,7 @@ public final class ComputeCalibrateV6 {
      */
     private static void writeCsv(File f, List<Cell> cells, Cell ref) {
         StringBuilder sb = new StringBuilder(
-                "Profile,Config,Ratio,BudgetUnits,Advances,Copies,Evals,"
+                "Profile,Config,Ratio,BudgetUnits,Scenarios,Advances,Copies,Evals,"
                 + "AdvanceNanos,CopyNanos,EvalNanos,CvAdvance,CvCopy,CvEval,"
                 + "W_ADVANCE,W_COPY,W_EVAL,MsPerKiloUnitNew,MsPerKiloUnitOld,Status\n");
         for (Cell c : cells) {
@@ -535,9 +613,9 @@ public final class ComputeCalibrateV6 {
             double nanos = c.adv * c.tAdv + c.cop * c.tCopy + c.ev * c.tEval;
             double msPerKiloOld = oldUnits > 0 ? (1000.0 * nanos / oldUnits) / 1e6 : 0;
             sb.append(String.format(Locale.ROOT,
-                    "%s,%s,%s,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.5f,%.5f,%.5f,%.6f,%.6f,%.6f,%.5f,%.5f,%s%n",
+                    "%s,%s,%s,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.5f,%.5f,%.5f,%.6f,%.6f,%.6f,%.5f,%.5f,%s%n",
                     c.profile, c.config, c.ratio > 0 ? String.valueOf(c.ratio) : "NA", c.units,
-                    c.adv, c.cop, c.ev, c.tAdv, c.tCopy, c.tEval,
+                    c.scenarios, c.adv, c.cop, c.ev, c.tAdv, c.tCopy, c.tEval,
                     c.cvAdv, c.cvCopy, c.cvEval, c.wAdvance, c.wCopy, c.wEval,
                     1000.0 * ref.tAdv / 1e6, msPerKiloOld,
                     c.failures.isEmpty() ? "ok" : "PROBLEM: " + String.join("; ", c.failures)
@@ -568,12 +646,6 @@ public final class ComputeCalibrateV6 {
     private static int indexOf(int[] arr, int v) {
         for (int i = 0; i < arr.length; i++) if (arr[i] == v) return i;
         return 0;
-    }
-
-    private static int maxOf(int[] arr) {
-        int m = 1;
-        for (int v : arr) m = Math.max(m, v);
-        return m;
     }
 
     private static double[] column(List<double[]> rows, int idx) {

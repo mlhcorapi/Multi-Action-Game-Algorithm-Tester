@@ -225,28 +225,46 @@ java -Xmx32g -cp "out:lib/*" core.data.exp.ComputeCalibrateV6 \
     [portfolioDir] [outDir] [reps] [turnsPerRepCsv] [warmupTurns] [levelsCsv]
 ```
 
-Defaults: the v6 portfolio and `_calibration` directories, `reps=3`, `turnsPerRep="4,4,2"` (one entry
-per level), `warmup=6`, levels from `RunExperimentV6.DEFAULT_COMPUTE_LEVELS`.
+Defaults: the v6 portfolio and `_calibration` directories, `reps=3`, `turnsPerRep="4,4,4"` (one entry
+per level — equivalently, how many distinct positions each cell is measured on), `warmup=6`, levels
+from `RunExperimentV6.DEFAULT_COMPUTE_LEVELS`. Roughly an hour, single-threaded.
 
 ### Procedure
 
-1. **Warm up** on the reference cell and discard, so JIT compilation is not timed. Each cell then
-   discards its own first turn as well, which is what touches that agent's own code paths.
+1. **Warm up** on the reference cell and discard, with profiling on so the *timed* code path is what
+   gets JIT-compiled. Each cell then discards its own first turn as well, which is what touches that
+   agent's own code paths.
 2. **For each of the 36 cells**, run `reps` repetitions of `turnsPerRep` turns with
    `ComputeMeter.PROFILE` on, which times each `advance()`, `copy()` and `evaluateState()`.
-3. Per repetition, divide accumulated nanoseconds by counts → `t_advance`, `t_copy`, `t_eval`. The mean
-   across repetitions is the cell's cost; the coefficient of variation across them is the evidence that
-   it is a measurement rather than a sample.
+3. Per **turn**, divide that turn's accumulated nanoseconds by that turn's operation counts. Per
+   repetition, sum both sides first and then divide → `t_advance`, `t_copy`, `t_eval`. The mean across
+   repetitions is the cell's cost.
 4. **Normalise** every cell by the reference cell's `t_advance` (§2).
 5. **Gate**, then write.
 
-**Every cell sees identical work.** The scenario for turn *i* and the seed for repetition *r* depend on
-`i` and `r` only, never on the configuration — otherwise a difference between two configurations'
-per-operation costs could be a difference between the positions they happened to draw.
+**Counts and nanoseconds must cover the same span**, and step 3 is where that is easy to get wrong. An
+agent calls `ComputeMeter.reset()` *twice* per planning episode — at the start, and again after greedy
+initialization so the phase ceilings bound search only — which clears the counters but not the
+nanosecond accumulators. Reading `ComputeMeter.advances()` after a loop of turns therefore returns the
+**last** turn's search count while `advanceNanos()` holds **every** turn's, and dividing one by the
+other inflates each per-operation time by roughly the number of turns in the repetition. So the
+accumulation is per turn: nanoseconds are reset before each turn, and the counts come from that turn's
+own `TurnData` — initialization plus search, because the nanoseconds cover both.
 
-**Turns per level are not equal** (`4,4,2`) because the sample size is in the *operations*, not the
-turns: a single 400,000-unit turn already contributes hundreds of thousands of timed operations while
-costing ~19 s of wall-clock. Roughly 35 minutes total, single-threaded.
+**A repetition repeats.** Every rep runs the same positions with the same seeds, so the work is
+byte-identical and the operation counts come out identical; only the timings differ. The CV across reps
+is therefore a pure machine-quietness statistic, which is what the gate is asking about — not a mixture
+of that and real position-to-position cost variation.
+
+**Every cell sees identical work.** The position for turn *i* depends on `i` only — never on the
+configuration, the repetition or the budget level — so all 36 cells are measured on the same positions.
+Otherwise a difference between two cells' per-operation costs could be a difference between the
+positions they happened to draw, and the cross-level ratios that anchor the unit would mean nothing.
+
+**Turns per level are equal by default** for that reason. A 400,000-unit turn costs ~19 s, so this is
+where the hour goes; passing `4,4,2` halves that level's cost, at the price of the cross-level ratio
+resting on a spread subset of the same positions rather than all of them. Within-level comparisons stay
+exact either way.
 
 **Single-threaded on an idle machine, necessarily.** This is a timing measurement, and competing load
 inflates the three operations unevenly — copies and evals are memory-bound and suffer most, advances
@@ -259,8 +277,12 @@ Per cell:
 | gate | constant | why |
 |---|---|---|
 | ≥ 20,000 of each operation | `MIN_OPS` | a per-operation mean divided by too few samples is noise |
-| CV across repetitions ≤ 10% | `MAX_CV` | if the same measurement moves between repeats, the machine was not quiet |
+| CV across repetitions ≤ 10% | `MAX_CV` | the reps run identical work, so movement between them is the machine, not the data |
 | weights plausible (0 < w < 100) | — | catches a broken or mis-attributed timer |
+
+On a quiet machine the CVs come out around 0.5–4%. Anything in the tens of percent means either real
+competing load or — as happened once — a bug making the numerator and denominator describe different
+spans of work.
 
 Globally: the load average must be idle (`MAX_LOAD_PER_CORE = 0.35`, skipped on OSes that do not expose
 it), and the reference cell must have produced a usable timing.
@@ -272,8 +294,9 @@ failure can be diagnosed.
 ### Outputs
 
 - `compute_weights.properties` — what the pipeline loads (§3).
-- `compute_profiles.csv` — one row per cell: operation counts, `AdvanceNanos` / `CopyNanos` /
-  `EvalNanos`, the three CVs, the three weights, `MsPerKiloUnitNew`, `MsPerKiloUnitOld`, `Status`.
+- `compute_profiles.csv` — one row per cell: positions measured, operation counts, `AdvanceNanos` /
+  `CopyNanos` / `EvalNanos`, the three CVs, the three weights, `MsPerKiloUnitNew`, `MsPerKiloUnitOld`,
+  `Status`.
 
 `MsPerKiloUnitOld` is what 1,000 nominal units really cost that cell **under the old global weights**,
 given its own realized operation mix — the column whose spread across cells is the bias being removed.
@@ -349,6 +372,7 @@ Every way this can break is silent — the run completes and the numbers look or
 
 | failure | what it does | what catches it |
 |---|---|---|
+| Counts and nanoseconds span different work | every per-op time inflated by ~the turns per rep; cross-level ratios inverted | the CV gate — this is how it was actually caught, at 42–86% against a 10% bar |
 | No calibration file | every config priced with compiled defaults from someone else's machine | run banner (`NONE of 36 calibrated`); smoke §9d; `BudgetFairnessProbe` |
 | Some levels calibrated, others not | two currencies in one dataset | run banner (`only N/36`); smoke §9d fails |
 | Factory builds the wrong key (e.g. `CrossoverBB_r5@…`) | that config silently falls back to globals | smoke §9a compares the key against `profileKey`, and asserts CrossoverBB carries no ratio |
@@ -376,6 +400,20 @@ residual is not aligned with the study's independent variable.
 priority-queue maintenance, node allocation and GC pressure are not counted. C0's units/ms is the
 residual check: if counted units track measured time closely and without agent-specific bias, the
 uncounted remainder is not distorting the comparison.
+
+**The per-operation means include greedy initialization.** The nanosecond accumulators cover a whole
+planning episode, so the counts they are divided by must too — initialization plus search. The budget
+prices search only, so a weight is very slightly contaminated by initialization's operations, which run
+on shallower states. Initialization is ~5% of a turn's operations at the floor level and less above it,
+and it contaminates every cell the same way, so it barely moves the ratios that the weights actually
+are. Splitting it out would require the agents to snapshot the nanosecond accumulators at the
+initialization boundary, which is not worth a DTO change for a sub-percent effect.
+
+**Timing costs time.** With `PROFILE` on, each operation carries two `System.nanoTime()` calls, on the
+order of 20–25 ns each. Against a ~22 µs advance that is 0.2%; against a ~1 µs eval it is a few percent,
+so `W_EVAL` is biased very slightly upward. Everything downstream is priced in the same inflated
+currency, so the effect cancels out of the comparisons; it matters only if a unit's absolute
+nanosecond value is quoted to better than a percent.
 
 **The weights are provenance, not scratch.** A compute-unit is defined only relative to them, so a run
 reproduced against different weights is a different experiment. Keep
