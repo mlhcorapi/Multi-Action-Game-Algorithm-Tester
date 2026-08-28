@@ -133,6 +133,18 @@ public class Stage1BiasedAgent extends ExperimentalEMCTSAgent {
     // Telemetry (cumulative; the isolation runner uses one agent per single-turn task).
     private long biasGreedyPicks, biasUniformPicks, shortlistCalls, shortlistSkipped, statUpdates;
     private long zeroEvalPicks;
+
+    // ---- floor-probe instrumentation (ActionBiasFloorProbe) -------------------------------------
+    // The action-bias line fails quietly from BELOW. qhat shrinks toward the running global mean, so
+    // an unobserved key returns exactly that mean; when every candidate key is unseen they all tie
+    // and the tie-break is uniform. An arm at too small a budget is therefore Baseline with extra
+    // bookkeeping — it reports a small noisy effect rather than announcing that the mechanism never
+    // engaged. What decides this is not how many mutations ran but how much evidence stood behind
+    // the key each biased insertion actually CHOSE: the search concentrates on a few promising
+    // actions, so a sparse table can still be well-supported exactly where it is read.
+    /** Bridge burns completed this turn; the probe ignores the cold start. */
+    private int burnsInTurn;
+    private long biasPicksAfterWarmup, biasSupportedAfterWarmup;
     /** Compute units, and candidate evaluations, charged inside repair(). See getRepairUnits(). */
     private double repairUnits;
     private long repairCandidateEvals;
@@ -175,6 +187,57 @@ public class Stage1BiasedAgent extends ExperimentalEMCTSAgent {
     public long getShortlistSkipped() { return shortlistSkipped; }
     public long getStatUpdates()      { return statUpdates; }
     public long getZeroEvalPicks()    { return zeroEvalPicks; }
+    /** Biased insertions made after the warm-up burns — the denominator of the support fraction. */
+    public long getBiasPicksAfterWarmup()     { return biasPicksAfterWarmup; }
+    /** Of those, how many chose a key already carrying at least {@link #MIN_SUPPORT} observations. */
+    public long getBiasSupportedAfterWarmup() { return biasSupportedAfterWarmup; }
+    /** Distinct observed keys in the table the insertion bias reads, at its own granularity. */
+    public int getDistinctInsertKeys() { return observationCounts().length; }
+    /** Observation counts of every observed insertion key, for the median the probe reports. */
+    public int[] getInsertKeyObservationCounts() { return observationCounts(); }
+
+    /** Burns to skip before measuring: the table is empty at turn start by construction, so counting
+     *  the cold start would measure the reset, not the budget. */
+    public static final int WARMUP_BURNS = 4;
+    /** Observations behind a key before reading it is evidence rather than the prior. */
+    public static final int MIN_SUPPORT = 3;
+
+    private int[] observationCounts() {
+        Table t = p1.perBurnUpdates ? snap : live;
+        java.util.ArrayList<Integer> out = new java.util.ArrayList<>();
+        switch (p1.insertKeys) {
+            case COARSE:
+                for (int a = 0; a < A_MAX; a++) if (t.cN[a] > 0) out.add(t.cN[a]);
+                break;
+            case FINE:
+                if (t.fine != null) for (double[] e : t.fine.values()) out.add((int) e[1]);
+                break;
+            case MID:
+            default:
+                for (int a = 0; a < A_MAX; a++)
+                    for (int q = 0; q < Q_MAX; q++) if (t.mN[a][q] > 0) out.add(t.mN[a][q]);
+                break;
+        }
+        int[] arr = new int[out.size()];
+        for (int i = 0; i < arr.length; i++) arr[i] = out.get(i);
+        return arr;
+    }
+
+    /** Observations behind one action's key in the table SELECTION reads. Mirrors {@link #qhat}. */
+    private int nObs(Stage1Params.Granularity g, Action action, GameState gs) {
+        Table t = p1.perBurnUpdates ? snap : live;
+        switch (g) {
+            case COARSE:
+                return t.cN[actionOrd(action)];
+            case FINE: {
+                double[] e = t.fine == null ? null : t.fine.get(action.toString());
+                return e == null ? 0 : (int) e[1];
+            }
+            case MID:
+            default:
+                return t.mN[actionOrd(action)][qualifierOf(action, gs)];
+        }
+    }
     /** Compute units charged inside {@code repair()} — candidate scanning plus the advances that
      *  apply the sequence. Every arm pays the latter, so compare arms on {@link #getRepairCandidateEvals()}
      *  when the question is what CHOOSING a replacement costs. */
@@ -192,6 +255,7 @@ public class Stage1BiasedAgent extends ExperimentalEMCTSAgent {
     protected ExperimentalEMCTSTreeNode randomActions(GameState gs) {
         live.reset();
         if (snap != null) snap.reset();
+        burnsInTurn = 0;
         pendingChild = null; pendingParent = null; pendInsA = -1; pendRemA = -1;
         pendInsFine = null; pendRemFine = null;
         iterInTurn = 0;
@@ -202,6 +266,7 @@ public class Stage1BiasedAgent extends ExperimentalEMCTSAgent {
     protected void recordBridgeBurn(int bridgeBurningPhaseNumber, double bestSequenceValue,
                                     long turnStartTime, int tick) {
         super.recordBridgeBurn(bridgeBurningPhaseNumber, bestSequenceValue, turnStartTime, tick);
+        burnsInTurn++;
         if (p1.perBurnUpdates) snap.copyFrom(live);    // publish the batch at the phase boundary
     }
 
@@ -314,6 +379,10 @@ public class Stage1BiasedAgent extends ExperimentalEMCTSAgent {
                     }
                 }
                 biasGreedyPicks++;
+                if (burnsInTurn >= WARMUP_BURNS && inserted != null) {
+                    biasPicksAfterWarmup++;
+                    if (nObs(p1.insertKeys, inserted, gs) >= MIN_SUPPORT) biasSupportedAfterWarmup++;
+                }
             }
             insA = actionOrd(inserted);
             insQ = qualifierOf(inserted, gs);

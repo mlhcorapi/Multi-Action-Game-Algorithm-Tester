@@ -361,8 +361,10 @@ hours to answer a question four configurations settle.
 > compute units and seconds, and an arm that wins in one and loses in the other is reported as
 > unresolved, not as a win.
 
-**A4 — Verify gates** at a calibrated budget (not a round number), plus the `ActionBiasFloorProbe`
-re-run on this machine to confirm the mechanism engages at all three levels. ~0.3 h.
+**A4 — Verify gates** at a calibrated budget (not a round number), plus `ActionBiasFloorProbe`
+(rebuilt; the original was lost with its worktree) to confirm the mechanism engages at all three
+levels. ~0.3 h. The probe's answer is weight-dependent, so it runs after A2 and must be re-taken
+whenever the weights change.
 
 > **Gate A.** All verify assertions pass; every arm resolves a calibrated profile; the floor probe passes
 > at 80k; the machine gate reports detected (not assumed) cores. Nothing downstream runs otherwise.
