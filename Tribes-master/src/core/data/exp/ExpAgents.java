@@ -345,4 +345,76 @@ public class ExpAgents {
         p.computeProfile = ComputeMeter.profileKey("EMCTS", -1, computeUnits);
         return p;
     }
+
+    // ================================================================================================
+    // Action-bias line: compute profiles
+    //
+    // Kept deliberately in step with the same names on the emcts-experiment-design branch, so the two
+    // lines of work converge rather than growing two incompatible profile namespaces.
+    // ================================================================================================
+
+    /** Profile-key prefix for the action-bias arms, keeping them out of the v6 configs' namespace. */
+    public static final String AB_PREFIX = "AB_";
+
+    /** The arm plain {@code ExperimentalEMCTSAgent} runs as: Stage 1's control, and Stage 0's pair. */
+    public static final String AB_BASELINE_ARM = "Baseline";
+
+    /** System property that downgrades {@link #requireProfiles} from fatal to a warning. */
+    public static final String ALLOW_UNPROFILED = "ab.allowUnprofiled";
+
+    /** Canonical {@link ComputeMeter} profile key for an action-bias arm at one budget level. */
+    public static String abProfileKey(String arm, int computeUnits) {
+        return ComputeMeter.profileKey(AB_PREFIX + arm, -1, computeUnits);
+    }
+
+    /**
+     * Plain-{@code ExperimentalEMCTS} params priced as {@code arm}. Used by the Stage 1 verify gate's
+     * un-instrumented side, which has to be priced identically to the Baseline arm — otherwise
+     * "bit-identical" would be comparing two currencies.
+     */
+    public static ExperimentalEMCTSParams abParams(String arm, int computeUnits) {
+        ExperimentalEMCTSParams p = new ExperimentalEMCTSParams();
+        p.stop_type = p.STOP_COMPUTE;
+        p.num_computeUnits = computeUnits;
+        p.heuristic_method = p.SIMPLE_HEURISTIC;
+        p.depth = DEPTH;
+        p.computeProfile = abProfileKey(arm, computeUnits);
+        return p;
+    }
+
+    /**
+     * Aborts the run unless every profile in {@code profiles} is calibrated.
+     *
+     * <p>{@link ComputeMeter#useProfile} falls back to the global weights and warns once, which is
+     * right for a probe at an uncalibrated budget and wrong for a production leaf: a warning in a log
+     * is not a guard. This is the guard. An uncalibrated arm silently spends a different currency from
+     * the calibrated ones, and nothing in any CSV would say so. Pass {@code -Dab.allowUnprofiled=true}
+     * for the deliberate exceptions (smoke tests, probes at odd budgets).
+     *
+     * @param what human-readable name of the schedule being gated, for the message
+     */
+    public static void requireProfiles(String what, java.util.List<String> profiles) {
+        java.util.List<String> missing = new java.util.ArrayList<>();
+        for (String p : profiles) if (!ComputeMeter.hasProfile(p)) missing.add(p);
+        if (missing.isEmpty()) {
+            System.out.println("# Compute profiles: " + profiles.size() + "/" + profiles.size()
+                    + " calibrated for " + what + " - per-arm, per-level weights in force.");
+            return;
+        }
+        String nl = System.lineSeparator();
+        String msg = "Compute profiles: only " + (profiles.size() - missing.size()) + "/"
+                + profiles.size() + " calibrated for " + what + ". MISSING: " + missing
+                + nl + "  An uncalibrated arm silently falls back to the GLOBAL weights, so its budget is"
+                + nl + "  a different currency from the calibrated arms' and the comparison is void."
+                + nl + "  Fix: java -cp \"out:lib/*\" core.data.exp.ComputeCalibrateV6 <portfolio> <out> "
+                + "3 4,4,2 6 <levelsCsv> ab"
+                + nl + "  Or, for a smoke/probe run where this does not matter: -D"
+                + ALLOW_UNPROFILED + "=true";
+        if (Boolean.getBoolean(ALLOW_UNPROFILED)) {
+            System.out.println("# " + msg.replace(nl, nl + "# "));
+            System.out.println("# CONTINUING ANYWAY because -D" + ALLOW_UNPROFILED + "=true was set.");
+            return;
+        }
+        throw new IllegalStateException(msg);
+    }
 }
