@@ -1,7 +1,8 @@
 # AB-EMCTS runbook — how to execute the plan on the R7615
 
 *Companion to `AB_EMCTS_R7615_PLAN.md`, which says **what** each stage measures and why. This says
-what to type, in what order, and what to look at before continuing. `V6_SERVER_RUNBOOK.md` covers
+what to type, in what order, and what to look at before continuing. To actually RUN it, open
+`analysis/run_ab_emcts.ipynb` — same sequence, one cell per stage, output teed to `logs/`. `V6_SERVER_RUNBOOK.md` covers
 thread placement, throttling and restart safety for the machine itself.*
 
 Every command runs from `Tribes-master/`. Substitute `W` with the worker count the calibration picks
@@ -109,14 +110,30 @@ java -Xmx<N>g -cp "out:lib/*" core.data.exp.Stage1Runner verify
 java -Xmx<N>g -cp "out:lib/*" core.data.exp.Stage0SignalRunner verify 40000 20
 ```
 
-> **Gate A.** Both verifies PASS; A2 verdict PASS; A3′ verdict recorded; the split frozen and balanced;
-> cores detected. **Nothing downstream runs otherwise.**
+```bash
+java -Xmx<N>g -cp "out:lib/*" core.data.exp.ActionBiasFloorProbe \
+     test_results/stage1/_portfolio test_results/stage1/_calibration 40000,80000,400000 20 W
+```
 
-**Known gap:** `ActionBiasFloorProbe` — which checked that ≥ 80% of biased insertions rest on a key
-with ≥ 3 observations — was lost with its worktree and has not been rebuilt. Its recorded result
-passed at 97.6 / 99.2 / 99.9% against an 80% criterion, so the margin is large; but that result is
-weight-dependent and the weights are about to change. Treat the mechanism-engagement check as
-outstanding, or ask for the probe back before Stage D.
+The third is the floor probe: **does the bias have evidence to act on at each level, or is it Baseline
+with bookkeeping?** `qhat` shrinks toward the running global mean, so an unobserved key returns exactly
+that mean; when every candidate key is unseen they all tie and the tie-break is uniform. An arm at too
+small a budget then reports a small noisy effect instead of announcing that the mechanism never fired.
+
+The quantity is not the mutation count — the search concentrates on a few actions, so a sparse table
+can still be well-supported exactly where it is read — but how much evidence stood behind the key each
+biased insertion actually **chose**. Criterion: ≥ 80% of picks from burn 4 onward chose a key carrying
+≥ 3 observations.
+
+Run it **after A2**: a budget is a number of units and a unit is defined by the weights, so this answer
+is weight-dependent and must be re-taken whenever they change — moving machines included.
+
+> **Gate A.** Both verifies PASS; A2 verdict PASS; A3′ verdict recorded; the floor probe passes at 80k;
+> the split frozen and balanced; cores detected. **Nothing downstream runs otherwise.**
+>
+> A level that fails *only* the floor probe is a **reporting** level — it can still carry a budget trend
+> or an anytime curve, but not a claim that the bias helped, because at that budget the bias was not
+> operating.
 
 ---
 
