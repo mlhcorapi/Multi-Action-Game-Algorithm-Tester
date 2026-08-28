@@ -75,10 +75,13 @@ import java.util.zip.GZIPOutputStream;
  *
  * <p>Usage:
  * <pre>
- *   java -Xmx12g -cp "out;lib/*" core.data.exp.Stage1Runner [threads] [baseDir] [split]
- *       threads  default 4
- *       baseDir  default test_results/stage1
- *       split    all (default) | dev | holdout
+ *   java -Xmx12g -cp "out:lib/*" core.data.exp.Stage1Runner [threads] [baseDir] [split] [stage] [champion]
+ *       threads   default 4
+ *       baseDir   default test_results/stage1
+ *       split     all (default) | dev | holdout
+ *       stage     D (default, biased insertion) | B (selection substrate)
+ *                 | E (table-directed repair)   | F (holdout confirmation)
+ *       champion  the Stage D winner carried into E and F; default Short5_e25
  *   java -cp "out;lib/*" core.data.exp.Stage1Runner smoke
  *   java -cp "out;lib/*" core.data.exp.Stage1Runner verify
  * </pre>
@@ -396,7 +399,57 @@ public final class Stage1Runner {
             System.exit(2);
             return;
         }
-        run(threads, baseDir, NUM_SINGLE, NUM_DUAL, schedule(), split);
+        String stage = args.length > 3 ? args[3].trim().toUpperCase(Locale.ROOT) : "D";
+        String champion = args.length > 4 ? args[4].trim() : SHORT5_E25.name;
+        List<Level> sched;
+        try {
+            sched = scheduleFor(stage, champion);
+        } catch (IllegalArgumentException e) {
+            System.err.println("[stage1] " + e.getMessage());
+            System.exit(2);
+            return;
+        }
+        run(threads, baseDir, NUM_SINGLE, NUM_DUAL, sched, split);
+    }
+
+    /**
+     * The schedule for one stage of the plan.
+     *
+     * <p>Stage B runs only the two comma arms: its plus half is {@code Baseline} and {@code Bias_e25}
+     * from Stage D's 80k grid, on the same scenarios and the same visit seeds, so the factorial is
+     * completed at analysis time rather than by running those arms twice.
+     */
+    static List<Level> scheduleFor(String stage, String champion) {
+        switch (stage) {
+            case "S":
+                // Shakedown only: three arms, one visit, the smallest budget. Enough to exercise the
+                // split filter, the checkpoint key, the telemetry schema, a comma arm and the paired
+                // analysis (which needs a Baseline to pair against) in seconds rather than minutes.
+                // It measures nothing.
+                return List.of(new Level(8_000, 1, List.of(BASELINE, BIAS_E25, COMMA_ON)));
+            case "D":
+                return schedule();
+            case "B":
+                // All four arms, not just the two comma ones. Stage B runs BEFORE Stage D — it is
+                // what pins the substrate D uses — so Baseline and Bias_e25 do not exist at 80k on
+                // this split yet, and every contrast in this line is a paired difference against
+                // Baseline on the same seeds. Running them here costs nothing twice: they write the
+                // same checkpoint keys Stage D would, so Stage D skips them on resume.
+                return List.of(new Level(80_000, 8, stageB()));
+            case "E": {
+                List<Config> arms = stageE(armByName(champion));
+                return List.of(new Level(80_000, 8, arms), new Level(400_000, 6, arms));
+            }
+            case "F": {
+                // Holdout confirmation: the minimum set that carries every claim, run once.
+                List<Config> arms = List.of(BASELINE, BIAS_E25, armByName(champion), Z0_FINE, Z0_INS_FINE);
+                return List.of(new Level(80_000, 8, arms), new Level(400_000, 6, arms));
+            }
+            default:
+                throw new IllegalArgumentException("unknown stage '" + stage
+                        + "' - expected D (biased insertion), B (selection substrate), "
+                        + "E (table-directed repair), F (holdout confirmation) or S (shakedown)");
+        }
     }
 
     static void run(int threads, File baseDir, int numSingle, int numDual, List<Level> schedule,
