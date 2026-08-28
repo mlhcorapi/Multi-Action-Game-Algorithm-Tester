@@ -47,7 +47,8 @@ public class Stage0MutationLogAgent extends ExperimentalEMCTSAgent {
             "Tick,Episode,Iter,Burns,UnitsAtEvent,SeqLen,MutPos,NumAvailable,"
             + "RemovedType,RemovedMid,RemovedFull,InsertedType,InsertedMid,InsertedFull,"
             + "RepairKept,RepairReplaced,InsertedSurvived,ChildSeqLen,Duplicate,"
-            + "ParentValue,ChildValue";
+            + "ParentValue,ChildValue,"
+            + "ExpandedDepth,ExpandedChildren,ExpandedAge,IncumbentMoved";
 
     /** Hard cap so a pathological game cannot exhaust the heap; overflow is counted, not fatal. */
     private static final int MAX_EVENTS_PER_GAME = 3_000_000;
@@ -67,6 +68,20 @@ public class Stage0MutationLogAgent extends ExperimentalEMCTSAgent {
     private ExperimentalEMCTSTreeNode pendingChild;
     private ExperimentalEMCTSTreeNode pendingParent;
     private StringBuilder pendingRow;
+    private int pendingDepth, pendingChildren, pendingAge;
+
+    // ---- selection instrumentation (R9) --------------------------------------------------------
+    // The question these answer is whether mutation payoff depends on WHERE in the tree the search
+    // is expanding — which could not be asked before, because the pre-fix descent made every
+    // expansion a fresh leaf and the notion of a node being expanded repeatedly did not exist.
+    //
+    // NOTE: times_visited is deliberately NOT logged. It is incremented exactly once per node, in
+    // planTurn, right after that node is created and scored — so it is 1 for every node in the tree
+    // and a column of it would carry no information. The meaningful analogues are how many children
+    // the expanded node has accumulated, and how long it has been the expansion target.
+    private ExperimentalEMCTSTreeNode lastExpanded;
+    private int expandedDepth;       // depth from the root; recomputed only when the target changes
+    private int expandedAge;         // mutations spawned from this target so far
 
     public Stage0MutationLogAgent(long seed, ExperimentalEMCTSParams params) {
         super(seed, params);
@@ -91,6 +106,7 @@ public class Stage0MutationLogAgent extends ExperimentalEMCTSAgent {
         burnsInTurn = 0;
         if (pendingChild != null) orphanEvents++;
         pendingChild = null; pendingParent = null; pendingRow = null;
+        lastExpanded = null; expandedDepth = 0; expandedAge = 0;
         return super.randomActions(gs);
     }
 
@@ -132,6 +148,18 @@ public class Stage0MutationLogAgent extends ExperimentalEMCTSAgent {
         Action removed = (moveToMutate < seq.size()) ? seq.get(moveToMutate) : null;
         int numAvailable = allAvailableActions.size();
         int seqLen = seq.size();
+        // Selection state, read before this mutation's child is attached. Depth is recomputed only
+        // when the expansion target changes, which under an exploitative policy is only on an
+        // improvement — so the parent walk costs nothing per mutation.
+        if (node != lastExpanded) {
+            lastExpanded = node;
+            expandedAge = 0;
+            expandedDepth = 0;
+            for (ExperimentalEMCTSTreeNode p = node.getParent(); p != null; p = p.getParent())
+                expandedDepth++;
+        }
+        int expandedChildren = node.getChildren().size();
+        int ageAtEvent = expandedAge++;
         String remType = typeKey(removed), remMid = midKey(removed, gs), remFull = fullKey(removed);
         String insType = typeKey(inserted), insMid = midKey(inserted, gs), insFull = fullKey(inserted);
         // ---- end bookkeeping ----
@@ -165,6 +193,7 @@ public class Stage0MutationLogAgent extends ExperimentalEMCTSAgent {
         pendingChild = newNode;
         pendingParent = node;
         pendingRow = row;
+        pendingDepth = expandedDepth; pendingChildren = expandedChildren; pendingAge = ageAtEvent;
         iterInTurn++;
         // ---- end bookkeeping ----
 
@@ -180,6 +209,10 @@ public class Stage0MutationLogAgent extends ExperimentalEMCTSAgent {
         super.eval(gs, node);
         if (!match) return;
 
+        // planTurn applies exactly this test right after eval returns, so evaluating it here reads
+        // the incumbent before it moves and records the same decision without duplicating state.
+        boolean incumbentMoved = incumbent != null && node.getValue() > incumbent.getValue();
+
         StringBuilder row = pendingRow;
         ExperimentalEMCTSTreeNode parent = pendingParent;
         pendingChild = null; pendingParent = null; pendingRow = null;
@@ -190,7 +223,11 @@ public class Stage0MutationLogAgent extends ExperimentalEMCTSAgent {
                 Math.round(core.game.ComputeMeter.computeUnits())));
         row.append(duplicate ? 1 : 0).append(',')
            .append(round4(parent.getValue())).append(',')
-           .append(round4(node.getValue()));
+           .append(round4(node.getValue())).append(',')
+           .append(pendingDepth).append(',')
+           .append(pendingChildren).append(',')
+           .append(pendingAge).append(',')
+           .append(incumbentMoved ? 1 : 0);
         eventRows.add(row.toString());
     }
 

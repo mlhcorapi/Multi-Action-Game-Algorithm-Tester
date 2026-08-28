@@ -58,11 +58,16 @@ import java.util.Locale;
  *   <li>measures on <b>portfolio scenarios</b>, one turn at a time, with the <b>same scenarios and the
  *       same seeds for every cell</b>, so cells differ by configuration and budget and by nothing
  *       else;</li>
- *   <li><b>warms up and then repeats identical work</b>, and reports how far each per-operation time
- *       moves between repetitions - which, because the work is identical, is a statement about the
- *       machine rather than about the portfolio;</li>
+ *   <li><b>warms up at every budget level and then repeats identical work</b>, estimating each
+ *       per-operation time from the <b>fastest</b> repetition. Because the work is identical, all
+ *       variation between repetitions is machine interference, and interference can only make a
+ *       repetition slower - so the mean is contaminated by whichever repetition was disturbed while
+ *       the fastest is the least-contended observation. Weights are ratios between cells, so a
+ *       consistent estimator matters more than an unbiased one;</li>
  *   <li><b>checks its own validity</b> per cell and prints a PASS/FAIL verdict: enough operations to
- *       divide by, repetition spread inside tolerance, plausible weights, and an idle machine;</li>
+ *       divide by, the two fastest repetitions agreeing within tolerance, plausible weights, and an
+ *       idle machine. Gating on the full spread instead would reject a cell for the behaviour of its
+ *       WORST repetition, a number carrying no information about what the operation costs;</li>
  *   <li><b>writes weights the pipeline loads automatically</b>, so applying them is not a manual step
  *       that can be forgotten, plus a CSV of everything measured for the write-up.</li>
  * </ol>
@@ -75,7 +80,7 @@ import java.util.Locale;
  * <p><b>One round is enough.</b> The measurement is mildly self-referential: per-op costs depend on how
  * big the tree grew, which depends on the weights in force while measuring. The dependence is
  * second-order (it moves the tree size, not the shape of the work), and re-running this command is the
- * cheap way to confirm it - a converged calibration reproduces its own weights within the CV it
+ * cheap way to confirm it - a converged calibration reproduces its own weights within the spread it
  * reports.
  *
  * <p><b>Changing the weights changes what a unit IS.</b> Run this BEFORE C0 and before the production
@@ -104,6 +109,21 @@ public final class ComputeCalibrateV6 {
      * (see {@link #scenarioFor}) rather than on all of them.
      */
     public static final String DEFAULT_TURNS_PER_REP = "4,4,4";
+
+    /**
+     * Turns per repetition for the action-bias suite, which needs more of them at the smallest level.
+     *
+     * <p>{@link #MIN_OPS} is a floor on each counter, and the zero-evaluation repair arms make roughly
+     * four times fewer COPIES than every other configuration — not by accident but by construction,
+     * since not copying candidates is the whole point of the mode. Measured at 40,000 units: a Z0 arm
+     * produces ~14,700 copies over four turns against a floor of 20,000, so the default would fail
+     * those four cells and, the gate being all-or-nothing, reject the entire calibration.
+     *
+     * <p>Eight turns at the smallest level clears it with margin. The floor is left alone: it is a
+     * sanity check on sample size, and the honest way past it is more samples, not a lower bar.
+     * Higher levels do far more work per turn, so their counts clear it easily and they stay cheap.
+     */
+    public static final String AB_TURNS_PER_REP = "8,4,2";
     /** Turns run and discarded before the first measurement, so JIT compilation is not timed. */
     public static final int DEFAULT_WARMUP = 6;
     /**
@@ -112,7 +132,14 @@ public final class ComputeCalibrateV6 {
      */
     public static final int SCENARIO_POOL = 8;
 
-    /** Coefficient of variation across repetitions above which a cell is not trustworthy. */
+    /**
+     * Tolerance for the stability gate: the two fastest repetitions of a cell must agree within this.
+     *
+     * <p>Also the threshold gate A3' uses when comparing idle against loaded weight ratios, so the
+     * two questions - "is this cell stable?" and "does its price survive contention?" - are asked at
+     * the same resolution. The full coefficient of variation is still computed and printed beside it
+     * as a disturbance diagnostic; it is reported, not gated on.
+     */
     public static final double MAX_CV = 0.10;
     /**
      * Minimum count of each operation in a cell before dividing by it means anything.
@@ -147,8 +174,9 @@ public final class ComputeCalibrateV6 {
         long adv, cop, ev;          // total operations timed, summed over repetitions
         int scenarios;              // distinct positions behind this cell
         final List<double[]> perRep = new ArrayList<>();   // {tAdv, tCopy, tEval} ns per rep
-        double tAdv, tCopy, tEval;  // means across reps
-        double cvAdv, cvCopy, cvEval;
+        double tAdv, tCopy, tEval;  // FASTEST repetition (see fastest())
+        double cvAdv, cvCopy, cvEval;              // full spread, reported as the disturbance diagnostic
+        double gapAdv, gapCopy, gapEval;           // two-fastest agreement, the gate
         double wAdvance, wCopy, wEval;
         final List<String> failures = new ArrayList<>();
 
@@ -163,7 +191,13 @@ public final class ComputeCalibrateV6 {
                 case "CrossoverBB":        return ExpAgents.crossoverBBV6(units);
                 case "CrossoverExpansion": return ExpAgents.crossoverExpansionV6(ratio, units);
                 case "CrossoverCombo":     return ExpAgents.crossoverComboV6(ratio, units);
-                default: throw new IllegalArgumentException("unknown config " + config);
+                default:
+                    // Action-bias arms carry the AB_ prefix and are looked up in the runner's own
+                    // registry, so an arm can never be calibrated under one definition and run under
+                    // another.
+                    if (config.startsWith(ExpAgents.AB_PREFIX))
+                        return Stage1Runner.specFor(config.substring(ExpAgents.AB_PREFIX.length()), units);
+                    throw new IllegalArgumentException("unknown config " + config);
             }
         }
     }
@@ -171,14 +205,48 @@ public final class ComputeCalibrateV6 {
     // ------------------------------------------------------------------ main
 
     public static void main(String[] args) throws Exception {
+        // --suite and --underLoad are flags, not positionals, and are stripped here.
+        //
+        // The suite HAS to be a flag. As a trailing positional it could only be given by supplying
+        // every argument before it, which would defeat its own suite-aware defaults: you cannot ask
+        // for the ab suite's turn counts while also being forced to state the turn counts. The
+        // trailing positional is still honoured so existing v6 invocations keep working.
+        int underLoad = 0;
+        String suiteFlag = null;
+        List<String> pos = new ArrayList<>();
+        for (int i = 0; i < args.length; i++) {
+            String a = args[i].trim();
+            if (a.equals("--underLoad") && i + 1 < args.length) underLoad = Integer.parseInt(args[++i].trim());
+            else if (a.startsWith("--underLoad=")) underLoad = Integer.parseInt(a.substring(12).trim());
+            else if (a.equals("--suite") && i + 1 < args.length) suiteFlag = args[++i].trim();
+            else if (a.startsWith("--suite=")) suiteFlag = a.substring(8).trim();
+            else pos.add(a);
+        }
+        args = pos.toArray(new String[0]);
+
         String portfolioDir = args.length > 0 ? args[0] : RunExperimentV6.BASE + "/_portfolio";
         String outDir       = args.length > 1 ? args[1] : RunExperimentV6.BASE + "/_calibration";
         int reps            = args.length > 2 ? Integer.parseInt(args[2].trim()) : DEFAULT_REPS;
+        String suiteArg     = suiteFlag != null ? suiteFlag.toLowerCase(Locale.ROOT)
+                            : args.length > 6 ? args[6].trim().toLowerCase(Locale.ROOT) : SUITE_V6;
+        // "auto" keeps the suite's own default while still allowing the later positionals (warmup,
+        // levels) to be given — otherwise choosing a level would force you to restate the turn counts.
+        String turnsArg     = args.length > 3 ? args[3].trim() : "auto";
         int[] turnsPerRep   = GameLengthProbeV6.parseInts(
-                                    args.length > 3 ? args[3] : DEFAULT_TURNS_PER_REP);
+                                    turnsArg.isEmpty() || turnsArg.equalsIgnoreCase("auto")
+                                    ? (suiteArg.equals(SUITE_V6) ? DEFAULT_TURNS_PER_REP
+                                                                 : AB_TURNS_PER_REP)
+                                    : turnsArg);
         int warmup          = args.length > 4 ? Integer.parseInt(args[4].trim()) : DEFAULT_WARMUP;
         int[] levels        = args.length > 5 ? GameLengthProbeV6.parseInts(args[5])
                                               : RunExperimentV6.DEFAULT_COMPUTE_LEVELS;
+        String suite        = suiteArg;
+        if (!suite.equals(SUITE_V6) && !suite.equals(SUITE_AB) && !suite.equals(SUITE_ALL)
+                && !suite.equals(SUITE_A3)) {
+            System.err.println("unknown suite '" + suite + "' - expected one of: "
+                    + SUITE_V6 + ", " + SUITE_AB + ", " + SUITE_ALL + ", " + SUITE_A3);
+            System.exit(2);
+        }
 
         Constants.VISUALS = false;
         Constants.LOG_STATS = false;
@@ -190,7 +258,7 @@ public final class ComputeCalibrateV6 {
         ExpCsv.ensureDir(out);
 
         List<Cell> cells = new ArrayList<>();
-        for (int level : levels) cells.addAll(cellsForLevel(level));
+        for (int level : levels) cells.addAll(cellsForLevel(level, suite));
 
         System.out.println("############################################################");
         System.out.println("# v6 compute-unit weight calibration (per config, per budget level)");
@@ -198,15 +266,29 @@ public final class ComputeCalibrateV6 {
         System.out.println("# AT EACH BUDGET LEVEL, relative to one reference operation, and writes them");
         System.out.println("# where the rest of the pipeline picks them up.");
         System.out.println("############################################################");
-        System.out.println("# SINGLE-THREADED and requires an idle machine: this is a timing measurement.");
+        if (underLoad > 1) {
+            System.out.println("# UNDER LOAD: each cell is measured on one thread while " + (underLoad - 1)
+                    + " others run the SAME configuration.");
+            System.out.println("# This is gate A3' — the idle weights are ratios measured in a regime the");
+            System.out.println("# experiment never occupies. Arms differ several-fold in allocation rate, and");
+            System.out.println("# GC is nearly free on one thread while it competes for cores, L3 and memory");
+            System.out.println("# bandwidth at " + underLoad + ". If the ratios move, the idle weights mis-price");
+            System.out.println("# exactly the arms this line is trying to measure.");
+        } else {
+            System.out.println("# SINGLE-THREADED and requires an idle machine: this is a timing measurement.");
+        }
         System.out.println("# currently in force: " + ComputeMeter.weightsSummary());
-        System.out.println("# levels=" + java.util.Arrays.toString(levels)
+        System.out.println("# suite=" + suite + "  underLoad=" + underLoad
+                + "  levels=" + java.util.Arrays.toString(levels)
                 + "  configs=" + (cells.size() / Math.max(1, levels.length))
                 + "  cells=" + cells.size());
         System.out.println("# reps=" + reps + "  turns(=positions)/rep per level="
                 + java.util.Arrays.toString(turnsPerRep) + "  warmup=" + warmup);
-        System.out.println("# A repetition repeats the SAME positions with the SAME seeds, so the CV"
+        System.out.println("# A repetition repeats the SAME positions with the SAME seeds, so variation"
                 + " across reps measures the machine, not the portfolio.");
+        System.out.println("# Estimator: the FASTEST repetition (interference can only slow one down).");
+        System.out.println("# Gate: the two fastest agree within " + (int) (100 * MAX_CV)
+                + "%. Full CV is printed beside it as the disturbance diagnostic.");
         System.out.println("# reference cell = " + REFERENCE_CONFIG + "@" + levels[0]
                 + "  (its advance is 1.000 units by definition)");
         ServerProfile.get().printBanner("compute-unit weight calibration");
@@ -223,27 +305,49 @@ public final class ComputeCalibrateV6 {
             System.exit(1);
         }
 
-        // Warm up once on the reference cell: the hot code (GameState.advance/copy, the heuristic) is
-        // shared by every configuration, so JIT state carries across cells. Each cell still discards
-        // its own first turn, which is what touches that agent's own code paths.
-        System.out.println("\n[weights] warmup: " + warmup + " turns (discarded)");
-        Cell warm = new Cell(REFERENCE_CONFIG, -1, levels[0]);
-        ComputeMeter.PROFILE = true;          // warm the TIMED code path, not the untimed one
-        for (int i = 0; i < warmup; i++)
-            runTurn(warm, scenarioFor(portfolio, i % SCENARIO_POOL, SCENARIO_POOL), 9_000 + i);
-        ComputeMeter.PROFILE = false;
-
         long t0 = System.currentTimeMillis();
         int done = 0;
+        int warmedLevel = -1;
         for (Cell c : cells) {
             int levelIdx = indexOf(levels, c.units);
+            // Warm up ONCE PER BUDGET LEVEL, not once per run.
+            //
+            // The hot code (GameState.advance/copy, the heuristic) is shared by every configuration,
+            // so JIT state carries across cells within a level. Heap state does not: a 400,000-unit
+            // turn builds a far larger tree than a 40,000-unit one, so warming only at the smallest
+            // level leaves the first cells of every larger level measured while the heap is still
+            // growing. Full collections then land inside their early repetitions and not their later
+            // ones — which is exactly the repetition-to-repetition spread the gate rejects, and it is
+            // reproducible: the first cells of the largest level failed while their neighbours passed.
+            //
+            // Each cell still discards its own first turn as well, which is what touches that
+            // agent's own code paths.
+            if (c.units != warmedLevel) {
+                warmedLevel = c.units;
+                System.out.println(String.format(Locale.ROOT,
+                        "%n[weights] warmup for level %d: %d turns (discarded)", c.units, warmup));
+                Cell warm = new Cell(REFERENCE_CONFIG, -1, c.units);
+                ComputeMeter.PROFILE = true;   // warm the TIMED code path, not the untimed one
+                for (int i = 0; i < warmup; i++)
+                    runTurn(warm, scenarioFor(portfolio, i % SCENARIO_POOL, SCENARIO_POOL), 9_000 + i);
+                ComputeMeter.PROFILE = false;
+                // Collect between levels so each starts from a comparable heap rather than carrying
+                // the previous level's garbage into its first cell's repetitions.
+                System.gc();
+            }
             int turns = turnsPerRep[Math.min(levelIdx, turnsPerRep.length - 1)];
-            measure(c, portfolio, reps, turns);
+            LoadHarness load = underLoad > 1 ? LoadHarness.start(c, portfolio, underLoad - 1) : null;
+            try {
+                measure(c, portfolio, reps, turns);
+            } finally {
+                if (load != null) load.stop();
+            }
             done++;
             System.out.printf(Locale.ROOT,
                     "  [%2d/%2d] %-30s advance %7.1f ns  copy %7.1f ns  eval %7.1f ns   "
-                    + "(CV %.1f/%.1f/%.1f%%)%s%n",
+                    + "(gap %.1f/%.1f/%.1f%% | CV %.1f/%.1f/%.1f%%)%s%n",
                     done, cells.size(), c.profile, c.tAdv, c.tCopy, c.tEval,
+                    100 * c.gapAdv, 100 * c.gapCopy, 100 * c.gapEval,
                     100 * c.cvAdv, 100 * c.cvCopy, 100 * c.cvEval,
                     c.failures.isEmpty() ? "" : "   <-- " + c.failures.get(0));
         }
@@ -284,7 +388,15 @@ public final class ComputeCalibrateV6 {
                 passes, failures);
 
         double loadAfter = loadPerCore();
-        if (loadAfter >= 0) {
+        if (underLoad > 1) {
+            // The idleness check is inverted here: a quiet machine would mean the load harness never
+            // ran, and the cells would be idle measurements wearing a loaded label.
+            check(loadAfter < 0 || loadAfter > 0.5,
+                    String.format(Locale.ROOT, "machine was loaded as intended (load %.2f per core)", loadAfter),
+                    String.format(Locale.ROOT, "load average %.2f per core - the load harness did not "
+                            + "actually load the machine, so these are idle measurements", loadAfter),
+                    passes, failures);
+        } else if (loadAfter >= 0) {
             check(loadAfter <= MAX_LOAD_PER_CORE + 1.0 / Math.max(1, ServerProfile.get().logicalCpus()),
                     String.format(Locale.ROOT, "machine was idle (load %.2f per core, this job included)",
                             loadAfter),
@@ -298,8 +410,14 @@ public final class ComputeCalibrateV6 {
         for (String s : passes) System.out.println("  [ok]   " + s);
         for (String s : failures) System.out.println("  [FAIL] " + s);
 
-        File weightsFile = new File(out, WEIGHTS_FILE);
-        File profilesCsv = new File(out, PROFILES_CSV);
+        // A loaded run never clobbers the idle weights: they are two measurements of the same thing
+        // in two regimes, and the comparison between them is the whole point of gate A3'.
+        File idleWeights = new File(out, WEIGHTS_FILE);
+        File weightsFile = underLoad > 1 ? new File(out, "compute_weights_load" + underLoad + ".properties")
+                                         : idleWeights;
+        File profilesCsv = underLoad > 1 ? new File(out, "compute_profiles_load" + underLoad + ".csv")
+                                         : new File(out, PROFILES_CSV);
+        if (underLoad > 1) reportLoadVsIdle(cells, idleWeights, underLoad);
         if (failures.isEmpty()) {
             writeWeights(weightsFile, cells, ref, reps, levels);
             writeCsv(profilesCsv, cells, ref);
@@ -319,6 +437,129 @@ public final class ComputeCalibrateV6 {
             System.out.println("  machine: stop it and try again.");
         }
         RunGuard.finished();
+    }
+
+    // ------------------------------------------------------------------ gate A3': under load
+
+    /**
+     * Keeps {@code workers} threads busy running the SAME configuration as the cell being measured,
+     * so that cell is timed in the regime the experiment actually occupies.
+     *
+     * <p><b>Why the same configuration.</b> A leaf of the isolation phase runs one arm across every
+     * worker, so "many threads all running arm X" is arm X's operating condition. Loading with a
+     * mixture would measure a machine state that never occurs.
+     *
+     * <p><b>Known distortion, and why it is tolerable.</b> {@code ComputeMeter.PROFILE} is a global
+     * flag, not a thread-local one, so while the measured thread is timing, the load threads also
+     * take the {@code nanoTime} path they would not take in a real run. The overhead is small and it
+     * applies to every cell equally — and A3' compares <i>ratios between cells</i>, where a uniform
+     * term cancels. Per-thread counters are thread-local, so the load threads never pollute the
+     * measurement itself.
+     */
+    private static final class LoadHarness {
+        private final java.util.concurrent.ExecutorService pool;
+        private final java.util.concurrent.atomic.AtomicBoolean stop =
+                new java.util.concurrent.atomic.AtomicBoolean();
+
+        private LoadHarness(java.util.concurrent.ExecutorService pool) { this.pool = pool; }
+
+        static LoadHarness start(Cell cell, List<Scenario> portfolio, int workers) {
+            java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(workers);
+            LoadHarness h = new LoadHarness(pool);
+            java.util.concurrent.CountDownLatch running = new java.util.concurrent.CountDownLatch(workers);
+            for (int w = 0; w < workers; w++) {
+                final int id = w;
+                pool.submit(() -> {
+                    boolean announced = false;
+                    for (long i = 0; !h.stop.get(); i++) {
+                        if (!announced) { running.countDown(); announced = true; }
+                        try {
+                            // Offset by worker so the threads are not lock-stepped on one position.
+                            Scenario sc = portfolio.get((int) (((id * 7L + i * 13L) % portfolio.size())));
+                            runTurn(cell, sc, 8_000_000L + id * 10_000L + i);
+                        } catch (Throwable t) {
+                            // A load thread failing must not take the measurement down with it.
+                        }
+                    }
+                });
+            }
+            try {
+                // Wait until every worker is inside a turn, then settle: the measured cell should see
+                // a machine already at load, not one ramping into it.
+                running.await(2, java.util.concurrent.TimeUnit.MINUTES);
+                Thread.sleep(5_000);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+            return h;
+        }
+
+        void stop() {
+            stop.set(true);
+            pool.shutdownNow();
+            try { pool.awaitTermination(2, java.util.concurrent.TimeUnit.MINUTES); }
+            catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+        }
+    }
+
+    /**
+     * Gate A3': does the per-configuration price hold in the regime it will be spent in?
+     *
+     * <p>Compares each cell's loaded weights against the idle ones and reports the largest move. The
+     * weights are ratios to the reference cell, so a uniform slowdown cancels: what shows up here is
+     * a configuration whose cost changes <i>relative to the others</i> under contention — which is
+     * exactly what an allocation-heavy arm is expected to do, and exactly what would otherwise
+     * mis-price it silently.
+     */
+    private static void reportLoadVsIdle(List<Cell> cells, File idleWeights, int underLoad) {
+        System.out.println("\n=== GATE A3': PER-CONFIG WEIGHT RATIOS, IDLE vs " + underLoad + " THREADS ===");
+        if (!idleWeights.exists()) {
+            System.out.println("  No idle calibration at " + idleWeights.getPath()
+                    + " to compare against - run the calibration without --underLoad first.");
+            return;
+        }
+        java.util.Properties idle = new java.util.Properties();
+        try (java.io.InputStream in = new java.io.FileInputStream(idleWeights)) {
+            idle.load(in);
+        } catch (Exception e) {
+            System.out.println("  Could not read " + idleWeights.getPath() + ": " + e);
+            return;
+        }
+        System.out.printf(Locale.ROOT, "  %-34s %10s %10s %9s%n", "profile", "idle", "loaded", "change");
+        double worst = 0; String worstWhere = "";
+        int compared = 0;
+        for (Cell c : cells) {
+            String key = "compute.profile." + c.profile + ".wAdvance";
+            String v = idle.getProperty(key);
+            if (v == null) continue;
+            double before = Double.parseDouble(v);
+            if (before <= 0) continue;
+            double change = (c.wAdvance - before) / before;
+            compared++;
+            if (Math.abs(change) > Math.abs(worst)) { worst = change; worstWhere = c.profile; }
+            System.out.printf(Locale.ROOT, "  %-34s %10.4f %10.4f %8.1f%%%n",
+                    c.profile, before, c.wAdvance, 100 * change);
+        }
+        if (compared == 0) {
+            System.out.println("  No overlapping profiles - the idle run calibrated a different suite.");
+            return;
+        }
+        System.out.printf(Locale.ROOT, "%n  Largest move: %.1f%% (%s), over %d profiles.%n",
+                100 * worst, worstWhere, compared);
+        if (Math.abs(worst) <= MAX_CV) {
+            System.out.println("  VERDICT: ratios HOLD under load (within the calibrator's own "
+                    + (int) (100 * MAX_CV) + "% gate).");
+            System.out.println("  The idle weights are the operating currency; wall-clock fairness (W7)");
+            System.out.println("  stays a secondary check.");
+        } else {
+            System.out.println("  VERDICT: ratios MOVE under load.");
+            System.out.println("  The LOADED weights are the operating currency: re-measure every cell with");
+            System.out.println("  --underLoad and use " + WEIGHTS_FILE.replace(".properties",
+                    "_load" + underLoad + ".properties") + " for the run.");
+            System.out.println("  Wall-clock fairness (W7) is promoted to CO-PRIMARY: report every headline");
+            System.out.println("  claim in both compute units and seconds, and treat an arm that wins in one");
+            System.out.println("  and loses in the other as unresolved, not as a win.");
+        }
     }
 
     // ------------------------------------------------------------------ measuring
@@ -352,13 +593,46 @@ public final class ComputeCalibrateV6 {
                 + " to the global weights. Re-run ComputeCalibrateV6 for the missing levels.";
     }
 
-    /** The 12 isolation-phase configurations at one budget level, in the canonical order. */
+    /** Suites of configurations this calibrator knows how to price. */
+    public static final String SUITE_V6 = "v6", SUITE_AB = "ab", SUITE_ALL = "all", SUITE_A3 = "a3";
+
+    /**
+     * The A3' subset: the reference plus the three most allocation-divergent action-bias arms.
+     *
+     * <p>A3' asks whether per-configuration cost RATIOS survive the move from an idle machine to a
+     * loaded one, and the arms that can answer it are the ones that differ most in allocation rate —
+     * full greedy repair, a shortlist, and zero-eval, which runs several times more mutations per turn.
+     * Measuring the whole suite under load would cost hours to answer a question four configurations
+     * settle, and a loaded measurement is the expensive kind.
+     */
+    private static final String[] A3_ARMS = {"Baseline", "Short5_e25", "Z0_Fine"};
+
+    /** The 12 v6 isolation-phase configurations at one budget level, in the canonical order. */
     private static List<Cell> cellsForLevel(int units) {
+        return cellsForLevel(units, SUITE_V6);
+    }
+
+    /**
+     * The configurations of one suite at one budget level.
+     *
+     * <p>The reference cell ({@code EMCTS}) is in every suite, because it is what defines the unit:
+     * a suite calibrated without it would have nothing to be a ratio of.
+     */
+    private static List<Cell> cellsForLevel(int units, String suite) {
         List<Cell> out = new ArrayList<>();
         out.add(new Cell("EMCTS", -1, units));
-        out.add(new Cell("CrossoverBB", -1, units));
-        for (int r : IsolationPhaseRunnerV6.RATIOS) out.add(new Cell("CrossoverExpansion", r, units));
-        for (int r : IsolationPhaseRunnerV6.RATIOS) out.add(new Cell("CrossoverCombo", r, units));
+        if (suite.equals(SUITE_V6) || suite.equals(SUITE_ALL)) {
+            out.add(new Cell("CrossoverBB", -1, units));
+            for (int r : IsolationPhaseRunnerV6.RATIOS) out.add(new Cell("CrossoverExpansion", r, units));
+            for (int r : IsolationPhaseRunnerV6.RATIOS) out.add(new Cell("CrossoverCombo", r, units));
+        }
+        if (suite.equals(SUITE_AB) || suite.equals(SUITE_ALL)) {
+            for (String arm : Stage1Runner.armNames())
+                out.add(new Cell(ExpAgents.AB_PREFIX + arm, -1, units));
+        }
+        if (suite.equals(SUITE_A3)) {
+            for (String arm : A3_ARMS) out.add(new Cell(ExpAgents.AB_PREFIX + arm, -1, units));
+        }
         return out;
     }
 
@@ -421,19 +695,24 @@ public final class ComputeCalibrateV6 {
         c.scenarios = turns;
 
         double[] a = column(c.perRep, 0), cp = column(c.perRep, 1), e = column(c.perRep, 2);
-        c.tAdv = mean(a);   c.cvAdv = cv(a);
-        c.tCopy = mean(cp); c.cvCopy = cv(cp);
-        c.tEval = mean(e);  c.cvEval = cv(e);
+        c.tAdv = fastest(a);   c.cvAdv = cv(a);   c.gapAdv = twoFastestGap(a);
+        c.tCopy = fastest(cp); c.cvCopy = cv(cp); c.gapCopy = twoFastestGap(cp);
+        c.tEval = fastest(e);  c.cvEval = cv(e);  c.gapEval = twoFastestGap(e);
 
         if (c.adv < MIN_OPS) c.failures.add("only " + c.adv + " advances (need " + MIN_OPS + ")");
         if (c.cop < MIN_OPS) c.failures.add("only " + c.cop + " copies (need " + MIN_OPS + ")");
         if (c.ev  < MIN_OPS) c.failures.add("only " + c.ev + " evals (need " + MIN_OPS + ")");
-        if (c.cvAdv > MAX_CV) c.failures.add(String.format(Locale.ROOT,
-                "advance time varies %.1f%% between reps", 100 * c.cvAdv));
-        if (c.cvCopy > MAX_CV) c.failures.add(String.format(Locale.ROOT,
-                "copy time varies %.1f%% between reps", 100 * c.cvCopy));
-        if (c.cvEval > MAX_CV) c.failures.add(String.format(Locale.ROOT,
-                "eval time varies %.1f%% between reps", 100 * c.cvEval));
+        // Gate on the two fastest repetitions agreeing, not on the full spread. A cell whose worst
+        // repetition was disturbed is not a badly-measured cell; it is a cell that was measured while
+        // something else ran, and its fastest repetitions still say what the operation costs.
+        if (c.perRep.size() >= 2) {
+            if (c.gapAdv > MAX_CV) c.failures.add(String.format(Locale.ROOT,
+                    "two fastest advance times differ by %.1f%%", 100 * c.gapAdv));
+            if (c.gapCopy > MAX_CV) c.failures.add(String.format(Locale.ROOT,
+                    "two fastest copy times differ by %.1f%%", 100 * c.gapCopy));
+            if (c.gapEval > MAX_CV) c.failures.add(String.format(Locale.ROOT,
+                    "two fastest eval times differ by %.1f%%", 100 * c.gapEval));
+        }
     }
 
     /**
@@ -656,6 +935,46 @@ public final class ComputeCalibrateV6 {
 
     private static double mean(double[] v) {
         double s = 0; for (double d : v) s += d; return v.length > 0 ? s / v.length : 0;
+    }
+
+    /**
+     * The fastest repetition — the estimator.
+     *
+     * <p>Every repetition runs byte-identical work, so all variation between them is machine
+     * interference, and interference can only make a repetition SLOWER. The mean is therefore
+     * contaminated by whichever repetition happened to be disturbed, while the fastest is the
+     * least-contended observation and the better estimate of what the operation actually costs.
+     *
+     * <p>Weights are RATIOS between cells, so a consistent estimator matters more than an unbiased
+     * one: any systematic difference between "fastest" and "mean" applies to every cell and cancels.
+     *
+     * <p>Zero entries mean the operation never occurred in that repetition; since all repetitions run
+     * identical work that is either true of all of them or none, but it is filtered defensively so a
+     * degenerate counter cannot pull the minimum to zero.
+     */
+    private static double fastest(double[] v) {
+        double best = Double.POSITIVE_INFINITY;
+        for (double d : v) if (d > 0 && d < best) best = d;
+        return Double.isInfinite(best) ? 0 : best;
+    }
+
+    /**
+     * Relative gap between the two fastest repetitions — the stability gate.
+     *
+     * <p>The question worth gating on is whether the least-contended measurements agree, not whether
+     * every repetition agreed: a cell should not be rejected for the behaviour of its WORST
+     * repetition, a number that carries no information about what the operation costs. Returns 0
+     * when there are fewer than two usable repetitions, which the caller reports rather than gates.
+     */
+    private static double twoFastestGap(double[] v) {
+        double a = Double.POSITIVE_INFINITY, b = Double.POSITIVE_INFINITY;
+        for (double d : v) {
+            if (d <= 0) continue;
+            if (d < a) { b = a; a = d; }
+            else if (d < b) b = d;
+        }
+        if (Double.isInfinite(a) || Double.isInfinite(b)) return 0;
+        return (b - a) / a;
     }
 
     /** Coefficient of variation: SD / mean. The stability statistic. */

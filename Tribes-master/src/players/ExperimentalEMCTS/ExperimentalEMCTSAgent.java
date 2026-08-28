@@ -163,6 +163,20 @@ public class ExperimentalEMCTSAgent extends Agent {
         super(seed);
         m_rnd = new Random(seed);
         this.params = params;
+        // Multi-child generations and crossover expansion are not defined together: crossover grafts
+        // its child onto an elite parent elsewhere in the tree rather than onto the expanded node, so
+        // "the best of this node's k offspring" stops describing the generation. Refuse the
+        // combination rather than pick an interpretation of it.
+        if (params.childrenPerGeneration > 1
+                && (params.useCrossoverExpansion || params.useCrossoverBridgeBurning)) {
+            throw new IllegalArgumentException(
+                    "childrenPerGeneration > 1 requires both crossover operators OFF (got k="
+                    + params.childrenPerGeneration + ")");
+        }
+        if (params.childrenPerGeneration < 1) {
+            throw new IllegalArgumentException(
+                    "childrenPerGeneration must be >= 1 (got " + params.childrenPerGeneration + ")");
+        }
     }
 
     @Override
@@ -341,94 +355,36 @@ public class ExperimentalEMCTSAgent extends Agent {
                 numIters++;
                 fmCallsRun = 0;
 
-                // Search iteration: expand the incumbent (purely exploitative selection),
-                // mutate once (or crossover-expand), evaluate, update the incumbent.
+                // One GENERATION: expand the selected node k times, then apply the selection
+                // rule once to the whole offspring set. At k = 1 with PLUS this reduces exactly to
+                // the previous one-child-per-iteration loop — same operations, same order, same RNG
+                // draws — which is what keeps every equivalence gate meaningful.
                 ExperimentalEMCTSTreeNode toMutate = nodeToExpand();
-                ExperimentalEMCTSTreeNode child = null;
-                // v5 telemetry: which operator generated this child + the crossover parents' stats.
-                boolean usedCrossover = false;
-                double xoP1 = 0.0, xoP2 = 0.0;
-
-                if (params.useCrossoverExpansion && globalTopNodesQueue.size() >= 2) {
-                    crossoverExpansionCounter++;
-                    if (crossoverExpansionCounter >= params.mutationExpansionRatio) {
-                        crossoverExpansionCounter = 0;
-
-                        ArrayList<ExperimentalEMCTSTreeNode> topNodesList = new ArrayList<>(globalTopNodesQueue);
-                        ExperimentalEMCTSTreeNode p1 = topNodesList.get(0);
-                        ExperimentalEMCTSTreeNode p2 = topNodesList.get(1);
-
-                        usedCrossover = true;
-                        xoP1 = p1.getValue(); xoP2 = p2.getValue();
-                        xoParentSimilaritySum += sequenceSimilarity(p1.getSequence(), p2.getSequence());
-
-                        // crossover() copies the state internally exactly once and never
-                        // mutates its gs argument, so no pre-copy (one charged copy, not two).
-                        ArrayList<Action> crossoverSeq = crossover(p1, p2, gs);
-
-                        ExperimentalEMCTSTreeNode strongerParent = (p1.getValue() > p2.getValue()) ? p1 : p2;
-                        child = new ExperimentalEMCTSTreeNode(crossoverSeq, strongerParent);
-                        strongerParent.addChild(child);
-                        int nGraftChildren = strongerParent.getChildren().size();
-                        if (nGraftChildren > maxChildrenOnANode) maxChildrenOnANode = nGraftChildren;
-                        xoEvents++;
-                        xoRepairKept += lastXoRepairKept; xoRepairReplaced += lastXoRepairReplaced;
-                    } else {
-                        child = mutate(toMutate, gs.copy());
-                        mutEvents++;
-                        mutRepairKept += lastRepairKept; mutRepairReplaced += lastRepairReplaced;
-                    }
-                } else {
-                    child = mutate(toMutate, gs.copy());
-                    mutEvents++;
-                    mutRepairKept += lastRepairKept; mutRepairReplaced += lastRepairReplaced;
+                final int k = Math.max(1, params.childrenPerGeneration);
+                ExperimentalEMCTSTreeNode bestOfGeneration = null;
+                ExperimentalEMCTSTreeNode randomOfGeneration = null;
+                for (int childIdx = 0; childIdx < k; childIdx++) {
+                    if (childIdx > 0) numIters++;
+                    fmCallsRun = 0;
+                    ExperimentalEMCTSTreeNode born = expandOnce(toMutate, gs);
+                    lastCreatedChild = born;
+                    if (bestOfGeneration == null || born.getValue() > bestOfGeneration.getValue())
+                        bestOfGeneration = born;
+                    // Reservoir pick, so COMMA_RAND draws uniformly without a second pass.
+                    //
+                    // Guarded on k > 1, and that guard is load-bearing: at k = 1 there is nothing to
+                    // choose between, and drawing anyway consumes a random number the pre-existing
+                    // search never consumed — which shifts the whole stream and silently breaks
+                    // bit-identity with the corrected baseline. It did: every ExperimentalEMCTS arm
+                    // diverged until this guard was added.
+                    //
+                    // Drawn for EVERY k > 1 mode rather than only COMMA_RAND, so all multi-child arms
+                    // consume one identical RNG stream and differ solely in which child they adopt.
+                    if (k == 1) randomOfGeneration = born;
+                    else if (m_rnd.nextInt(childIdx + 1) == 0) randomOfGeneration = born;
                 }
 
-                // Duplicate check BEFORE eval (eval registers the child's key in uniqueSeqKeys).
-                boolean childDuplicate = uniqueSeqKeys.contains(seqKey(child.getSequence()));
-                double prevBest = bestNode.getValue();
-                eval(gs.copy(), child);
-
-                if (usedCrossover) {
-                    double cv = child.getValue();
-                    double pBest = Math.max(xoP1, xoP2), pMean = 0.5 * (xoP1 + xoP2);
-                    xoChildVsBestParentSum += cv - pBest;
-                    xoChildVsMeanParentSum += cv - pMean;
-                    if (cv > pBest) xoChildBeatsBestParent++;
-                    if (cv < Math.min(xoP1, xoP2)) xoChildWorseThanBothParents++;
-                    if (childDuplicate) xoChildDuplicates++;
-                } else if (childDuplicate) {
-                    mutChildDuplicates++;
-                }
-
-                if (child.getValue() > prevBest) {
-                    if (usedCrossover) { xoBestGains++;  xoBestGainSum  += child.getValue() - prevBest; }
-                    else               { mutBestGains++; mutBestGainSum += child.getValue() - prevBest; }
-                    bestNode = child;
-                }
-
-                child.visited();
-
-                // Track top nodes for crossover bridge burning
-                topNodesQueue.offer(child);
-                if (topNodesQueue.size() > 8) {
-                    topNodesQueue.poll();
-                }
-
-                globalTopNodesQueue.offer(child);
-                if (globalTopNodesQueue.size() > 2) {
-                    globalTopNodesQueue.poll();
-                }
-
-                // Purely exploitative incumbent update: a strictly better child becomes the
-                // new expansion target; otherwise it stays a leaf where it was attached. (No
-                // UCB backpropagation: with a zero exploration term a node's score IS its
-                // heuristic value, so there is nothing to propagate.) Crossover-expansion
-                // children are grafted onto live parents (see purgeDetachedTopNodes), so any
-                // child that wins here is reachable by the burn-lineage walk.
-                if (child.getValue() > incumbent.getValue()) {
-                    incumbent = child;
-                }
+                adoptAfterGeneration(bestOfGeneration, randomOfGeneration);
             }
 
             // Bridge burn at every phase boundary except the last: FIXED at depth-1 = 20 burns,
@@ -525,6 +481,11 @@ public class ExperimentalEMCTSAgent extends Agent {
         // Telemetry: each eval() scores one candidate node (main-loop children, the initial root,
         // and bridge-burn tournament children). Count it (duplicates included), accumulate its value
         // (for the per-turn mean), and record its sequence key (distinct-sequence count).
+        // Keep score == value. Nothing reads score under the corrected policies, so this is inert
+        // for them; SelectionMode.LEGACY ranks by score, and without this its descent silently
+        // degrades from "best offspring" to "first offspring". Restoring it here is exactly what the
+        // pre-fix backpropagation did.
+        node.refreshScore(params.bias);
         nodesEvaluated++;
         sumNodeValue += node.getValue();
         uniqueSeqKeys.add(seqKey(node.getSequence()));
@@ -565,6 +526,156 @@ public class ExperimentalEMCTSAgent extends Agent {
                 xoChildVsBestParentSum, xoChildVsMeanParentSum,
                 xoChildBeatsBestParent, xoChildWorseThanBothParents,
                 xoParentSimilaritySum, xoChildDuplicates, xoRepairKept, xoRepairReplaced);
+    }
+
+
+    /** The most recently created child, which is what {@link SelectionMode#DRIFT} expands next. */
+    protected ExperimentalEMCTSTreeNode lastCreatedChild;
+
+    /**
+     * One child: expand {@code toMutate} (by mutation, or by crossover when that is this iteration's
+     * turn), evaluate it, and fold it into the elitist archive and the telemetry. Lifted verbatim out
+     * of the search loop so a generation can call it k times; the only thing removed is the selection
+     * decision, which is now made once per generation by {@link #adoptAfterGeneration}.
+     */
+    private ExperimentalEMCTSTreeNode expandOnce(ExperimentalEMCTSTreeNode toMutate, GameState gs) {
+        ExperimentalEMCTSTreeNode child = null;
+        // v5 telemetry: which operator generated this child + the crossover parents' stats.
+        boolean usedCrossover = false;
+        double xoP1 = 0.0, xoP2 = 0.0;
+
+                    if (params.useCrossoverExpansion && globalTopNodesQueue.size() >= 2) {
+                        crossoverExpansionCounter++;
+                        if (crossoverExpansionCounter >= params.mutationExpansionRatio) {
+                            crossoverExpansionCounter = 0;
+
+                            ArrayList<ExperimentalEMCTSTreeNode> topNodesList = new ArrayList<>(globalTopNodesQueue);
+                            ExperimentalEMCTSTreeNode p1 = topNodesList.get(0);
+                            ExperimentalEMCTSTreeNode p2 = topNodesList.get(1);
+
+                            usedCrossover = true;
+                            xoP1 = p1.getValue(); xoP2 = p2.getValue();
+                            xoParentSimilaritySum += sequenceSimilarity(p1.getSequence(), p2.getSequence());
+
+                            // crossover() copies the state internally exactly once and never
+                            // mutates its gs argument, so no pre-copy (one charged copy, not two).
+                            ArrayList<Action> crossoverSeq = crossover(p1, p2, gs);
+
+                            ExperimentalEMCTSTreeNode strongerParent = (p1.getValue() > p2.getValue()) ? p1 : p2;
+                            child = new ExperimentalEMCTSTreeNode(crossoverSeq, strongerParent);
+                            strongerParent.addChild(child);
+                            int nGraftChildren = strongerParent.getChildren().size();
+                            if (nGraftChildren > maxChildrenOnANode) maxChildrenOnANode = nGraftChildren;
+                            xoEvents++;
+                            xoRepairKept += lastXoRepairKept; xoRepairReplaced += lastXoRepairReplaced;
+                        } else {
+                            child = mutate(toMutate, gs.copy());
+                            mutEvents++;
+                            mutRepairKept += lastRepairKept; mutRepairReplaced += lastRepairReplaced;
+                        }
+                    } else {
+                        child = mutate(toMutate, gs.copy());
+                        mutEvents++;
+                        mutRepairKept += lastRepairKept; mutRepairReplaced += lastRepairReplaced;
+                    }
+
+                    // Duplicate check BEFORE eval (eval registers the child's key in uniqueSeqKeys).
+                    boolean childDuplicate = uniqueSeqKeys.contains(seqKey(child.getSequence()));
+                    double prevBest = bestNode.getValue();
+                    eval(gs.copy(), child);
+
+                    if (usedCrossover) {
+                        double cv = child.getValue();
+                        double pBest = Math.max(xoP1, xoP2), pMean = 0.5 * (xoP1 + xoP2);
+                        xoChildVsBestParentSum += cv - pBest;
+                        xoChildVsMeanParentSum += cv - pMean;
+                        if (cv > pBest) xoChildBeatsBestParent++;
+                        if (cv < Math.min(xoP1, xoP2)) xoChildWorseThanBothParents++;
+                        if (childDuplicate) xoChildDuplicates++;
+                    } else if (childDuplicate) {
+                        mutChildDuplicates++;
+                    }
+
+                    if (child.getValue() > prevBest) {
+                        if (usedCrossover) { xoBestGains++;  xoBestGainSum  += child.getValue() - prevBest; }
+                        else               { mutBestGains++; mutBestGainSum += child.getValue() - prevBest; }
+                        bestNode = child;
+                    }
+
+                    child.visited();
+
+                    // Track top nodes for crossover bridge burning
+                    topNodesQueue.offer(child);
+                    if (topNodesQueue.size() > 8) {
+                        topNodesQueue.poll();
+                    }
+
+                    globalTopNodesQueue.offer(child);
+                    if (globalTopNodesQueue.size() > 2) {
+                        globalTopNodesQueue.poll();
+                    }
+
+        return child;
+    }
+
+    /**
+     * The selection rule, applied once per generation.
+     *
+     * <p>This is the only line that differs between the policies, which is the point: comma and plus
+     * run identical operators over identical offspring and disagree solely about whether to move when
+     * nothing improved.
+     */
+    private void adoptAfterGeneration(ExperimentalEMCTSTreeNode bestOfGeneration,
+                                      ExperimentalEMCTSTreeNode randomOfGeneration) {
+        if (bestOfGeneration == null) return;
+        switch (params.selectionMode) {
+            case COMMA:
+                // (1,k): relocate every generation, improvement or not. bestNode still holds the
+                // best sequence ever seen, so non-elitist SELECTION does not lose the answer.
+                incumbent = bestOfGeneration;
+                break;
+            case COMMA_RAND:
+                incumbent = randomOfGeneration != null ? randomOfGeneration : bestOfGeneration;
+                break;
+            case DRIFT:
+                incumbent = lastCreatedChild;
+                break;
+            case LEGACY:
+                incumbent = legacyDescendToLeaf();
+                break;
+            case PLUS:
+            default:
+                // Purely exploitative: a strictly better child becomes the new expansion target;
+                // otherwise the incumbent stays where it is and the generation is discarded. (No UCB
+                // backpropagation: with a zero exploration term a node's score IS its heuristic
+                // value, so there is nothing to propagate.) Crossover-expansion children are grafted
+                // onto live parents (see purgeDetachedTopNodes), so any child that wins here is
+                // reachable by the burn-lineage walk.
+                if (bestOfGeneration.getValue() > incumbent.getValue()) incumbent = bestOfGeneration;
+                break;
+        }
+    }
+
+    /**
+     * The pre-fix policy, reproduced exactly: descend from the root taking the highest-SCORE child
+     * until a node with no children.
+     *
+     * <p><b>It ranks by score, not value, and that detail once cost a silently wrong result.</b> The
+     * selection fix deleted the backpropagation loop that kept {@code score == value}; with scores
+     * left at 0.0 the strict {@code >} below keeps the FIRST child, turning "expand the best
+     * offspring" into "expand an arbitrary offspring" — invisible at k = 1, where there is only one.
+     * {@link #eval} therefore calls {@code refreshScore}, which restores exactly what the pre-fix
+     * backpropagation did and is invisible to every other arm because nothing else reads score.
+     */
+    protected ExperimentalEMCTSTreeNode legacyDescendToLeaf() {
+        ExperimentalEMCTSTreeNode node = root;
+        while (node.getChildren().size() > 0) {
+            ExperimentalEMCTSTreeNode best = null;
+            for (ExperimentalEMCTSTreeNode c : node.getChildren())
+                if (best == null || c.getScore() > best.getScore()) best = c;
+            node = best;
+        }
+        return node;
     }
 
     /**

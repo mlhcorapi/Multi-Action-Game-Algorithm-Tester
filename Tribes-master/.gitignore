@@ -34,3 +34,7 @@ test_results/tbets_vs_emcts/*.log
 # Transient run-lock + javac sources list
 test_results/**/_running.lock
 _srcs.txt
+
+# Smoke/verify runs build a throwaway portfolio in the working directory. Only the scenarios/
+# directory was ignored, so the manifest and journal beside it were staged by a plain `git add -A`.
+test_results/stage1_smoke/
