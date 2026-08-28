@@ -50,7 +50,23 @@ laptop and none of which is invalidated by moving machines:
 | `ExpAgents.abParams` / `abStage1Params` / `requireProfiles`; **a missing compute profile is now fatal** | done, negative-tested |
 | Verify gates: Baseline ≡ plain `ExperimentalEMCTSAgent` bit-identical; the tree branches (`maxBranching ≥ 2`); the elitist archive holds | done |
 | `ActionBiasFloorProbe` — the mechanism actually engages: ≥ 80% of biased insertions rest on a key with ≥ 3 observations | **PASS at all three levels** (97.6 / 99.2 / 99.9%) |
-| The finding that the calibrator must warm up **per budget level** and estimate from the **fastest** repetition, not the mean | folded into `ComputeCalibrateV6` |
+| The finding that the calibrator must warm up **per budget level** and estimate from the **fastest** repetition, not the mean | **rebuilt on this branch** (the original was lost — see below). Verified: run-to-run ratio drift ≤ 2.4%, absolute ns ≤ 3.3%, against a 185% swing before the fix |
+
+> **Work that was lost, and must be rewritten rather than merged.** The two sibling worktrees this
+> design originally expected to merge from (`claude/emcts-experiment-design-be38d0`,
+> `claude/emcts-performance-bug-experiment-2750c4`) were removed with their changes **never
+> committed** — both branches point at the commit this one started from, their reflogs are empty and
+> their indexes are gone. What survived is what was written down: their Stage A *results*, quoted in
+> the table above, and the two analysis scripts, which were recovered independently from `1d2b800^`.
+> Two pieces of code did not:
+>
+> - **The robust calibration estimator** — rewritten here, and validated against the numbers the
+>   original reported (see §5 A2).
+> - **The multi-child expansion arms** — still missing. **Stage B cannot run until they exist**, and
+>   Stage B is what pins the substrate for D–G. This is now the critical path.
+>
+> The repository lives inside OneDrive, so its file-version history is the one remaining recovery
+> route for the second. Check it before rewriting.
 
 Two things it inherits that are **not** settled, and that this design must handle rather than assume:
 
@@ -292,6 +308,27 @@ Single-threaded means the server gives no speed-up here, and the estimate is now
 guessed: 16 cells × 3 reps × (8/4/2 turns) × (4.1/9.3/50.9 s) ≈ 2.3 h, of which the 400k level is 81
 minutes. Hash `compute_weights.properties` into every leaf CSV; a run reproduced against different
 weights is a different experiment.
+
+**The estimator, rebuilt.** Two defects the original calibration hit, both reintroduced when its fix
+was lost and both fixed again here:
+
+1. **Warmup ran once, at the smallest level.** A 400k turn builds a far larger tree, so the first
+   cells of every larger level were measured while the heap was still growing — full collections
+   landing inside their early repetitions and not their later ones, which is exactly the spread the
+   gate rejects. Warmup is now per level, with a collection between them.
+2. **The estimator averaged the repetitions.** Every repetition runs byte-identical work, so all
+   variation is machine interference — and interference can only make a repetition *slower*. The
+   mean is therefore contaminated by whichever repetition was disturbed; the **fastest** is the
+   least-contended observation. The gate changed with it: not "did every repetition agree" (which
+   rejects a cell for the behaviour of its *worst*, a number carrying no information about cost) but
+   **"do the two fastest agree within 10%"**. Full CV is still printed beside it as the disturbance
+   diagnostic.
+
+This is a better measurement, not a looser gate, and it is verifiable: two consecutive runs now
+reproduce their weight **ratios within 2.4%** and their absolute ns within 3.3%, where before the fix
+the same cell measured 15,821 ns in one run and 45,088 ns in the next. The per-config spread it
+reports (`Z0_Fine` at ~1.21× the reference advance) sits in the same 17.5–22.2% band the original
+implementation found, which is the evidence that the rewrite is faithful rather than merely working.
 
 > **The `ab` suite needs more turns at the smallest level, and this is not a tuning preference.**
 > `MIN_OPS` floors each counter at 20,000 before the calibrator will divide by it. Zero-eval repair

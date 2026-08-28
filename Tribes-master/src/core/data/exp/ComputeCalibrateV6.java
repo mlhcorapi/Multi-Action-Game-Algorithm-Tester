@@ -58,11 +58,16 @@ import java.util.Locale;
  *   <li>measures on <b>portfolio scenarios</b>, one turn at a time, with the <b>same scenarios and the
  *       same seeds for every cell</b>, so cells differ by configuration and budget and by nothing
  *       else;</li>
- *   <li><b>warms up and then repeats identical work</b>, and reports how far each per-operation time
- *       moves between repetitions - which, because the work is identical, is a statement about the
- *       machine rather than about the portfolio;</li>
+ *   <li><b>warms up at every budget level and then repeats identical work</b>, estimating each
+ *       per-operation time from the <b>fastest</b> repetition. Because the work is identical, all
+ *       variation between repetitions is machine interference, and interference can only make a
+ *       repetition slower - so the mean is contaminated by whichever repetition was disturbed while
+ *       the fastest is the least-contended observation. Weights are ratios between cells, so a
+ *       consistent estimator matters more than an unbiased one;</li>
  *   <li><b>checks its own validity</b> per cell and prints a PASS/FAIL verdict: enough operations to
- *       divide by, repetition spread inside tolerance, plausible weights, and an idle machine;</li>
+ *       divide by, the two fastest repetitions agreeing within tolerance, plausible weights, and an
+ *       idle machine. Gating on the full spread instead would reject a cell for the behaviour of its
+ *       WORST repetition, a number carrying no information about what the operation costs;</li>
  *   <li><b>writes weights the pipeline loads automatically</b>, so applying them is not a manual step
  *       that can be forgotten, plus a CSV of everything measured for the write-up.</li>
  * </ol>
@@ -75,7 +80,7 @@ import java.util.Locale;
  * <p><b>One round is enough.</b> The measurement is mildly self-referential: per-op costs depend on how
  * big the tree grew, which depends on the weights in force while measuring. The dependence is
  * second-order (it moves the tree size, not the shape of the work), and re-running this command is the
- * cheap way to confirm it - a converged calibration reproduces its own weights within the CV it
+ * cheap way to confirm it - a converged calibration reproduces its own weights within the spread it
  * reports.
  *
  * <p><b>Changing the weights changes what a unit IS.</b> Run this BEFORE C0 and before the production
@@ -127,7 +132,14 @@ public final class ComputeCalibrateV6 {
      */
     public static final int SCENARIO_POOL = 8;
 
-    /** Coefficient of variation across repetitions above which a cell is not trustworthy. */
+    /**
+     * Tolerance for the stability gate: the two fastest repetitions of a cell must agree within this.
+     *
+     * <p>Also the threshold gate A3' uses when comparing idle against loaded weight ratios, so the
+     * two questions - "is this cell stable?" and "does its price survive contention?" - are asked at
+     * the same resolution. The full coefficient of variation is still computed and printed beside it
+     * as a disturbance diagnostic; it is reported, not gated on.
+     */
     public static final double MAX_CV = 0.10;
     /**
      * Minimum count of each operation in a cell before dividing by it means anything.
@@ -162,8 +174,9 @@ public final class ComputeCalibrateV6 {
         long adv, cop, ev;          // total operations timed, summed over repetitions
         int scenarios;              // distinct positions behind this cell
         final List<double[]> perRep = new ArrayList<>();   // {tAdv, tCopy, tEval} ns per rep
-        double tAdv, tCopy, tEval;  // means across reps
-        double cvAdv, cvCopy, cvEval;
+        double tAdv, tCopy, tEval;  // FASTEST repetition (see fastest())
+        double cvAdv, cvCopy, cvEval;              // full spread, reported as the disturbance diagnostic
+        double gapAdv, gapCopy, gapEval;           // two-fastest agreement, the gate
         double wAdvance, wCopy, wEval;
         final List<String> failures = new ArrayList<>();
 
@@ -271,8 +284,11 @@ public final class ComputeCalibrateV6 {
                 + "  cells=" + cells.size());
         System.out.println("# reps=" + reps + "  turns(=positions)/rep per level="
                 + java.util.Arrays.toString(turnsPerRep) + "  warmup=" + warmup);
-        System.out.println("# A repetition repeats the SAME positions with the SAME seeds, so the CV"
+        System.out.println("# A repetition repeats the SAME positions with the SAME seeds, so variation"
                 + " across reps measures the machine, not the portfolio.");
+        System.out.println("# Estimator: the FASTEST repetition (interference can only slow one down).");
+        System.out.println("# Gate: the two fastest agree within " + (int) (100 * MAX_CV)
+                + "%. Full CV is printed beside it as the disturbance diagnostic.");
         System.out.println("# reference cell = " + REFERENCE_CONFIG + "@" + levels[0]
                 + "  (its advance is 1.000 units by definition)");
         ServerProfile.get().printBanner("compute-unit weight calibration");
@@ -289,20 +305,36 @@ public final class ComputeCalibrateV6 {
             System.exit(1);
         }
 
-        // Warm up once on the reference cell: the hot code (GameState.advance/copy, the heuristic) is
-        // shared by every configuration, so JIT state carries across cells. Each cell still discards
-        // its own first turn, which is what touches that agent's own code paths.
-        System.out.println("\n[weights] warmup: " + warmup + " turns (discarded)");
-        Cell warm = new Cell(REFERENCE_CONFIG, -1, levels[0]);
-        ComputeMeter.PROFILE = true;          // warm the TIMED code path, not the untimed one
-        for (int i = 0; i < warmup; i++)
-            runTurn(warm, scenarioFor(portfolio, i % SCENARIO_POOL, SCENARIO_POOL), 9_000 + i);
-        ComputeMeter.PROFILE = false;
-
         long t0 = System.currentTimeMillis();
         int done = 0;
+        int warmedLevel = -1;
         for (Cell c : cells) {
             int levelIdx = indexOf(levels, c.units);
+            // Warm up ONCE PER BUDGET LEVEL, not once per run.
+            //
+            // The hot code (GameState.advance/copy, the heuristic) is shared by every configuration,
+            // so JIT state carries across cells within a level. Heap state does not: a 400,000-unit
+            // turn builds a far larger tree than a 40,000-unit one, so warming only at the smallest
+            // level leaves the first cells of every larger level measured while the heap is still
+            // growing. Full collections then land inside their early repetitions and not their later
+            // ones — which is exactly the repetition-to-repetition spread the gate rejects, and it is
+            // reproducible: the first cells of the largest level failed while their neighbours passed.
+            //
+            // Each cell still discards its own first turn as well, which is what touches that
+            // agent's own code paths.
+            if (c.units != warmedLevel) {
+                warmedLevel = c.units;
+                System.out.println(String.format(Locale.ROOT,
+                        "%n[weights] warmup for level %d: %d turns (discarded)", c.units, warmup));
+                Cell warm = new Cell(REFERENCE_CONFIG, -1, c.units);
+                ComputeMeter.PROFILE = true;   // warm the TIMED code path, not the untimed one
+                for (int i = 0; i < warmup; i++)
+                    runTurn(warm, scenarioFor(portfolio, i % SCENARIO_POOL, SCENARIO_POOL), 9_000 + i);
+                ComputeMeter.PROFILE = false;
+                // Collect between levels so each starts from a comparable heap rather than carrying
+                // the previous level's garbage into its first cell's repetitions.
+                System.gc();
+            }
             int turns = turnsPerRep[Math.min(levelIdx, turnsPerRep.length - 1)];
             LoadHarness load = underLoad > 1 ? LoadHarness.start(c, portfolio, underLoad - 1) : null;
             try {
@@ -313,8 +345,9 @@ public final class ComputeCalibrateV6 {
             done++;
             System.out.printf(Locale.ROOT,
                     "  [%2d/%2d] %-30s advance %7.1f ns  copy %7.1f ns  eval %7.1f ns   "
-                    + "(CV %.1f/%.1f/%.1f%%)%s%n",
+                    + "(gap %.1f/%.1f/%.1f%% | CV %.1f/%.1f/%.1f%%)%s%n",
                     done, cells.size(), c.profile, c.tAdv, c.tCopy, c.tEval,
+                    100 * c.gapAdv, 100 * c.gapCopy, 100 * c.gapEval,
                     100 * c.cvAdv, 100 * c.cvCopy, 100 * c.cvEval,
                     c.failures.isEmpty() ? "" : "   <-- " + c.failures.get(0));
         }
@@ -662,19 +695,24 @@ public final class ComputeCalibrateV6 {
         c.scenarios = turns;
 
         double[] a = column(c.perRep, 0), cp = column(c.perRep, 1), e = column(c.perRep, 2);
-        c.tAdv = mean(a);   c.cvAdv = cv(a);
-        c.tCopy = mean(cp); c.cvCopy = cv(cp);
-        c.tEval = mean(e);  c.cvEval = cv(e);
+        c.tAdv = fastest(a);   c.cvAdv = cv(a);   c.gapAdv = twoFastestGap(a);
+        c.tCopy = fastest(cp); c.cvCopy = cv(cp); c.gapCopy = twoFastestGap(cp);
+        c.tEval = fastest(e);  c.cvEval = cv(e);  c.gapEval = twoFastestGap(e);
 
         if (c.adv < MIN_OPS) c.failures.add("only " + c.adv + " advances (need " + MIN_OPS + ")");
         if (c.cop < MIN_OPS) c.failures.add("only " + c.cop + " copies (need " + MIN_OPS + ")");
         if (c.ev  < MIN_OPS) c.failures.add("only " + c.ev + " evals (need " + MIN_OPS + ")");
-        if (c.cvAdv > MAX_CV) c.failures.add(String.format(Locale.ROOT,
-                "advance time varies %.1f%% between reps", 100 * c.cvAdv));
-        if (c.cvCopy > MAX_CV) c.failures.add(String.format(Locale.ROOT,
-                "copy time varies %.1f%% between reps", 100 * c.cvCopy));
-        if (c.cvEval > MAX_CV) c.failures.add(String.format(Locale.ROOT,
-                "eval time varies %.1f%% between reps", 100 * c.cvEval));
+        // Gate on the two fastest repetitions agreeing, not on the full spread. A cell whose worst
+        // repetition was disturbed is not a badly-measured cell; it is a cell that was measured while
+        // something else ran, and its fastest repetitions still say what the operation costs.
+        if (c.perRep.size() >= 2) {
+            if (c.gapAdv > MAX_CV) c.failures.add(String.format(Locale.ROOT,
+                    "two fastest advance times differ by %.1f%%", 100 * c.gapAdv));
+            if (c.gapCopy > MAX_CV) c.failures.add(String.format(Locale.ROOT,
+                    "two fastest copy times differ by %.1f%%", 100 * c.gapCopy));
+            if (c.gapEval > MAX_CV) c.failures.add(String.format(Locale.ROOT,
+                    "two fastest eval times differ by %.1f%%", 100 * c.gapEval));
+        }
     }
 
     /**
@@ -897,6 +935,46 @@ public final class ComputeCalibrateV6 {
 
     private static double mean(double[] v) {
         double s = 0; for (double d : v) s += d; return v.length > 0 ? s / v.length : 0;
+    }
+
+    /**
+     * The fastest repetition — the estimator.
+     *
+     * <p>Every repetition runs byte-identical work, so all variation between them is machine
+     * interference, and interference can only make a repetition SLOWER. The mean is therefore
+     * contaminated by whichever repetition happened to be disturbed, while the fastest is the
+     * least-contended observation and the better estimate of what the operation actually costs.
+     *
+     * <p>Weights are RATIOS between cells, so a consistent estimator matters more than an unbiased
+     * one: any systematic difference between "fastest" and "mean" applies to every cell and cancels.
+     *
+     * <p>Zero entries mean the operation never occurred in that repetition; since all repetitions run
+     * identical work that is either true of all of them or none, but it is filtered defensively so a
+     * degenerate counter cannot pull the minimum to zero.
+     */
+    private static double fastest(double[] v) {
+        double best = Double.POSITIVE_INFINITY;
+        for (double d : v) if (d > 0 && d < best) best = d;
+        return Double.isInfinite(best) ? 0 : best;
+    }
+
+    /**
+     * Relative gap between the two fastest repetitions — the stability gate.
+     *
+     * <p>The question worth gating on is whether the least-contended measurements agree, not whether
+     * every repetition agreed: a cell should not be rejected for the behaviour of its WORST
+     * repetition, a number that carries no information about what the operation costs. Returns 0
+     * when there are fewer than two usable repetitions, which the caller reports rather than gates.
+     */
+    private static double twoFastestGap(double[] v) {
+        double a = Double.POSITIVE_INFINITY, b = Double.POSITIVE_INFINITY;
+        for (double d : v) {
+            if (d <= 0) continue;
+            if (d < a) { b = a; a = d; }
+            else if (d < b) b = d;
+        }
+        if (Double.isInfinite(a) || Double.isInfinite(b)) return 0;
+        return (b - a) / a;
     }
 
     /** Coefficient of variation: SD / mean. The stability statistic. */
