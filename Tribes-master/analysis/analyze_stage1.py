@@ -79,6 +79,18 @@ def spearman(x, y):
     return float(np.corrcoef(x, y)[0, 1])
 
 
+
+def sorted_frame(rows, by):
+    """DataFrame(rows) sorted by `by`, tolerating no rows at all.
+
+    A stage that has not run yet produces no pairs — Stage B on its own has no Baseline to pair
+    against until Stage D's grid exists — and sorting an empty frame by columns it therefore lacks
+    raises an opaque KeyError. An empty result is a legitimate state here, not a failure.
+    """
+    df = pd.DataFrame(rows)
+    return df.sort_values(by) if not df.empty else df
+
+
 # --------------------------------------------------------------------------- load
 def load(indir):
     tele, res = [], []
@@ -134,7 +146,7 @@ def run_headline(t):
                 js = j[j.ScenarioSource == src]
                 row[f"MeanDiff_{src}"] = float(js.Diff.mean())
             rows.append(row)
-    return pd.DataFrame(rows).sort_values(["Budget", "Config"])
+    return sorted_frame(rows, ["Budget", "Config"])
 
 
 def run_contrasts(t):
@@ -176,7 +188,7 @@ def run_efficiency(t):
                                    / (g.BiasGreedyPicks + g.BiasUniformPicks).replace(0, np.nan)).mean()),
             ShortlistCallsPerTurn=float(g.ShortlistCalls.mean()),
             MeanPlanMillis=float(g.PlanMillis.mean())))
-    df = pd.DataFrame(rows).sort_values(["Budget", "Config"])
+    df = sorted_frame(rows, ["Budget", "Config"])
     base = df[df.Config == BASELINE].set_index("Budget")
     df["NodesVsBase"] = df.apply(
         lambda r: r.MeanNodes / base.loc[r.Budget].MeanNodes if r.Budget in base.index else np.nan,
@@ -425,6 +437,11 @@ def main():
     t, r = load(args.indir)
     print(f"[stage1] {len(t):,} turns | configs {sorted(t.Config.unique())} | "
           f"budgets {sorted(t.Budget.unique())}")
+    for b in sorted(t.Budget.unique()):
+        if not ((t.Config == BASELINE) & (t.Budget == b)).any():
+            print(f"  NOTE: no {BASELINE} arm at {b}cu, so nothing can be paired there. Every "
+                  f"contrast in this line is a paired difference against {BASELINE} on the same "
+                  f"(scenario, visit) seeds; run it at {b}cu before reading these tables.")
 
     tables = {}
     tables["headline"] = run_headline(t)
