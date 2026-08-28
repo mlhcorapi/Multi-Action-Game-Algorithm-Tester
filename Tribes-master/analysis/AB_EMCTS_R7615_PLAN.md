@@ -62,8 +62,10 @@ laptop and none of which is invalidated by moving machines:
 >
 > - **The robust calibration estimator** — rewritten here, and validated against the numbers the
 >   original reported (see §5 A2).
-> - **The multi-child expansion arms** — still missing. **Stage B cannot run until they exist**, and
->   Stage B is what pins the substrate for D–G. This is now the critical path.
+> - **The multi-child expansion arms** — rebuilt, and the reframing they rest on is now asserted
+>   rather than argued: `SelectionStructureCheck` shows `LEGACY_k == COMMA_k` on byte-identical
+>   complete games at k = 3, 5, 10, `LEGACY_k1 == DRIFT_k1`, and legacy branching exactly k against
+>   plus's 40–90. Stage B is unblocked.
 >
 > The repository lives inside OneDrive, so its file-version history is the one remaining recovery
 > route for the second. Check it before rewriting.
@@ -384,9 +386,20 @@ a weak baseline and every later claim is measured against the wrong control.
 | `Comma_Off` | comma, k = 5 | ε = 1.00 |
 | `Comma_On` | comma, k = 5 | ε = 0.25, Mid |
 
-6,400 turns ≈ 0.34 h. *Dependency: the multi-child expansion arms live in the
-`emcts-performance-bug-experiment` worktree and must be merged first. If that line resolves the main
-effect independently, take its answer and run only the two `_On` arms to get the interaction.*
+6,400 turns ≈ 0.34 h, via `Stage1Runner.stageB()`. The arms exist and are verified; there is no
+outstanding dependency.
+
+**k = 5 for comma is not a free parameter.** Comma at k = 1 is not comma: with one child, "adopt the
+best of the generation unconditionally" is a neutral random walk, and `SelectionStructureCheck`
+asserts exactly that by showing it byte-identical to DRIFT. Comma needs offspring to select among
+before it is a policy at all, which is the whole reason the old leaf descent only beat the fixed one
+once expansion widened.
+
+**A fifth arm is available and cheap if the interaction is significant.** `COMMA_RAND` adopts a
+uniformly random child instead of the best of k, which separates the two things comma changes at
+once — moving every generation (non-elitism) from moving to the best of k (the offspring filter).
+All k > 1 arms draw the same reservoir sample whether or not they use it, so they consume one
+identical RNG stream and differ solely in which child they adopt.
 
 **Pre-registered rules.**
 
@@ -757,7 +770,7 @@ needed from Phase C is written fresh — which is why Stage E extends `Stage1Par
 | 1 | ~~Scenario-**split filter** on `Stage1Runner`~~ — **DONE.** New `core.data.exp.PortfolioSplit`; `Stage1Runner` takes a third argument (`all` \| `dev` \| `holdout`) | A | ~~blocking~~ |
 | 2 | Portfolio nesting + branching-distribution verification against the existing manifests | A | small |
 | 3 | ~~`ComputeCalibrateV6` cells for the 6 Stage-E arms; loaded-calibration mode for A3′~~ — **DONE.** `--suite {v6,ab,a3,all}` and `--underLoad N`; `ExpAgents.abProfileKey`/`requireProfiles`; every arm now carries a profile and an unpriced arm aborts the run | A | ~~medium~~ |
-| 4 | Merge the multi-child expansion arms for the comma/plus contrast | B | medium |
+| 4 | ~~Merge the multi-child expansion arms for the comma/plus contrast~~ — **DONE (rebuilt, not merged: the original was lost).** `SelectionMode {PLUS, COMMA, COMMA_RAND, DRIFT, LEGACY}` + `childrenPerGeneration`; new `SelectionStructureCheck`; `Stage1Runner.stageB()` carries the 2×2. Default PLUS/k=1 verified bit-identical to the pre-change agent | B | ~~medium~~ |
 | 5 | ~~Variance decomposition (between/within) in `analyze_stage1.py`~~ — **DONE.** `analyze_stage1.py` recovered from `1d2b800^`; adds `run_variance` (unbalanced one-way random effects, terminal-excluded sensitivity) and a design section in `SUMMARY.md` | B | ~~small~~ |
 | 6 | ~~Incumbent logging in `Stage0MutationLogAgent` + R9/R10 in `analyze_stage0.py`~~ — **DONE.** Four columns added (`ExpandedDepth/Children/Age`, `IncumbentMoved`), behavioural-equivalence gate still passes; `analyze_stage0.py` recovered from `1d2b800^` with `run_selection_payoff` and `run_duplicates` | C | ~~small~~ |
 | 7 | ~~`Stage1Runner.CORE` → `Short5_e25`; ladder → {40k, 80k, 400k}; visits → 8/8/6~~ — **DONE.** Also replaced the stale per-turn runtime model with one fitted to Stage A's measurements, behind `-Dstage1.machineFactor` | D | ~~one line each~~ |

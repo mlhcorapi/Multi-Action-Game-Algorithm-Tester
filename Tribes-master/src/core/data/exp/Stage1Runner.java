@@ -11,6 +11,7 @@ import players.stage1.Stage1BiasedAgent;
 import players.stage1.Stage1Params;
 import players.stage1.Stage1Params.Granularity;
 import players.stage1.Stage1Params.RepairMode;
+import players.ExperimentalEMCTS.ExperimentalEMCTSParams.SelectionMode;
 import utils.ElapsedCpuTimer;
 
 import java.io.File;
@@ -144,13 +145,29 @@ public final class Stage1Runner {
         final RepairMode repairMode;
         final int shortlistK;
         final boolean logSeq;
+        /** Expansion policy and offspring count. PLUS/1 is the corrected baseline every other arm
+         *  is measured against, and is what every arm outside Stage B uses. */
+        final SelectionMode selectionMode;
+        final int childrenPerGeneration;
         Config(String name, double eps, Granularity insertKeys, Granularity repairKeys,
                boolean removal, boolean perBurn, RepairMode repairMode, int shortlistK,
                boolean logSeq) {
+            this(name, eps, insertKeys, repairKeys, removal, perBurn, repairMode, shortlistK, logSeq,
+                 SelectionMode.PLUS, 1);
+        }
+        Config(String name, double eps, Granularity insertKeys, Granularity repairKeys,
+               boolean removal, boolean perBurn, RepairMode repairMode, int shortlistK,
+               boolean logSeq, SelectionMode selectionMode, int childrenPerGeneration) {
             this.name = name; this.eps = eps;
             this.insertKeys = insertKeys; this.repairKeys = repairKeys;
             this.removal = removal; this.perBurn = perBurn;
             this.repairMode = repairMode; this.shortlistK = shortlistK; this.logSeq = logSeq;
+            this.selectionMode = selectionMode; this.childrenPerGeneration = childrenPerGeneration;
+        }
+        /** The same arm on a different expansion policy — Stage B's only degree of freedom. */
+        Config onSelection(String newName, SelectionMode mode, int k) {
+            return new Config(newName, eps, insertKeys, repairKeys, removal, perBurn,
+                    repairMode, shortlistK, logSeq, mode, k);
         }
         Agent create(long seed, int cu) {
             Stage1Params p = new Stage1Params();
@@ -169,6 +186,8 @@ public final class Stage1Runner {
             // Priced per (arm, budget level). Without this the arm silently falls back to the global
             // weights while the calibrated arms do not, and the two are then spending different
             // currencies for the same nominal budget.
+            p.selectionMode = selectionMode;
+            p.childrenPerGeneration = childrenPerGeneration;
             p.computeProfile = ExpAgents.abProfileKey(name, cu);
             return new Stage1BiasedAgent(seed, p);
         }
@@ -249,14 +268,48 @@ public final class Stage1Runner {
         return List.of(BASELINE, dChampion, Z0_COARSE, Z0_MID, Z0_FINE, Z0_INS_FINE);
     }
 
+    // ------------------------------------------------------------------ Stage B: the substrate
+
+    /**
+     * Stage B's 2 x 2: expansion policy crossed with the insertion bias.
+     *
+     * <p>The contrast that matters is the <b>interaction</b> — whether the bias pays the same on both
+     * substrates. The bias works by having good mutations revisited, and comma and plus differ in
+     * exactly that, so an operator result measured on one need not transfer to the other. The main
+     * effect matters too, and more bluntly: whichever policy wins becomes the substrate <i>and the
+     * baseline</i> for every later stage, because measuring AB-EMCTS against the weaker of two
+     * available searches is the fastest way to produce a dismissible result.
+     *
+     * <p>k = 5 for comma is not arbitrary. Comma at k = 1 is not comma at all — with one child, "adopt
+     * the best of the generation unconditionally" is a neutral random walk, which
+     * {@code SelectionStructureCheck} asserts by showing it identical to DRIFT. Comma needs offspring
+     * to select among before it is a policy.
+     */
+    static List<Config> stageB() {
+        return List.of(
+                BASELINE.onSelection("Plus_Off",  SelectionMode.PLUS,  1),
+                BIAS_E25.onSelection("Plus_On",   SelectionMode.PLUS,  1),
+                BASELINE.onSelection("Comma_Off", SelectionMode.COMMA, 5),
+                BIAS_E25.onSelection("Comma_On",  SelectionMode.COMMA, 5));
+    }
+
     /**
      * Every arm this line can run, by name — the registry {@link ComputeCalibrateV6} calibrates and
      * the runners look arms up in. Adding an arm anywhere else and forgetting it here means it runs
      * unpriced, which {@link ExpAgents#requireProfiles} turns from silent into fatal.
      */
-    static final List<Config> ALL_ARMS = List.of(BASELINE, BIAS_E75, BIAS_E50, BIAS_E25, BIAS_E10,
+    static final List<Config> CORE_ARMS = List.of(BASELINE, BIAS_E75, BIAS_E50, BIAS_E25, BIAS_E10,
             COARSE_E25, NOREM_E25, PERBURN_E25, SHORT15, SHORT15_E25, SHORT5_E25,
-            Z0_COARSE, Z0_MID, Z0_FINE, Z0_INS_FINE);
+            Z0_COARSE, Z0_MID, Z0_FINE, Z0_INS_FINE),
+            STAGE_B_ARMS = stageB();
+
+    static final List<Config> ALL_ARMS = concat(CORE_ARMS, STAGE_B_ARMS);
+
+    private static List<Config> concat(List<Config> a, List<Config> b) {
+        List<Config> out = new ArrayList<>(a);
+        out.addAll(b);
+        return out;
+    }
 
     static Config armByName(String name) {
         for (Config c : ALL_ARMS) if (c.name.equals(name)) return c;
