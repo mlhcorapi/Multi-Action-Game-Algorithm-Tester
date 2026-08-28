@@ -256,7 +256,7 @@ fell.
 Seven stages, each with a pre-registered decision rule and a gate, ordered so the cheap ones can kill the
 line before the expensive ones run.
 
-### Stage A — Machine, currency and gates *(~5.3 h, nothing measured)*
+### Stage A — Machine, currency and gates *(~5.6 h, nothing measured)*
 
 **A0 — Machine gate (new).** Before anything:
 
@@ -299,15 +299,15 @@ A `dev` or `holdout` run **will not build a portfolio** — it aborts with the t
 instead. Two split runs may be in flight at once, neither should race the other into a build, and a
 split frozen against a portfolio that was still being written is not reproducible.
 
-**A2 — Calibrate idle** *(~2.3 h)*. `ComputeCalibrateV6`, single-threaded, on the `ab` suite: the
-reference `EMCTS` cell plus all 15 action-bias arms, × 3 levels = **48 cells**.
+**A2 — Calibrate idle** *(~2.6 h)*. `ComputeCalibrateV6`, single-threaded, on the `ab` suite: the
+reference `EMCTS` cell plus all 17 action-bias arms, × 3 levels = **54 cells**.
 
 ```bash
 java -cp "out:lib/*" core.data.exp.ComputeCalibrateV6      test_results/stage1/_portfolio test_results/stage1/_calibration 3 auto 6 40000,80000,400000 --suite ab
 ```
 
 Single-threaded means the server gives no speed-up here, and the estimate is now derived rather than
-guessed: 16 cells × 3 reps × (8/4/2 turns) × (4.1/9.3/50.9 s) ≈ 2.3 h, of which the 400k level is 81
+guessed: 18 cells × 3 reps × (8/4/2 turns) × (4.1/9.3/50.9 s) ≈ 2.6 h, of which the 400k level is ~92
 minutes. Hash `compute_weights.properties` into every leaf CSV; a run reproduced against different
 weights is a different experiment.
 
@@ -379,12 +379,19 @@ a weak baseline and every later claim is measured against the wrong control.
 
 **Design.** 2 × 2 factorial, isolation phase, 80k, **development set (200 scenarios) × 8 visits**, paired.
 
-| Arm | Selection | Insertion |
-|---|---|---|
-| `Plus_Off` | plus, k = 1 (the current fixed policy) | ε = 1.00 |
-| `Plus_On` | plus, k = 1 | ε = 0.25, Mid |
-| `Comma_Off` | comma, k = 5 | ε = 1.00 |
-| `Comma_On` | comma, k = 5 | ε = 0.25, Mid |
+| Arm | Selection | Insertion | New? |
+|---|---|---|---|
+| `Baseline` | plus, k = 1 (the current fixed policy) | ε = 1.00 | no — Stage D's grid |
+| `Bias_e25` | plus, k = 1 | ε = 0.25, Mid | no — Stage D's grid |
+| `Comma_Off` | comma, k = 5 | ε = 1.00 | yes |
+| `Comma_On` | comma, k = 5 | ε = 0.25, Mid | yes |
+
+**Only two of the four are new arms, and that is not a shortcut.** PLUS at k = 1 *is* the corrected
+default, so a separate `Plus_Off` would be the same configuration under a second name, producing
+byte-identical output on identical seeds — the thing this line treats as a bug wherever it appears.
+The plus half of the factorial is completed at analysis time from arms that already exist, which also
+makes it free: Stage D runs both at 80k on the same scenarios and the same visit seeds, so Stage B
+only has to run the two comma arms and pair against Stage D's rows.
 
 6,400 turns ≈ 0.34 h, via `Stage1Runner.stageB()`. The arms exist and are verified; there is no
 outstanding dependency.
@@ -711,14 +718,14 @@ At the modelled `W = 48`. **Re-derive from Stage B's first measured `PlanMillis`
 
 | Stage | Work | Hours |
 |---|---|---|
-| A — machine, currency, gates, portfolio | calibration only | 5.3 |
+| A — machine, currency, gates, portfolio | calibration only | 5.6 |
 | B — selection substrate + variance probe | 6,400 turns | 0.4 |
 | C — signal | 144 logged games | 0.7 |
 | D — biased insertion, full ladder × 11 arms | 48,400 turns | 5.3 |
 | E — table-directed repair | 16,800 turns | 2.6 |
 | F — holdout confirmation | 14,000 turns | 2.2 |
 | G — the yardstick | 3,900 games | 5.4 |
-| **Total** | | **≈ 21.9 h** |
+| **Total** | | **≈ 22.2 h** |
 
 Against a ~50 h window that is a safety factor of 2.5×, which is the right size given that the last model
 of this workload was wrong by 1.66× in the expensive direction. If it is wrong by that much again, the

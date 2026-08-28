@@ -285,12 +285,29 @@ public final class Stage1Runner {
      * {@code SelectionStructureCheck} asserts by showing it identical to DRIFT. Comma needs offspring
      * to select among before it is a policy.
      */
+    static final Config COMMA_OFF = BASELINE.onSelection("Comma_Off", SelectionMode.COMMA, 5);
+    static final Config COMMA_ON  = BIAS_E25.onSelection("Comma_On",  SelectionMode.COMMA, 5);
+
+    /**
+     * Stage B's 2 x 2 — but only TWO of its cells are new arms.
+     *
+     * <p>The plus half of the factorial is {@code Baseline} and {@code Bias_e25} themselves: PLUS at
+     * k = 1 is the corrected default, so a separate "Plus_Off" arm would be the same configuration
+     * under a second name, producing byte-identical output on identical seeds. This line treats two
+     * arms with identical output as a bug, and it would be right to — so the factorial is completed
+     * at analysis time from arms that already exist rather than by duplicating them.
+     *
+     * <p>That also makes the plus half FREE: Stage D already runs both at 80k on the development
+     * split, on the same scenarios and the same visit seeds, so Stage B only has to run the two comma
+     * arms and pair against Stage D's rows.
+     */
     static List<Config> stageB() {
-        return List.of(
-                BASELINE.onSelection("Plus_Off",  SelectionMode.PLUS,  1),
-                BIAS_E25.onSelection("Plus_On",   SelectionMode.PLUS,  1),
-                BASELINE.onSelection("Comma_Off", SelectionMode.COMMA, 5),
-                BIAS_E25.onSelection("Comma_On",  SelectionMode.COMMA, 5));
+        return List.of(BASELINE, BIAS_E25, COMMA_OFF, COMMA_ON);
+    }
+
+    /** The arms Stage B actually has to RUN; the plus half comes from Stage D's grid. */
+    static List<Config> stageBNewArms() {
+        return List.of(COMMA_OFF, COMMA_ON);
     }
 
     /**
@@ -301,7 +318,7 @@ public final class Stage1Runner {
     static final List<Config> CORE_ARMS = List.of(BASELINE, BIAS_E75, BIAS_E50, BIAS_E25, BIAS_E10,
             COARSE_E25, NOREM_E25, PERBURN_E25, SHORT15, SHORT15_E25, SHORT5_E25,
             Z0_COARSE, Z0_MID, Z0_FINE, Z0_INS_FINE),
-            STAGE_B_ARMS = stageB();
+            STAGE_B_ARMS = stageBNewArms();
 
     static final List<Config> ALL_ARMS = concat(CORE_ARMS, STAGE_B_ARMS);
 
