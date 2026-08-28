@@ -102,6 +102,7 @@ src/core/data/dto/CrossoverEventData.java
 src/core/data/dto/GameSummaryData.java
 src/core/data/dto/OperatorTelemetryData.java
 src/core/data/dto/TurnData.java
+src/core/data/exp/ActionBiasFloorProbe.java
 src/core/data/exp/ActionKeyCollisionProbe.java
 src/core/data/exp/AgentSpec.java
 src/core/data/exp/Budget.java
