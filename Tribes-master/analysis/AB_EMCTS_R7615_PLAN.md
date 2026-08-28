@@ -391,9 +391,10 @@ a weak baseline and every later claim is measured against the wrong control.
 **Only two of the four are new arms, and that is not a shortcut.** PLUS at k = 1 *is* the corrected
 default, so a separate `Plus_Off` would be the same configuration under a second name, producing
 byte-identical output on identical seeds — the thing this line treats as a bug wherever it appears.
-The plus half of the factorial is completed at analysis time from arms that already exist, which also
-makes it free: Stage D runs both at 80k on the same scenarios and the same visit seeds, so Stage B
-only has to run the two comma arms and pair against Stage D's rows.
+The plus half of the factorial is therefore the real `Baseline` and `Bias_e25`, run by Stage B
+itself under the very checkpoint keys Stage D writes: B stands on its own as a complete 2 × 2 (it
+runs first, and must — it pins the substrate), and when Stage D later reaches those two leaves it
+skips them on resume, so the work is still done exactly once.
 
 6,400 turns ≈ 0.34 h, via `Stage1Runner.stageB()`. The arms exist and are verified; there is no
 outstanding dependency.
@@ -533,8 +534,8 @@ is a small-budget crutch. That question is worth 3.9 h.
 **Arms.** `Baseline` (ε = 1.00); `Bias_e{75,50,25,10}`; `Coarse_e25`; `NoRemoval_e25`; `PerBurn_e25`;
 `Shortlist15` (the repair change alone); `Short15_e25`; `Short5_e25`.
 
-*One-line change: `Stage1Runner.CORE` currently carries `Short15_e25`. Make it `Short5_e25` — K = 5 was
-the champion, K = 15 was not.*
+*The one-line change this paragraph used to ask for — `Stage1Runner.CORE` from `Short15_e25` to
+`Short5_e25` — is done (work item 7); K = 5 was the champion, K = 15 was not.*
 
 **Pre-registered contrasts.**
 
