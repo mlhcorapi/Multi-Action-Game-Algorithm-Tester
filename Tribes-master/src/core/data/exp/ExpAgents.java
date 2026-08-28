@@ -406,8 +406,11 @@ public class ExpAgents {
                 + profiles.size() + " calibrated for " + what + ". MISSING: " + missing
                 + nl + "  An uncalibrated arm silently falls back to the GLOBAL weights, so its budget is"
                 + nl + "  a different currency from the calibrated arms' and the comparison is void."
-                + nl + "  Fix: java -cp \"out:lib/*\" core.data.exp.ComputeCalibrateV6 <portfolio> <out> "
-                + "3 4,4,2 6 <levelsCsv> ab"
+                + nl + "  Fix: run the ab calibration suite, then point THIS JVM at its output:"
+                + nl + "    java -cp \"out:lib/*\" core.data.exp.ComputeCalibrateV6 <portfolio> <calibDir> "
+                + "3 auto 6 <levelsCsv> --suite ab"
+                + nl + "    -Dcompute.weightsFile=<calibDir>/compute_weights.properties  "
+                + "(the compiled default points at the v6 tree)"
                 + nl + "  Or, for a smoke/probe run where this does not matter: -D"
                 + ALLOW_UNPROFILED + "=true";
         if (Boolean.getBoolean(ALLOW_UNPROFILED)) {

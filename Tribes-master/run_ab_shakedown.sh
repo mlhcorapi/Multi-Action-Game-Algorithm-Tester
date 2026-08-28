@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# AB-EMCTS shakedown — ~15 minutes, run BEFORE committing the machine to Stage A.
+# AB-EMCTS shakedown — ~6 minutes, run BEFORE committing the machine to Stage A.
 #
 # Stage A is a ~5.6 h block that is mostly single-threaded and requires an idle machine, so an
 # environment problem discovered inside it costs an evening. This runs every moving part at toy size:
@@ -64,9 +64,9 @@ esac
 step "1. Build"
 find src -name '*.java' > sources.txt
 rm -rf out && mkdir -p out
-if javac -nowarn -d out -cp "lib/*" @sources.txt 2>&1 | grep -v '^Note:' | grep -q .; then
+if javac --release 11 -nowarn -d out -cp "lib/*" @sources.txt 2>&1 | grep -v '^Note:' | grep -q .; then
   bad "compile produced errors"
-  javac -nowarn -d out -cp "lib/*" @sources.txt 2>&1 | grep -v '^Note:' | head -10 | sed 's/^/         /'
+  javac --release 11 -nowarn -d out -cp "lib/*" @sources.txt 2>&1 | grep -v '^Note:' | head -10 | sed 's/^/         /'
   exit 1
 fi
 ok "$(wc -l < sources.txt) source files compiled"
