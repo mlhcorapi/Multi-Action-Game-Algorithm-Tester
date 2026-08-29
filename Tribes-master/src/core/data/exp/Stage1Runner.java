@@ -268,7 +268,11 @@ public final class Stage1Runner {
      * better everywhere".
      */
     static List<Config> stageE(Config dChampion) {
-        return List.of(COMMA_OFF, dChampion, CZ0_COARSE, CZ0_MID, CZ0_FINE, CZ0_INS_FINE);
+        List<Config> out = new ArrayList<>(List.of(COMMA_OFF, dChampion));
+        for (Config c : List.of(COMMA_RAND15, CZ0_COARSE, CZ0_MID, CZ0_FINE, CZ0_RANDOM,
+                COMMA_FINE_E25))
+            if (!out.contains(c)) out.add(c);      // the champion may already be one of them
+        return out;
     }
 
     /**
@@ -325,11 +329,57 @@ public final class Stage1Runner {
     static final Config COMMA_SHORT15_E25 = SHORT15_E25.onSelection("Comma_Short15_e25", SelectionMode.COMMA, 5);
     static final Config COMMA_SHORT5_E25  = SHORT5_E25.onSelection("Comma_Short5_e25", SelectionMode.COMMA, 5);
 
-    /** Stage E's zero-eval repair arms, on the pinned substrate. */
-    static final Config CZ0_COARSE   = Z0_COARSE.onSelection("Comma_Z0_Coarse", SelectionMode.COMMA, 5);
-    static final Config CZ0_MID      = Z0_MID.onSelection("Comma_Z0_Mid", SelectionMode.COMMA, 5);
-    static final Config CZ0_FINE     = Z0_FINE.onSelection("Comma_Z0_Fine", SelectionMode.COMMA, 5);
-    static final Config CZ0_INS_FINE = Z0_INS_FINE.onSelection("Comma_Z0_Fine_InsFine", SelectionMode.COMMA, 5);
+    // ------------------------------------------------------------------ Stage E (Gate D re-scope)
+    //
+    // Gate D (2026-08-29) changed what Stage E has to ask. The champion is `Comma_Short15`, which
+    // runs with the insertion bias OFF (eps = 1.00) and consults the table only to rank repair
+    // candidates; adding insertion bias to it cost -31.5 at 80k and -130.3 at 400k. So the whole
+    // zero-eval family moves to eps = 1.00 — the champion's own footing, and the clean K -> 0 limit
+    // of the design that actually won. (The plus-era Z0 arms keep Z0_EPS = 0.25 unchanged: they are
+    // never run now, and freezing them keeps `--suite ab` reproducing the weights it measured.)
+    //
+    // Their insertion granularity is inert at eps = 1.00, so `Z0_Fine_InsFine` would be
+    // byte-identical to `Z0_Fine` — the failure this line treats as a bug. The insertion half of the
+    // D2 falsification therefore moves to the FULL-repair ladder below, where insertion is live.
+
+    /** Comma-substrate arm with an explicit repair mode; eps = 1.00 leaves insertion unbiased. */
+    private static Config commaRepairArm(String name, double eps, Granularity insertKeys,
+                                         Granularity repairKeys, RepairMode mode, int k) {
+        return new Config(name, eps, insertKeys, repairKeys, true, false, mode, k, false,
+                SelectionMode.COMMA, 5);
+    }
+
+    /** Zero-evaluation repair by Q-argmax, unbiased insertion: repair granularity is the variable. */
+    static final Config CZ0_COARSE = commaRepairArm("Comma_Z0_Coarse", 1.00,
+            Granularity.MID, Granularity.COARSE, RepairMode.ZERO_EVAL, 0);
+    static final Config CZ0_MID    = commaRepairArm("Comma_Z0_Mid", 1.00,
+            Granularity.MID, Granularity.MID, RepairMode.ZERO_EVAL, 0);
+    static final Config CZ0_FINE   = commaRepairArm("Comma_Z0_Fine", 1.00,
+            Granularity.MID, Granularity.FINE, RepairMode.ZERO_EVAL, 0);
+
+    /**
+     * The two attribution controls, and the reason Stage E is worth running at all.
+     *
+     * <p>Stage D's champion shortlists 15 candidates by Q and evaluates only those, roughly doubling
+     * the nodes it reaches per unit of budget. That throughput arrives whether the ranking is
+     * informative or arbitrary, so "the learned table directs repair" and "evaluating 15 candidates
+     * instead of ~300 is simply cheaper" predict the same +118.9. These arms separate them: identical
+     * candidate lists, identical shortlist size, identical evaluation of the survivors, identical
+     * number of RNG draws — only the ranking key is replaced by noise.
+     */
+    static final Config COMMA_RAND15 = commaRepairArm("Comma_Rand15", 1.00,
+            Granularity.MID, Granularity.MID, RepairMode.SHORTLIST_RANDOM, 15);
+    static final Config CZ0_RANDOM   = commaRepairArm("Comma_Z0_Random", 1.00,
+            Granularity.MID, Granularity.MID, RepairMode.ZERO_EVAL_RANDOM, 0);
+
+    /**
+     * Completes the INSERTION granularity ladder at eps = 0.25 on FULL repair, where insertion is
+     * live: `Comma_Coarse_e25` (Coarse) and `Comma_On` (Mid) already ran in Stage D, and Coarse beat
+     * Mid by +39/+45/+50 across the ladder. This is the Fine end, and it carries the insertion half
+     * of the D2 falsification — abstraction should win for a decision the sequence score corrects.
+     */
+    static final Config COMMA_FINE_E25 = commaRepairArm("Comma_Fine_e25", 0.25,
+            Granularity.FINE, Granularity.FINE, RepairMode.FULL, 0);
 
     /** Stage D on the comma substrate: the 11-arm operator grid, Comma_Off as its baseline. */
     static final List<Config> COMMA_GRID = List.of(COMMA_OFF, COMMA_E75, COMMA_E50, COMMA_ON,
@@ -338,7 +388,21 @@ public final class Stage1Runner {
 
     static final List<Config> COMMA_ARMS = List.of(COMMA_E75, COMMA_E50, COMMA_E10, COMMA_COARSE,
             COMMA_NOREM, COMMA_PERBURN, COMMA_SHORT15, COMMA_SHORT15_E25, COMMA_SHORT5_E25,
-            CZ0_COARSE, CZ0_MID, CZ0_FINE, CZ0_INS_FINE);
+            CZ0_COARSE, CZ0_MID, CZ0_FINE, COMMA_RAND15, CZ0_RANDOM, COMMA_FINE_E25);
+
+    /**
+     * The arms {@code --suite commaE} prices: everything Stage E runs that Stage D did not already
+     * pay for. Three of them ({@code Comma_Z0_*}) were priced during D-prep at the old
+     * {@code eps = 0.25} and are <b>re-measured, not reused</b> — the Gate D re-scope moved them to
+     * unbiased insertion, and a profile is keyed by arm name, so stale prices would be spent
+     * silently on a different configuration.
+     */
+    public static List<String> stageEArmNames() {
+        List<String> out = new ArrayList<>();
+        for (Config c : List.of(CZ0_COARSE, CZ0_MID, CZ0_FINE, COMMA_RAND15, CZ0_RANDOM,
+                COMMA_FINE_E25)) out.add(c.name);
+        return out;
+    }
 
     /**
      * Stage B's 2 x 2 — but only TWO of its cells are new arms.
@@ -474,7 +538,9 @@ public final class Stage1Runner {
             return;
         }
         String stage = args.length > 3 ? args[3].trim().toUpperCase(Locale.ROOT) : "D";
-        String champion = args.length > 4 ? args[4].trim() : COMMA_SHORT5_E25.name;
+        // Gate D (2026-08-29): Comma_Short15 won at every budget (+105.7/+118.9/+170.5 vs Comma_Off)
+        // and survived W7. Note it runs with the bias OFF — see the Stage E block above.
+        String champion = args.length > 4 ? args[4].trim() : COMMA_SHORT15.name;
         List<Level> sched;
         try {
             sched = scheduleFor(stage, champion);
@@ -519,8 +585,12 @@ public final class Stage1Runner {
                 // the pinned substrate. Comma_On stands in for "bias only at eps*" exactly as
                 // BIAS_E25 did before the re-pin — if Gate D picks a materially different eps*,
                 // substitute that dose arm here before F runs.
-                List<Config> arms = List.of(COMMA_OFF, COMMA_ON, requireCommaChampion(champion),
-                        CZ0_FINE, CZ0_INS_FINE);
+                // Post-Gate-D set: the control, the champion, the control that ATTRIBUTES the
+                // champion (without it the holdout headline is unattributed too), the best pure-bias
+                // arm, and Stage E's zero-eval winner. Re-read at Gate E if E's winner is not Fine.
+                List<Config> arms = new ArrayList<>(List.of(COMMA_OFF, requireCommaChampion(champion)));
+                for (Config c : List.of(COMMA_RAND15, COMMA_COARSE, CZ0_FINE))
+                    if (!arms.contains(c)) arms.add(c);
                 return List.of(new Level(80_000, 8, arms), new Level(400_000, 6, arms));
             }
             default:

@@ -290,10 +290,26 @@ nohup java -Xmx<N>g $WF -Dstage1.threads.400000=31 -cp "out:lib/*" core.data.exp
       W $DATA/stage1 dev E <champion> > $DATA/logs/E.log 2>&1 &
 ```
 
-`<champion>` is Stage D's winner (default `Comma_Short5_e25`; the runner refuses a plus arm —
-the substrate is pinned). If ε\* is materially different from 0.25, change `Stage1Runner.Z0_EPS`,
-**re-run the `comma` calibration suite** (it re-merges), and substitute the ε\* dose arm for
-`Comma_On` in Stage F's arm list — the arms and their prices have to move together.
+> **Gate D — resolved 2026-08-29. Champion: `Comma_Short15`**, +105.7 / +118.9 / +170.5 vs
+> `Comma_Off`, growing with budget, W7-clean at 40k and 80k. **It runs with the bias OFF** — the ε
+> curve is not monotone (peak ≈ 0.50, ε = 0.10 harmful at 400k), bias + shortlist is anti-additive
+> (−130.3 at 400k), and biased arms raise the duplicate share to 0.23–0.34 against the champion's
+> 0.068. Insertion Coarse > Mid by +39/+45/+50. See the plan's Gate D block for the full table and
+> the 400k W7 clamping caveat.
+
+**Stage E was re-scoped by that result.** It now leads with the control that attributes the
+champion's win — `Comma_Rand15`, the same arm with the Q ranking replaced by noise — plus
+`Comma_Z0_Random` as the zero-eval floor, and the whole zero-eval family moved to ε = 1.00. Six arms
+need pricing first (three new, three re-priced because their ε changed):
+
+```bash
+nohup java -Xmx<N>g -cp "out:lib/*" core.data.exp.ComputeCalibrateV6 \
+      $DATA/stage1/_portfolio $DATA/stage1/_calibration \
+      3 auto 6 40000,80000,400000 --suite commaE > $DATA/logs/Eprep_calibrate.log 2>&1 &
+```
+
+`<champion>` is Stage D's winner (default `Comma_Short15`; the runner refuses a plus arm — the
+substrate is pinned).
 
 ```bash
 python analysis/analyze_stage1.py $DATA/stage1/dev --outdir $DATA/ab_results/E --baseline Comma_Off
