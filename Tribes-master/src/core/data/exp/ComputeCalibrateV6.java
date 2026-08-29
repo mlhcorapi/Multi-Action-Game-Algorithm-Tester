@@ -141,6 +141,14 @@ public final class ComputeCalibrateV6 {
      * as a disturbance diagnostic; it is reported, not gated on.
      */
     public static final double MAX_CV = 0.10;
+
+    /**
+     * Two-fastest-repetition gap a cell may show before it fails its own check. Doubled under
+     * {@code --underLoad}: a loaded run measures ratios in a deliberately contended regime, and
+     * rejecting its cells at the idle threshold throws away exactly the measurement the loaded run
+     * exists to take (the R7615 run lost 1–2 of 12 cells this way, all in the noisy eval timings).
+     */
+    private static double gapLimit = MAX_CV;
     /**
      * Minimum count of each operation in a cell before dividing by it means anything.
      *
@@ -223,6 +231,8 @@ public final class ComputeCalibrateV6 {
             else pos.add(a);
         }
         args = pos.toArray(new String[0]);
+
+        if (underLoad > 1) gapLimit = 2 * MAX_CV;   // contended timings are legitimately noisier
 
         String portfolioDir = args.length > 0 ? args[0] : RunExperimentV6.BASE + "/_portfolio";
         String outDir       = args.length > 1 ? args[1] : RunExperimentV6.BASE + "/_calibration";
@@ -389,12 +399,18 @@ public final class ComputeCalibrateV6 {
 
         double loadAfter = loadPerCore();
         if (underLoad > 1) {
-            // The idleness check is inverted here: a quiet machine would mean the load harness never
-            // ran, and the cells would be idle measurements wearing a loaded label.
-            check(loadAfter < 0 || loadAfter > 0.5,
-                    String.format(Locale.ROOT, "machine was loaded as intended (load %.2f per core)", loadAfter),
-                    String.format(Locale.ROOT, "load average %.2f per core - the load harness did not "
-                            + "actually load the machine, so these are idle measurements", loadAfter),
+            // Gate on the harness's OWN completed work, not on the OS load average. Inside a
+            // container the load average can read near zero while the machine is saturated (the
+            // R7615's JupyterHub read 0.11/core during a run whose per-op costs were 40-80% above
+            // idle), and that false negative once discarded a measurement that had succeeded.
+            long loadTurns = LoadHarness.WORK_TURNS.get();
+            long minTurns = (long) cells.size() * (underLoad - 1);
+            check(loadTurns >= minTurns,
+                    String.format(Locale.ROOT, "load harness completed %,d turns beside the measured "
+                            + "cells (OS load average %.2f per core, informational only)",
+                            loadTurns, loadAfter),
+                    String.format(Locale.ROOT, "load harness completed only %,d turns (wanted >= %,d) - "
+                            + "the machine was not reliably loaded while measuring", loadTurns, minTurns),
                     passes, failures);
         } else if (loadAfter >= 0) {
             check(loadAfter <= MAX_LOAD_PER_CORE + 1.0 / Math.max(1, ServerProfile.get().logicalCpus()),
@@ -457,6 +473,15 @@ public final class ComputeCalibrateV6 {
      * measurement itself.
      */
     private static final class LoadHarness {
+        /**
+         * Completed load turns across the whole run — proof the harness actually loaded the machine.
+         * The verdict gates on this rather than on the OS load average, because inside a container
+         * the load average can read near zero while the machine is saturated: the R7615's JupyterHub
+         * reported 0.11 per core during a run whose per-op costs were 40–80% above idle.
+         */
+        static final java.util.concurrent.atomic.AtomicLong WORK_TURNS =
+                new java.util.concurrent.atomic.AtomicLong();
+
         private final java.util.concurrent.ExecutorService pool;
         private final java.util.concurrent.atomic.AtomicBoolean stop =
                 new java.util.concurrent.atomic.AtomicBoolean();
@@ -477,6 +502,7 @@ public final class ComputeCalibrateV6 {
                             // Offset by worker so the threads are not lock-stepped on one position.
                             Scenario sc = portfolio.get((int) (((id * 7L + i * 13L) % portfolio.size())));
                             runTurn(cell, sc, 8_000_000L + id * 10_000L + i);
+                            WORK_TURNS.incrementAndGet();
                         } catch (Throwable t) {
                             // A load thread failing must not take the measurement down with it.
                         }
@@ -706,12 +732,15 @@ public final class ComputeCalibrateV6 {
         // repetition was disturbed is not a badly-measured cell; it is a cell that was measured while
         // something else ran, and its fastest repetitions still say what the operation costs.
         if (c.perRep.size() >= 2) {
-            if (c.gapAdv > MAX_CV) c.failures.add(String.format(Locale.ROOT,
-                    "two fastest advance times differ by %.1f%%", 100 * c.gapAdv));
-            if (c.gapCopy > MAX_CV) c.failures.add(String.format(Locale.ROOT,
-                    "two fastest copy times differ by %.1f%%", 100 * c.gapCopy));
-            if (c.gapEval > MAX_CV) c.failures.add(String.format(Locale.ROOT,
-                    "two fastest eval times differ by %.1f%%", 100 * c.gapEval));
+            if (c.gapAdv > gapLimit) c.failures.add(String.format(Locale.ROOT,
+                    "two fastest advance times differ by %.1f%% (limit %.0f%%)",
+                    100 * c.gapAdv, 100 * gapLimit));
+            if (c.gapCopy > gapLimit) c.failures.add(String.format(Locale.ROOT,
+                    "two fastest copy times differ by %.1f%% (limit %.0f%%)",
+                    100 * c.gapCopy, 100 * gapLimit));
+            if (c.gapEval > gapLimit) c.failures.add(String.format(Locale.ROOT,
+                    "two fastest eval times differ by %.1f%% (limit %.0f%%)",
+                    100 * c.gapEval, 100 * gapLimit));
         }
     }
 
