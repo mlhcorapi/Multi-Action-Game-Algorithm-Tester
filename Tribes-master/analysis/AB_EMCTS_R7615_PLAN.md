@@ -361,6 +361,27 @@ hours to answer a question four configurations settle.
 > compute units and seconds, and an arm that wins in one and loses in the other is reported as
 > unresolved, not as a win.
 
+> **Gate A3′ — resolved 2026-08-29 (measured on the R7615's JupyterHub).** The harness loaded the
+> machine as designed — per-op costs rose 42–78% over idle — but the OS load average read 0.11/core
+> inside the container, so the calibrator's gate mis-declared FAIL and refused to write loaded
+> weights (the gate now counts the harness's own completed work, and the per-cell gap limit is
+> doubled under load). The measurement itself stands, archived in `compute_profiles_load48.csv`:
+>
+> - Non-Z0 profiles hold within **0.4–6.4%** under load — the currency is sound for them.
+> - **`Z0_Fine` moves +24.3% at 80k and +24.1% at 400k.** Mechanism: the zero-eval family barely
+>   copies or evaluates (84k copies vs Baseline's 582k at 80k), so idle, its advances ride the
+>   cache — 44% cheaper than Baseline's at 400k; 48-way L3 contention removes that advantage.
+>   Idle pricing therefore *subsidizes* the `Z0_*` arms by ~24% at run conditions — precisely
+>   Stage E's headline family.
+>
+> **Amended decision, recorded as a deliberate deviation from the rule above:** the idle 54-cell
+> calibration remains the operating currency — one fixed, reproducible ruler, where a loaded
+> currency would be specific to one worker count on one container — and the rule's other half is
+> kept in full: **W7 wall-clock fairness is CO-PRIMARY for every stage**, implemented in
+> `analyze_stage1.py` (`run_w7`, table `w7_wallclock.csv`, a verdict block in every `SUMMARY.md`).
+> A `Z0_*` result that wins in units and fails W7 is an artefact of the subsidy, not a finding,
+> and E1 is quoted with its W7 verdict attached. **Do not re-run A3′.**
+
 **A4 — Verify gates** at a calibrated budget (not a round number), plus `ActionBiasFloorProbe`
 (rebuilt; the original was lost with its worktree) to confirm the mechanism engages at all three
 levels. ~0.3 h. The probe's answer is weight-dependent, so it runs after A2 and must be re-taken
@@ -750,7 +771,7 @@ plan still lands at ~34 h.
   contrast. (d) Never compare value *levels* across the heuristic-fix boundary.
 - **`UniqueSequences`.** Its meaning changed twice. Within-run diversity guard-rail only; never a
   headline, never across the fix boundary.
-- **Wall-clock fairness re-test on every stage** — co-primary if A3′ found the currency load-dependent.
+- **Wall-clock fairness re-test (W7) on every stage — CO-PRIMARY** since 2026-08-29: A3′ found the currency load-dependent for the `Z0_*` family (+24%). `analyze_stage1.py` computes it per (scenario, visit) against Baseline's value-vs-time curve; a units-only win is unresolved, not a win.
 - **Provenance in every leaf CSV:** git SHA, portfolio manifest hash, `compute_weights.properties` hash,
   the split name, and the pinned selection policy.
 - **Checkpoint a leaf only if every turn produced a row.** And: *any two arms producing identical output
@@ -794,7 +815,7 @@ needed from Phase C is written fresh — which is why Stage E extends `Stage1Par
 
 | Risk | Signal that it is happening | Pre-registered response |
 |---|---|---|
-| Idle-calibrated weights mis-price the arms under load | A3′ ratios move > 10% | Loaded ratios become the currency; W7 promoted to co-primary (§3.4) |
+| Idle-calibrated weights mis-price the arms under load | A3′ ratios move > 10% | **Fired 2026-08-29** (`Z0_Fine` +24%). Amended: idle stays the currency, W7 co-primary everywhere — see the Gate A3′ resolution |
 | The pinned substrate is the weaker one | Stage B main effect favours comma | Re-pin to comma; it is the baseline as well as the substrate, so nothing else runs on plus |
 | The bias effect vanishes on a corrected tree | Stage D W1 CIs span 0 | Stop at D. Report the negative with its mechanism: amplification needed the chain |
 | The bias is selection-dependent | Stage B interaction CI excludes 0 | Name the substrate in every claim; do not merge with v6 numbers |

@@ -137,6 +137,13 @@ Writes `compute_weights_load<W>.properties` **beside** the idle weights, never o
 the comparison table and a verdict. This is the gate that decides whether the wall-clock fairness
 re-test is a secondary check or co-primary for the whole line, so keep the verdict block.
 
+> **Resolved 2026-08-29 — do not re-run.** The 2026-08-28 run measured what it needed to despite
+> reporting FAIL: the container's OS load average is meaningless (0.11/core while every op cost
+> 42–78% more than idle), and the gate now counts the harness's own completed work instead.
+> Outcome, recorded in the plan's Gate A3′ resolution: idle weights stay the currency; `Z0_Fine`
+> +24% under load; **W7 is co-primary** — every `SUMMARY.md` carries a W7 verdict table, and a
+> champion must win in both currencies.
+
 ### A4 — the gates
 
 ```bash
@@ -175,6 +182,12 @@ is weight-dependent and must be re-taken whenever they change — moving machine
 ---
 
 ## Stage B — the substrate *(~0.4 h)* — **run this before D**
+
+Measured 2026-08-28 (A0b): **`W = 54`** at 80k (47 at 40k; both nearly flat past 39), and the 400k
+level is **heap-bound at 31 workers** under `-Xmx64g` — every command with a 400k level below
+carries `-Dstage1.threads.400000=31` (the notebook does too). `machineFactor` fitted from A0b:
+**1.5**. Widening the 400k level is a decision for Gate B, taken only with `free -g` in hand and
+`HEAP` raised together with it.
 
 ```bash
 nohup java -Xmx<N>g $WF -cp "out:lib/*" core.data.exp.Stage1Runner W $DATA/stage1 dev B \
@@ -221,7 +234,7 @@ real argument for per-burn resets and a mechanism for comma beating plus.
 ## Stage D — biased insertion *(~5.3 h)*
 
 ```bash
-nohup java -Xmx<N>g $WF -Dstage1.machineFactor=<measured> -cp "out:lib/*" \
+nohup java -Xmx<N>g $WF -Dstage1.machineFactor=1.5 -Dstage1.threads.400000=31 -cp "out:lib/*" \
       core.data.exp.Stage1Runner W $DATA/stage1 dev D > $DATA/logs/D.log 2>&1 &
 ```
 
@@ -242,7 +255,7 @@ If the ε curve is still rising at 0.10, extend it — but only then.
 ## Stage E — table-directed repair *(~2.6 h)*
 
 ```bash
-nohup java -Xmx<N>g $WF -cp "out:lib/*" core.data.exp.Stage1Runner \
+nohup java -Xmx<N>g $WF -Dstage1.threads.400000=31 -cp "out:lib/*" core.data.exp.Stage1Runner \
       W $DATA/stage1 dev E <champion> > $DATA/logs/E.log 2>&1 &
 ```
 
@@ -261,7 +274,7 @@ finding: a non-zero value means the mode is not engaged and the run is a bug.
 is worth nothing if it is read twice.
 
 ```bash
-nohup java -Xmx<N>g $WF -cp "out:lib/*" core.data.exp.Stage1Runner \
+nohup java -Xmx<N>g $WF -Dstage1.threads.400000=31 -cp "out:lib/*" core.data.exp.Stage1Runner \
       W $DATA/stage1 holdout F <champion> > $DATA/logs/F.log 2>&1 &
 ```
 

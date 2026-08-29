@@ -527,6 +527,14 @@ public final class Stage1Runner {
         }
 
         for (Level level : schedule) {
+            // Per-level worker override. The 400k level is heap-bound well below the cheap levels'
+            // optimum (A0b on the R7615 measured 47 @ 40k / 54 @ 80k but only 31 @ 400k at -Xmx64g,
+            // peak heap riding the cap), and one level's ceiling should not drag the others down.
+            // -Dstage1.threads.<cu>=N; levels without an override keep the CLI thread count.
+            int levelThreads = Integer.getInteger("stage1.threads." + level.cu, threads);
+            if (levelThreads != threads)
+                System.out.println("[stage1] " + level.cu + "cu runs on " + levelThreads
+                        + " workers (-Dstage1.threads." + level.cu + "=" + levelThreads + ")");
             for (Config cfg : level.configs) {
                 if (RunGuard.stopRequested()) { finish(t0); return; }
                 String key = "config=" + cfg.name + ";cu=" + level.cu + ";split=" + split.key();
@@ -534,7 +542,7 @@ public final class Stage1Runner {
                     System.out.println("[stage1] SKIP (done): " + key);
                     continue;
                 }
-                boolean complete = runLeaf(level, cfg, portfolio, outDir, threads);
+                boolean complete = runLeaf(level, cfg, portfolio, outDir, levelThreads);
                 if (complete) {
                     ExpCsv.markCompleted(ckpt, key);
                     System.out.println("[stage1] DONE " + key + "   elapsed=" + elapsed(t0));
@@ -579,16 +587,17 @@ public final class Stage1Runner {
         System.out.println("############################################################");
         System.out.println("# STAGE 1 — within-turn action bias, isolation phase   (output=" + outDir + ")");
         System.out.println("# split=" + split.key() + "   scenarios=" + scenarios);
-        long totalTurns = 0; double estSec = 0;
+        long totalTurns = 0; double estH = 0;
         for (Level l : schedule) {
             long t = (long) l.configs.size() * scenarios * l.visits;
             totalTurns += t;
-            estSec += t * secPerTurn(l.cu);
+            estH += t * secPerTurn(l.cu) / 3600.0
+                    / Integer.getInteger("stage1.threads." + l.cu, threads);
         }
         System.out.println(String.format(Locale.ROOT,
                 "# %d turns planned; rough estimate %.1f h on %d workers "
-                + "(single-thread model x machineFactor=%s)",
-                totalTurns, estSec / 3600.0 / threads, threads,
+                + "(single-thread model x machineFactor=%s; -Dstage1.threads.<cu> honored)",
+                totalTurns, estH, threads,
                 System.getProperty("stage1.machineFactor", "1.0")));
         System.out.println("# ComputeMeter weights: " + core.game.ComputeMeter.weightsSummary());
         System.out.println("############################################################");

@@ -196,6 +196,55 @@ def run_efficiency(t):
     return df
 
 
+def run_w7(t):
+    """W7 - wall-clock fairness. CO-PRIMARY since Gate A3' (2026-08-29).
+
+    The compute-unit currency is calibrated idle and single-threaded, and A3' measured the Z0
+    family's relative op cost rising ~24% under a loaded machine (a cache-light arm loses its idle
+    cache advantage to 48-way L3 contention), so a unit budget subsidizes exactly those arms at run
+    conditions. This re-scores every arm against Baseline INTERPOLATED AT THE ARM'S OWN PlanMillis:
+    Baseline's (PlanMillis, FinalValue) points across the budget ladder form a value-vs-time curve
+    per (scenario, visit), and the arm is compared with that curve at the wall-clock it actually
+    spent. Paired per (scenario, visit), scenario-clustered CI, terminals excluded (a +/-2e9
+    terminal would dominate the interpolation).
+
+    Needs Baseline at >= 2 budgets to have a curve, so it is empty on a Stage-B-only tree and
+    fills in retroactively once Stage D adds the other levels. An arm that wins in units but not
+    here is a bookkeeping artefact, not an algorithm.
+    """
+    base = t[(t.Config == BASELINE) & (t.FinalValue.abs() < TERMINAL_VALUE_CUTOFF)]
+    if base.empty:
+        return pd.DataFrame()
+    curves = {}
+    for (s, v), g in base.groupby(["ScenarioId", "VisitId"]):
+        g = g.sort_values("PlanMillis")
+        if len(g) >= 2:
+            curves[(s, v)] = (g.PlanMillis.to_numpy(float), g.FinalValue.to_numpy(float))
+    if not curves:
+        return pd.DataFrame()
+    rows = []
+    arms = t[(t.Config != BASELINE) & (t.FinalValue.abs() < TERMINAL_VALUE_CUTOFF)]
+    for (budget, cfg), g in arms.groupby(["Budget", "Config"]):
+        recs = []
+        for r in g.itertuples():
+            c = curves.get((r.ScenarioId, r.VisitId))
+            if c is None:
+                continue
+            xs, ys = c
+            x = float(r.PlanMillis)
+            recs.append((r.ScenarioId, r.FinalValue - float(np.interp(x, xs, ys)),
+                         x < xs[0] or x > xs[-1]))
+        if len(recs) < 10:
+            continue
+        j = pd.DataFrame(recs, columns=["ScenarioId", "WallDiff", "Clamped"])
+        m, lo, hi, k = cluster_boot_ci(j, "WallDiff")
+        rows.append(dict(Budget=budget, Config=cfg, Pairs=len(j), Scenarios=k,
+                         WallDiff=m, WallLo=lo, WallHi=hi,
+                         ClampedShare=float(j.Clamped.mean()),
+                         MeanArmMillis=float(g.PlanMillis.mean())))
+    return sorted_frame(rows, ["Budget", "Config"])
+
+
 def run_anytime(r):
     """Paired diff vs Baseline of BestSequenceValue at each burn phase."""
     if r.empty:
@@ -447,6 +496,7 @@ def main():
     tables["headline"] = run_headline(t)
     tables["contrasts"] = run_contrasts(t)
     tables["efficiency"] = run_efficiency(t)
+    tables["w7_wallclock"] = run_w7(t)
     tables["variance"] = run_variance(t)
     tables["anytime"] = run_anytime(r)
     seq = load_seqlogs(args.indir)
@@ -478,6 +528,41 @@ def main():
             lines.append(f"| {x.Config} | {x.Pairs} | {sig}{x.MeanDiff:+.1f} "
                          f"[{x.Lo:+.1f}, {x.Hi:+.1f}]{sig} | {x.RelDiff:+.3f} | {x.WinRate:.3f} |")
         lines.append("")
+    # W7 - the co-primary wall-clock check (Gate A3' resolution, 2026-08-29).
+    w7 = tables["w7_wallclock"]
+    if not w7.empty and not h.empty:
+        lines.append("## W7 — wall-clock fairness (CO-PRIMARY)")
+        lines.append("")
+        lines.append("Units and seconds must agree. `WallDiff` re-scores each arm against Baseline")
+        lines.append("interpolated at the arm's own PlanMillis (paired per scenario+visit, terminals")
+        lines.append("excluded). A3' measured the idle currency subsidizing the cache-light `Z0_*`")
+        lines.append("family by ~24% under load, so a units-only win there is an artefact until it")
+        lines.append("survives this column.")
+        lines.append("")
+        lines.append("| Budget | Config | Units MeanDiff | Wall-clock diff [CI] | Verdict |")
+        lines.append("|---|---|---|---|---|")
+        hidx = h.set_index(["Budget", "Config"])
+        for _, x in w7.iterrows():
+            key = (x.Budget, x.Config)
+            um = hidx.MeanDiff.get(key, np.nan)
+            us = bool(key in hidx.index and hidx.Lo.get(key, np.nan) > 0)
+            ws = bool(x.WallLo > 0)
+            verdict = ("**wins both**" if us and ws else
+                       "units only — UNRESOLVED" if us else
+                       "wall-clock only" if ws else "no win")
+            clamp = f" (clamped {x.ClampedShare:.0%})" if x.ClampedShare > 0.05 else ""
+            lines.append(f"| {int(x.Budget)} | {x.Config} | {um:+.1f} | "
+                         f"{x.WallDiff:+.1f} [{x.WallLo:+.1f}, {x.WallHi:+.1f}]{clamp} | {verdict} |")
+        lines.append("")
+    elif not h.empty and len(h.Budget.unique()) < 2:
+        lines.append("## W7 — wall-clock fairness (CO-PRIMARY)")
+        lines.append("")
+        lines.append("Not computable yet: Baseline exists at only one budget, so it has no")
+        lines.append("value-vs-time curve to interpolate against. Re-run this analysis after Stage D")
+        lines.append("adds the other levels — every arm then gets its W7 verdict retroactively on the")
+        lines.append("same rows.")
+        lines.append("")
+
     # Gate B question 2: what a scenario buys, and what a visit buys.
     vt = tables["variance"]
     if not vt.empty:
