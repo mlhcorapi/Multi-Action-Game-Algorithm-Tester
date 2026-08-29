@@ -252,10 +252,11 @@ public final class ComputeCalibrateV6 {
                                               : RunExperimentV6.DEFAULT_COMPUTE_LEVELS;
         String suite        = suiteArg;
         if (!suite.equals(SUITE_V6) && !suite.equals(SUITE_AB) && !suite.equals(SUITE_ALL)
-                && !suite.equals(SUITE_A3) && !suite.equals(SUITE_COMMA)) {
+                && !suite.equals(SUITE_A3) && !suite.equals(SUITE_COMMA)
+                && !suite.equals(SUITE_COMMA_E)) {
             System.err.println("unknown suite '" + suite + "' - expected one of: "
                     + SUITE_V6 + ", " + SUITE_AB + ", " + SUITE_ALL + ", " + SUITE_A3
-                    + ", " + SUITE_COMMA);
+                    + ", " + SUITE_COMMA + ", " + SUITE_COMMA_E);
             System.exit(2);
         }
 
@@ -622,7 +623,7 @@ public final class ComputeCalibrateV6 {
 
     /** Suites of configurations this calibrator knows how to price. */
     public static final String SUITE_V6 = "v6", SUITE_AB = "ab", SUITE_ALL = "all", SUITE_A3 = "a3",
-            SUITE_COMMA = "comma";
+            SUITE_COMMA = "comma", SUITE_COMMA_E = "commae";
 
     /**
      * The A3' subset: the reference plus the three most allocation-divergent action-bias arms.
@@ -663,6 +664,13 @@ public final class ComputeCalibrateV6 {
         if (suite.equals(SUITE_COMMA)) {
             // The comma grid added at the Gate B re-pin; merged into the existing weights file.
             for (String arm : Stage1Runner.commaArmNames())
+                out.add(new Cell(ExpAgents.AB_PREFIX + arm, -1, units));
+        }
+        if (suite.equals(SUITE_COMMA_E)) {
+            // Stage E's arms after the Gate D re-scope. Includes the three Comma_Z0_* arms priced
+            // during D-prep at the old eps: they moved to unbiased insertion, so they are
+            // re-measured and the merge replaces their stale profiles by name.
+            for (String arm : Stage1Runner.stageEArmNames())
                 out.add(new Cell(ExpAgents.AB_PREFIX + arm, -1, units));
         }
         if (suite.equals(SUITE_ALL)) {

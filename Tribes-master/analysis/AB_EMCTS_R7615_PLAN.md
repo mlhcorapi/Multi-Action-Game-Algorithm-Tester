@@ -619,17 +619,61 @@ is a small-budget crutch. That question is worth 3.9 h.
 - **W7** wall-clock fairness: re-score each arm against Baseline interpolated at that arm's own
   `PlanMillis`. Co-primary if A3′ found the currency load-dependent.
 
-> **Gate D.** The champion is the best arm on W1 whose CI excludes 0 **and** which survives W7. An arm
-> that wins in compute units and loses in milliseconds is a bookkeeping artefact, not an algorithm —
-> re-open the currency rather than carrying it into Stage E. **Write ε\* and the champion down before
-> Stage F runs.**
+> **Gate D — resolved 2026-08-29** (48,000 turns, 3 h 39 m at 54/31 workers, zero throttling).
+>
+> **Champion: `Comma_Short15`** — +105.7 / +118.9 / +170.5 vs `Comma_Off` at 40k / 80k / 400k, the
+> effect **growing** with budget, significant on both scenario sources and terminal-excluded
+> (+102.8 / +115.0 / +168.0), and winning W7 at 40k and 80k (+96.1 / +110.3).
+>
+> **The champion carries no insertion bias (ε = 1.00).** It learns the Qδ table from unbiased
+> sampling and reads it only to rank repair candidates. This is the central result of the line and
+> it was not the expected one, so the supporting evidence is listed in full:
+>
+> | Question | Pre-registered | Measured |
+> |---|---|---|
+> | W2 ε dose-response | monotone → extend to ε ∈ {0.05, 0.02} | **not monotone** (peak ε ≈ 0.50: +31.0/+38.6/+17.6; ε = 0.10 is **harmful** at 400k, −65.0 [−98.3, −32.5]) → **extension cancelled** |
+> | W3 composition | bias and shortlisting additive? | **strongly anti-additive**: adding bias to the shortlist costs −19.3 / −31.5 / **−130.3** |
+> | W3 granularity | — | **Coarse > Mid by +39.4 / +45.3 / +50.3**, growing with budget (D2's insertion prediction) |
+> | W4 diversity | duplicate rate ≫ baseline while W1 flattens | biased arms 0.23–0.34 duplicate share vs `Comma_Off` 0.063; the champion holds **0.068** while nearly doubling unique sequences (428 → 840 at 80k) |
+> | W6 budget equivalence | does an arm at 80k beat the baseline at 400k? | `Short15@40k − Comma_Off@80k = +77.6` (beats **2×** budget); `Short15@80k − Comma_Off@400k = −113.2` (does **not** beat 5×); `Short15@80k − plain EMCTS Baseline@400k = +18.3` (ns) — **matches the unmodified algorithm at 5× budget** |
+>
+> The mechanism is one sentence: **shortlisted repair converts saved evaluations into new sequences,
+> and the insertion bias converts them into duplicates.** The champion reaches 1.93× the nodes at an
+> unchanged duplicate rate; ε = 0.25 reaches 1.47× the nodes and spends the surplus re-deriving
+> sequences it already had.
+>
+> ε\* is reported as **"off" for the champion, ≈ 0.50 where the bias is used alone**. `Z0_EPS`
+> accordingly moves 0.25 → 1.00 for the comma zero-eval family (the plus-era arms stay frozen at
+> 0.25 so `--suite ab` keeps reproducing the weights it measured).
+>
+> **W7 caveat, recorded rather than buried.** At 400k the champion spends more wall-clock than
+> `Comma_Off` does at its own most expensive measured point, so 92% of its W7 pairs clamp to the end
+> of the interpolation curve and the 400k wall-clock column is not a real test — it degenerates to
+> the units comparison. The 40k and 80k W7 verdicts are genuine (21–33% clamped) and the champion
+> wins both. **Quote the 400k result in units, with this caveat, or extend the ladder.**
 
 ---
 
 ### Stage E — Table-directed repair *(~2.6 h, closed loop; needs new code)*
 
+> **Re-scoped at Gate D, 2026-08-29.** Stage D handed Stage E a sharper and more dangerous
+> question than the one it was designed around. The champion shortlists 15 candidates by Q and
+> evaluates only those, reaching **1.93× the nodes** per unit of budget — and that throughput
+> arrives whether the ranking is informative or arbitrary. *"The learned table directs repair"* and
+> *"evaluating 15 candidates instead of ~300 is simply cheaper"* predict the same +118.9. Nothing in
+> Stage D distinguishes them, so Stage E now leads with the control that does:
+> **`Comma_Rand15`** — the same arm with the Q ranking replaced by noise, and everything else
+> (candidate list, shortlist size, evaluation of the survivors, number of RNG draws) held identical.
+> **`Comma_Z0_Random`** is the same control one rung further down, for the zero-eval family.
+>
+> If `Comma_Short15 − Comma_Rand15` ≈ 0, the table contributes nothing and the finding is that
+> greedy repair over-evaluates — **a real result, and it becomes the headline rather than a
+> footnote**. The whole zero-eval family also moves to ε = 1.00, the champion's own footing, making
+> Stage E the clean K → 0 limit of the design that actually won.
+
 **Question.** Repair is ~69% of Baseline's budget and ~90% of its evaluations are discarded. Can the same
-Qδ table replace the exhaustive scan outright — and does the granularity principle hold?
+Qδ table replace the exhaustive scan outright — is its *ranking* what pays, and does the granularity
+principle hold?
 
 **Code needed** — a small extension of the existing agent, not a new package:
 `repairMode ∈ {FULL, SHORTLIST_K, ZERO_EVAL}` (FULL = the current default), and split the single
@@ -638,17 +682,22 @@ is that the two decisions want different granularities.
 
 **Arms** (development set; ε\* = Stage D's winner; insertion Coarse unless stated):
 
-| Arm | Insertion table | Repair |
-|---|---|---|
-| `Comma_Off` | ε = 1.00 | FULL greedy |
-| `D_champion` | Stage D's winner, carried over unchanged as the cross-stage anchor | |
-| `Comma_Z0_Coarse` | ε\*, Coarse | ZERO-EVAL, Coarse keys |
-| `Comma_Z0_Mid` | ε\*, Coarse | ZERO-EVAL, Mid keys |
-| `Comma_Z0_Fine` | ε\*, Coarse | ZERO-EVAL, Fine keys |
-| `Comma_Z0_Fine_InsFine` | ε\*, **Fine** | ZERO-EVAL, Fine keys |
+| Arm | Insertion | Repair | Carries |
+|---|---|---|---|
+| `Comma_Off` | ε = 1.00 | FULL greedy | control *(reused from D — skips)* |
+| `Comma_Short15` | ε = 1.00 | Q-ranked top-15, then evaluate | the champion *(reused — skips)* |
+| **`Comma_Rand15`** | ε = 1.00 | **random** top-15, then evaluate | **the attribution control** |
+| `Comma_Z0_Coarse` | ε = 1.00 | ZERO-EVAL, Coarse keys | E1 + repair D2 |
+| `Comma_Z0_Mid` | ε = 1.00 | ZERO-EVAL, Mid keys | E1 + repair D2 |
+| `Comma_Z0_Fine` | ε = 1.00 | ZERO-EVAL, Fine keys | E1 + repair D2 |
+| **`Comma_Z0_Random`** | ε = 1.00 | **random** pick, zero evaluations | the zero-eval floor |
+| `Comma_Fine_e25` | ε = 0.25, **Fine** | FULL greedy | insertion D2, third point |
 
-*(All comma k=5 since the Gate B re-pin. E1 is quoted with its W7 verdict attached — A3′ measured
-idle pricing subsidizing exactly the zero-eval family by ~24% under load.)*
+*(All comma k=5. `Z0_Fine_InsFine` is **dropped**: at ε = 1.00 the insertion table is never read, so
+it would be byte-identical to `Z0_Fine` — the failure this line treats as a bug. The insertion half
+of the D2 falsification moves to `Comma_Fine_e25`, which is directly comparable with
+`Comma_Coarse_e25` and `Comma_On` from Stage D's grid. E1 is quoted with its W7 verdict attached —
+A3′ measured idle pricing subsidizing exactly the zero-eval family by ~24% under load.)*
 
 80k × 8 visits = 9,600 turns (0.51 h); 400k × 6 visits = 7,200 turns (2.12 h).
 
@@ -677,9 +726,15 @@ idle pricing subsidizing exactly the zero-eval family by ~24% under load.)*
 - **E2 — the D2 falsification.** D2 says granularity should track whether a decision is *corrected
   downstream*: insertion is a proposal the sequence scores afterwards, so abstraction generalises and
   Coarse should win; zero-eval repair is a commitment nothing checks, so precision matters and Fine
-  should win. Two predictions, and **both must hold**:
-  1. repair granularity orders **Fine > Mid > Coarse**, monotone;
-  2. `Z0_Fine_InsFine` < `Z0_Fine` — making the *insertion* table Fine must **hurt**.
+  should win. Two predictions pointing in **opposite** directions, and **both must hold**:
+  1. repair granularity orders **Fine > Mid > Coarse** (`Comma_Z0_*`), monotone;
+  2. insertion granularity orders **Coarse > Mid > Fine** (`Comma_Coarse_e25` > `Comma_On` >
+     `Comma_Fine_e25`, the first two already measured at +39.4 / +45.3 / +50.3 in Stage D).
+
+  Prediction (2) is now a three-point monotone test on live arms rather than a single hurts/helps
+  comparison, and Stage D has already delivered two of its three points in the predicted order.
+  Note that (1) is only interpretable **once `Comma_Z0_Random` is in hand**: if Q-argmax repair does
+  no better than a random pick, the granularity ordering is noise about an inert mechanism.
 
   Prediction (2) is the arm that was designed and never run, and it is the one that matters. Without it,
   (1) alone is equally consistent with the boring alternative "Fine is simply better everywhere", and D2
@@ -793,7 +848,8 @@ At the modelled `W = 48`. **Re-derive from Stage B's first measured `PlanMillis`
 | C — signal | 144 logged games | 0.7 |
 | D-prep — comma-grid calibration (42 cells) + floor probe | calibration only | ~1.8 |
 | D — comma grid × 11 arms + plus anchor at 40k/400k | 48,000 turns | 6.3 |
-| E — table-directed repair (4 new arms; baseline + champion reused) | 11,200 turns | 2.1 |
+| E-prep — Stage E arm calibration (21 cells) | calibration only | ~0.8 |
+| E — repair, attribution controls, D2 ladder (6 new arms) | 16,800 turns | ~1.5 |
 | F — holdout confirmation | 14,000 turns | 2.2 |
 | G — the yardstick | 3,900 games | 5.4 |
 | **Total** | | **≈ 24.3 h** (post re-pin) |

@@ -60,7 +60,26 @@ public class Stage1Params extends ExperimentalEMCTSParams {
          * that is applying the sequence rather than scoring a candidate — so the quantity that goes
          * to zero is the <i>candidate evaluation</i> count, which the agent reports directly.
          */
-        ZERO_EVAL
+        ZERO_EVAL,
+        /**
+         * {@link #SHORTLIST_K} with the Q ranking replaced by a random one: still exactly
+         * {@link #shortlistK} candidates evaluated, chosen uniformly instead of by the table.
+         *
+         * <p><b>This is the control that attributes the shortlist result.</b> Stage D's champion
+         * (`Comma_Short15`) beat exhaustive repair by +118.9 at 80k while nearly doubling the nodes
+         * it evaluated — a throughput gain that shortlisting buys whether or not the ranking is any
+         * good. Without this arm, "the learned table directs repair" and "evaluating 15 candidates
+         * instead of 300 is simply cheaper" predict the same measurement.
+         */
+        SHORTLIST_RANDOM,
+        /**
+         * {@link #ZERO_EVAL} with the Q argmax replaced by a uniform draw: the same zero
+         * forward-model calls, committing to an arbitrary feasible action.
+         *
+         * <p>The floor for the zero-eval family, and the same attribution question one rung further
+         * down: if Q-argmax repair does no better than this, the table carries no usable ranking.
+         */
+        ZERO_EVAL_RANDOM
     }
 
     /**

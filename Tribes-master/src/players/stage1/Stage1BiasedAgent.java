@@ -165,14 +165,17 @@ public class Stage1BiasedAgent extends ExperimentalEMCTSAgent {
         // Refuse the combination rather than pick a winner.
         switch (params.repairMode) {
             case SHORTLIST_K:
+            case SHORTLIST_RANDOM:
                 if (params.shortlistK <= 0) throw new IllegalArgumentException(
-                        "repairMode=SHORTLIST_K needs shortlistK > 0 (got " + params.shortlistK + ")");
+                        "repairMode=" + params.repairMode + " needs shortlistK > 0 (got "
+                        + params.shortlistK + ")");
                 break;
             case FULL:
             case ZERO_EVAL:
+            case ZERO_EVAL_RANDOM:
                 if (params.shortlistK != 0) throw new IllegalArgumentException(
                         "repairMode=" + params.repairMode + " needs shortlistK = 0 (got "
-                        + params.shortlistK + "); shortlistK only applies to SHORTLIST_K");
+                        + params.shortlistK + "); shortlistK only applies to the shortlist modes");
                 break;
         }
         this.needFine = params.insertKeys == Stage1Params.Granularity.FINE
@@ -496,8 +499,13 @@ public class Stage1BiasedAgent extends ExperimentalEMCTSAgent {
                     continue;
                 }
             }
-            Action bestAction = p1.repairMode == Stage1Params.RepairMode.ZERO_EVAL
-                    ? zeroEvalReplace(gs) : shortlistedGreedyReplace(gs);
+            Action bestAction;
+            switch (p1.repairMode) {
+                case ZERO_EVAL:        bestAction = zeroEvalReplace(gs, true);         break;
+                case ZERO_EVAL_RANDOM: bestAction = zeroEvalReplace(gs, false);        break;
+                case SHORTLIST_RANDOM: bestAction = shortlistedGreedyReplace(gs, false); break;
+                default:               bestAction = shortlistedGreedyReplace(gs, true);  break;
+            }
             if (bestAction != null) {
                 advance(gs, bestAction);
                 repairedChild.add(bestAction);
@@ -536,9 +544,16 @@ public class Stage1BiasedAgent extends ExperimentalEMCTSAgent {
      * something about. It is also the quantity to watch if this mode underperforms: if nearly every
      * replacement is a random pick among unseen keys, the table is too sparse to be steering.
      */
-    private Action zeroEvalReplace(GameState gs) {
+    private Action zeroEvalReplace(GameState gs, boolean rankByQ) {
         ArrayList<Action> cands = this.allGoodActions(gs, m_rnd);
         if (cands.isEmpty()) return null;
+
+        if (!rankByQ) {
+            // ZERO_EVAL_RANDOM: commit to an arbitrary feasible action. Same zero forward-model
+            // calls; the only thing removed is the table's opinion, which is what it controls for.
+            zeroEvalPicks++;
+            return cands.get(m_rnd.nextInt(cands.size()));
+        }
 
         Action best = null;
         double bestQ = Double.NEGATIVE_INFINITY;
@@ -560,7 +575,7 @@ public class Stage1BiasedAgent extends ExperimentalEMCTSAgent {
      * The replacement rule: rank feasible candidates by Q (free), pay copy+advance+eval only for the
      * top K, pick the heuristic-best of those (ties broken uniformly, as in the base greedy).
      */
-    private Action shortlistedGreedyReplace(GameState gs) {
+    private Action shortlistedGreedyReplace(GameState gs, boolean rankByQ) {
         ArrayList<Action> cands = this.allGoodActions(gs, m_rnd);
         if (cands.isEmpty()) return null;
 
@@ -570,11 +585,16 @@ public class Stage1BiasedAgent extends ExperimentalEMCTSAgent {
             shortlistSkipped += cands.size() - p1.shortlistK;
             // Rank by Q with a random jitter far below any real delta, purely to break ties
             // (unseen keys all sit at the prior) without biasing among equals.
+            //
+            // SHORTLIST_RANDOM replaces the ranking key with the jitter alone, and nothing else:
+            // same candidate list, same shortlist size, same evaluation of the survivors, and the
+            // same NUMBER OF RNG DRAWS, so the two arms differ in the ranking and in nothing else.
             int n = cands.size();
             double[] score = new double[n];
             for (int i = 0; i < n; i++) {
                 Action c = cands.get(i);
-                score[i] = qhat(p1.repairKeys, c, gs) + m_rnd.nextDouble() * 1e-9;
+                double jitter = m_rnd.nextDouble();
+                score[i] = rankByQ ? qhat(p1.repairKeys, c, gs) + jitter * 1e-9 : jitter;
             }
             pool = new ArrayList<>(p1.shortlistK);
             boolean[] taken = new boolean[n];
