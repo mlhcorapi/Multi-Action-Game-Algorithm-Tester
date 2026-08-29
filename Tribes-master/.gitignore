@@ -40,3 +40,4 @@ _srcs.txt
 test_results/stage1_smoke/
 test_results/_shakedown/
 logs/
+ab_runs/
