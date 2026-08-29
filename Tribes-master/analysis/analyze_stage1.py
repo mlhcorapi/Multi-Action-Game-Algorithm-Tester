@@ -142,21 +142,37 @@ def run_headline(t):
                        RelDiff=rm, RelLo=rlo, RelHi=rhi,
                        Wins=wins, Losses=losses, Ties=len(j) - wins - losses,
                        WinRate=wins / max(1, wins + losses))
+            # Per-source effects WITH their own CIs. Stage B found the bias effect to be strongly
+            # source-dependent (+53 single vs -10 dual on comma), so a pooled mean alone can hide
+            # the mechanism's actual scope.
             for src in j.ScenarioSource.unique():
                 js = j[j.ScenarioSource == src]
-                row[f"MeanDiff_{src}"] = float(js.Diff.mean())
+                sm, slo, shi, _ = cluster_boot_ci(js, "Diff")
+                row[f"MeanDiff_{src}"] = sm
+                row[f"Lo_{src}"] = slo
+                row[f"Hi_{src}"] = shi
             rows.append(row)
     return sorted_frame(rows, ["Budget", "Config"])
 
 
 def run_contrasts(t):
     """Design contrasts as paired A-minus-B at the main budget (fallback: any shared budget)."""
+    # Both substrates' arm names: a contrast row appears only when both of its arms exist in the
+    # data, so the plus-era rows come out of Stage B trees and the comma rows out of Stage D's.
     pairs = [("Granularity Mid>Coarse", "Bias_e25", "Coarse_e25"),
              ("RemovalCredit on>off", "Bias_e25", "NoRemoval_e25"),
              ("Continuous>PerBurn", "Bias_e25", "PerBurn_e25"),
-             ("Shortlist15 alone>Baseline", "Shortlist15", BASELINE),
+             ("Shortlist15 alone>Baseline", "Shortlist15", "Baseline"),
              ("Short15+Bias>Bias alone", "Short15_e25", "Bias_e25"),
-             ("Short5>Short15 (given bias)", "Short5_e25", "Short15_e25")]
+             ("Short5>Short15 (given bias)", "Short5_e25", "Short15_e25"),
+             ("C: Granularity Mid>Coarse", "Comma_On", "Comma_Coarse_e25"),
+             ("C: RemovalCredit on>off", "Comma_On", "Comma_NoRem_e25"),
+             ("C: Continuous>PerBurn", "Comma_On", "Comma_PerBurn_e25"),
+             ("C: Shortlist15 alone>Comma_Off", "Comma_Short15", "Comma_Off"),
+             ("C: Short15+Bias>Bias alone", "Comma_Short15_e25", "Comma_On"),
+             ("C: Short5>Short15 (given bias)", "Comma_Short5_e25", "Comma_Short15_e25"),
+             ("C: bias on comma (On>Off)", "Comma_On", "Comma_Off"),
+             ("Substrate (Comma_Off>Baseline)", "Comma_Off", "Baseline")]
     rows = []
     for budget in sorted(t.Budget.unique()):
         d = t[t.Budget == budget]
@@ -476,10 +492,15 @@ def fig_anytime(anytime, outdir, budget, configs):
 
 # --------------------------------------------------------------------------- main
 def main():
+    global BASELINE
     ap = argparse.ArgumentParser()
     ap.add_argument("indir", nargs="?", default="test_results/stage1")
     ap.add_argument("--outdir", default="analysis/stage1_results")
+    ap.add_argument("--baseline", default=BASELINE,
+                    help="arm every contrast (and the W7 time curve) is paired against; the Gate B "
+                         "re-pin makes this Comma_Off for Stage D onward")
     args = ap.parse_args()
+    BASELINE = args.baseline
     os.makedirs(os.path.join(args.outdir, "tables"), exist_ok=True)
     os.makedirs(os.path.join(args.outdir, "figures"), exist_ok=True)
 
@@ -511,12 +532,15 @@ def main():
     main_budget = 80000 if (t.Budget == 80000).any() else int(t.Budget.max())
     fig_dose_response(tables["headline"], args.outdir, main_budget)
     for b in sorted(t.Budget.unique()):
-        fig_anytime(tables["anytime"], args.outdir, b, ["Bias_e25", "Short15_e25", "Shortlist15"])
+        hb = tables["headline"]
+        hb = hb[hb.Budget == b]
+        top = list(hb.reindex(hb.MeanDiff.abs().sort_values(ascending=False).index).Config.head(3))
+        fig_anytime(tables["anytime"], args.outdir, b, top)
 
     # SUMMARY.md
     h = tables["headline"]
     lines = ["# Stage 1 — biased mutation results", "",
-             "Positive MeanDiff = the config finds BETTER final sequences than Baseline on the",
+             f"Positive MeanDiff = the config finds BETTER final sequences than {BASELINE} on the",
              "same (scenario, visit) seeds. CI is a scenario-clustered bootstrap.", ""]
     for budget in sorted(h.Budget.unique()):
         lines.append(f"## {budget}cu")

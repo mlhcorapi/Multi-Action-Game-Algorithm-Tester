@@ -202,12 +202,12 @@ Four arms at 80k: `Baseline`, `Bias_e25`, `Comma_Off`, `Comma_On`. The two plus 
 `Baseline` and `Bias_e25` rather than renamed copies, so **Stage D later skips them on resume** — same
 checkpoint keys, no work done twice.
 
-**Read `SUMMARY.md` for two things**, and stop before D until you have:
-
-1. **The main effect**, `Comma_Off − Plus_Off`. Whichever wins becomes the substrate *and the
-   baseline* for D–G. If comma wins, that is a re-pin, not a footnote.
-2. **The design section** — the measured ICC, which sets Stage D's visit count. The default is 8; a
-   pilot put the ICC near 0.12, which would say visits are worth more than the plan first assumed.
+> **Gate B — resolved 2026-08-29.** Comma won: `Comma_Off − Baseline = +22.3 [+9.8, +34.8]`,
+> uniform across sources and terminal-excluded; bias-on-plus null (+6.1 ns); bias-on-comma +21.4
+> with the CI at zero overall but **+53.4 [+30.4, +77.8] single-source** vs −10.5 (ns) dual. ICC
+> median 0.06 → visits stay 8/8/6. **Substrate re-pinned to comma k=5**; D–F run the comma grid,
+> analyses pair against `Comma_Off` (`--baseline Comma_Off`), and D-prep below prices the new arms
+> first.
 
 ---
 
@@ -222,8 +222,10 @@ nohup java -Xmx<N>g $WF -cp "out:lib/*" core.data.exp.Stage0SignalRunner \
 python analysis/analyze_stage0.py $DATA/stage0 --outdir $DATA/ab_results/C
 ```
 
-> **Gate C.** Mean ρ ≥ 0.15 with a CI excluding zero, at 80k, for at least one granularity. **Fails
-> everywhere → stop the line**; the premise is gone and D–G are unfundable.
+> **Gate C — resolved 2026-08-29: SIGNAL in all nine cells** (ρ 0.55–0.80 vs the 0.15 bar,
+> Coarse ≈ Mid > Fine everywhere). R9: P(improve) decays ~10–15× with target age, and 65% of 80k
+> events (91% at 400k) hit age-64+ targets where it is ≈0 and 88% of children are duplicates — the
+> mechanism behind the Gate B re-pin. R10: duplicates 64/75/84% at 40k/80k/400k.
 
 Also read R9 and R10 — payoff versus expansion-target age, and the re-measured duplicate rate. A pilot
 found the improvement rate falling roughly tenfold as the incumbent goes stale, which is the first
@@ -231,11 +233,40 @@ real argument for per-burn resets and a mechanism for comma beating plus.
 
 ---
 
-## Stage D — biased insertion *(~5.3 h)*
+## D-prep — price the comma grid *(~1.5–2 h, single-threaded, idle machine)*
+
+The Gate B re-pin added 13 comma arms (9 operator + 4 zero-eval). `--suite comma` measures them and
+**merges** into the existing weights file — the pinned currency and all 54 plus-era profiles stay
+untouched, and the new cells are re-denominated into the file's reference unit. Then the floor probe
+re-runs on `Comma_On` (comma visits fresher targets, so the table fills under different dynamics).
+
+```bash
+nohup java -Xmx<N>g -cp "out:lib/*" core.data.exp.ComputeCalibrateV6 \
+      $DATA/stage1/_portfolio $DATA/stage1/_calibration \
+      3 auto 6 40000,80000,400000 --suite comma > $DATA/logs/Dprep_calibrate.log 2>&1 &
+```
+
+```bash
+java -Xmx<N>g $WF -cp "out:lib/*" core.data.exp.ActionBiasFloorProbe \
+     $DATA/stage1/_portfolio $DATA/stage1/_calibration 40000,80000,400000 20 W Comma_On
+```
+
+Verdict must read `PASS`, and afterwards the weights file must contain BOTH
+`compute.profile.AB_Baseline@40000.*` and `compute.profile.AB_Comma_e75@40000.*` lines — the
+notebook's D-prep cell asserts exactly that before anything else may run.
+
+## Stage D — biased insertion, on the comma substrate *(~6.3 h)*
+
+All 11 comma arms; `Comma_Off`/`Comma_On` skip at 80k (Stage B's leaves); the plus `Baseline` rides
+along at 40k/400k as the substrate-trend anchor.
 
 ```bash
 nohup java -Xmx<N>g $WF -Dstage1.machineFactor=1.5 -Dstage1.threads.400000=31 -cp "out:lib/*" \
       core.data.exp.Stage1Runner W $DATA/stage1 dev D > $DATA/logs/D.log 2>&1 &
+```
+
+```bash
+python analysis/analyze_stage1.py $DATA/stage1/dev --outdir $DATA/ab_results/D --baseline Comma_Off
 ```
 
 All 11 arms at 80k → 40k → 400k (8/8/6 visits). That order is the schedule, not a listing: leaves are
@@ -259,9 +290,14 @@ nohup java -Xmx<N>g $WF -Dstage1.threads.400000=31 -cp "out:lib/*" core.data.exp
       W $DATA/stage1 dev E <champion> > $DATA/logs/E.log 2>&1 &
 ```
 
-`<champion>` is Stage D's winner (default `Short5_e25`). If ε\* is materially different from 0.25,
-change `Stage1Runner.Z0_EPS` **and re-run the `ab` calibration suite** — the arms and their prices
-have to move together.
+`<champion>` is Stage D's winner (default `Comma_Short5_e25`; the runner refuses a plus arm —
+the substrate is pinned). If ε\* is materially different from 0.25, change `Stage1Runner.Z0_EPS`,
+**re-run the `comma` calibration suite** (it re-merges), and substitute the ε\* dose arm for
+`Comma_On` in Stage F's arm list — the arms and their prices have to move together.
+
+```bash
+python analysis/analyze_stage1.py $DATA/stage1/dev --outdir $DATA/ab_results/E --baseline Comma_Off
+```
 
 Check `RepairCandidateEvals` reads **0** for every `Z0_*` arm. That is a construction check, not a
 finding: a non-zero value means the mode is not engaged and the run is a bug.
@@ -279,7 +315,7 @@ nohup java -Xmx<N>g $WF -Dstage1.threads.400000=31 -cp "out:lib/*" core.data.exp
 ```
 
 ```bash
-python analysis/analyze_stage1.py $DATA/stage1/holdout --outdir $DATA/ab_results/F
+python analysis/analyze_stage1.py $DATA/stage1/holdout --outdir $DATA/ab_results/F --baseline Comma_Off
 ```
 
 > **Gate F.** A development effect that does not replicate here **is not a result**. Report both

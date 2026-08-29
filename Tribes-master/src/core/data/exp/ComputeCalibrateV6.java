@@ -252,9 +252,10 @@ public final class ComputeCalibrateV6 {
                                               : RunExperimentV6.DEFAULT_COMPUTE_LEVELS;
         String suite        = suiteArg;
         if (!suite.equals(SUITE_V6) && !suite.equals(SUITE_AB) && !suite.equals(SUITE_ALL)
-                && !suite.equals(SUITE_A3)) {
+                && !suite.equals(SUITE_A3) && !suite.equals(SUITE_COMMA)) {
             System.err.println("unknown suite '" + suite + "' - expected one of: "
-                    + SUITE_V6 + ", " + SUITE_AB + ", " + SUITE_ALL + ", " + SUITE_A3);
+                    + SUITE_V6 + ", " + SUITE_AB + ", " + SUITE_ALL + ", " + SUITE_A3
+                    + ", " + SUITE_COMMA);
             System.exit(2);
         }
 
@@ -620,7 +621,8 @@ public final class ComputeCalibrateV6 {
     }
 
     /** Suites of configurations this calibrator knows how to price. */
-    public static final String SUITE_V6 = "v6", SUITE_AB = "ab", SUITE_ALL = "all", SUITE_A3 = "a3";
+    public static final String SUITE_V6 = "v6", SUITE_AB = "ab", SUITE_ALL = "all", SUITE_A3 = "a3",
+            SUITE_COMMA = "comma";
 
     /**
      * The A3' subset: the reference plus the three most allocation-divergent action-bias arms.
@@ -652,7 +654,18 @@ public final class ComputeCalibrateV6 {
             for (int r : IsolationPhaseRunnerV6.RATIOS) out.add(new Cell("CrossoverExpansion", r, units));
             for (int r : IsolationPhaseRunnerV6.RATIOS) out.add(new Cell("CrossoverCombo", r, units));
         }
-        if (suite.equals(SUITE_AB) || suite.equals(SUITE_ALL)) {
+        if (suite.equals(SUITE_AB)) {
+            // The plus-era 17, frozen: this is what the pinned A2 weights were measured over, and a
+            // re-run of "ab" must reproduce that suite, not silently grow with the registry.
+            for (String arm : Stage1Runner.plusEraArmNames())
+                out.add(new Cell(ExpAgents.AB_PREFIX + arm, -1, units));
+        }
+        if (suite.equals(SUITE_COMMA)) {
+            // The comma grid added at the Gate B re-pin; merged into the existing weights file.
+            for (String arm : Stage1Runner.commaArmNames())
+                out.add(new Cell(ExpAgents.AB_PREFIX + arm, -1, units));
+        }
+        if (suite.equals(SUITE_ALL)) {
             for (String arm : Stage1Runner.armNames())
                 out.add(new Cell(ExpAgents.AB_PREFIX + arm, -1, units));
         }
@@ -866,6 +879,10 @@ public final class ComputeCalibrateV6 {
     // ------------------------------------------------------------------ output
 
     private static void writeWeights(File f, List<Cell> cells, Cell ref, int reps, int[] levels) {
+        if (f.exists()) {
+            mergeWeights(f, cells, ref);
+            return;
+        }
         StringBuilder sb = new StringBuilder();
         sb.append("# v6 ComputeMeter weights, measured on this machine, PER CONFIGURATION PER BUDGET LEVEL.\n");
         sb.append("# Loaded automatically by core.game.ComputeMeter. Delete this file to fall back to the\n");
@@ -900,6 +917,63 @@ public final class ComputeCalibrateV6 {
             sb.append(String.format(Locale.ROOT, "%sadvanceNanos=%.3f%n", p, c.tAdv));
         }
         RunGuard.atomicWrite(f, sb.toString());
+    }
+
+    /**
+     * Merges this run's cells into an existing weights file instead of clobbering it.
+     *
+     * <p>The existing file IS the operating currency: its header, its global weights and its
+     * {@code compute.referenceAdvanceNanos} stay exactly as they were, so profiles measured earlier
+     * keep their meaning. This run's cells are <b>re-denominated into the file's unit</b>: each
+     * weight is a ratio to this run's own reference advance, so multiplying by
+     * {@code thisRef / fileRef} expresses it against the file's reference instead — which cancels
+     * the run-to-run drift of the reference measurement itself (~2-3%) rather than baking it into
+     * every merged profile. A profile measured both then and now takes the new values (delete-the-
+     * lines-and-re-run semantics for a deliberate subset recalibration).
+     */
+    private static void mergeWeights(File f, List<Cell> cells, Cell ref) {
+        java.util.List<String> kept = new java.util.ArrayList<>();
+        double fileRef = Double.NaN;
+        java.util.Set<String> replacing = new java.util.HashSet<>();
+        for (Cell c : cells) replacing.add("compute.profile." + c.profile + ".");
+        try {
+            for (String line : java.nio.file.Files.readAllLines(f.toPath(),
+                    java.nio.charset.StandardCharsets.UTF_8)) {
+                String t = line.trim();
+                if (t.startsWith("compute.referenceAdvanceNanos="))
+                    fileRef = Double.parseDouble(t.substring(t.indexOf('=') + 1).trim());
+                boolean replaced = false;
+                for (String p : replacing) if (t.startsWith(p)) { replaced = true; break; }
+                if (!replaced) kept.add(line);
+            }
+        } catch (java.io.IOException e) {
+            throw new RuntimeException("cannot read existing weights file " + f + " for merge", e);
+        }
+        double scale = 1.0;
+        if (fileRef > 0 && ref.tAdv > 0) {
+            scale = ref.tAdv / fileRef;
+        } else {
+            System.out.println("  [merge] WARNING: existing file has no compute.referenceAdvanceNanos; "
+                    + "merged profiles keep this run's own denomination (uncorrected reference drift).");
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String line : kept) sb.append(line).append('\n');
+        sb.append('\n').append("# merged ").append(new java.util.Date()).append(": ")
+          .append(cells.size()).append(" profile(s) from a ").append(ref.profile)
+          .append("-anchored run, re-denominated x")
+          .append(String.format(Locale.ROOT, "%.4f", scale))
+          .append(" into this file's reference unit\n");
+        for (Cell c : cells) {
+            String p = "compute.profile." + c.profile + ".";
+            sb.append(String.format(Locale.ROOT, "%swAdvance=%.6f%n", p, c.wAdvance * scale));
+            sb.append(String.format(Locale.ROOT, "%swCopy=%.6f%n", p, c.wCopy * scale));
+            sb.append(String.format(Locale.ROOT, "%swEval=%.6f%n", p, c.wEval * scale));
+            sb.append(String.format(Locale.ROOT, "%sadvanceNanos=%.3f%n", p, c.tAdv));
+        }
+        RunGuard.atomicWrite(f, sb.toString());
+        System.out.println("  [merge] kept the existing currency and " + "appended/replaced "
+                + cells.size() + " profile(s) in " + f.getPath()
+                + String.format(Locale.ROOT, " (re-denominated x%.4f)", scale));
     }
 
     /**

@@ -420,6 +420,32 @@ skips them on resume, so the work is still done exactly once.
 6,400 turns ≈ 0.34 h, via `Stage1Runner.stageB()`. The arms exist and are verified; there is no
 outstanding dependency.
 
+> **Gate B — resolved 2026-08-29 (measured: 200 dev scenarios × 8 visits at 80k, 11m51s at 54
+> workers, zero throttling).**
+>
+> | Contrast | Effect [95% CI] | single-source | dual-source |
+> |---|---|---|---|
+> | Substrate, bias off (`Comma_Off − Baseline`) | **+22.3 [+9.8, +34.8]** | +19.6 [+3.4, +36.4] | +25.0 [+5.8, +43.9] |
+> | Bias on plus (`Bias_e25 − Baseline`) | +6.1 [−8.9, +20.3] | +23.9 [+2.6, +44.9] | −11.6 [−30.9, +8.1] |
+> | Bias on comma (`Comma_On − Comma_Off`) | +21.4 [≈0, +42] | **+53.4 [+30.4, +77.8]** | −10.5 [−45.8, +22.0] |
+> | Interaction | +15.3 [−1.3, +32.0] | +29.5 [+7.9, +53.2] | +1.1 [−23.7, +25.5] |
+>
+> **Comma k=5 is re-pinned as the substrate and the baseline for D–G** — the pre-registered
+> response, and it is uniform: significant on both sources separately and terminal-excluded
+> (+23.6). Two things the factorial adds beyond the pin: the bias effect is **source-dependent**
+> (strong on single-source scenarios, absent-to-negative on dual, on *both* substrates — a
+> mechanism boundary, now a pre-registered per-source read-out in every later stage), and
+> bias-on-comma sits right at the significance boundary overall, which Stage D's five-point dose
+> curve exists to settle. ICC 0.015–0.17 (median 0.06): **visit counts stay 8/8/6**. Diversity: no
+> collapse — `Comma_On` unique sequences −2.5% vs `Comma_Off` (the laptop pilot's collapse does not
+> reproduce at ε=0.25, 80k, 200 clusters).
+>
+> Operationally: Stages D–F run the comma grid (`Comma_*` arms; `Stage1Runner` refuses a plus
+> champion), the 13 new arms are priced by `--suite comma` which merges into the pinned weights
+> file re-denominated into its reference unit, the floor probe re-runs on `Comma_On`, and every
+> D–F analysis passes `--baseline Comma_Off`. The plus `Baseline` rides along at 40k/400k only
+> (~2,800 turns) as the substrate-trend anchor — no operator is measured on plus.
+
 **k = 5 for comma is not a free parameter.** Comma at k = 1 is not comma: with one child, "adopt the
 best of the generation unconditionally" is a neutral random walk, and `SelectionStructureCheck`
 asserts exactly that by showing it byte-identical to DRIFT. Comma needs offspring to select among
@@ -534,9 +560,24 @@ excluding zero, per (budget × granularity).
 
 ---
 
-### Stage D — Does biased insertion improve the search? *(~5.3 h, closed loop)*
+> **Gate C — resolved 2026-08-29: SIGNAL in all nine (budget × granularity) cells.** Temporal ρ
+> 0.55–0.80 against a 0.15 bar, ordered Coarse ≈ Mid > Fine at every budget; top-tercile uplift
+> +0.26 to +0.40 z. The premise holds everywhere, at every budget. R9 at scale: P(improve) decays
+> ~10–15× from target age 0 to 64+, and the event mass sits where nothing pays — **65% of all
+> mutation events at 80k (91% at 400k) hit targets aged 64+**, where P(improve) ≈ 0.000 and 88% of
+> children are duplicates. That is the mechanism behind Gate B: plus grinds a stale incumbent,
+> comma keeps the target fresh. R10 re-measured: overall duplicate rate 64% / 75% / 84% at
+> 40k / 80k / 400k — the search saturates with budget, which caps what any insertion policy can
+> add at 400k and is itself a finding for the write-up.
 
-The core result. **Development set only.** Runs on the existing 11 arms with no new agent code.
+### Stage D — Does biased insertion improve the search? *(~6.3 h, closed loop, on the comma substrate)*
+
+The core result. **Development set only.** The Gate B re-pin re-based the grid: the same 11-arm
+design, every arm now `COMMA k=5` (`Comma_Off` is the baseline; `Comma_On` is the ε=0.25 dose
+point, both already checkpointed at 80k from Stage B). The plus `Baseline` joins the 40k and 400k
+levels only, as the substrate-trend anchor. 13 new arms (9 here + 4 for Stage E) are priced by
+`ComputeCalibrateV6 --suite comma` (~1.5–2 h idle), which merges into the pinned weights file;
+the floor probe re-runs on `Comma_On` before D starts.
 
 | Order | Level | Arms | Visits | Turns | Hours |
 |---|---|---|---|---|---|
@@ -552,8 +593,10 @@ Running the **full arm set at 400k**, rather than the three the laptop plan coul
 "is the effect real?" into "does the effect grow or shrink with search budget?" — i.e. whether the bias
 is a small-budget crutch. That question is worth 3.9 h.
 
-**Arms.** `Baseline` (ε = 1.00); `Bias_e{75,50,25,10}`; `Coarse_e25`; `NoRemoval_e25`; `PerBurn_e25`;
-`Shortlist15` (the repair change alone); `Short15_e25`; `Short5_e25`.
+**Arms** (all comma k=5). `Comma_Off` (ε = 1.00, the baseline); `Comma_e75`/`Comma_e50`/
+`Comma_On`(=ε0.25)/`Comma_e10`; `Comma_Coarse_e25`; `Comma_NoRem_e25`; `Comma_PerBurn_e25`;
+`Comma_Short15` (the repair change alone); `Comma_Short15_e25`; `Comma_Short5_e25`. Plus
+`Baseline` at 40k/400k as the substrate anchor.
 
 *The one-line change this paragraph used to ask for — `Stage1Runner.CORE` from `Short15_e25` to
 `Short5_e25` — is done (work item 7); K = 5 was the champion, K = 15 was not.*
@@ -597,12 +640,15 @@ is that the two decisions want different granularities.
 
 | Arm | Insertion table | Repair |
 |---|---|---|
-| `Baseline` | ε = 1.00 | FULL greedy |
+| `Comma_Off` | ε = 1.00 | FULL greedy |
 | `D_champion` | Stage D's winner, carried over unchanged as the cross-stage anchor | |
-| `Z0_Coarse` | ε\*, Coarse | ZERO-EVAL, Coarse keys |
-| `Z0_Mid` | ε\*, Coarse | ZERO-EVAL, Mid keys |
-| `Z0_Fine` | ε\*, Coarse | ZERO-EVAL, Fine keys |
-| `Z0_Fine_InsFine` | ε\*, **Fine** | ZERO-EVAL, Fine keys |
+| `Comma_Z0_Coarse` | ε\*, Coarse | ZERO-EVAL, Coarse keys |
+| `Comma_Z0_Mid` | ε\*, Coarse | ZERO-EVAL, Mid keys |
+| `Comma_Z0_Fine` | ε\*, Coarse | ZERO-EVAL, Fine keys |
+| `Comma_Z0_Fine_InsFine` | ε\*, **Fine** | ZERO-EVAL, Fine keys |
+
+*(All comma k=5 since the Gate B re-pin. E1 is quoted with its W7 verdict attached — A3′ measured
+idle pricing subsidizing exactly the zero-eval family by ~24% under load.)*
 
 80k × 8 visits = 9,600 turns (0.51 h); 400k × 6 visits = 7,200 turns (2.12 h).
 
@@ -661,11 +707,11 @@ writing before this starts. The arms are the minimum set that carries every clai
 
 | Arm | Carries |
 |---|---|
-| `Baseline` | the control |
-| `Bias_e*` (bias only, ε\*) | the insertion mechanism alone |
+| `Comma_Off` | the control (the pinned substrate's baseline) |
+| `Comma_On` (bias only; substitute the ε\* dose arm if Gate D moves off 0.25) | the insertion mechanism alone |
 | `D_champion` | Stage D's headline |
-| `Z0_best` | Stage E's headline, at zero repair evaluations |
-| `Z0_Fine_InsFine` | the D2 falsification (E2·2) |
+| `Comma_Z0_Fine` (or E's winner) | Stage E's headline, at zero repair evaluations |
+| `Comma_Z0_Fine_InsFine` | the D2 falsification (E2·2) |
 
 Holdout set (200 scenarios): 80k × 8 visits = 8,000 turns (0.43 h); 400k × 6 visits = 6,000 turns
 (1.77 h).
@@ -745,11 +791,12 @@ At the modelled `W = 48`. **Re-derive from Stage B's first measured `PlanMillis`
 | A — machine, currency, gates, portfolio | calibration only | 5.6 |
 | B — selection substrate + variance probe | 6,400 turns | 0.4 |
 | C — signal | 144 logged games | 0.7 |
-| D — biased insertion, full ladder × 11 arms | 48,400 turns | 5.3 |
-| E — table-directed repair | 16,800 turns | 2.6 |
+| D-prep — comma-grid calibration (42 cells) + floor probe | calibration only | ~1.8 |
+| D — comma grid × 11 arms + plus anchor at 40k/400k | 48,000 turns | 6.3 |
+| E — table-directed repair (4 new arms; baseline + champion reused) | 11,200 turns | 2.1 |
 | F — holdout confirmation | 14,000 turns | 2.2 |
 | G — the yardstick | 3,900 games | 5.4 |
-| **Total** | | **≈ 22.2 h** |
+| **Total** | | **≈ 24.3 h** (post re-pin) |
 
 Against a ~50 h window that is a safety factor of 2.5×, which is the right size given that the last model
 of this workload was wrong by 1.66× in the expensive direction. If it is wrong by that much again, the
@@ -816,9 +863,9 @@ needed from Phase C is written fresh — which is why Stage E extends `Stage1Par
 | Risk | Signal that it is happening | Pre-registered response |
 |---|---|---|
 | Idle-calibrated weights mis-price the arms under load | A3′ ratios move > 10% | **Fired 2026-08-29** (`Z0_Fine` +24%). Amended: idle stays the currency, W7 co-primary everywhere — see the Gate A3′ resolution |
-| The pinned substrate is the weaker one | Stage B main effect favours comma | Re-pin to comma; it is the baseline as well as the substrate, so nothing else runs on plus |
+| The pinned substrate is the weaker one | Stage B main effect favours comma | **Fired 2026-08-29** (+22.3 [+9.8, +34.8]). Re-pinned: comma is substrate and baseline; D–F re-based (see Gate B resolution) |
 | The bias effect vanishes on a corrected tree | Stage D W1 CIs span 0 | Stop at D. Report the negative with its mechanism: amplification needed the chain |
-| The bias is selection-dependent | Stage B interaction CI excludes 0 | Name the substrate in every claim; do not merge with v6 numbers |
+| The bias is selection-dependent | Stage B interaction CI excludes 0 | Interaction +15.3 [−1.3, +32.0] overall (+29.5 SIG single-source): not established overall, but the bias is **source-dependent** on both substrates — per-source CIs now ride in every headline table |
 | Winner's curse inflates the headline | Holdout effect ≪ development effect | Already handled — the holdout *is* the headline (Stage F). Report both |
 | Diversity collapse at low ε | W4 duplicate rate ≫ Baseline while W1 flattens | The ε extension is gated on monotonicity |
 | D2 contrast still underpowered | E2(2) CI spans 0 at 200 clusters | Pool development + holdout for that contrast **only after** Stage F is read, and label it post-hoc |

@@ -67,6 +67,15 @@ public final class ActionBiasFloorProbe {
     public static final int DEFAULT_SCENARIOS = 10;
     public static final String CSV_NAME = "action_bias_floor.csv";
 
+    /** The biased arm being probed; set in {@link #main} (default {@code Bias_e25}). */
+    private static Stage1Runner.Config arm;
+
+    /** The default arm keeps the historical file name; any other arm gets its own file. */
+    private static String csvName() {
+        return arm.name.equals(Stage1Runner.BIAS_E25.name)
+                ? CSV_NAME : "action_bias_floor_" + arm.name + ".csv";
+    }
+
     private static final class Row {
         final int budget;
         int turns;
@@ -85,6 +94,12 @@ public final class ActionBiasFloorProbe {
         int numScenarios    = args.length > 3 ? Integer.parseInt(args[3].trim()) : DEFAULT_SCENARIOS;
         int threads         = args.length > 4 ? Integer.parseInt(args[4].trim())
                                               : Math.max(1, ServerProfile.get().maxWorkers());
+        // Optional 6th arg: which biased arm to probe. The question is per-substrate — comma visits
+        // fresher targets, so its table fills differently — hence Comma_On after the Gate B re-pin.
+        arm = Stage1Runner.armByName(args.length > 5 ? args[5].trim() : Stage1Runner.BIAS_E25.name);
+        if (arm.eps >= 1.0)
+            throw new IllegalArgumentException("arm '" + arm.name + "' has eps=" + arm.eps
+                    + " - an unbiased arm never CHOOSES a key, so it has no floor to probe");
 
         Stage1Runner.applyEngineConstants();
         Constants.TURN_TIME_LIMITED = false;
@@ -97,7 +112,7 @@ public final class ActionBiasFloorProbe {
         int n = Math.min(numScenarios, portfolio.size());
 
         System.out.println("############################################################");
-        System.out.println("# ACTION-BIAS FLOOR PROBE   arm=" + Stage1Runner.BIAS_E25.name
+        System.out.println("# ACTION-BIAS FLOOR PROBE   arm=" + arm.name
                 + "  scenarios=" + n + "  threads=" + threads);
         System.out.println("# Does the bias have evidence to act on, or is it Baseline with bookkeeping?");
         System.out.println("# Criterion: >= " + CRITERION_PCT + "% of biased insertions from burn "
@@ -153,7 +168,7 @@ public final class ActionBiasFloorProbe {
                     r.pass() ? "PASS" : "FAIL"));
         }
         ExpCsv.ensureDir(new File(outDir));
-        File out = new File(outDir, CSV_NAME);
+        File out = new File(outDir, csvName());
         RunGuard.atomicWrite(out, csv.toString());
 
         System.out.println("\n=== VERDICT ===");
@@ -181,8 +196,7 @@ public final class ActionBiasFloorProbe {
     private static Stage1BiasedAgent planOneTurn(Scenario sc, int budget) {
         try {
             long seed = IsolationPhaseRunnerV6.visitSeed(sc.id, 0);
-            Stage1BiasedAgent agent =
-                    (Stage1BiasedAgent) Stage1Runner.BIAS_E25.create(seed, budget);
+            Stage1BiasedAgent agent = (Stage1BiasedAgent) arm.create(seed, budget);
             GameState gs = sc.state.copy();
             gs.setRandomGenerator(new java.util.Random(seed));
             ArrayList<Integer> ids = new ArrayList<>();
