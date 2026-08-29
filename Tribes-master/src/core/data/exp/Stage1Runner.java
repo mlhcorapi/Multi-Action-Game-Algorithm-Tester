@@ -268,7 +268,22 @@ public final class Stage1Runner {
      * better everywhere".
      */
     static List<Config> stageE(Config dChampion) {
-        return List.of(BASELINE, dChampion, Z0_COARSE, Z0_MID, Z0_FINE, Z0_INS_FINE);
+        return List.of(COMMA_OFF, dChampion, CZ0_COARSE, CZ0_MID, CZ0_FINE, CZ0_INS_FINE);
+    }
+
+    /**
+     * E and F run entirely on the pinned substrate, so a plus-era champion name here is almost
+     * certainly the placeholder that never got updated after Gate D — running it would silently put
+     * a plus arm inside an all-comma grid and every paired contrast against it would cross
+     * substrates.
+     */
+    private static Config requireCommaChampion(String champion) {
+        Config c = armByName(champion);
+        if (c.selectionMode != SelectionMode.COMMA)
+            throw new IllegalArgumentException("champion '" + champion + "' is a " + c.selectionMode
+                    + " arm, but the substrate was pinned to COMMA at Gate B (2026-08-29). "
+                    + "Pass Stage D's comma champion, e.g. Comma_Short5_e25.");
+        return c;
     }
 
     // ------------------------------------------------------------------ Stage B: the substrate
@@ -290,6 +305,40 @@ public final class Stage1Runner {
      */
     static final Config COMMA_OFF = BASELINE.onSelection("Comma_Off", SelectionMode.COMMA, 5);
     static final Config COMMA_ON  = BIAS_E25.onSelection("Comma_On",  SelectionMode.COMMA, 5);
+
+    // ------------------------------------------------------------------ the comma grid (Gate B re-pin)
+    //
+    // Stage B (2026-08-29, R7615, 200 dev scenarios x 8 visits at 80k) pinned the substrate to
+    // COMMA k=5: Comma_Off - Baseline = +22.3 [+9.8, +34.8], significant on both scenario sources
+    // separately and terminal-excluded, while bias-on-plus was +6.1 [-8.9, +20.3]. Per the
+    // pre-registered response, comma is now the substrate AND the baseline, so Stage D's operator
+    // grid and Stage E's repair grid are re-based here. Comma_On is the eps=0.25 point of the dose
+    // curve (it IS Bias_e25-on-comma); it keeps its Stage B name so its checkpointed 80k leaf and
+    // its calibrated profile stay valid.
+    static final Config COMMA_E75     = BIAS_E75.onSelection("Comma_e75", SelectionMode.COMMA, 5);
+    static final Config COMMA_E50     = BIAS_E50.onSelection("Comma_e50", SelectionMode.COMMA, 5);
+    static final Config COMMA_E10     = BIAS_E10.onSelection("Comma_e10", SelectionMode.COMMA, 5);
+    static final Config COMMA_COARSE  = COARSE_E25.onSelection("Comma_Coarse_e25", SelectionMode.COMMA, 5);
+    static final Config COMMA_NOREM   = NOREM_E25.onSelection("Comma_NoRem_e25", SelectionMode.COMMA, 5);
+    static final Config COMMA_PERBURN = PERBURN_E25.onSelection("Comma_PerBurn_e25", SelectionMode.COMMA, 5);
+    static final Config COMMA_SHORT15 = SHORT15.onSelection("Comma_Short15", SelectionMode.COMMA, 5);
+    static final Config COMMA_SHORT15_E25 = SHORT15_E25.onSelection("Comma_Short15_e25", SelectionMode.COMMA, 5);
+    static final Config COMMA_SHORT5_E25  = SHORT5_E25.onSelection("Comma_Short5_e25", SelectionMode.COMMA, 5);
+
+    /** Stage E's zero-eval repair arms, on the pinned substrate. */
+    static final Config CZ0_COARSE   = Z0_COARSE.onSelection("Comma_Z0_Coarse", SelectionMode.COMMA, 5);
+    static final Config CZ0_MID      = Z0_MID.onSelection("Comma_Z0_Mid", SelectionMode.COMMA, 5);
+    static final Config CZ0_FINE     = Z0_FINE.onSelection("Comma_Z0_Fine", SelectionMode.COMMA, 5);
+    static final Config CZ0_INS_FINE = Z0_INS_FINE.onSelection("Comma_Z0_Fine_InsFine", SelectionMode.COMMA, 5);
+
+    /** Stage D on the comma substrate: the 11-arm operator grid, Comma_Off as its baseline. */
+    static final List<Config> COMMA_GRID = List.of(COMMA_OFF, COMMA_E75, COMMA_E50, COMMA_ON,
+            COMMA_E10, COMMA_COARSE, COMMA_NOREM, COMMA_PERBURN, COMMA_SHORT15, COMMA_SHORT15_E25,
+            COMMA_SHORT5_E25);
+
+    static final List<Config> COMMA_ARMS = List.of(COMMA_E75, COMMA_E50, COMMA_E10, COMMA_COARSE,
+            COMMA_NOREM, COMMA_PERBURN, COMMA_SHORT15, COMMA_SHORT15_E25, COMMA_SHORT5_E25,
+            CZ0_COARSE, CZ0_MID, CZ0_FINE, CZ0_INS_FINE);
 
     /**
      * Stage B's 2 x 2 — but only TWO of its cells are new arms.
@@ -323,11 +372,31 @@ public final class Stage1Runner {
             Z0_COARSE, Z0_MID, Z0_FINE, Z0_INS_FINE),
             STAGE_B_ARMS = stageBNewArms();
 
-    static final List<Config> ALL_ARMS = concat(CORE_ARMS, STAGE_B_ARMS);
+    static final List<Config> ALL_ARMS = concat(concat(CORE_ARMS, STAGE_B_ARMS), COMMA_ARMS);
 
     private static List<Config> concat(List<Config> a, List<Config> b) {
         List<Config> out = new ArrayList<>(a);
         out.addAll(b);
+        return out;
+    }
+
+    /**
+     * The 17 arms of the original (plus-era) {@code ab} calibration suite, frozen. The A2 weights on
+     * the server were measured over exactly these plus the reference, and re-defining what
+     * {@code --suite ab} enumerates would silently change what a re-run produces. The comma-grid
+     * arms added at the Gate B re-pin are priced by their own {@code --suite comma} run, which
+     * merges into the same weights file.
+     */
+    public static List<String> plusEraArmNames() {
+        List<String> out = new ArrayList<>();
+        for (Config c : concat(CORE_ARMS, STAGE_B_ARMS)) out.add(c.name);
+        return out;
+    }
+
+    /** The comma-substrate arms added at the Gate B re-pin — {@code --suite comma}'s cell list. */
+    public static List<String> commaArmNames() {
+        List<String> out = new ArrayList<>();
+        for (Config c : COMMA_ARMS) out.add(c.name);
         return out;
     }
 
@@ -375,10 +444,15 @@ public final class Stage1Runner {
      * headline and its budget trend.
      */
     static List<Level> schedule() {
+        // The comma grid (Gate B re-pin). Comma_Off and Comma_On skip at 80k on resume — Stage B
+        // already ran them under these checkpoint keys. The plus BASELINE rides along at 40k and
+        // 400k only, as the substrate-trend anchor: with its Stage B 80k leaf that gives
+        // (Comma_Off - Baseline) at all three budgets for ~2,800 turns, without measuring any
+        // OPERATOR on plus. Analyse with --baseline Comma_Off.
         return List.of(
-                new Level(80_000, 8, ALL),     // main grid
-                new Level(40_000, 8, ALL),     // budget trend — cheap, so it runs before 400k
-                new Level(400_000, 6, ALL));   // budget dependence / confirmation
+                new Level(80_000, 8, COMMA_GRID),                       // main grid
+                new Level(40_000, 8, concat(COMMA_GRID, List.of(BASELINE))),  // trend — cheap
+                new Level(400_000, 6, concat(COMMA_GRID, List.of(BASELINE)))); // budget dependence
     }
 
     // ------------------------------------------------------------------ main
@@ -400,7 +474,7 @@ public final class Stage1Runner {
             return;
         }
         String stage = args.length > 3 ? args[3].trim().toUpperCase(Locale.ROOT) : "D";
-        String champion = args.length > 4 ? args[4].trim() : SHORT5_E25.name;
+        String champion = args.length > 4 ? args[4].trim() : COMMA_SHORT5_E25.name;
         List<Level> sched;
         try {
             sched = scheduleFor(stage, champion);
@@ -437,12 +511,16 @@ public final class Stage1Runner {
                 // same checkpoint keys Stage D would, so Stage D skips them on resume.
                 return List.of(new Level(80_000, 8, stageB()));
             case "E": {
-                List<Config> arms = stageE(armByName(champion));
+                List<Config> arms = stageE(requireCommaChampion(champion));
                 return List.of(new Level(80_000, 8, arms), new Level(400_000, 6, arms));
             }
             case "F": {
-                // Holdout confirmation: the minimum set that carries every claim, run once.
-                List<Config> arms = List.of(BASELINE, BIAS_E25, armByName(champion), Z0_FINE, Z0_INS_FINE);
+                // Holdout confirmation: the minimum set that carries every claim, run once, all on
+                // the pinned substrate. Comma_On stands in for "bias only at eps*" exactly as
+                // BIAS_E25 did before the re-pin — if Gate D picks a materially different eps*,
+                // substitute that dose arm here before F runs.
+                List<Config> arms = List.of(COMMA_OFF, COMMA_ON, requireCommaChampion(champion),
+                        CZ0_FINE, CZ0_INS_FINE);
                 return List.of(new Level(80_000, 8, arms), new Level(400_000, 6, arms));
             }
             default:
