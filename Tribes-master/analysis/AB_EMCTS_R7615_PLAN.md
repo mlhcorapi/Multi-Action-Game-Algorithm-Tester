@@ -753,7 +753,56 @@ survive the hardware change.
 
 ---
 
-### Stage F — Holdout confirmation *(~2.2 h)*
+> **Gate E — resolved 2026-08-30** (16,800 turns, 1 h 11 m). **The champion changed and so did the
+> mechanism.**
+>
+> **`Comma_Z0_Coarse`** — zero-evaluation repair by coarse Q-argmax, no insertion bias — is
+> **+268.1 [+228.6, +309.7]** vs `Comma_Off` at 80k and +284.8 at 400k: significant on both scenario
+> sources, terminal-robust (+264.4), **+250.4 in wall-clock** (W7, 23% clamped — a genuine test),
+> and it beats `Comma_Off` given **5× the budget** (+39.3 [+10.3, +70.2]). `RepairCandidateEvals`
+> reads exactly 0.0. It is +149.2 clear of Stage D's champion.
+>
+> **E1 — the attribution control decided the thesis's central question, and it cuts both ways.**
+>
+> | Contrast (80k) | Effect | Reading |
+> |---|---|---|
+> | `Comma_Rand15 − Comma_Off` | **+139.8 [+112.0, +168.4]** | cheap repair alone, with **no table involved** — larger than Stage D's champion |
+> | `Comma_Short15 − Comma_Rand15` | **−20.9 [−43.1, −0.2]**, ns terminal-excluded | Q-ranking adds **nothing** to a shortlist, and may cost a little |
+> | `Comma_Z0_Coarse − Comma_Z0_Random` | **+244.2 [+205.6, +285.7]** | the table is worth a great deal when it decides **alone** |
+>
+> So Stage D's champion was mostly a cheap-repair effect — `Comma_Rand15`, which never reads the
+> table, beats it. But the Qδ table is emphatically *not* inert: it pays where it is the **sole**
+> decision-maker. Pre-filter candidates that are evaluated anyway and the heuristic dominates the
+> prior; commit with no evaluation at all and a well-estimated coarse prior is worth +244.
+>
+> **E2 — D2 is falsified as stated, and replaced by something simpler.** Repair granularity orders
+> **Coarse > Mid > Fine** (`Z0_Fine − Z0_Mid = −121.7`, `Z0_Mid − Z0_Coarse = −99.1`; monotone at
+> both budgets) — the *opposite* of prediction (1). Insertion granularity also orders Coarse > Mid >
+> Fine (+45.3 then +57.2 at 80k; +50.3 then +87.4 at 400k), confirming prediction (2), and
+> `Comma_Fine_e25` is outright harmful (−35.8 / −92.3) with the worst duplicate share of any arm
+> (0.322). **Both decisions want Coarse**, so "granularity tracks whether the decision is corrected
+> downstream" does not survive contact with the data.
+>
+> The surviving explanation is **statistical support, not decision structure**: coarse keys
+> accumulate enough observations to be estimated, fine keys stay sparse and tie at the prior, so a
+> fine table degenerates toward random tie-breaking. The evidence is in the ladder itself —
+> `Z0_Fine` (+47.4) sits nearer `Z0_Random` (+23.9) than `Z0_Coarse` (+268.1). This is a better
+> claim than D2 was: it is mechanistic, it predicts the ordering on both decisions with one
+> sentence, and `ActionBiasFloorProbe` already measures the quantity it rests on (distinct keys and
+> observations per key). **Report D2 as tested and refuted, with this as the replacement.**
+>
+> **Mechanism.** `Z0_Coarse` reaches 1,458 nodes and 1,332 unique sequences per turn against
+> `Comma_Off`'s 475 / 428 — **3.1×** the search at an unchanged duplicate share (0.072 vs 0.063),
+> because zero-eval repair returns the whole ~69% repair budget to the search.
+>
+> **One arm before the holdout.** `Comma_Short15` inherits `repairKeys = MID`, and this stage
+> measured Coarse ≫ Mid for exactly that decision — so "ranking does not help the shortlist" was
+> tested at a granularity now known to be wrong, and cannot be separated from "MID keys rank
+> badly". `Comma_Short15_Coarse` settles it in ~12 min on development, and Stage F waits for it.
+
+---
+
+### Stage F — Holdout confirmation *(~1.5 h)*
 
 **The headline numbers come from here, and this stage runs exactly once.**
 
@@ -763,13 +812,14 @@ writing before this starts. The arms are the minimum set that carries every clai
 | Arm | Carries |
 |---|---|
 | `Comma_Off` | the control (the pinned substrate's baseline) |
-| `Comma_On` (bias only; substitute the ε\* dose arm if Gate D moves off 0.25) | the insertion mechanism alone |
-| `D_champion` | Stage D's headline |
-| `Comma_Z0_Fine` (or E's winner) | Stage E's headline, at zero repair evaluations |
-| `Comma_Z0_Fine_InsFine` | the D2 falsification (E2·2) |
+| **`Comma_Z0_Coarse`** | **the headline** — zero-eval coarse Q-argmax repair |
+| **`Comma_Z0_Random`** | **attributes it**: the same arm with the table removed. Without this the holdout replicates a number whose cause is unproven |
+| `Comma_Z0_Mid`, `Comma_Z0_Fine` | the granularity ordering — it needs all three points to *be* an ordering |
+| `Comma_Rand15` | how much of the win needs no table at all |
+| `Comma_Short15` | Stage D's champion; the cross-stage anchor |
 
-Holdout set (200 scenarios): 80k × 8 visits = 8,000 turns (0.43 h); 400k × 6 visits = 6,000 turns
-(1.77 h).
+Holdout set (200 scenarios), 7 arms: 80k × 8 visits = 11,200 turns; 400k × 6 visits = 8,400 turns.
+Stage E ran 16,800 turns in 1 h 11 m, so budget ≈ 1.5 h.
 
 > **Gate F.** A development-set effect that does not replicate on the holdout is **not a result**. Report
 > both numbers side by side, always. If the champion's holdout CI includes 0, the honest headline is the
