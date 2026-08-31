@@ -260,11 +260,30 @@ public final class ComputeCalibrateV6 {
         // "auto" keeps the suite's own default while still allowing the later positionals (warmup,
         // levels) to be given — otherwise choosing a level would force you to restate the turn counts.
         String turnsArg     = args.length > 3 ? args[3].trim() : "auto";
-        int[] turnsPerRep   = GameLengthProbeV6.parseInts(
-                                    turnsArg.isEmpty() || turnsArg.equalsIgnoreCase("auto")
-                                    ? (suiteArg.equals(SUITE_V6) ? DEFAULT_TURNS_PER_REP
-                                                                 : AB_TURNS_PER_REP)
-                                    : turnsArg);
+        // Turns-per-rep is not just a sample size: it selects WHICH positions each level measures
+        // (see scenarioFor). Two calibrations that disagree about it are measuring different
+        // material, and every ratio between them is meaningless — which is exactly how a currency
+        // check once reported 55% "drift" on a machine that had not moved at all.
+        //
+        // So when the turns are not stated, take them from the weights file being extended, and only
+        // fall back to a suite default when there is no file to agree with.
+        String turnsSpec, turnsWhy;
+        if (!(turnsArg.isEmpty() || turnsArg.equalsIgnoreCase("auto"))) {
+            turnsSpec = turnsArg; turnsWhy = "given on the command line";
+        } else {
+            String stored = storedTurnsPerRep(new File(outDir, WEIGHTS_FILE));
+            if (stored != null) {
+                turnsSpec = stored; turnsWhy = "recorded in " + WEIGHTS_FILE + " - matching how the "
+                        + "profiles already there were measured";
+            } else if (!explicitArms.isEmpty() || !suiteArg.equals(SUITE_V6)) {
+                turnsSpec = AB_TURNS_PER_REP; turnsWhy = "action-bias default";
+            } else {
+                turnsSpec = DEFAULT_TURNS_PER_REP; turnsWhy = "v6 default";
+            }
+        }
+        int[] turnsPerRep   = GameLengthProbeV6.parseInts(turnsSpec);
+        turnsPerRepSpec     = turnsSpec;
+        System.out.println("# turns/rep per level: " + turnsSpec + "  (" + turnsWhy + ")");
         int warmup          = args.length > 4 ? Integer.parseInt(args[4].trim()) : DEFAULT_WARMUP;
         int[] levels        = args.length > 5 ? GameLengthProbeV6.parseInts(args[5])
                                               : RunExperimentV6.DEFAULT_COMPUTE_LEVELS;
@@ -684,6 +703,31 @@ public final class ComputeCalibrateV6 {
     /** {@code --checkArms}: measure and compare against the stored profiles, writing nothing. */
     private static boolean checkOnly = false;
 
+    /** Property recording the turns-per-rep a weights file was measured with. */
+    private static final String TURNS_KEY = "compute.turnsPerRep";
+
+    /** The turns-per-rep spec in force, as written into the weights file. Set in {@link #main}. */
+    private static String turnsPerRepSpec = DEFAULT_TURNS_PER_REP;
+
+    /**
+     * The turns-per-rep an existing weights file was measured with, or null.
+     *
+     * <p>This is what makes a later incremental pricing or currency check comparable with what is
+     * already in the file: turns-per-rep chooses the positions, so reproducing it is the difference
+     * between measuring the same thing again and measuring something else.
+     */
+    private static String storedTurnsPerRep(File weightsFile) {
+        if (!weightsFile.isFile()) return null;
+        java.util.Properties p = new java.util.Properties();
+        try (java.io.InputStream in = new java.io.FileInputStream(weightsFile)) {
+            p.load(in);
+        } catch (java.io.IOException e) {
+            return null;
+        }
+        String v = p.getProperty(TURNS_KEY);
+        return v == null || v.trim().isEmpty() ? null : v.trim();
+    }
+
     /**
      * Re-measures arms that are <b>already priced</b> and reports how far this machine has moved
      * from the currency in the weights file. Writes nothing.
@@ -711,6 +755,16 @@ public final class ComputeCalibrateV6 {
             p.load(in);
         } catch (java.io.IOException e) {
             System.out.println("  cannot read " + weightsFile.getPath() + ": " + e);
+            return;
+        }
+        String storedTurns = p.getProperty(TURNS_KEY);
+        System.out.println("  turns/rep now: " + turnsPerRepSpec + "   recorded in the file: "
+                + (storedTurns == null ? "(not recorded - written before this was tracked)"
+                                       : storedTurns.trim()));
+        if (storedTurns != null && !storedTurns.trim().equals(turnsPerRepSpec)) {
+            System.out.println("  ABORT-WORTHY: these differ, so the two runs measured DIFFERENT");
+            System.out.println("  positions and every number below is a comparison of unlike things.");
+            System.out.println("  Re-run without overriding the turns.");
             return;
         }
         double fileRef = Double.parseDouble(
@@ -1031,6 +1085,9 @@ public final class ComputeCalibrateV6 {
         sb.append("# measured=").append(new java.util.Date()).append('\n');
         sb.append("# reps=").append(reps).append(" levels=")
           .append(java.util.Arrays.toString(levels)).append('\n');
+        // Turns-per-rep selects the positions each level measures, so anything later that extends or
+        // checks this file must reproduce it or it is measuring different material.
+        sb.append(TURNS_KEY).append('=').append(turnsPerRepSpec).append('\n');
         sb.append("compute.reference=").append(ref.profile).append('\n');
         sb.append(String.format(Locale.ROOT, "compute.referenceAdvanceNanos=%.3f%n", ref.tAdv));
         sb.append("\n# Global fallback: the reference cell's weights. Used by anything with no profile\n");
