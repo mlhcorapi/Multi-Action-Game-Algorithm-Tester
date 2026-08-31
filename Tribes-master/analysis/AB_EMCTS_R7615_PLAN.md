@@ -795,10 +795,33 @@ survive the hardware change.
 > `Comma_Off`'s 475 / 428 — **3.1×** the search at an unchanged duplicate share (0.072 vs 0.063),
 > because zero-eval repair returns the whole ~69% repair budget to the search.
 >
-> **One arm before the holdout.** `Comma_Short15` inherits `repairKeys = MID`, and this stage
-> measured Coarse ≫ Mid for exactly that decision — so "ranking does not help the shortlist" was
-> tested at a granularity now known to be wrong, and cannot be separated from "MID keys rank
-> badly". `Comma_Short15_Coarse` settles it in ~12 min on development, and Stage F waits for it.
+> **Gate E2 — resolved 2026-08-31. The shortlist verdict was a granularity artifact.**
+> `Comma_Short15_Coarse − Comma_Rand15 = **+66.6 [+36.7, +96.5]** at 80k` (terminal-robust,
+> **+60.6 in wall-clock**), and **+87.5** over the MID-keyed `Comma_Short15`. Q-ranking *does* help
+> the shortlist once the keys are coarse enough to be estimated. At 400k it vanishes (+6.1, ns).
+> The champion is unchanged — `Comma_Z0_Coarse` stays +61.7 clear at 80k and +88.1 at 400k.
+>
+> **The four rungs, and the sentence that covers every repair result in this line:**
+>
+> | Arm | 80k vs `Comma_Off` | How much of the repair decision the table owns |
+> |---|---|---|
+> | `Comma_Off` | 0 | none — evaluate every candidate |
+> | `Comma_Rand15` | **+139.8** | none — evaluate 15 *arbitrary* candidates (pure throughput) |
+> | `Comma_Short15_Coarse` | **+206.5** | it picks *which* 15 are evaluated (+66.6 over random) |
+> | `Comma_Z0_Coarse` | **+268.1** | it picks the replacement outright, no evaluation at all |
+>
+> **The table pays in proportion to how much of the decision it owns, and only at coarse
+> granularity.** That also explains the insertion half, where the sequence score always overrules
+> the table: it owns least there, and pays least.
+>
+> **Currency drift, found here and now guarded.** This arm was priced in a session whose 40k
+> reference cell measured 58% slow (a warmup artifact — the 80k and 400k cells matched the original
+> currency and the 40k leaf was never run). Its prices are sound and every arm spent the same units,
+> but it took 6.9% more wall-clock than `Comma_Rand15`, which is why W7 is quoted beside the units
+> figure. Because a merged arm is written against the *file's* reference, a machine that has moved
+> since the currency was set overcharges the newly priced arms and nothing announces it. Stage F now
+> begins with `ComputeCalibrateV6 --checkArms`, which re-measures already-priced arms, reports the
+> per-op drift and **writes nothing**.
 
 ---
 
@@ -813,6 +836,7 @@ writing before this starts. The arms are the minimum set that carries every clai
 |---|---|
 | `Comma_Off` | the control (the pinned substrate's baseline) |
 | **`Comma_Z0_Coarse`** | **the headline** — zero-eval coarse Q-argmax repair |
+| `Comma_Short15_Coarse` | the middle rung: ranking pays once the keys are coarse |
 | **`Comma_Z0_Random`** | **attributes it**: the same arm with the table removed. Without this the holdout replicates a number whose cause is unproven |
 | `Comma_Z0_Mid`, `Comma_Z0_Fine` | the granularity ordering — it needs all three points to *be* an ordering |
 | `Comma_Rand15` | how much of the win needs no table at all |

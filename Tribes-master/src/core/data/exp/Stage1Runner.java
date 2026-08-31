@@ -611,8 +611,12 @@ public final class Stage1Runner {
                 //                    points to be an ordering rather than one comparison
                 //   Comma_Rand15     how much of the win needs no table at all (cheap repair alone)
                 //   Comma_Short15    Stage D's champion, the cross-stage anchor
+                // Comma_Short15_Coarse joins after Gate E2: it is the middle rung of the headline
+                // ladder (random shortlist -> coarse-ranked shortlist -> coarse Q-argmax), and the
+                // rung that shows ranking paying once the keys are coarse enough to be estimated.
                 List<Config> arms = new ArrayList<>(List.of(COMMA_OFF, requireCommaChampion(champion)));
-                for (Config c : List.of(CZ0_RANDOM, CZ0_MID, CZ0_FINE, COMMA_RAND15, COMMA_SHORT15))
+                for (Config c : List.of(CZ0_RANDOM, CZ0_MID, CZ0_FINE, COMMA_RAND15,
+                        COMMA_SHORT15_COARSE, COMMA_SHORT15))
                     if (!arms.contains(c)) arms.add(c);
                 return List.of(new Level(80_000, 8, arms), new Level(400_000, 6, arms));
             }
