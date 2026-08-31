@@ -322,6 +322,18 @@ finding: a non-zero value means the mode is not engaged and the run is a bug.
 
 ## Stage F — the holdout *(~2.2 h, runs once)*
 
+> **Gate E — resolved 2026-08-30. Champion: `Comma_Z0_Coarse`** (+268.1 vs `Comma_Off` at 80k,
+> +250.4 in wall-clock, zero repair evaluations, beats `Comma_Off` at 5× budget). The attribution
+> control settled the central question both ways: `Rand15 − Comma_Off = +139.8` with **no table
+> involved**, `Short15 − Rand15 = −20.9` (Q-ranking adds nothing to a shortlist), but
+> `Z0_Coarse − Z0_Random = +244.2` — the table pays where it decides **alone**. D2 is falsified as
+> stated (both decisions want Coarse); the replacement claim is statistical support, not decision
+> structure. See the plan's Gate E block.
+>
+> **Run `Comma_Short15_Coarse` before the holdout** — re-run the E-prep and Stage E commands and
+> everything else skips. `Comma_Short15` ranked at MID, and Coarse ≫ Mid was measured on the same
+> decision, so the shortlist verdict needs that one arm to stand.
+
 **Freeze the choices in writing first.** ε\*, the champion, the repair granularity winner. The holdout
 is worth nothing if it is read twice.
 

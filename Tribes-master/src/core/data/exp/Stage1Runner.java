@@ -269,8 +269,8 @@ public final class Stage1Runner {
      */
     static List<Config> stageE(Config dChampion) {
         List<Config> out = new ArrayList<>(List.of(COMMA_OFF, dChampion));
-        for (Config c : List.of(COMMA_RAND15, CZ0_COARSE, CZ0_MID, CZ0_FINE, CZ0_RANDOM,
-                COMMA_FINE_E25))
+        for (Config c : List.of(COMMA_SHORT15, COMMA_RAND15, CZ0_COARSE, CZ0_MID, CZ0_FINE,
+                CZ0_RANDOM, COMMA_FINE_E25, COMMA_SHORT15_COARSE))
             if (!out.contains(c)) out.add(c);      // the champion may already be one of them
         return out;
     }
@@ -373,6 +373,21 @@ public final class Stage1Runner {
             Granularity.MID, Granularity.MID, RepairMode.ZERO_EVAL_RANDOM, 0);
 
     /**
+     * The shortlist, re-ranked by COARSE keys — added after Stage E, to close a hole Stage E opened
+     * in its own conclusion.
+     *
+     * <p>Stage E found Q-ranking worth nothing for the shortlist ({@code Comma_Short15 −
+     * Comma_Rand15 = −20.9}, and not significant once terminals are excluded) — but
+     * {@code Comma_Short15} inherits {@code repairKeys = MID} from {@link #biasArm}, and the same
+     * stage measured Coarse ≫ Mid for exactly this decision ({@code Z0_Coarse − Z0_Mid = +99.1}).
+     * The shortlist was therefore tested at a granularity now known to be the wrong one, and
+     * "ranking does not help the shortlist" cannot be separated from "MID keys do not rank well"
+     * without this arm.
+     */
+    static final Config COMMA_SHORT15_COARSE = commaRepairArm("Comma_Short15_Coarse", 1.00,
+            Granularity.MID, Granularity.COARSE, RepairMode.SHORTLIST_K, 15);
+
+    /**
      * Completes the INSERTION granularity ladder at eps = 0.25 on FULL repair, where insertion is
      * live: `Comma_Coarse_e25` (Coarse) and `Comma_On` (Mid) already ran in Stage D, and Coarse beat
      * Mid by +39/+45/+50 across the ladder. This is the Fine end, and it carries the insertion half
@@ -388,7 +403,8 @@ public final class Stage1Runner {
 
     static final List<Config> COMMA_ARMS = List.of(COMMA_E75, COMMA_E50, COMMA_E10, COMMA_COARSE,
             COMMA_NOREM, COMMA_PERBURN, COMMA_SHORT15, COMMA_SHORT15_E25, COMMA_SHORT5_E25,
-            CZ0_COARSE, CZ0_MID, CZ0_FINE, COMMA_RAND15, CZ0_RANDOM, COMMA_FINE_E25);
+            CZ0_COARSE, CZ0_MID, CZ0_FINE, COMMA_RAND15, CZ0_RANDOM, COMMA_FINE_E25,
+            COMMA_SHORT15_COARSE);
 
     /**
      * The arms {@code --suite commaE} prices: everything Stage E runs that Stage D did not already
@@ -400,7 +416,7 @@ public final class Stage1Runner {
     public static List<String> stageEArmNames() {
         List<String> out = new ArrayList<>();
         for (Config c : List.of(CZ0_COARSE, CZ0_MID, CZ0_FINE, COMMA_RAND15, CZ0_RANDOM,
-                COMMA_FINE_E25)) out.add(c.name);
+                COMMA_FINE_E25, COMMA_SHORT15_COARSE)) out.add(c.name);
         return out;
     }
 
@@ -538,9 +554,10 @@ public final class Stage1Runner {
             return;
         }
         String stage = args.length > 3 ? args[3].trim().toUpperCase(Locale.ROOT) : "D";
-        // Gate D (2026-08-29): Comma_Short15 won at every budget (+105.7/+118.9/+170.5 vs Comma_Off)
-        // and survived W7. Note it runs with the bias OFF — see the Stage E block above.
-        String champion = args.length > 4 ? args[4].trim() : COMMA_SHORT15.name;
+        // Gate E (2026-08-30) superseded Gate D's pick: Comma_Z0_Coarse is +268.1 [+228.6, +309.7]
+        // at 80k against Comma_Off — +149.2 clear of Comma_Short15 — wins W7 in wall-clock
+        // (+250.4), and beats Comma_Off given 5x the budget (+39.3). Zero repair evaluations.
+        String champion = args.length > 4 ? args[4].trim() : CZ0_COARSE.name;
         List<Level> sched;
         try {
             sched = scheduleFor(stage, champion);
@@ -585,11 +602,17 @@ public final class Stage1Runner {
                 // the pinned substrate. Comma_On stands in for "bias only at eps*" exactly as
                 // BIAS_E25 did before the re-pin — if Gate D picks a materially different eps*,
                 // substitute that dose arm here before F runs.
-                // Post-Gate-D set: the control, the champion, the control that ATTRIBUTES the
-                // champion (without it the holdout headline is unattributed too), the best pure-bias
-                // arm, and Stage E's zero-eval winner. Re-read at Gate E if E's winner is not Fine.
+                // Post-Gate-E set. Every arm carries one claim and nothing here is decoration:
+                //   Comma_Off        the control
+                //   champion         Comma_Z0_Coarse, the headline (+268.1 on development)
+                //   Comma_Z0_Random  ATTRIBUTES it: the same arm with the table removed. Without
+                //                    this the holdout replicates a number whose cause is unproven.
+                //   Z0_Mid, Z0_Fine  the granularity ordering that replaced D2 — it needs all three
+                //                    points to be an ordering rather than one comparison
+                //   Comma_Rand15     how much of the win needs no table at all (cheap repair alone)
+                //   Comma_Short15    Stage D's champion, the cross-stage anchor
                 List<Config> arms = new ArrayList<>(List.of(COMMA_OFF, requireCommaChampion(champion)));
-                for (Config c : List.of(COMMA_RAND15, COMMA_COARSE, CZ0_FINE))
+                for (Config c : List.of(CZ0_RANDOM, CZ0_MID, CZ0_FINE, COMMA_RAND15, COMMA_SHORT15))
                     if (!arms.contains(c)) arms.add(c);
                 return List.of(new Level(80_000, 8, arms), new Level(400_000, 6, arms));
             }
