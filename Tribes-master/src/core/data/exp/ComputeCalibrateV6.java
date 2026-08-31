@@ -220,7 +220,7 @@ public final class ComputeCalibrateV6 {
         // for the ab suite's turn counts while also being forced to state the turn counts. The
         // trailing positional is still honoured so existing v6 invocations keep working.
         int underLoad = 0;
-        String suiteFlag = null;
+        String suiteFlag = null, armsFlag = null;
         List<String> pos = new ArrayList<>();
         for (int i = 0; i < args.length; i++) {
             String a = args[i].trim();
@@ -228,7 +228,21 @@ public final class ComputeCalibrateV6 {
             else if (a.startsWith("--underLoad=")) underLoad = Integer.parseInt(a.substring(12).trim());
             else if (a.equals("--suite") && i + 1 < args.length) suiteFlag = args[++i].trim();
             else if (a.startsWith("--suite=")) suiteFlag = a.substring(8).trim();
+            else if (a.equals("--arms") && i + 1 < args.length) armsFlag = args[++i].trim();
+            else if (a.startsWith("--arms=")) armsFlag = a.substring(7).trim();
             else pos.add(a);
+        }
+        if (armsFlag != null && !armsFlag.isEmpty()) {
+            for (String arm : armsFlag.split(",")) {
+                String n = arm.trim();
+                if (n.isEmpty()) continue;
+                Stage1Runner.armByName(n);      // fail fast on a typo, before hours of measuring
+                explicitArms.add(n);
+            }
+            if (explicitArms.isEmpty()) {
+                System.err.println("--arms was given but named no arms");
+                System.exit(2);
+            }
         }
         args = pos.toArray(new String[0]);
 
@@ -647,9 +661,24 @@ public final class ComputeCalibrateV6 {
      * <p>The reference cell ({@code EMCTS}) is in every suite, because it is what defines the unit:
      * a suite calibrated without it would have nothing to be a ratio of.
      */
+    /**
+     * Arms named by {@code --arms}, which overrides the suite entirely.
+     *
+     * <p>Exists so a follow-up arm can be priced <b>without re-measuring the arms already priced</b>.
+     * Re-running a whole suite would replace those profiles with fresh measurements, and the leaves
+     * already collected were run under the old ones — the recorded weights would then no longer be
+     * the weights that produced the data. Pricing exactly what is missing keeps that honest, and
+     * costs minutes instead of an hour.
+     */
+    private static final List<String> explicitArms = new ArrayList<>();
+
     private static List<Cell> cellsForLevel(int units, String suite) {
         List<Cell> out = new ArrayList<>();
-        out.add(new Cell("EMCTS", -1, units));
+        out.add(new Cell("EMCTS", -1, units));   // the reference defines the unit; always measured
+        if (!explicitArms.isEmpty()) {
+            for (String arm : explicitArms) out.add(new Cell(ExpAgents.AB_PREFIX + arm, -1, units));
+            return out;
+        }
         if (suite.equals(SUITE_V6) || suite.equals(SUITE_ALL)) {
             out.add(new Cell("CrossoverBB", -1, units));
             for (int r : IsolationPhaseRunnerV6.RATIOS) out.add(new Cell("CrossoverExpansion", r, units));
