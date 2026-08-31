@@ -230,7 +230,11 @@ public final class ComputeCalibrateV6 {
             else if (a.startsWith("--suite=")) suiteFlag = a.substring(8).trim();
             else if (a.equals("--arms") && i + 1 < args.length) armsFlag = args[++i].trim();
             else if (a.startsWith("--arms=")) armsFlag = a.substring(7).trim();
-            else pos.add(a);
+            else if (a.equals("--checkArms") && i + 1 < args.length) {
+                armsFlag = args[++i].trim(); checkOnly = true;
+            } else if (a.startsWith("--checkArms=")) {
+                armsFlag = a.substring(12).trim(); checkOnly = true;
+            } else pos.add(a);
         }
         if (armsFlag != null && !armsFlag.isEmpty()) {
             for (String arm : armsFlag.split(",")) {
@@ -450,6 +454,11 @@ public final class ComputeCalibrateV6 {
         File profilesCsv = underLoad > 1 ? new File(out, "compute_profiles_load" + underLoad + ".csv")
                                          : new File(out, PROFILES_CSV);
         if (underLoad > 1) reportLoadVsIdle(cells, idleWeights, underLoad);
+        if (checkOnly) {
+            reportCurrencyDrift(cells, ref, idleWeights);
+            RunGuard.finished();
+            return;
+        }
         if (failures.isEmpty()) {
             writeWeights(weightsFile, cells, ref, reps, levels);
             writeCsv(profilesCsv, cells, ref);
@@ -671,6 +680,90 @@ public final class ComputeCalibrateV6 {
      * costs minutes instead of an hour.
      */
     private static final List<String> explicitArms = new ArrayList<>();
+
+    /** {@code --checkArms}: measure and compare against the stored profiles, writing nothing. */
+    private static boolean checkOnly = false;
+
+    /**
+     * Re-measures arms that are <b>already priced</b> and reports how far this machine has moved
+     * from the currency in the weights file. Writes nothing.
+     *
+     * <p><b>Why this exists.</b> The absolute speed of the machine does not matter — a weight is a
+     * ratio, and {@link #mergeWeights} re-denominates a later session into the file's unit, so a
+     * uniformly slower machine cancels exactly. What does <i>not</i> cancel is a change in the
+     * ratios <i>between</i> operations. On 2026-08-31 a follow-up calibration measured the reference
+     * cell 58% slower in absolute terms (harmless) while copy and eval fell 19% and 14% relative to
+     * advance (not harmless): the arm priced in that session was undercharged for the work it does
+     * most of, and took 6.9% more wall-clock than its comparator for the same nominal budget.
+     *
+     * <p>W7 caught it after the fact. This catches it before — which is what matters before the
+     * holdout, because that stage runs once and its whole value is being comparable with the
+     * development numbers it is quoted beside.
+     */
+    private static void reportCurrencyDrift(List<Cell> cells, Cell ref, File weightsFile) {
+        System.out.println("\n=== CURRENCY DRIFT: THIS MACHINE vs THE STORED WEIGHTS ===");
+        if (!weightsFile.isFile()) {
+            System.out.println("  no weights file at " + weightsFile.getPath() + " - nothing to compare.");
+            return;
+        }
+        java.util.Properties p = new java.util.Properties();
+        try (java.io.InputStream in = new java.io.FileInputStream(weightsFile)) {
+            p.load(in);
+        } catch (java.io.IOException e) {
+            System.out.println("  cannot read " + weightsFile.getPath() + ": " + e);
+            return;
+        }
+        double fileRef = Double.parseDouble(
+                p.getProperty("compute.referenceAdvanceNanos", "0").trim());
+        double scale = (fileRef > 0 && ref.tAdv > 0) ? ref.tAdv / fileRef : Double.NaN;
+        System.out.printf(Locale.ROOT,
+                "  reference advance: stored %.1f ns, measured now %.1f ns  (x%.4f)%n",
+                fileRef, ref.tAdv, scale);
+        System.out.println("  That factor is NOT cosmetic here. Within a single calibration a uniform");
+        System.out.println("  slowdown cancels, because every arm is a ratio to the same reference - but");
+        System.out.println("  a merged arm is written against the FILE's reference, so if this machine");
+        System.out.println("  is slower than the one that set the currency, the newly priced arms are");
+        System.out.println("  overcharged and the ones already in the file are not. The drift column is");
+        System.out.println("  each op's absolute cost now versus when the currency was set.");
+        System.out.printf(Locale.ROOT, "  %-34s %10s %10s %8s%n", "profile.op", "stored", "now", "drift");
+        double worst = 0; String worstWhat = "-";
+        for (Cell c : cells) {
+            if (c.profile.equals(ref.profile)) continue;
+            double[] now = {c.wAdvance, c.wCopy, c.wEval};
+            String[] op = {"wAdvance", "wCopy", "wEval"};
+            for (int i = 0; i < 3; i++) {
+                String key = "compute.profile." + c.profile + "." + op[i];
+                String v = p.getProperty(key);
+                if (v == null) continue;
+                double stored = Double.parseDouble(v.trim());
+                // What a merge WOULD write for this cell today: its cost expressed against the
+                // file's reference (mergeWeights multiplies by the same factor). The session's own
+                // reference cancels, so the drift below is the change in this op's ABSOLUTE cost
+                // since the currency was set — which is precisely what does not cancel when only
+                // some arms are re-priced and merged into a file the others were priced in.
+                double scaled = Double.isNaN(scale) ? now[i] : now[i] * scale;
+                double drift = stored > 0 ? scaled / stored - 1 : Double.NaN;
+                if (Math.abs(drift) > Math.abs(worst)) { worst = drift; worstWhat = c.profile + "." + op[i]; }
+                System.out.printf(Locale.ROOT, "  %-34s %10.4f %10.4f %7.1f%%%n",
+                        c.profile + "." + op[i], stored, scaled, 100 * drift);
+            }
+        }
+        System.out.println();
+        if (Math.abs(worst) <= MAX_CV) {
+            System.out.printf(Locale.ROOT,
+                    "  VERDICT: PASS - largest drift %.1f%% (%s), within the %.0f%% gate.%n",
+                    100 * worst, worstWhat, 100 * MAX_CV);
+            System.out.println("  This machine still spends the currency the stored weights define.");
+        } else {
+            System.out.printf(Locale.ROOT,
+                    "  VERDICT: FAIL - largest drift %.1f%% (%s), past the %.0f%% gate.%n",
+                    100 * worst, worstWhat, 100 * MAX_CV);
+            System.out.println("  Arms priced earlier and arms priced now are NOT spending the same");
+            System.out.println("  currency. Do not start a stage whose results are quoted beside");
+            System.out.println("  earlier ones until this is understood - and read W7 either way.");
+        }
+        System.out.println("  (nothing was written; this run only compared)");
+    }
 
     private static List<Cell> cellsForLevel(int units, String suite) {
         List<Cell> out = new ArrayList<>();

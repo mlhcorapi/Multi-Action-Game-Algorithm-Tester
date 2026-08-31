@@ -330,7 +330,17 @@ finding: a non-zero value means the mode is not engaged and the run is a bug.
 > stated (both decisions want Coarse); the replacement claim is statistical support, not decision
 > structure. See the plan's Gate E block.
 >
-> **Run `Comma_Short15_Coarse` before the holdout** — re-run the E-prep and Stage E commands and
+> **Gate E2 (2026-08-31): the shortlist verdict was a granularity artifact.**
+> `Short15_Coarse − Rand15 = +66.6` at 80k (+60.6 wall-clock), +87.5 over the MID-keyed arm; ns at
+> 400k. Champion unchanged. Ladder: `Comma_Off` 0 -> `Rand15` +139.8 (throughput only) ->
+> `Short15_Coarse` +206.5 (ranking too) -> `Z0_Coarse` +268.1 (table decides alone). **Before Stage
+> F**, run the currency check — it re-measures already-priced arms and writes nothing:
+>
+> ```bash
+> java -Xmx<N>g -cp "out:lib/*" core.data.exp.ComputeCalibrateV6 >      $DATA/stage1/_portfolio $DATA/stage1/_calibration >      3 auto 6 40000,80000,400000 --checkArms Comma_Off,Comma_Z0_Coarse
+> ```
+>
+> **Superseded — run `Comma_Short15_Coarse` before the holdout** — re-run the E-prep and Stage E commands and
 > everything else skips. `Comma_Short15` ranked at MID, and Coarse ≫ Mid was measured on the same
 > decision, so the shortlist verdict needs that one arm to stand.
 
