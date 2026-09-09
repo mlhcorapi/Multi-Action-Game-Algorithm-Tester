@@ -850,6 +850,44 @@ Stage E ran 16,800 turns in 1 h 11 m, so budget ≈ 1.5 h.
 > mechanism's *direction* plus a negative confirmation — and that is a publishable outcome, not a failure
 > to be worked around.
 
+> **Gate F — resolved 2026-09-02. The line replicates.** 200 held-out scenarios, disjoint from
+> development, read once. 19,600 turns in 2 h 27 m, zero throttling.
+>
+> | Claim (80k, vs `Comma_Off`) | Development | **Holdout** |
+> |---|---|---|
+> | **`Comma_Z0_Coarse` — the headline** | +268.1 | **+244.3 [+208.4, +281.7]** |
+> | **`− Comma_Z0_Random` — the table's own contribution** | +244.2 | **+211.7 [+175.4, +249.0]** |
+> | `Comma_Rand15` — cheap repair, no table involved | +139.8 | **+133.8 [+107.2, +161.5]** |
+> | `Comma_Short15_Coarse` — + coarse ranking | +206.5 | **+199.9 [+167.0, +234.7]** |
+> | `Short15_Coarse − Rand15` — ranking pays | +66.6 | **+66.1 [+43.7, +89.9]** |
+> | `Short15 − Rand15` — MID ranking does not | −20.9 (ns) | **−21.2 (ns)** |
+>
+> Every development effect lands inside its own confidence interval on unseen scenarios, and the
+> headline survives W7 in wall-clock (**+223.3 [+186.6, +261.1]**, 14% clamped — a genuine test),
+> terminal exclusion (+241.7), and both scenario sources (+305.2 single, +183.4 dual). At 400k it is
+> **+297.4 [+252.5, +342.4]**. `RepairCandidateEvals` reads exactly **0.0** for all four zero-eval
+> arms. The mechanism replicates too: 1,435 nodes and 1,293 unique sequences per turn against
+> `Comma_Off`'s 457 / 408 — **3.1× the search** at an unchanged duplicate share.
+>
+> **Budget equivalence.** `Z0_Coarse@80k − Comma_Off@400k = +12.5 [−15.2, +41.5]` — indistinguishable
+> from the baseline given **5× the compute** (development had +39.3, significant). The honest claim
+> is "matches the baseline at 5× budget", not "beats".
+>
+> **One thing does not replicate, and it sharpens the conclusion.** `Z0_Fine − Z0_Random` was +23.4
+> (significant) on development and is **+3.8 [−13.3, +20.7], ns**, on the holdout — and ns in
+> wall-clock too. At Fine granularity the table is indistinguishable from no table at all. That is
+> the statistical-support account making a prediction and being right: fine keys stay too sparse to
+> estimate, so the mechanism degenerates to random tie-breaking. Report the ordering as
+> **Coarse ≫ Mid ≫ Fine ≈ nothing**.
+>
+> **Caveat to carry, not to bury.** `Comma_Short15_Coarse` at 400k reads +196.7 on development
+> against +252.4 on the holdout, outside the development interval. That arm's 400k development leaf
+> was run under the stale price the turns-per-rep bug produced (20,644 ms against the holdout's
+> 24,303 ms for the same nominal budget); the holdout used the corrected price. The direction is
+> exactly what the overcharge predicts. **Re-run the development analysis after the E3 fix-up and
+> quote that number instead** — every other arm, and that arm at 80k, are already on matching prices.
+
+
 ---
 
 ### Stage G — The yardstick: games that price an isolation difference *(~5.4 h, 3,900 games)*

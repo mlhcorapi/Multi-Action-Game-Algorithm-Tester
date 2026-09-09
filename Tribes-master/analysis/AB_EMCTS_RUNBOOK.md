@@ -356,8 +356,12 @@ nohup java -Xmx<N>g $WF -Dstage1.threads.400000=31 -cp "out:lib/*" core.data.exp
 python analysis/analyze_stage1.py $DATA/stage1/holdout --outdir $DATA/ab_results/F --baseline Comma_Off
 ```
 
-> **Gate F.** A development effect that does not replicate here **is not a result**. Report both
-> numbers side by side, always.
+> **Gate F — resolved 2026-09-02: the line replicates.** Headline `Comma_Z0_Coarse − Comma_Off =
+> **+244.3 [+208.4, +281.7]** at 80k (+297.4 at 400k), W7-clean at **+223.3**, zero repair
+> evaluations; of that, **+211.7 is the table's own contribution** (vs `Z0_Random`). Every
+> development effect lands inside its interval. `Z0_Fine − Z0_Random` does **not** replicate
+> (+3.8, ns) — at Fine granularity the table is worth nothing, as the statistical-support account
+> predicts. See the plan's Gate F block for the full side-by-side and the one pricing caveat.
 
 ---
 
