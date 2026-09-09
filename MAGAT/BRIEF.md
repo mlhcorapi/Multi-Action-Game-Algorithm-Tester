@@ -177,16 +177,16 @@ The honest framing: those frameworks give you a forward model and let you run ga
 a pinned portfolio, a paired design, a calibrated currency with a wall-clock check, a holdout, or
 attribution as a pattern. That gap is the product, and it does not depend on the game count.
 
-## 8. Open decisions — confirm before building
+## 8. Decisions — confirmed 2026-09-09
 
-| Decision | Options | Recommendation |
-|---|---|---|
-| Language / platform | Java core (native to Tribes, direct extraction) · Python core (researcher-friendly, needs a bridge) · Java core + Python analysis | **Java core + Python analysis**; document the contract so games can be ported |
-| v0.1 scope | core + Tribes · core + Tribes + a second game | **core + Tribes**; second game is v0.2 |
-| Tribes code | copy into MAGAT · git submodule · dependency | depends on license — **no LICENSE file is present in `Tribes-master`**; the upstream (GAIGResearch/Tribes) must be checked before redistribution |
-| Cross-machine promise | reference weights only · each machine recalibrates · both | **both**: published R7615 weights plus a one-command recalibration and drift report |
-| Reference agents | Random + plain baseline · + one strong reference | **all three** |
-| License for MAGAT | — | user's call |
+| Decision | Confirmed |
+|---|---|
+| Language / platform | **Java core + Python analysis.** In-process metering; games port to the Java `Game` contract. |
+| v0.1 scope | **Core + Tribes.** Stratega is v0.2, after the contract has survived one extraction. |
+| Tribes code | **Submodule / dependency, adapter in MAGAT.** Upstream has no license file; public availability grants no redistribution rights by default, so no copying in until the authors give explicit permission (the user will ask). Credit them regardless. Adapter design is identical either way. |
+| Cross-machine promise | **Published R7615 weights + one-command recalibration with drift report + raw op counts on every result.** |
+| Reference agents | **`Random`, plain EMCTS, `Comma_Z0_Coarse`.** |
+| MAGAT license | Open — MIT or Apache-2.0 recommended; not blocking, but required before any release tag. |
 
 ## 9. Known traps (each cost real time; do not repeat)
 

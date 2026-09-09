@@ -28,15 +28,26 @@ The brief's §6 extraction map says which existing file becomes which component,
 twelve principles that are not negotiable. The old names (`v6`, `Stage1`, `AB_`, `ExperimentV6`) do
 not survive the extraction; name things for what they are.
 
-**Decisions I have confirmed** *(fill in from the answers to the questions in the brief's §8 —
-the session should not proceed on any of these until they are stated here)*:
+**Decisions I have confirmed** (2026-09-09):
 
-- Language / platform: ______
-- v0.1 scope: ______
-- How Tribes code is included, and its license: ______
-- Cross-machine promise: ______
-- Reference agents: ______
-- MAGAT license: ______
+- **Language / platform: Java core + Python analysis.** Metering stays in-process — a process
+  boundary on every forward-model call would dominate the cost being counted. Games are ported to
+  the Java `Game` contract; the analyzer is Python.
+- **v0.1 scope: core + Tribes.** The methodology extracted cleanly, Tribes as the first game, and
+  the worked AB-EMCTS result as the example. A second game (Stratega) is v0.2, after the contract
+  has survived one extraction.
+- **Tribes code: git submodule or dependency, with the adapter living in MAGAT.** Upstream
+  (GAIGResearch/Tribes) has no license file that I can find; a public repository without one grants
+  no redistribution rights by default, so MAGAT does not copy Tribes in until the authors have
+  given explicit permission — I will email them. Credit the original authors in the README and any
+  paper regardless. The adapter design is identical either way, so this does not block anything.
+- **Cross-machine promise: published R7615 reference weights + one-command recalibration with a
+  drift report + raw op counts on every result**, so any published run can be re-priced with another
+  machine's weights.
+- **Reference agents: `Random`, plain EMCTS, and `Comma_Z0_Coarse`** (the strong reference, and the
+  worked example of the attribution pattern).
+- **MAGAT license: to choose** — MIT or Apache-2.0 recommended; do not block on it, but do not tag a
+  release without it.
 
 **How to work.** The same discipline the line ended with, from day one:
 
@@ -58,5 +69,5 @@ milestone is: the `Game` contract, the meter, and the Tribes adapter, with the e
 gate (`Baseline` bit-identical to plain EMCTS) passing through the new interface. That proves the
 seam is in the right place before anything else is moved.
 
-Begin by reading the brief and the retrospective, then ask me the §8 questions that are still
-blank above, then propose the design.
+Begin by reading the brief and the retrospective, confirm you have understood the decisions above
+(the only one still open is the MAGAT license), then propose the design.
