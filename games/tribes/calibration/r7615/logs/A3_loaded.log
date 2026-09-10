@@ -1,0 +1,434 @@
+
+>>>>> 2026-08-28 21:18:25 $ java -Xmx100g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dcompute.weightsFile="/home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties" -XX:+AlwaysPreTouch -cp "out:lib/*" core.data.exp.ComputeCalibrateV6 "/home/jovyan/ab_runs/stage1/_portfolio" "/home/jovyan/ab_runs/stage1/_calibration" 3 auto 6 40000,80000,400000 --suite a3 --underLoad 48
+[ComputeMeter] compute.wAdvance = 1.0 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 1.0)
+[ComputeMeter] compute.wCopy = 0.137451 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.16)
+[ComputeMeter] compute.wEval = 0.056738 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.077)
+############################################################
+# v6 compute-unit weight calibration (per config, per budget level)
+# Measures what an advance, a copy and an eval cost FOR EACH CONFIGURATION
+# AT EACH BUDGET LEVEL, relative to one reference operation, and writes them
+# where the rest of the pipeline picks them up.
+############################################################
+# UNDER LOAD: each cell is measured on one thread while 47 others run the SAME configuration.
+# This is gate A3' — the idle weights are ratios measured in a regime the
+# experiment never occupies. Arms differ several-fold in allocation rate, and
+# GC is nearly free on one thread while it competes for cores, L3 and memory
+# bandwidth at 48. If the ratios move, the idle weights mis-price
+# exactly the arms this line is trying to measure.
+# currently in force: advance=1.0000 copy=0.1375 eval=0.0567  (+54 calibrated per-config profiles)
+# suite=a3  underLoad=48  levels=[40000, 80000, 400000]  configs=4  cells=12
+# reps=3  turns(=positions)/rep per level=[8, 4, 2]  warmup=6
+# A repetition repeats the SAME positions with the SAME seeds, so variation across reps measures the machine, not the portfolio.
+# Estimator: the FASTEST repetition (interference can only slow one down).
+# Gate: the two fastest agree within 10%. Full CV is printed beside it as the disturbance diagnostic.
+# reference cell = EMCTS@40000  (its advance is 1.000 units by definition)
+------------------------------------------------------------
+[machine] compute-unit weight calibration
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical CPUs / 64 physical cores (SMT x2) | 1 NUMA node(s) | maxHeap 102400 MB | reserve 2 core(s) | worker ceiling 62
+[machine] SMT is ON. Workers are capped at physical cores: this workload is clone/bandwidth-bound, so sibling threads add heat and memory, not throughput.
+------------------------------------------------------------
+# load average before starting: 0.00 per core   (idle)
+
+[weights] warmup for level 40000: 6 turns (discarded)
+  [ 1/12] EMCTS@40000                    advance 89610.0 ns  copy 13066.6 ns  eval  4988.5 ns   (gap 0.6/0.5/0.9% | CV 4.5/1.8/1.0%)
+  [ 2/12] AB_Baseline@40000              advance 89894.3 ns  copy 13348.0 ns  eval  5143.6 ns   (gap 0.6/0.1/2.5% | CV 0.4/0.7/1.8%)
+  [ 3/12] AB_Short5_e25@40000            advance 93109.3 ns  copy 14614.7 ns  eval  4834.0 ns   (gap 4.2/0.6/2.1% | CV 4.2/2.5/1.3%)
+  [ 4/12] AB_Z0_Fine@40000               advance 88734.5 ns  copy 17069.2 ns  eval  6434.1 ns   (gap 4.3/3.7/5.4% | CV 2.6/2.1/4.0%)
+
+[weights] warmup for level 80000: 6 turns (discarded)
+  [ 5/12] EMCTS@80000                    advance 138912.0 ns  copy 16943.0 ns  eval  8813.8 ns   (gap 0.3/1.4/1.1% | CV 3.0/0.8/1.4%)
+  [ 6/12] AB_Baseline@80000              advance 136236.4 ns  copy 16773.8 ns  eval  8435.0 ns   (gap 2.9/0.4/6.4% | CV 1.7/1.3/3.7%)
+  [ 7/12] AB_Short5_e25@80000            advance 141118.2 ns  copy 19194.8 ns  eval  8173.5 ns   (gap 0.7/0.4/7.8% | CV 1.9/2.9/7.1%)
+  [ 8/12] AB_Z0_Fine@80000               advance 127437.8 ns  copy 21346.0 ns  eval  8590.1 ns   (gap 1.5/3.3/4.7% | CV 5.7/3.0/9.8%)
+
+[weights] warmup for level 400000: 6 turns (discarded)
+  [ 9/12] EMCTS@400000                   advance 136705.6 ns  copy 17223.5 ns  eval 10566.3 ns   (gap 0.7/0.6/0.2% | CV 1.8/0.8/2.8%)
+  [10/12] AB_Baseline@400000             advance 149052.3 ns  copy 17603.9 ns  eval 11093.1 ns   (gap 0.6/0.8/0.8% | CV 1.3/11.8/0.6%)
+  [11/12] AB_Short5_e25@400000           advance 136864.5 ns  copy 18851.6 ns  eval  6564.0 ns   (gap 0.0/4.2/1.8% | CV 2.0/4.4/11.2%)
+  [12/12] AB_Z0_Fine@400000              advance 95079.2 ns  copy 22021.9 ns  eval  5564.3 ns   (gap 0.7/7.6/3.2% | CV 0.8/4.2/15.8%)
+  measured in 41 min
+
+=== RESULT: weights per profile (relative to one advance in EMCTS@40000 = 89610.0 ns) ===
+  profile                     W_ADVANCE     W_COPY     W_EVAL   ns/advance
+  EMCTS@40000                    1.0000     0.1458     0.0557      89610.0
+  AB_Baseline@40000              1.0032     0.1490     0.0574      89894.3
+  AB_Short5_e25@40000            1.0391     0.1631     0.0539      93109.3
+  AB_Z0_Fine@40000               0.9902     0.1905     0.0718      88734.5
+  EMCTS@80000                    1.5502     0.1891     0.0984     138912.0
+  AB_Baseline@80000              1.5203     0.1872     0.0941     136236.4
+  AB_Short5_e25@80000            1.5748     0.2142     0.0912     141118.2
+  AB_Z0_Fine@80000               1.4221     0.2382     0.0959     127437.8
+  EMCTS@400000                   1.5256     0.1922     0.1179     136705.6
+  AB_Baseline@400000             1.6633     0.1965     0.1238     149052.3
+  AB_Short5_e25@400000           1.5273     0.2104     0.0733     136864.5
+  AB_Z0_Fine@400000              1.0610     0.2458     0.0621      95079.2
+
+  Each cell above: 8 distinct position(s), each replanned once per repetition. Identical positions and seeds in every cell, so the ratios between cells are paired.
+
+=== DOES AN OPERATION COST THE SAME FOR EVERY CONFIGURATION? ===
+  (this is the question the old single-weight calibration assumed the answer to)
+       level           cheapest advance            dearest advance         spread
+       40000         AB_Z0_Fine 88734.5      AB_Short5_e25 93109.3           4.9%
+       80000         AB_Z0_Fine 127437.8      AB_Short5_e25 141118.2          10.7%
+      400000         AB_Z0_Fine 95079.2        AB_Baseline 149052.3          56.8%
+
+  Same question across levels, for the reference configuration:
+       40000 units: 89610.0 ns/advance  (1.00x the floor level)
+       80000 units: 138912.0 ns/advance  (1.55x the floor level)
+      400000 units: 136705.6 ns/advance  (1.53x the floor level)
+
+=== WHAT THE OLD GLOBAL WEIGHTS WOULD HAVE MIS-ALLOCATED ===
+  Wall-clock a nominal 1,000-unit budget would really have bought, priced with
+  one global weight set (advance=1, copy=0.16, eval=0.077) against each cell's
+  own realized operation mix. Equal columns = the old scheme was already fair.
+       level     min (ms)     max (ms)     unfairness
+       40000       87.923       92.652           5.4%   (EMCTS@40000 vs AB_Short5_e25@40000)
+       80000      127.458      139.904           9.8%   (AB_Z0_Fine@80000 vs AB_Short5_e25@80000)
+      400000       95.413      145.374          52.4%   (AB_Z0_Fine@400000 vs AB_Baseline@400000)
+  A large percentage here is the bias the per-profile weights remove: the same
+  nominal budget was buying that much more compute for one agent than another.
+
+=== IS THIS A FAIR BENCHMARK? ===
+  [ok]   every cell measured cleanly (12 cells)
+  [ok]   weights are plausible in every cell
+  [FAIL] load average 0.12 per core - the load harness did not actually load the machine, so these are idle measurements
+
+=== GATE A3': PER-CONFIG WEIGHT RATIOS, IDLE vs 48 THREADS ===
+  profile                                  idle     loaded    change
+  EMCTS@40000                            1.0000     1.0000      0.0%
+  AB_Baseline@40000                      1.0007     1.0032      0.3%
+  AB_Short5_e25@40000                    1.0030     1.0391      3.6%
+  AB_Z0_Fine@40000                       0.9119     0.9902      8.6%
+  EMCTS@80000                            1.5345     1.5502      1.0%
+  AB_Baseline@80000                      1.5352     1.5203     -1.0%
+  AB_Short5_e25@80000                    1.6002     1.5748     -1.6%
+  AB_Z0_Fine@80000                       1.1922     1.4221     19.3%
+  EMCTS@400000                           1.5468     1.5256     -1.4%
+  AB_Baseline@400000                     1.5474     1.6633      7.5%
+  AB_Short5_e25@400000                   1.4633     1.5273      4.4%
+  AB_Z0_Fine@400000                      0.8594     1.0610     23.5%
+
+  Largest move: 23.5% (AB_Z0_Fine@400000), over 12 profiles.
+  VERDICT: ratios MOVE under load.
+  The LOADED weights are the operating currency: re-measure every cell with
+  --underLoad and use compute_weights_load48.properties for the run.
+  Wall-clock fairness (W7) is promoted to CO-PRIMARY: report every headline
+  claim in both compute units and seconds, and treat an arm that wins in one
+  and loses in the other as unresolved, not as a win.
+
+  VERDICT: FAIL - weights NOT written; the pipeline keeps its current ones.
+  The measurements are in /home/jovyan/ab_runs/stage1/_calibration/compute_profiles_load48.csv for inspection.
+  Fix the failures above and re-run. The usual cause is other load on the
+  machine: stop it and try again.
+===== exit 0 after 0:42:05.795363
+
+>>>>> 2026-08-28 23:54:58 $ java -Xmx100g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dcompute.weightsFile="/home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties" -XX:+AlwaysPreTouch -cp "out:lib/*" core.data.exp.ComputeCalibrateV6 "/home/jovyan/ab_runs/stage1/_portfolio" "/home/jovyan/ab_runs/stage1/_calibration" 3 auto 6 40000,80000,400000 --suite a3 --underLoad 48
+[ComputeMeter] compute.wAdvance = 1.0 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 1.0)
+[ComputeMeter] compute.wCopy = 0.137451 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.16)
+[ComputeMeter] compute.wEval = 0.056738 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.077)
+############################################################
+# v6 compute-unit weight calibration (per config, per budget level)
+# Measures what an advance, a copy and an eval cost FOR EACH CONFIGURATION
+# AT EACH BUDGET LEVEL, relative to one reference operation, and writes them
+# where the rest of the pipeline picks them up.
+############################################################
+# UNDER LOAD: each cell is measured on one thread while 47 others run the SAME configuration.
+# This is gate A3' — the idle weights are ratios measured in a regime the
+# experiment never occupies. Arms differ several-fold in allocation rate, and
+# GC is nearly free on one thread while it competes for cores, L3 and memory
+# bandwidth at 48. If the ratios move, the idle weights mis-price
+# exactly the arms this line is trying to measure.
+# currently in force: advance=1.0000 copy=0.1375 eval=0.0567  (+54 calibrated per-config profiles)
+# suite=a3  underLoad=48  levels=[40000, 80000, 400000]  configs=4  cells=12
+# reps=3  turns(=positions)/rep per level=[8, 4, 2]  warmup=6
+# A repetition repeats the SAME positions with the SAME seeds, so variation across reps measures the machine, not the portfolio.
+# Estimator: the FASTEST repetition (interference can only slow one down).
+# Gate: the two fastest agree within 10%. Full CV is printed beside it as the disturbance diagnostic.
+# reference cell = EMCTS@40000  (its advance is 1.000 units by definition)
+------------------------------------------------------------
+[machine] compute-unit weight calibration
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical CPUs / 64 physical cores (SMT x2) | 1 NUMA node(s) | maxHeap 102400 MB | reserve 2 core(s) | worker ceiling 62
+[machine] SMT is ON. Workers are capped at physical cores: this workload is clone/bandwidth-bound, so sibling threads add heat and memory, not throughput.
+------------------------------------------------------------
+# load average before starting: 0.00 per core   (idle)
+
+[weights] warmup for level 40000: 6 turns (discarded)
+  [ 1/12] EMCTS@40000                    advance 90774.8 ns  copy 13402.1 ns  eval  5237.5 ns   (gap 0.6/0.3/1.6% | CV 2.3/14.8/1.5%)
+
+>>>>> 2026-08-29 00:02:40 $ java -Xmx100g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dcompute.weightsFile="/home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties" -XX:+AlwaysPreTouch -cp "out:lib/*" core.data.exp.ComputeCalibrateV6 "/home/jovyan/ab_runs/stage1/_portfolio" "/home/jovyan/ab_runs/stage1/_calibration" 3 auto 6 40000,80000,400000 --suite a3 --underLoad 48
+[ComputeMeter] compute.wAdvance = 1.0 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 1.0)
+[ComputeMeter] compute.wCopy = 0.137451 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.16)
+[ComputeMeter] compute.wEval = 0.056738 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.077)
+############################################################
+# v6 compute-unit weight calibration (per config, per budget level)
+# Measures what an advance, a copy and an eval cost FOR EACH CONFIGURATION
+# AT EACH BUDGET LEVEL, relative to one reference operation, and writes them
+# where the rest of the pipeline picks them up.
+############################################################
+# UNDER LOAD: each cell is measured on one thread while 47 others run the SAME configuration.
+# This is gate A3' — the idle weights are ratios measured in a regime the
+# experiment never occupies. Arms differ several-fold in allocation rate, and
+# GC is nearly free on one thread while it competes for cores, L3 and memory
+# bandwidth at 48. If the ratios move, the idle weights mis-price
+# exactly the arms this line is trying to measure.
+# currently in force: advance=1.0000 copy=0.1375 eval=0.0567  (+54 calibrated per-config profiles)
+# suite=a3  underLoad=48  levels=[40000, 80000, 400000]  configs=4  cells=12
+# reps=3  turns(=positions)/rep per level=[8, 4, 2]  warmup=6
+# A repetition repeats the SAME positions with the SAME seeds, so variation across reps measures the machine, not the portfolio.
+# Estimator: the FASTEST repetition (interference can only slow one down).
+# Gate: the two fastest agree within 10%. Full CV is printed beside it as the disturbance diagnostic.
+# reference cell = EMCTS@40000  (its advance is 1.000 units by definition)
+------------------------------------------------------------
+[machine] compute-unit weight calibration
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical CPUs / 64 physical cores (SMT x2) | 1 NUMA node(s) | maxHeap 102400 MB | reserve 2 core(s) | worker ceiling 62
+[machine] SMT is ON. Workers are capped at physical cores: this workload is clone/bandwidth-bound, so sibling threads add heat and memory, not throughput.
+------------------------------------------------------------
+# load average before starting: 0.01 per core   (idle)
+
+[weights] warmup for level 40000: 6 turns (discarded)
+  [ 1/12] EMCTS@40000                    advance 90223.5 ns  copy 12985.5 ns  eval  5037.6 ns   (gap 0.7/0.1/1.3% | CV 3.9/1.0/2.7%)
+  [ 2/12] AB_Baseline@40000              advance 91226.7 ns  copy 13075.2 ns  eval  5303.5 ns   (gap 0.6/1.4/2.9% | CV 0.4/1.2/1.6%)
+  [ 3/12] AB_Short5_e25@40000            advance 94198.3 ns  copy 14869.2 ns  eval  4870.9 ns   (gap 3.3/2.0/1.8% | CV 2.0/25.3/7.5%)
+  [ 4/12] AB_Z0_Fine@40000               advance 90570.5 ns  copy 15633.8 ns  eval  6172.5 ns   (gap 0.4/1.4/13.1% | CV 2.0/2.9/7.8%)   <-- two fastest eval times differ by 13.1%
+
+[weights] warmup for level 80000: 6 turns (discarded)
+  [ 5/12] EMCTS@80000                    advance 139579.1 ns  copy 16917.6 ns  eval  8692.0 ns   (gap 0.5/0.3/4.9% | CV 3.6/17.3/3.3%)
+  [ 6/12] AB_Baseline@80000              advance 137937.1 ns  copy 16812.6 ns  eval  8910.6 ns   (gap 0.3/0.8/0.9% | CV 0.2/1.5/1.0%)
+  [ 7/12] AB_Short5_e25@80000            advance 141616.0 ns  copy 19496.6 ns  eval  8448.1 ns   (gap 1.3/5.7/2.0% | CV 1.8/5.1/4.5%)
+  [ 8/12] AB_Z0_Fine@80000               advance 133315.9 ns  copy 22499.3 ns  eval  9226.7 ns   (gap 1.3/1.1/0.5% | CV 5.4/5.2/95.8%)
+
+[weights] warmup for level 400000: 6 turns (discarded)
+  [ 9/12] EMCTS@400000                   advance 139792.2 ns  copy 17045.3 ns  eval  9207.6 ns   (gap 1.1/1.3/0.4% | CV 2.0/6.8/2.7%)
+  [10/12] AB_Baseline@400000             advance 152363.3 ns  copy 17549.1 ns  eval 10745.5 ns   (gap 1.0/0.5/1.8% | CV 1.1/0.6/1.4%)
+  [11/12] AB_Short5_e25@400000           advance 137912.7 ns  copy 19416.7 ns  eval  6385.1 ns   (gap 0.6/0.1/17.4% | CV 1.9/1.9/11.0%)   <-- two fastest eval times differ by 17.4%
+  [12/12] AB_Z0_Fine@400000              advance 97077.6 ns  copy 21331.5 ns  eval  5236.1 ns   (gap 0.6/7.9/1.8% | CV 0.9/6.4/3.1%)
+  measured in 42 min
+
+=== RESULT: weights per profile (relative to one advance in EMCTS@40000 = 90223.5 ns) ===
+  profile                     W_ADVANCE     W_COPY     W_EVAL   ns/advance
+  EMCTS@40000                    1.0000     0.1439     0.0558      90223.5
+  AB_Baseline@40000              1.0111     0.1449     0.0588      91226.7
+  AB_Short5_e25@40000            1.0441     0.1648     0.0540      94198.3
+  AB_Z0_Fine@40000               1.0038     0.1733     0.0684      90570.5
+  EMCTS@80000                    1.5470     0.1875     0.0963     139579.1
+  AB_Baseline@80000              1.5288     0.1863     0.0988     137937.1
+  AB_Short5_e25@80000            1.5696     0.2161     0.0936     141616.0
+  AB_Z0_Fine@80000               1.4776     0.2494     0.1023     133315.9
+  EMCTS@400000                   1.5494     0.1889     0.1021     139792.2
+  AB_Baseline@400000             1.6887     0.1945     0.1191     152363.3
+  AB_Short5_e25@400000           1.5286     0.2152     0.0708     137912.7
+  AB_Z0_Fine@400000              1.0760     0.2364     0.0580      97077.6
+
+  Each cell above: 8 distinct position(s), each replanned once per repetition. Identical positions and seeds in every cell, so the ratios between cells are paired.
+
+=== DOES AN OPERATION COST THE SAME FOR EVERY CONFIGURATION? ===
+  (this is the question the old single-weight calibration assumed the answer to)
+       level           cheapest advance            dearest advance         spread
+       40000              EMCTS 90223.5      AB_Short5_e25 94198.3           4.4%
+       80000         AB_Z0_Fine 133315.9      AB_Short5_e25 141616.0           6.2%
+      400000         AB_Z0_Fine 97077.6        AB_Baseline 152363.3          57.0%
+
+  Same question across levels, for the reference configuration:
+       40000 units: 90223.5 ns/advance  (1.00x the floor level)
+       80000 units: 139579.1 ns/advance  (1.55x the floor level)
+      400000 units: 139792.2 ns/advance  (1.55x the floor level)
+
+=== WHAT THE OLD GLOBAL WEIGHTS WOULD HAVE MIS-ALLOCATED ===
+  Wall-clock a nominal 1,000-unit budget would really have bought, priced with
+  one global weight set (advance=1, copy=0.16, eval=0.077) against each cell's
+  own realized operation mix. Equal columns = the old scheme was already fair.
+       level     min (ms)     max (ms)     unfairness
+       40000       88.440       93.751           6.0%   (EMCTS@40000 vs AB_Short5_e25@40000)
+       80000      133.364      140.492           5.3%   (AB_Z0_Fine@80000 vs AB_Short5_e25@80000)
+      400000       97.346      148.032          52.1%   (AB_Z0_Fine@400000 vs AB_Baseline@400000)
+  A large percentage here is the bias the per-profile weights remove: the same
+  nominal budget was buying that much more compute for one agent than another.
+
+=== IS THIS A FAIR BENCHMARK? ===
+  [ok]   weights are plausible in every cell
+  [FAIL] 2 of 12 cells failed their own checks (listed above)
+  [FAIL] load average 0.13 per core - the load harness did not actually load the machine, so these are idle measurements
+
+=== GATE A3': PER-CONFIG WEIGHT RATIOS, IDLE vs 48 THREADS ===
+  profile                                  idle     loaded    change
+  EMCTS@40000                            1.0000     1.0000      0.0%
+  AB_Baseline@40000                      1.0007     1.0111      1.0%
+  AB_Short5_e25@40000                    1.0030     1.0441      4.1%
+  AB_Z0_Fine@40000                       0.9119     1.0038     10.1%
+  EMCTS@80000                            1.5345     1.5470      0.8%
+  AB_Baseline@80000                      1.5352     1.5288     -0.4%
+  AB_Short5_e25@80000                    1.6002     1.5696     -1.9%
+  AB_Z0_Fine@80000                       1.1922     1.4776     23.9%
+  EMCTS@400000                           1.5468     1.5494      0.2%
+  AB_Baseline@400000                     1.5474     1.6887      9.1%
+  AB_Short5_e25@400000                   1.4633     1.5286      4.5%
+  AB_Z0_Fine@400000                      0.8594     1.0760     25.2%
+
+  Largest move: 25.2% (AB_Z0_Fine@400000), over 12 profiles.
+  VERDICT: ratios MOVE under load.
+  The LOADED weights are the operating currency: re-measure every cell with
+  --underLoad and use compute_weights_load48.properties for the run.
+  Wall-clock fairness (W7) is promoted to CO-PRIMARY: report every headline
+  claim in both compute units and seconds, and treat an arm that wins in one
+  and loses in the other as unresolved, not as a win.
+
+  VERDICT: FAIL - weights NOT written; the pipeline keeps its current ones.
+  The measurements are in /home/jovyan/ab_runs/stage1/_calibration/compute_profiles_load48.csv for inspection.
+  Fix the failures above and re-run. The usual cause is other load on the
+  machine: stop it and try again.
+===== exit 0 after 0:42:20.380352
+
+>>>>> 2026-08-29 11:19:27 $ java -Xmx100g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dcompute.weightsFile="/home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties" -XX:+AlwaysPreTouch -cp "out:lib/*" core.data.exp.ComputeCalibrateV6 "/home/jovyan/ab_runs/stage1/_portfolio" "/home/jovyan/ab_runs/stage1/_calibration" 3 auto 6 40000,80000,400000 --suite a3 --underLoad 48
+[ComputeMeter] compute.wAdvance = 1.0 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 1.0)
+[ComputeMeter] compute.wCopy = 0.137451 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.16)
+[ComputeMeter] compute.wEval = 0.056738 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.077)
+############################################################
+# v6 compute-unit weight calibration (per config, per budget level)
+# Measures what an advance, a copy and an eval cost FOR EACH CONFIGURATION
+# AT EACH BUDGET LEVEL, relative to one reference operation, and writes them
+# where the rest of the pipeline picks them up.
+############################################################
+# UNDER LOAD: each cell is measured on one thread while 47 others run the SAME configuration.
+# This is gate A3' — the idle weights are ratios measured in a regime the
+# experiment never occupies. Arms differ several-fold in allocation rate, and
+# GC is nearly free on one thread while it competes for cores, L3 and memory
+# bandwidth at 48. If the ratios move, the idle weights mis-price
+# exactly the arms this line is trying to measure.
+# currently in force: advance=1.0000 copy=0.1375 eval=0.0567  (+54 calibrated per-config profiles)
+# suite=a3  underLoad=48  levels=[40000, 80000, 400000]  configs=4  cells=12
+# reps=3  turns(=positions)/rep per level=[8, 4, 2]  warmup=6
+# A repetition repeats the SAME positions with the SAME seeds, so variation across reps measures the machine, not the portfolio.
+# Estimator: the FASTEST repetition (interference can only slow one down).
+# Gate: the two fastest agree within 10%. Full CV is printed beside it as the disturbance diagnostic.
+# reference cell = EMCTS@40000  (its advance is 1.000 units by definition)
+------------------------------------------------------------
+[machine] compute-unit weight calibration
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical CPUs / 64 physical cores (SMT x2) | 1 NUMA node(s) | maxHeap 102400 MB | reserve 2 core(s) | worker ceiling 62
+[machine] SMT is ON. Workers are capped at physical cores: this workload is clone/bandwidth-bound, so sibling threads add heat and memory, not throughput.
+------------------------------------------------------------
+# load average before starting: 0.00 per core   (idle)
+
+[weights] warmup for level 40000: 6 turns (discarded)
+
+>>>>> 2026-08-29 11:19:37 $ java -Xmx100g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dcompute.weightsFile="/home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties" -XX:+AlwaysPreTouch -cp "out:lib/*" core.data.exp.ComputeCalibrateV6 "/home/jovyan/ab_runs/stage1/_portfolio" "/home/jovyan/ab_runs/stage1/_calibration" 3 auto 6 40000,80000,400000 --suite a3 --underLoad 48
+[ComputeMeter] compute.wAdvance = 1.0 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 1.0)
+[ComputeMeter] compute.wCopy = 0.137451 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.16)
+[ComputeMeter] compute.wEval = 0.056738 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.077)
+############################################################
+# v6 compute-unit weight calibration (per config, per budget level)
+# Measures what an advance, a copy and an eval cost FOR EACH CONFIGURATION
+# AT EACH BUDGET LEVEL, relative to one reference operation, and writes them
+# where the rest of the pipeline picks them up.
+############################################################
+# UNDER LOAD: each cell is measured on one thread while 47 others run the SAME configuration.
+# This is gate A3' — the idle weights are ratios measured in a regime the
+# experiment never occupies. Arms differ several-fold in allocation rate, and
+# GC is nearly free on one thread while it competes for cores, L3 and memory
+# bandwidth at 48. If the ratios move, the idle weights mis-price
+# exactly the arms this line is trying to measure.
+# currently in force: advance=1.0000 copy=0.1375 eval=0.0567  (+54 calibrated per-config profiles)
+# suite=a3  underLoad=48  levels=[40000, 80000, 400000]  configs=4  cells=12
+# reps=3  turns(=positions)/rep per level=[8, 4, 2]  warmup=6
+# A repetition repeats the SAME positions with the SAME seeds, so variation across reps measures the machine, not the portfolio.
+# Estimator: the FASTEST repetition (interference can only slow one down).
+# Gate: the two fastest agree within 10%. Full CV is printed beside it as the disturbance diagnostic.
+# reference cell = EMCTS@40000  (its advance is 1.000 units by definition)
+------------------------------------------------------------
+[machine] compute-unit weight calibration
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical CPUs / 64 physical cores (SMT x2) | 1 NUMA node(s) | maxHeap 102400 MB | reserve 2 core(s) | worker ceiling 62
+[machine] SMT is ON. Workers are capped at physical cores: this workload is clone/bandwidth-bound, so sibling threads add heat and memory, not throughput.
+------------------------------------------------------------
+# load average before starting: 0.00 per core   (idle)
+
+[weights] warmup for level 40000: 6 turns (discarded)
+  [ 1/12] EMCTS@40000                    advance 90356.9 ns  copy 13095.4 ns  eval  5283.0 ns   (gap 0.5/0.6/1.2% | CV 2.6/1.3/1.0%)
+  [ 2/12] AB_Baseline@40000              advance 90921.3 ns  copy 13033.0 ns  eval  5389.9 ns   (gap 0.1/2.0/1.6% | CV 0.4/1.8/1.8%)
+  [ 3/12] AB_Short5_e25@40000            advance 94182.9 ns  copy 14726.2 ns  eval  4971.8 ns   (gap 3.2/0.6/4.9% | CV 1.9/0.6/5.1%)
+  [ 4/12] AB_Z0_Fine@40000               advance 89190.3 ns  copy 17373.4 ns  eval  6759.4 ns   (gap 4.0/1.1/0.4% | CV 2.6/2.2/1.7%)
+
+[weights] warmup for level 80000: 6 turns (discarded)
+  [ 5/12] EMCTS@80000                    advance 139180.2 ns  copy 16893.5 ns  eval  9360.3 ns   (gap 0.2/0.9/0.2% | CV 3.5/1.4/0.8%)
+  [ 6/12] AB_Baseline@80000              advance 137757.1 ns  copy 16668.3 ns  eval  9072.8 ns   (gap 0.2/1.8/3.0% | CV 1.5/1.1/2.2%)
+  [ 7/12] AB_Short5_e25@80000            advance 140175.0 ns  copy 19594.5 ns  eval  7638.1 ns   (gap 2.7/3.9/8.0% | CV 3.0/4.7/5.9%)
+  [ 8/12] AB_Z0_Fine@80000               advance 133926.8 ns  copy 24236.5 ns  eval  9316.6 ns   (gap 0.7/2.0/11.4% | CV 4.9/40.5/6.3%)   <-- two fastest eval times differ by 11.4%
+
+[weights] warmup for level 400000: 6 turns (discarded)
+  [ 9/12] EMCTS@400000                   advance 141028.0 ns  copy 16989.6 ns  eval 10792.7 ns   (gap 1.0/1.5/0.6% | CV 0.7/0.9/17.6%)
+  [10/12] AB_Baseline@400000             advance 148814.0 ns  copy 18949.3 ns  eval 11214.4 ns   (gap 2.7/1.1/0.8% | CV 1.7/8.8/7.9%)
+  [11/12] AB_Short5_e25@400000           advance 138947.5 ns  copy 20712.7 ns  eval  6977.5 ns   (gap 0.1/2.0/0.6% | CV 1.7/1.9/0.7%)
+  [12/12] AB_Z0_Fine@400000              advance 96363.7 ns  copy 25805.2 ns  eval  5394.8 ns   (gap 0.5/1.5/2.5% | CV 0.9/6.4/3.4%)
+  measured in 42 min
+
+=== RESULT: weights per profile (relative to one advance in EMCTS@40000 = 90356.9 ns) ===
+  profile                     W_ADVANCE     W_COPY     W_EVAL   ns/advance
+  EMCTS@40000                    1.0000     0.1449     0.0585      90356.9
+  AB_Baseline@40000              1.0062     0.1442     0.0597      90921.3
+  AB_Short5_e25@40000            1.0423     0.1630     0.0550      94182.9
+  AB_Z0_Fine@40000               0.9871     0.1923     0.0748      89190.3
+  EMCTS@80000                    1.5403     0.1870     0.1036     139180.2
+  AB_Baseline@80000              1.5246     0.1845     0.1004     137757.1
+  AB_Short5_e25@80000            1.5513     0.2169     0.0845     140175.0
+  AB_Z0_Fine@80000               1.4822     0.2682     0.1031     133926.8
+  EMCTS@400000                   1.5608     0.1880     0.1194     141028.0
+  AB_Baseline@400000             1.6470     0.2097     0.1241     148814.0
+  AB_Short5_e25@400000           1.5378     0.2292     0.0772     138947.5
+  AB_Z0_Fine@400000              1.0665     0.2856     0.0597      96363.7
+
+  Each cell above: 8 distinct position(s), each replanned once per repetition. Identical positions and seeds in every cell, so the ratios between cells are paired.
+
+=== DOES AN OPERATION COST THE SAME FOR EVERY CONFIGURATION? ===
+  (this is the question the old single-weight calibration assumed the answer to)
+       level           cheapest advance            dearest advance         spread
+       40000         AB_Z0_Fine 89190.3      AB_Short5_e25 94182.9           5.6%
+       80000         AB_Z0_Fine 133926.8      AB_Short5_e25 140175.0           4.7%
+      400000         AB_Z0_Fine 96363.7        AB_Baseline 148814.0          54.4%
+
+  Same question across levels, for the reference configuration:
+       40000 units: 90356.9 ns/advance  (1.00x the floor level)
+       80000 units: 139180.2 ns/advance  (1.54x the floor level)
+      400000 units: 141028.0 ns/advance  (1.56x the floor level)
+
+=== WHAT THE OLD GLOBAL WEIGHTS WOULD HAVE MIS-ALLOCATED ===
+  Wall-clock a nominal 1,000-unit budget would really have bought, priced with
+  one global weight set (advance=1, copy=0.16, eval=0.077) against each cell's
+  own realized operation mix. Equal columns = the old scheme was already fair.
+       level     min (ms)     max (ms)     unfairness
+       40000       88.744       93.721           5.6%   (EMCTS@40000 vs AB_Short5_e25@40000)
+       80000      133.769      138.996           3.9%   (AB_Baseline@80000 vs AB_Short5_e25@80000)
+      400000       96.888      145.980          50.7%   (AB_Z0_Fine@400000 vs AB_Baseline@400000)
+  A large percentage here is the bias the per-profile weights remove: the same
+  nominal budget was buying that much more compute for one agent than another.
+
+=== IS THIS A FAIR BENCHMARK? ===
+  [ok]   weights are plausible in every cell
+  [FAIL] 1 of 12 cells failed their own checks (listed above)
+  [FAIL] load average 0.11 per core - the load harness did not actually load the machine, so these are idle measurements
+
+=== GATE A3': PER-CONFIG WEIGHT RATIOS, IDLE vs 48 THREADS ===
+  profile                                  idle     loaded    change
+  EMCTS@40000                            1.0000     1.0000      0.0%
+  AB_Baseline@40000                      1.0007     1.0062      0.6%
+  AB_Short5_e25@40000                    1.0030     1.0423      3.9%
+  AB_Z0_Fine@40000                       0.9119     0.9871      8.2%
+  EMCTS@80000                            1.5345     1.5403      0.4%
+  AB_Baseline@80000                      1.5352     1.5246     -0.7%
+  AB_Short5_e25@80000                    1.6002     1.5513     -3.1%
+  AB_Z0_Fine@80000                       1.1922     1.4822     24.3%
+  EMCTS@400000                           1.5468     1.5608      0.9%
+  AB_Baseline@400000                     1.5474     1.6470      6.4%
+  AB_Short5_e25@400000                   1.4633     1.5378      5.1%
+  AB_Z0_Fine@400000                      0.8594     1.0665     24.1%
+
+  Largest move: 24.3% (AB_Z0_Fine@80000), over 12 profiles.
+  VERDICT: ratios MOVE under load.
+  The LOADED weights are the operating currency: re-measure every cell with
+  --underLoad and use compute_weights_load48.properties for the run.
+  Wall-clock fairness (W7) is promoted to CO-PRIMARY: report every headline
+  claim in both compute units and seconds, and treat an arm that wins in one
+  and loses in the other as unresolved, not as a win.
+
+  VERDICT: FAIL - weights NOT written; the pipeline keeps its current ones.
+  The measurements are in /home/jovyan/ab_runs/stage1/_calibration/compute_profiles_load48.csv for inspection.
+  Fix the failures above and re-run. The usual cause is other load on the
+  machine: stop it and try again.
+===== exit 0 after 0:42:41.359782

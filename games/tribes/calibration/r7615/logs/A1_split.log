@@ -1,0 +1,10 @@
+
+>>>>> 2026-08-28 15:57:02 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dcompute.weightsFile="/home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties"  -cp "out:lib/*" core.data.exp.PortfolioSplit "/home/jovyan/ab_runs/stage1/_portfolio"
+[split] portfolio: /home/jovyan/ab_runs/stage1/_portfolio  (400 scenarios)
+[split] identity-sha256: ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7
+[split] froze portfolio split in /home/jovyan/ab_runs/stage1/_portfolio
+[split]   DEV: 200 scenarios (single=100, dual=100), mean branching 272.0
+[split]   HOLDOUT: 200 scenarios (single=100, dual=100), mean branching 274.6
+[split] DEV: 200 ids -> /home/jovyan/ab_runs/stage1/_portfolio/_split_dev.txt
+[split] HOLDOUT: 200 ids -> /home/jovyan/ab_runs/stage1/_portfolio/_split_holdout.txt
+===== exit 0 after 0:00:00.185198
