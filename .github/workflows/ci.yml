@@ -1,0 +1,37 @@
+name: MAGAT CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [ '11', '17', '21' ]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build
+        run: python magat.py build --tests
+      - name: Layering
+        run: python magat.py layering
+      - name: Unit tests
+        run: python magat.py test
+      - name: Contract laws (Tribes, 4 published positions)
+        run: python magat.py check contract --game tribes --scenarios 4
+      - name: Equivalence gate (emcts vs the thesis agent, 2 positions, 8k units)
+        run: python magat.py check equivalence --game tribes --arms emcts --scenarios 2 --visits 1 --budgets 8000
+      - name: Notebook self-test
+        run: python magat.py notebook selftest

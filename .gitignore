@@ -1,0 +1,11 @@
+# MAGAT build output and run output (runs live outside the clone; see magat.py)
+build/
+*.class
+magat_runs/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.idea/
+*.iml
+.DS_Store
+build.stale-*/
