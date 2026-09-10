@@ -149,20 +149,21 @@ Multi-Action-Game-Algorithm-Tester/           (this repository)
 +-- README.md            what MAGAT is, the afternoon path (§14.2), credits (Tribes authors, AIIDE 2020)
 +-- LICENSE              (§17)
 +-- CITATION.cff
-+-- magat                the launcher (Python, §13.1): ./magat build, ./magat run ...
-+-- magat/               Java core (package root `magat`)
++-- magat.py             the launcher (Python, §13.1): python magat.py build, ...; bin/magat and magat.cmd wrap it
++-- core/                Java core (package root `magat`; the directory is `core/` because `MAGAT/` holds the
+|   |                    founding documents and the two names collide on a case-insensitive filesystem)
 |   +-- src/magat/meter/        Meter, Weights, Profile
-|   +-- src/magat/game/         Game, MeteredGame, Granularity, Scenario, ScenarioSource, Capture, ContractCheck
-|   +-- src/magat/agent/        SearchAgent, AgentFactory, AgentRegistry, TurnBudget, TurnRecord, Curve, Seeds
-|   +-- src/magat/agents/       random/Random; emcts/{Emcts, EmctsParams, Selection, Node, QdeltaEmcts, QdeltaParams, ActionTable}
-|   +-- src/magat/portfolio/    PortfolioBuilder, CaptureJournal, Manifest, Identity, Split, Portfolio, HoldoutLedger
+|   +-- src/magat/game/         Game, MeteredGame, Granularity, Scenario, ScenarioSource, Capture, ContractCheck, GameModule
+|   +-- src/magat/agent/        SearchAgent, AgentFactory, AgentRegistry, TurnBudget, TurnRecord, Seeds, Episode, Oracle, Signature
+|   +-- src/magat/agents/       random/RandomAgent; emcts/{Emcts, EmctsParams, Selection, Node, EmctsFactory, QdeltaEmcts, QdeltaParams, ActionTable}
+|   +-- src/magat/portfolio/    Portfolio (loader), PortfolioBuilder, CaptureJournal, Manifest, Identity, Split, HoldoutLedger
 |   +-- src/magat/calibrate/    Calibrator, Cell, Estimator, LoadHarness, DriftReport, ThreadSweep
 |   +-- src/magat/machine/      MachineProfile (was ServerProfile)
-|   +-- src/magat/run/          Experiment, GridRunner, Leaf, Checkpoint, Episode, ResultsWriter, LoadGovernor, RunGuard, Provenance
+|   +-- src/magat/run/          Experiment, GridRunner, Leaf, Checkpoint, ResultsWriter, LoadGovernor, RunGuard, Provenance
 |   +-- src/magat/probe/        EquivalenceCheck, StructureCheck, SupportProbe, ReplayCheck
-|   +-- src/magat/cli/          Main, Args, one class per command
-|   +-- test/                   JUnit 4, one test class per component
-|   +-- lib/                    junit-4.13.2, hamcrest-core-1.3, minimal-json (MIT) — §15.4
+|   +-- src/magat/cli/          Main, Args, Games, one class per command
+|   +-- test/                   JUnit 4, one test class per component, plus the toy game the core tests run on
+|   +-- lib/                    minimal-json (MIT) — §15.4; junit and hamcrest come from the engine's lib/
 +-- games/tribes/
 |   +-- engine/                 git submodule -> the Tribes fork (§15.3)
 |   +-- src/magat/games/tribes/ TribesGame, TribesState, TribesScenarioSources, TribesAgents, oracle/*
@@ -492,10 +493,13 @@ comparing unlike things — trap A.5 one level up) and per-op nanoseconds for ev
 what re-pricing and the drift report want).
 
 **Importing the R7615 file.** `games/tribes/calibration/r7615/ORIGIN.md` records the mapping:
-`EMCTS@<b>` → the anchor (`referenceAdvanceNanos` and the global fallback); `AB_Baseline@<b>` →
-`profile.emcts@<b>`; every `AB_Comma_*` → its new id. The two plain-EMCTS cells are checked to agree
-within the calibrator's own 10% gate, and both originals are kept verbatim beside the converted file.
-See §17 for what is needed from you to do this exactly rather than from logs.
+`EMCTS@<b>` → the anchor (`referenceAdvanceNanos` and the global fallback), kept as the profile
+`emcts-engine@<b>` that MAGAT never runs; `AB_Baseline@<b>` → `profile.emcts@<b>`; every
+`AB_Comma_*` → its new id. Both originals are kept verbatim beside the converted file.
+
+*Done 2026-09-10 (milestone 1) by `tools/import_r7615.py` from the archived `_calibration` and
+`_portfolio` directories: 105 profiles (35 arms × 3 levels), the portfolio identity
+`ec243fd7…` verified against the frozen split files.*
 
 ### 6.4 Where the profile is installed
 
@@ -557,14 +561,17 @@ mandatory (the file's hash goes into the ledger and the provenance). "Read once"
 
 ### 7.6 Distribution
 
-The published Tribes portfolio is `games/tribes/portfolio/v1/` in git: manifest, both split files,
-identity, split report — a few hundred kilobytes. The bins are a release asset
-(`tribes-portfolio-v1.tar.gz`) and are reproducible: `magat portfolio build` on any machine reproduces
-the manifest bit-for-bit (the build is deterministic in its seeds and fixed weights, and the thesis
-verified that at every thread count), and `magat portfolio verify` asserts the rebuilt identity equals
-the published one before anything runs on it. A run against a portfolio whose identity is not the
+The published Tribes portfolio is `games/tribes/portfolio/v1/` in git, bins included: the 400
+serialized positions are 1.8 MB, small enough that a release asset would only add a step. The bins
+are tied to the engine's class shape (Java serialization), which the manifest records as the engine
+commit, and they are reproducible: `magat portfolio build` on any machine reproduces the manifest
+bit-for-bit (the build is deterministic in its seeds and fixed weights, and the thesis verified that
+at every thread count), and `magat portfolio verify` asserts the rebuilt identity equals the
+published one before anything runs on it. A run against a portfolio whose identity is not the
 published one is allowed, but its results are labelled with that identity and are not comparable with
 published leaves.
+
+*Amended 2026-09-10 (milestone 1): bins in git rather than a release asset.*
 
 ---
 
@@ -809,7 +816,7 @@ re-analysed by MAGAT.
 | Command | What it asserts | Extracted from |
 |---|---|---|
 | `magat check contract` | laws L1–L10 on captured positions (§4.4) | `ActionKeyCollisionProbe`, `StaleActorIdTest`, the copy-determinism reasoning in `IsolationPhaseRunner` |
-| `magat check equivalence` | each ported arm reproduces its oracle's `(initial, final, advances, copies, evals, nodes, unique)` on N scenarios × V visits at a calibrated budget, both sides under identical weights (the oracle's engine meter is set to the profile's three numbers). Default N = 8, V = 2; the shakedown uses a toy budget | `Stage1Runner.verify` |
+| `magat check equivalence` | each ported arm reproduces its oracle's `(initial, final, advances, copies, evals, nodes, unique, units)` and initialization spend on N scenarios × V visits at a calibrated budget, both sides under identical weights (the oracle's engine meter is set to the profile's three numbers; an unpriced toy budget uses the arm's smallest priced level). Default N = 8, V = 2. An oracle declares the initialization copies it makes and never reads (the thesis agent makes two), which the port does not make; the gate expects exactly that offset | `Stage1Runner.verify` |
 | `magat check structure` | `--same a=b` pairs are byte-identical over N turns, `--differ c=d` pairs are not, and the tree branches (`maxBranching ≥ 2` in telemetry); the LEGACY = COMMA and k = 1 = DRIFT equivalences become entries in `experiments/tribes/structure.json`. Runs on portfolio turns rather than full games, so it needs no game loop | `SelectionStructureCheck`, `SelectionFixCheck` |
 | `magat probe support` | an arm's `support()` counters over N scenarios per level against a criterion from the spec (Tribes/Qδ: ≥ 80% of biased picks after the warm-up burns rest on a key with ≥ 3 observations); a failing level is labelled a *reporting* level in the report | `ActionBiasFloorProbe` |
 | `magat check replay` | **new.** Given a published leaf, rebuilt scenarios and the published weights, re-run K turns and assert the rows agree field for field. The cross-machine determinism claim, tested rather than stated | — |
@@ -822,7 +829,8 @@ All five run in the shakedown at toy size and print PASS/FAIL; all exit non-zero
 
 ### 13.1 The launcher
 
-`./magat` (Python 3, at the repository root) is the one thing a user types. It locates the root from
+`python magat.py` (Python 3, at the repository root; `bin/magat` and `magat.cmd` wrap it) is the one
+thing a user types. It locates the root from
 any working directory, builds when sources are newer than classes, computes the classpath, opens the
 data root, passes `--weights` explicitly to every JVM, and tees every command's output to
 `<data>/logs/<name>.log` with a timestamped header (the notebook's `run/java` helpers, promoted). Java
@@ -952,16 +960,22 @@ minutes.
 
 ### 15.3 The engine fork
 
-`games/tribes/engine` is a submodule pointing at a repository under your account that is a GitHub fork
-of `GAIGResearch/Tribes` with the thesis's engine changes applied on top as one commit, so the diff
-against upstream is visible. It keeps: the engine (`core/`, `utils/`, `gui/`), the thesis's engine
+`games/tribes/engine` is a submodule pointing at `mlhcorapi/Tribes`, a public GitHub fork of
+`GAIGResearch/Tribes`, branch `magat-engine`: upstream `270e7e5` (2022-08-25, the commit the thesis
+tree was taken from, established by comparing the files the thesis did not touch) plus two commits.
+The first is the thesis tree with line endings normalised, assembled by `tools/make_engine_branch.py`
+so the provenance is reproducible: the engine (`core/`, `utils/`, `gui/`), the thesis's engine
 modifications (`setRandomGenerator`, `captureAtTickAsTurnStart`, typed actor lookup and the stale-id
 feasibility fixes, `FastGameStateIO`'s `readObject` hook, the `LOSE_BOOST` fix, `REMOVE_FISHING`,
 `ComputeMeter` and its hooks), `players/` (upstream agents and the thesis agents that serve as
-oracles), `core/data/dto`, `StaleActorIdTest`. It drops `core/data/exp`, `analysis/`, the shakedown
-script, `test_results/`, `Benchmark.java`. Whether it is public or private is your call (§17); CI can
-use a deploy key for a private one. Credit to the Tribes authors goes in MAGAT's README and
-`games/tribes/README.md` either way.
+oracles), `core/data/dto`, the two tests with junit in `lib/`; not `core/data/exp`, `analysis/`, the
+shakedown script, `test_results/`, `Benchmark.java`, or the experiment mains in `core/data/`. Against
+upstream that is 125 files changed, +7,663/−419. The second commit is the one engine change MAGAT
+needs (`tools/patch_engine_paths.py`): `IO.readFile/readJSON` resolve a relative data file against
+`-Dtribes.home` when it is not in the working directory, so the engine runs from any directory; the
+launcher passes the property. Credit to the Tribes authors is in MAGAT's README.
+
+*Done 2026-09-10 (milestone 1).*
 
 ### 15.4 Third-party audit
 
@@ -969,7 +983,7 @@ use a deploy key for a private one. Credit to the Tribes authors goes in MAGAT's
 - `json.jar` (JSON.org) carries the "shall be used for Good, not Evil" clause, which is not an
   OSI-approved licence. The engine uses it for level loading; MAGAT's own code will not. The
   experiment spec and the sidecars are parsed with `minimal-json` (MIT, one small jar, no
-  dependencies), added to `magat/lib/`.
+  dependencies), added to `core/lib/`.
 - The R7615 calibration and the worked result are the user's own data.
 
 ---
@@ -982,7 +996,7 @@ commit. `run_magat.ipynb` and `tools/shakedown.py` exist from milestone 0 and gr
 | # | Deliverable | Acceptance |
 |---|---|---|
 | 0 | Repository bootstrap: layout, launcher with `build`, engine fork + submodule, CI skeleton, licence file, README with credits, notebook (parameters + build + shakedown cells), shakedown (build only), layering check | CI green on an empty core |
-| 1 | **The seam**: `Game`, `MeteredGame`, `Meter`, `TurnBudget`, `TurnRecord`, `Episode`, `TribesGame`, `TribesState`, `Emcts` ported, `check contract`, `check equivalence` | L1–L10 pass on 8 captured positions; `emcts` reproduces its oracle on 8 scenarios × 2 visits at 8k and 40k; `check equivalence` is in the shakedown |
+| 1 | **The seam**: `Game`, `MeteredGame`, `Meter`, `TurnBudget`, `TurnRecord`, `Episode`, `TribesGame`, `TribesState`, `Emcts` ported, `check contract`, `check equivalence` | L1–L10 pass on 8 captured positions; `emcts` reproduces its oracle on 8 scenarios × 2 visits at 8k and 40k; `check equivalence` is in the shakedown. *Done 2026-09-10; the port also reproduces the R7615's own archived verify signature for scenario 1 at 40k (`init=6231.0 final=6486.0 fm=37354 nodes=430 unique=356 units=40056.0483`), and `emcts-comma` came along for free.* |
 | 2 | Portfolio: builder, journal, manifest v1, identity, split, ledger, `random`; `TribesScenarioSources` | toy build reproducible at 1 and 4 threads; the published manifest identity (reconstructed from the archived rows, §17) reproduced by a full build on the server |
 | 3 | Calibration: `Calibrator`, merge, `--check`, `--under-load`, `ThreadSweep`, `MachineProfile`, weights v1, R7615 import + `ORIGIN.md` | toy calibration writes and merges; the drift-math unit test (divide vs multiply) exists; the imported file loads and prices every worked-result arm |
 | 4 | Runner: spec + validator, `GridRunner`, checkpoints, compaction, currency lock, identical-output assertion, provenance, `run` and `bundle` commands | shakedown spec runs on dev and holdout, resumes, skips, retires a leaf; validator rejects a sweep without its null |
