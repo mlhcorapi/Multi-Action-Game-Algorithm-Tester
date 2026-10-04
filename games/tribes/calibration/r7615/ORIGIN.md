@@ -74,3 +74,20 @@ machine uniformly faster or slower than the R7615 prices the new arm exactly as 
 What does not cancel is a change in cost ratios between operations; run
 `magat calibrate --check --game tribes --arms emcts,emcts-comma` first, which reports it per operation
 against the 10% gate and writes nothing.
+
+## Drift checks against this currency
+
+`magat calibrate --check --game tribes --arms emcts,emcts-comma`: turns per repetition `8,4,2` (from this
+file), 3 repetitions, 6 warm-up turns per level, the published portfolio. Drift is per operation in this
+file's unit (gate 10%); the turn price is each cell's own operation mix priced now against stored.
+
+| Date | Machine | Bracket (reference moved) | Advance | Copy | Eval | Turn price | Verdict |
+|---|---|---|---|---|---|---|---|
+| 2026-10-04 | Intel Core i9-14900HX laptop, Windows 11, JDK 26 | +0.6% / +0.3% / +0.9% (held) | +0.6% to +5.3% | -2.0% to -6.9% | -31.3% to -37.8% | -1.7% to +3.7% | FAIL (evaluations) |
+
+On that laptop the heuristic evaluation is about a third cheaper relative to an advance than on the
+EPYC 9534, consistently across every cell and three sessions; advances and copies carry over within the
+gate. Evaluations are about 3% of a turn's price, so an arm priced there and merged here would be
+mis-sized by a few percent, not by a third; the per-operation gate, as pre-registered, still fails it.
+Two earlier sessions on the same laptop ran before the session bracket existed; one measured the
+reference advance 14% away from the other, which is why every session now brackets its reference.
