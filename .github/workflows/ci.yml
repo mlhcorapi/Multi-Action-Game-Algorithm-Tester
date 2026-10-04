@@ -33,5 +33,12 @@ jobs:
         run: python magat.py check contract --game tribes --scenarios 4
       - name: Equivalence gate (emcts vs the thesis agent, 2 positions, 8k units)
         run: python magat.py check equivalence --game tribes --arms emcts --scenarios 2 --visits 1 --budgets 8000
+      - name: Published portfolio verifies (bins, identity, split rule)
+        run: python magat.py portfolio verify --game tribes
+      - name: Toy portfolio build, freeze, and verify against the published rows
+        run: |
+          python magat.py portfolio build --game tribes --out "$RUNNER_TEMP/toy" --targets single=2,dual=1 --threads 2
+          python magat.py portfolio freeze --portfolio "$RUNNER_TEMP/toy"
+          python magat.py portfolio verify --game tribes --portfolio "$RUNNER_TEMP/toy" --published games/tribes/portfolio/v1 --subset --plan 3
       - name: Notebook self-test
         run: python magat.py notebook selftest

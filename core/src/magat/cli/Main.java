@@ -27,7 +27,7 @@ import java.util.Set;
  */
 public final class Main {
 
-    public static final String VERSION = "0.1.0-m1";
+    public static final String VERSION = "0.1.0-m2";
 
     private Main() {}
 
@@ -40,6 +40,7 @@ public final class Main {
             else if (cmd.equals("version")) { System.out.println("magat " + VERSION); code = 0; }
             else if (cmd.equals("check")) code = check(args);
             else if (cmd.equals("arms")) code = arms(args);
+            else if (cmd.equals("portfolio")) code = PortfolioCommand.run(args);
             else { System.err.println("unknown command: " + cmd); usage(); code = 2; }
         } catch (IllegalArgumentException | IllegalStateException e) {
             System.err.println("error: " + e.getMessage());
@@ -58,11 +59,12 @@ public final class Main {
         System.out.println("  check contract    --game <name> --portfolio <dir> [--scenarios 8] [--ids 1,2,...]");
         System.out.println("  check equivalence --game <name> --portfolio <dir> --weights <file> [--arms emcts]");
         System.out.println("                    [--scenarios 8] [--visits 2] [--budgets 8000,40000] [--threads N] [--ids ...] [--verbose]");
+        PortfolioCommand.usage();
     }
 
     // ------------------------------------------------------------------ shared
 
-    private static void banner(String what, Args args) {
+    static void banner(String what) {
         System.out.println("# magat " + VERSION + " " + what);
         System.out.println("# data root: " + System.getProperty("magat.data", "(not set)")
                 + "   engine: " + System.getProperty("magat.engine.commit", "(not set)"));
@@ -109,7 +111,7 @@ public final class Main {
     }
 
     private static <S, A> int checkContract(Args args) throws Exception {
-        banner("check contract", args);
+        banner("check contract");
         GameModule<S, A> module = Games.load(args.require("game"));
         Game<S, A> game = module.game();
         System.out.println("# game: " + game.id() + "  " + game.configuration());
@@ -123,7 +125,7 @@ public final class Main {
     }
 
     private static <S, A> int checkEquivalence(Args args) throws Exception {
-        banner("check equivalence", args);
+        banner("check equivalence");
         GameModule<S, A> module = Games.load(args.require("game"));
         Game<S, A> game = module.game();
         Weights weights = Weights.load(Paths.get(args.require("weights")));

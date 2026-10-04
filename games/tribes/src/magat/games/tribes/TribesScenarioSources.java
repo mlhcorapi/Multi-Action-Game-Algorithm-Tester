@@ -16,9 +16,11 @@ import players.emcts.EMCTSAgent;
 import players.emcts.EMCTSParams;
 import utils.ElapsedCpuTimer;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * The two capture sources of the published Tribes portfolio, exactly as {@code BuildV5Portfolio}
@@ -42,6 +44,8 @@ public final class TribesScenarioSources implements ScenarioSource<TribesState> 
     public static final int[] DUAL_TICKS = {15, 20, 25};
     public static final int MAX_SINGLE_ATTEMPTS = 150;
     public static final int MAX_DUAL_ATTEMPTS = 1500;
+    /** Captures per source in the published portfolio (200 + 200). */
+    public static final int DEFAULT_TARGET = 200;
     private static final Types.TRIBE[] TRIBES = {Types.TRIBE.IMPERIUS, Types.TRIBE.IMPERIUS2};
 
     private final String name;
@@ -70,6 +74,24 @@ public final class TribesScenarioSources implements ScenarioSource<TribesState> 
     @Override public String name() { return name; }
     @Override public int[] phases() { return ticks.clone(); }
     @Override public int maxAttempts() { return maxAttempts; }
+    @Override public int defaultTarget() { return DEFAULT_TARGET; }
+
+    @Override
+    public String definition() {
+        return String.format(Locale.ROOT,
+                "level seed %d+attempt, game seed %d, %s, %s vs %s, %s, captures at ticks %s (turn cap %d), source agent "
+                        + "EMCTSAgent seed %d depth 21 SIMPLE heuristic %d units at weights %s/%s/%s, valid when the active "
+                        + "tribe has >=1 city and >=1 unit and score >=%d and a 50 ms EMCTS plan does not throw, "
+                        + "abandoned when the first tick is invalid, at most %d attempts",
+                seedBase, FIXED_GAME_SEED, mode, TRIBES[0], twoPlayer ? TRIBES[1] + " (same agent)" : TRIBES[1] + " (DoNothing)",
+                "11x11 water-free board", Arrays.toString(ticks).replace(", ", " "), turnCap, SOURCE_AGENT_SEED,
+                SOURCE_BUDGET_UNITS, fmt(Weights.DEFAULT[0]), fmt(Weights.DEFAULT[1]), fmt(Weights.DEFAULT[2]),
+                MIN_VALID_SCORE, maxAttempts);
+    }
+
+    private static String fmt(double d) {
+        return BigDecimal.valueOf(d).stripTrailingZeros().toPlainString();
+    }
 
     @Override
     public List<Capture<TribesState>> play(int attempt) {

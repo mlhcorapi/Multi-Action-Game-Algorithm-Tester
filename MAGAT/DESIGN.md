@@ -263,9 +263,12 @@ public interface ScenarioSource<S> {
     String name();                 // "single", "dual"
     int[] phases();                // capture points within a source game (Tribes: ticks)
     int maxAttempts();             // attempt cap before the builder gives up on this source
+    int defaultTarget();           // captures the published portfolio takes from this source (Tribes: 200)
+    String definition();           // one line naming everything that determines what play() yields;
+                                   // written into the manifest and keys the build journal
     /** Plays source game #attempt (deterministic in attempt) and returns its validated captures in
      *  phase order. Applies the source's own validity predicate and stuck-game rule. Swallows engine
-     *  failures: a bad seed yields fewer captures, never an aborted build. */
+     *  failures: a bad seed yields fewer captures. Anything escaping it stops the build. */
     List<Capture<S>> play(int attempt);
 }
 
@@ -528,6 +531,17 @@ target counts per source, sequential id assignment across sources in declared or
 completion marker. The `ScenarioSource` owns everything game-specific. Output is exactly what the
 runner reads, so the consumer/producer check of trap A.3 is one code path.
 
+*Amended 2026-10-04 (milestone 2), three details settled in the extraction:*
+- *The journal is keyed by the game, its configuration and each source's `definition()`, not by the
+  targets: what an attempt yields does not depend on how many captures are wanted, so a toy build
+  grows into a full one without replaying a game, while a changed source never resumes from the old
+  one's games.*
+- *An exception escaping `play` stops the build (journal kept). The thesis builder read it as "this
+  attempt yielded nothing", which can change the portfolio without a word; a source already swallows
+  its own engine failures, so whatever escapes is a bug.*
+- *A capture labelled with an attempt other than the one played is refused, and a frozen portfolio
+  (one with split files) is never rebuilt in place.*
+
 ### 7.2 Manifest, version 1
 
 `portfolio.csv`: `ScenarioId,Source,SourceAttempt,SourceSeed,Phase,Branching,` followed by the
@@ -535,12 +549,27 @@ runner reads, so the consumer/producer check of trap A.3 is one code path.
 `configuration()` map, the source definitions and the builder's fixed capture weights. Bins are
 `scenarios/scenario_NNN.bin`, opaque bytes from `serialize`.
 
+*Amended 2026-10-04 (milestone 2): the header is `# key: value` lines (`magat-portfolio: 1`, `game`,
+`configuration.<key>`, `source.<name>` carrying the definition, which for Tribes includes the source
+agent's budget and capture weights, and `targets`). Nothing in the manifest depends on the machine,
+the thread count or the time. The published Tribes manifest stays in the thesis format, which the
+loader reads as it is; converting it would only break the line from the R7615's own files.*
+
 ### 7.3 Identity
 
 `identity.txt` = SHA-256 over the ordered `(id, source, phase)` tuples, as `PortfolioSplit` computes
 it today, plus `game` and `configuration()` in the hashed text. It is what the split files, the
 weights file, the checkpoint root and every result's provenance name. Branching and `describe` facts
 are outside it on purpose (they may be recomputed; a changed identity means a different portfolio).
+
+*Amended 2026-10-04 (milestone 2): `game` and `configuration()` are NOT hashed. The identity is the
+thesis formula exactly: SHA-256 over the ordered `id,source,phase` lines. Two reasons. Hashing the
+configuration would hash the engine commit, so an engine commit that changes nothing about the
+positions would change what every result says it was measured on. And the published portfolio, its
+split files, the published weights file and every archived R7615 result already name `ec243fd7...`;
+the formula that produced it is the one that keeps them all valid. The game and configuration are
+recorded in the manifest header instead: loading a portfolio with a different game is refused, and
+`portfolio verify` reports a configuration that differs from the current one.*
 
 ### 7.4 Split
 
@@ -559,6 +588,11 @@ holdout (spec hash, date, arms). `magat run --split holdout` appends to it and p
 experiment reading the same holdout gets a warning it cannot miss, and a `--frozen <file>` argument is
 mandatory (the file's hash goes into the ledger and the provenance). "Read once" becomes auditable.
 
+*Amended 2026-10-04 (milestone 2): `HoldoutLedger` and `magat portfolio ledger` exist; a ledger
+written for a different portfolio identity is refused. The `run` side (print first, refuse without
+`--frozen`, append) arrives with the runner in milestone 4. The ledger is the first JSON the core
+writes, so `core/lib/minimal-json-0.9.5.jar` arrived with it.*
+
 ### 7.6 Distribution
 
 The published Tribes portfolio is `games/tribes/portfolio/v1/` in git, bins included: the 400
@@ -572,6 +606,16 @@ published one is allowed, but its results are labelled with that identity and ar
 published leaves.
 
 *Amended 2026-09-10 (milestone 1): bins in git rather than a release asset.*
+
+*Amended 2026-10-04 (milestone 2): `portfolio verify` checks, in order: the manifest parses and names
+this game; every bin loads and the branching and `describe` facts recomputed from it equal the
+manifest's; `identity.txt` equals the manifest's identity; the split files carry it and the split rule
+applied to the manifest reproduces their membership (an audit, never a replacement for the files);
+and, with `--published`, the identity and every row (attempt, seed, phase, branching, facts) are
+equal. `--subset` compares a toy build row by row with the published row of the same source, attempt
+and phase, and `--plan N` plans N scenarios from both sets of bins with the same arm, seed and budget
+and requires identical plans, which is how "the same positions" is checked beyond the manifest when
+the bins themselves are not byte-identical.*
 
 ---
 
@@ -843,7 +887,8 @@ magat build                                      javac --release 11 over magat/s
 magat machine                                    MachineProfile banner; no work run
 magat portfolio build   --game tribes --out <dir> [--threads N] [--targets single=200,dual=200]
 magat portfolio freeze  --portfolio <dir>        split files + identity + report; idempotent
-magat portfolio verify  --portfolio <dir> [--published games/tribes/portfolio/v1]
+magat portfolio verify  --game tribes --portfolio <dir> [--published games/tribes/portfolio/v1] [--subset] [--plan N --arm emcts --budget 8000]
+magat portfolio ledger  --portfolio <dir>
 magat threads           --portfolio <dir> --out <calib> --levels 40000,80000,400000
 magat calibrate         --portfolio <dir> --out <calib> --levels ... [--arms a,b] [--reps 3] [--turns auto] [--warmup 6] [--under-load W] [--replace a]
 magat calibrate --check --portfolio <dir> --weights <file> --arms a,b
@@ -997,7 +1042,7 @@ commit. `run_magat.ipynb` and `tools/shakedown.py` exist from milestone 0 and gr
 |---|---|---|
 | 0 | Repository bootstrap: layout, launcher with `build`, engine fork + submodule, CI skeleton, licence file, README with credits, notebook (parameters + build + shakedown cells), shakedown (build only), layering check | CI green on an empty core |
 | 1 | **The seam**: `Game`, `MeteredGame`, `Meter`, `TurnBudget`, `TurnRecord`, `Episode`, `TribesGame`, `TribesState`, `Emcts` ported, `check contract`, `check equivalence` | L1–L10 pass on 8 captured positions; `emcts` reproduces its oracle on 8 scenarios × 2 visits at 8k and 40k; `check equivalence` is in the shakedown. *Done 2026-09-10; the port also reproduces the R7615's own archived verify signature for scenario 1 at 40k (`init=6231.0 final=6486.0 fm=37354 nodes=430 unique=356 units=40056.0483`), and `emcts-comma` came along for free.* |
-| 2 | Portfolio: builder, journal, manifest v1, identity, split, ledger, `random`; `TribesScenarioSources` | toy build reproducible at 1 and 4 threads; the published manifest identity (reconstructed from the archived rows, §17) reproduced by a full build on the server |
+| 2 | Portfolio: builder, journal, manifest v1, identity, split, ledger, `random`; `TribesScenarioSources` | toy build reproducible at 1 and 4 threads; the published manifest identity (reconstructed from the archived rows, §17) reproduced by a full build on the server. *Done 2026-10-04. The toy Tribes manifest is byte-identical at 1, 2 and 4 threads (and the core test asserts it on the toy game). A full rebuild on a second machine (i9-14900HX, Windows, JDK 26, 20 threads, 15.5 min) reproduced `ec243fd7...`, all 400 rows, both split files from a fresh freeze, and identical `emcts` plans from rebuilt and published bins (`games/tribes/portfolio/v1/REBUILDS.md`); the server rebuild remains a one-command check.* |
 | 3 | Calibration: `Calibrator`, merge, `--check`, `--under-load`, `ThreadSweep`, `MachineProfile`, weights v1, R7615 import + `ORIGIN.md` | toy calibration writes and merges; the drift-math unit test (divide vs multiply) exists; the imported file loads and prices every worked-result arm |
 | 4 | Runner: spec + validator, `GridRunner`, checkpoints, compaction, currency lock, identical-output assertion, provenance, `run` and `bundle` commands | shakedown spec runs on dev and holdout, resumes, skips, retires a leaf; validator rejects a sweep without its null |
 | 5 | The rest of the family: `emcts-comma`, `QdeltaEmcts` and every worked-result arm; `check structure`, `probe support`, `check replay` | every arm passes its oracle gate; `check replay` reproduces 20 published `emcts-comma@80000` holdout rows on the rebuilt portfolio under the published weights |
@@ -1011,6 +1056,12 @@ on sixteen turns at two budgets, with units compared as well as values and count
 ---
 
 ## 17. Inputs and decisions needed from you
+
+*Status 2026-10-04. Decided: (1) Apache-2.0, in `LICENSE`; (2) a public fork, `mlhcorapi/Tribes`
+branch `magat-engine`; (3) the stage A artefacts were supplied and are published under
+`games/tribes/portfolio/v1` and `games/tribes/calibration/r7615`; (4) port, with the oracle gate as
+the safety net (passing since milestone 1); (5) minimal-json, in `core/lib` since milestone 2.
+Still open: (6) the arm ids. The original text follows.*
 
 1. **Licence.** Apache-2.0 is recommended: it adds an explicit patent grant and contributor terms, which
    matter for a framework other groups will build on; MIT is equally acceptable. Milestone 0 writes the

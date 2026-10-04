@@ -158,6 +158,8 @@ public final class ToyGame implements Game<ToyGame.State, ToyGame.Move> {
             @Override public String name() { return "toy"; }
             @Override public int[] phases() { return new int[]{1, 2}; }
             @Override public int maxAttempts() { return 100; }
+            @Override public int defaultTarget() { return 6; }
+            @Override public String definition() { return "toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2"; }
             @Override
             public List<Capture<State>> play(int attempt) {
                 State s = new State();

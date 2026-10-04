@@ -11,6 +11,10 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py check contract    --game tribes [--portfolio DIR] [--scenarios N] [--ids 1,2]
     python magat.py check equivalence --game tribes [--portfolio DIR] [--weights FILE] [--arms emcts] ...
     python magat.py arms --game tribes
+    python magat.py portfolio build  --game tribes --out DIR [--threads N] [--targets single=200,dual=200]
+    python magat.py portfolio freeze --portfolio DIR
+    python magat.py portfolio verify --game tribes [--portfolio DIR] [--published DIR] [--subset] [--plan N]
+    python magat.py portfolio ledger --portfolio DIR
     python magat.py java <args...>          raw magat.cli.Main invocation
     python magat.py layering
     python magat.py notebook build|selftest
@@ -33,6 +37,8 @@ CLASSES = BUILD / "classes"
 TEST_CLASSES = BUILD / "test-classes"
 GAMES = ROOT / "games"
 DEFAULT_HEAP = os.environ.get("MAGAT_HEAP", "4g")
+# A portfolio build holds every capture in memory and plays a source game per worker.
+BUILD_HEAP = os.environ.get("MAGAT_HEAP", "8g")
 GC_FLAGS = ["-XX:+UseG1GC", "-XX:MaxGCPauseMillis=500"]
 
 # Engine-specific JVM properties: Tribes resolves its data files against tribes.home.
@@ -213,6 +219,8 @@ def with_published_defaults(args: list) -> list:
             args += ["--portfolio", str(pub["portfolio"])]
         if "equivalence" in args and "--weights" not in args and "weights" in pub and pub["weights"].is_file():
             args += ["--weights", str(pub["weights"])]
+        if args[:2] == ["portfolio", "verify"] and "--portfolio" not in args and "portfolio" in pub:
+            args += ["--portfolio", str(pub["portfolio"])]
     return args
 
 
@@ -230,8 +238,10 @@ def main(argv: list) -> None:
         for cwd, classes in test_classes().items():
             run(["java", f"-Xmx{DEFAULT_HEAP}", "-cp", classpath(TEST_CLASSES, CLASSES),
                  "org.junit.runner.JUnitCore", *classes], log="test", cwd=str(cwd))
-    elif cmd in ("check", "arms"):
-        java(with_published_defaults([cmd, *rest]), log=cmd + ("-" + rest[0] if rest and not rest[0].startswith("--") else ""))
+    elif cmd in ("check", "arms", "portfolio"):
+        heap = BUILD_HEAP if rest[:1] == ["build"] else None
+        java(with_published_defaults([cmd, *rest]), heap=heap,
+             log=cmd + ("-" + rest[0] if rest and not rest[0].startswith("--") else ""))
     elif cmd == "java":
         java(rest, log="java")
     elif cmd == "layering":

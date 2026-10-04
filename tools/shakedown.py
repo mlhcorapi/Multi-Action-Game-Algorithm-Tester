@@ -6,7 +6,9 @@ answers is "does this all work on this machine". Run before every pull request.
 
     python tools/shakedown.py [--game tribes]
 """
+import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import time
@@ -64,7 +66,23 @@ def main(argv) -> int:
           [PY, ROOT / "magat.py", "check", "equivalence", "--game", game, "--arms", "emcts",
            "--scenarios", "2", "--visits", "1", "--budgets", "8000"], "EQUIVALENCE: PASS")
 
-    step("5. Notebook")
+    step("5. Portfolio: toy build, freeze, verify against the published portfolio")
+    data = pathlib.Path(os.environ.get("MAGAT_DATA") or (pathlib.Path.home() / "magat_runs")).resolve()
+    toy = data / "shakedown" / f"portfolio-{game}"
+    shutil.rmtree(toy, ignore_errors=True)
+    check("toy build (2 + 1 captures from one source game each) completes",
+          [PY, ROOT / "magat.py", "portfolio", "build", "--game", game, "--out", toy,
+           "--targets", "single=2,dual=1", "--threads", "2"], "PORTFOLIO: COMPLETE")
+    check("freeze writes the split files", [PY, ROOT / "magat.py", "portfolio", "freeze", "--portfolio", toy], "FROZEN: ")
+    check("every toy row equals the published row, and plans identically from both bins",
+          [PY, ROOT / "magat.py", "portfolio", "verify", "--game", game, "--portfolio", toy,
+           "--published", ROOT / "games" / game / "portfolio" / "v1", "--subset", "--plan", "3"], "VERIFY: PASS")
+    check("the published portfolio verifies against itself (bins, identity, split rule)",
+          [PY, ROOT / "magat.py", "portfolio", "verify", "--game", game], "VERIFY: PASS")
+    check("the holdout ledger reads", [PY, ROOT / "magat.py", "portfolio", "ledger", "--portfolio",
+                                       ROOT / "games" / game / "portfolio" / "v1"], "holdout ledger")
+
+    step("6. Notebook")
     check("generated notebook is current and its setup cells run from three directories",
           [PY, ROOT / "magat.py", "notebook", "selftest"], "0 failure(s)")
 
