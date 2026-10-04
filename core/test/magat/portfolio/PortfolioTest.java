@@ -31,7 +31,7 @@ public class PortfolioTest {
         List<String> lines = new ArrayList<>();
         lines.add(legacyHeader
                 ? "ScenarioId,Source,SourceGameId,SourceLevelSeed,SourceGameSeed,CapturedTick,Pos0,Pos1,Pos2,BranchingFactor"
-                : "# game = toy\nScenarioId,Source,SourceAttempt,SourceSeed,Phase,Branching,Pos0,Pos1,Pos2");
+                : "# magat-portfolio: 1\n# game: toy\nScenarioId,Source,SourceAttempt,SourceSeed,Phase,Branching,Pos0,Pos1,Pos2");
         for (Scenario<ToyGame.State> sc : positions) {
             String facts = sc.facts.get("Pos0") + "," + sc.facts.get("Pos1") + "," + sc.facts.get("Pos2");
             lines.add(legacyHeader
