@@ -637,6 +637,17 @@ measurements go to `compute_profiles.csv` regardless.
 file does the game's default apply (Tribes: `8,4,2`, because the zero-evaluation arms make four times
 fewer copies).
 
+*Amended 2026-10-04 (milestone 3): the reference cell is the file's `reference` profile, measured in
+every session whatever `--levels` says, because the merge needs this session's measurement of exactly
+that cell; without a file it is the game module's `referenceArm()` at the smallest level. `--arms`
+accepts the game's named sets (`@reference`, `@worked-result`). Arms whose budget buys no search
+(`random`) declare `priced() = false` and are not calibrated by default. `--toy` runs the same gates
+and reports them, but a failed cell does not stop the write; the file is marked `toy = true`, a toy
+session may not merge into a real currency, and the shakedown and CI use it to exercise write, merge
+and check end to end in seconds. Refused before anything is measured: a file of another game, a file
+measured on another portfolio identity, `--turns` different from the file's, and a non-version-1
+file as a merge target.*
+
 ### 8.2 Merge
 
 Writing into an existing file **merges**: header, globals and `referenceAdvanceNanos` untouched, new
@@ -645,11 +656,33 @@ cells re-denominated by `thisRef / fileRef`, a profile measured twice takes the 
 E-prep cell as a first-class command); a profile already present is refused unless `--replace` names it
 explicitly, which is the E3 fix-up as a command rather than a hand-edit of the properties file.
 
+*Amended 2026-10-04 (milestone 3): **re-denomination is by ratio, not by absolute nanoseconds.** A
+session measures every cell relative to its own measurement of the file's reference cell; a merged
+cell is that ratio times the file's stored `wAdvance` of its reference profile (1.0 for a file this
+calibrator wrote, 1.000659 for the imported R7615 file, whose unit is the engine EMCTS advance). The
+thesis code multiplied by `thisRef / fileRef`, i.e. wrote each new cell's absolute nanoseconds over the
+file's stored reference nanoseconds; on a machine, or an afternoon, 58% slower that priced the new arms
+58% too high (the 2026-08-31 merge, `x1.5820`, re-measured the same day), which is the trap the brief
+lists and the opposite of its rule that re-denomination makes cross-session drift cancel. Under ratio
+transfer a uniform speed difference cancels exactly, including between the R7615 and a newcomer's
+machine, which is what makes §14.2 step 4 possible at all; a change in the ratios themselves does not
+cancel, and that is what `--check` reports. The `# merged` line records both numbers: the factor
+applied and this session's reference advance as a multiple of the file's (machine speed, informational).
+The reference arm is measured at every level of a session but its cells are written only where the file
+lacks them or `--replace` names the arm. `CurrencyTest` is the "divide versus multiply" test: a
+reference weight of 2.0, a machine uniformly 0.6x, 1x and 1.58x as fast, zero drift and the same merged
+weight in every case.*
+
 ### 8.3 Drift check
 
 `magat calibrate --check --arms a,b`: re-measures already-priced arms, reports the reference-advance
 factor and each op's absolute drift once re-denominated, PASS/FAIL against the 10% gate, writes
 nothing. Runs first in the holdout stage of the notebook and in the newcomer's path (§14.2).
+
+*Amended 2026-10-04 (milestone 3): drift is this session's weight times the merge factor over the
+stored weight, per operation, in the file's unit, so it is exactly the error a merge made now would
+carry; the reference profile's own copy and evaluation ratios are included, its advance (1 by
+construction) is not. The reference advance's machine factor is printed beside it and does not gate.*
 
 ### 8.4 Two measurements added to the check
 
@@ -657,6 +690,11 @@ nothing. Runs first in the holdout stage of the notebook and in the newcomer's p
 against the same turns timed by the engine's own hooks on the reference machine, once, recorded in
 `ORIGIN.md`; and (b) the engine's dormant counter cost (§2.2). Both are expected to be within noise;
 the point is that they are measured.
+
+*Amended 2026-10-04 (milestone 3): deferred to milestone 5 with the other probes. (a) needs the
+engine's own nanosecond hooks driven through the oracle side by side with the port, and (b) needs a
+switch in the fork that turns the dormant counters off; neither is on the acceptance path of this
+milestone, and both belong with `check structure` and `probe support`.*
 
 ### 8.5 Under load
 
@@ -672,6 +710,13 @@ ruler and W7 is co-primary.
 registry's reference arm; `ServerProfile` → `MachineProfile` (physical cores detected on Linux,
 conservatively assumed elsewhere, reserve, override, ladder, clock sampling). Output
 `thread_sweep.csv` and `threads.json` (`{budget: chosen}`), which `magat run` reads by default.
+
+*Amended 2026-10-04 (milestone 3): `threads.json` is
+`{"format": 1, "game", "arm", "portfolio", "machine", "measured", "levels": {"<budget>": {"threads": n,
+"estimate": bool}}}`, extended level by level. `--ladder` and `--segment-seconds` exist for toy sweeps.
+Physical cores are detected on Linux; on Windows and macOS they are assumed to be half the logical
+CPUs and the banner says so (`MAGAT_MAX_THREADS` states the ceiling). The overrides are
+`MAGAT_MAX_THREADS` and `MAGAT_RESERVE_CORES` (`-Dmagat.maxThreads`, `-Dmagat.reserveCores`).*
 
 ---
 
@@ -892,6 +937,7 @@ magat portfolio ledger  --portfolio <dir>
 magat threads           --portfolio <dir> --out <calib> --levels 40000,80000,400000
 magat calibrate         --portfolio <dir> --out <calib> --levels ... [--arms a,b] [--reps 3] [--turns auto] [--warmup 6] [--under-load W] [--replace a]
 magat calibrate --check --portfolio <dir> --weights <file> --arms a,b
+magat weights           --weights <file> [--game tribes --arms a,b|@set --levels ...]   coverage; exit 1 if any profile is missing
 magat check contract    --game tribes --portfolio <dir>
 magat check equivalence --game tribes --portfolio <dir> --weights <file> [--arms ...] [--scenarios 8 --visits 2 --budget 40000]
 magat check structure   --spec experiments/tribes/structure.json ...
@@ -1095,7 +1141,7 @@ Still open: (6) the arm ids. The original text follows.*
 | Consumer does not read what the producer writes | no compiled default weights path; `--weights` passed by the launcher to every JVM; hard error on an unpriced profile; one code path writes and reads the portfolio |
 | OS load average meaningless in a container | the load harness gates on its own completed work; the idle load average is informational |
 | Turns-per-rep selects positions | recorded in the weights file with the portfolio identity; `--check` refuses to compare under different turns |
-| Merged arm written against the file's reference | re-denomination on merge, and `--check` reports the absolute per-op drift before anything is merged or compared |
+| Merged arm written against the file's reference | ratio re-denomination on merge (§8.2 amendment), so a uniformly slower machine cancels; `--check` reports the ratio drift that does not cancel before anything is merged or compared |
 | Two arms identical; a grid without its null | the identical-output assertion in the runner and the analyzer; the spec validator requires nulls and attribution controls |
 | Commit before a worktree can disappear | every milestone is a commit; the pre-commit hook keeps commits cheap |
 

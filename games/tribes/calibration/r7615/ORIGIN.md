@@ -63,3 +63,14 @@ one advance of the reference cell `EMCTS@40000` = 62870.569 ns on that machine.
 for the stage A2 cells (the per-session CSV was overwritten by later sessions); merged profiles carry
 `advanceNanos` only. `turnsPerRep` was not recorded in the file when it was written; `8,4,2` is what
 the A2 log states. The E3 re-pricing log was not bundled.
+
+## Extending this currency on another machine
+
+Copy `compute_weights.properties` into a calibration directory and run
+`magat calibrate --game tribes --out <dir> --arms <new-arm>`. Each new cell is measured against this
+session's own `emcts@40000` advance and multiplied by this file's stored `emcts@40000` weight,
+1.000659 (the ported `emcts` advance relative to the engine EMCTS advance that defines the unit), so a
+machine uniformly faster or slower than the R7615 prices the new arm exactly as the R7615 would have.
+What does not cancel is a change in cost ratios between operations; run
+`magat calibrate --check --game tribes --arms emcts,emcts-comma` first, which reports it per operation
+against the 10% gate and writes nothing.
