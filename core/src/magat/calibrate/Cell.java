@@ -30,6 +30,8 @@ public final class Cell {
     /** Weights relative to this session's reference advance (the reference cell's wAdvance is 1). */
     public double wAdvance, wCopy, wEval;
     public final List<String> failures = new ArrayList<>();
+    /** "reference", "bracket" (the reference cell measured again at the end of the session), or empty. */
+    public String role = "";
 
     public Cell(String arm, long budget) {
         this.arm = arm;

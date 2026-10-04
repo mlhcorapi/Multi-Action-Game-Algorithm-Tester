@@ -86,6 +86,8 @@ public class CalibratorToyTest {
         // A second arm merges into the same currency; turns come from the file.
         Calibrator.Result r2 = Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-comma"));
         assertTrue(r2.pass);
+        assertFalse("a session of more than one cell brackets its reference", Double.isNaN(r2.bracketMove));
+        assertTrue(read(out.resolve(Currency.PROFILES_CSV)).contains(",bracket,"));
         Weights w2 = Weights.load(file);
         assertTrue(w2.has("emcts-comma@300") && w2.has("emcts-comma@600"));
         assertEquals(w1.referenceAdvanceNanos(), w2.referenceAdvanceNanos(), 0);

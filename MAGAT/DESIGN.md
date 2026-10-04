@@ -682,7 +682,21 @@ nothing. Runs first in the holdout stage of the notebook and in the newcomer's p
 *Amended 2026-10-04 (milestone 3): drift is this session's weight times the merge factor over the
 stored weight, per operation, in the file's unit, so it is exactly the error a merge made now would
 carry; the reference profile's own copy and evaluation ratios are included, its advance (1 by
-construction) is not. The reference advance's machine factor is printed beside it and does not gate.*
+construction) is not. The reference advance's machine factor is printed beside it and does not gate.
+Each cell's turn-price drift (its own operation counts priced now against stored) is printed as
+information: the gate stays per operation as pre-registered, but evaluations are about 3% of a Tribes
+turn's price, so a 38% evaluation drift is a 1-2% turn-price drift.*
+
+*Amended 2026-10-04 (milestone 3), **the bracket**, new: every session of more than one cell measures
+the reference cell again at the end (after its own warm-up), and fails if any of its three operations
+moved by more than the gap gate. Within-cell repetitions cannot see a machine whose speed drifts across
+the session, and every weight is a ratio to the reference measured first. Found on the first laptop
+check against the R7615 currency: two sessions on the same machine, each internally consistent within
+2%, measured the reference advance 14% apart while the other levels moved 1-3%, because a laptop boosts
+while cool and the reference cell is measured first. This is a hazard for either re-denomination: the
+thesis's absolute version is exposed to the machine's speed changing between sessions, the ratio version
+to the reference measurement being unrepresentative of the session; the bracket detects the second, and
+a session that fails it writes nothing.*
 
 ### 8.4 Two measurements added to the check
 

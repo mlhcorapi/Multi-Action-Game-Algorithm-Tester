@@ -84,6 +84,8 @@ public final class Calibrator {
         public boolean pass;
         public Path written;
         public Currency.Drift drift;
+        /** Largest relative move of the reference cell between the start and the end of the session; NaN when not measured. */
+        public double bracketMove = Double.NaN;
         public final List<Cell> cells = new ArrayList<>();
     }
 
@@ -183,6 +185,7 @@ public final class Calibrator {
                     loadBefore > MAX_LOAD_PER_CORE ? "   <-- MACHINE IS BUSY" : "   (idle)"));
 
         // ---- measure
+        Cell bracket = null;
         Weights previous = Meter.installed();
         Meter.install(existing);                    // cells run under their stored profile when priced, else the global weights
         Meter.allowUnpriced(true);
@@ -222,6 +225,28 @@ public final class Calibrator {
                         100 * c.gapAdvance, 100 * c.gapCopy, 100 * c.gapEval, 100 * c.cvAdvance, 100 * c.cvCopy, 100 * c.cvEval,
                         c.failures.isEmpty() ? "" : "   <-- " + c.failures.get(0)));
             }
+            // The bracket: the reference cell again, last. Within-cell repetitions cannot see a machine
+            // whose speed drifts across the session (a laptop that boosts while cool, a neighbour that
+            // starts halfway), and every weight is a ratio to the first measurement of this cell.
+            if (cells.size() > 1 && !RunGuard.stopRequested()) {
+                System.out.println(String.format(Locale.ROOT, "%n[calibrate] bracket: %s again, last (warm-up %d turns, discarded)", reference, o.warmup));
+                AgentFactory<S, A> refFactory = registry.get(refArm);
+                Meter.PROFILE = true;
+                for (int i = 0; i < o.warmup; i++)
+                    Episode.run(game, positionFor(scenarios, i % POSITION_POOL, POSITION_POOL), 9_000 + i, refFactory, refBudget);
+                Meter.PROFILE = false;
+                System.gc();
+                LoadHarness load = o.underLoad > 1 ? LoadHarness.start(game, refFactory, refBudget, scenarios, o.underLoad - 1) : null;
+                try {
+                    bracket = new Cell(refArm, refBudget);
+                    bracket.role = "bracket";
+                    measure(game, refFactory, bracket, scenarios, o.reps, turnsFor(refBudget, turnLevels, turns), minOps, gapLimit);
+                } finally {
+                    if (load != null) load.stop();
+                }
+                System.out.println(String.format(Locale.ROOT, "  [bracket] %-32s advance %8.1f ns  copy %8.1f ns  eval %8.1f ns",
+                        bracket.profile, bracket.tAdvance, bracket.tCopy, bracket.tEval));
+            }
         } finally {
             Meter.PROFILE = false;
             Meter.allowUnpriced(false);
@@ -249,6 +274,18 @@ public final class Calibrator {
         for (Cell c : cells) if (!c.plausible()) plausible = false;
         if (plausible) passes.add("weights are plausible in every cell");
         else failures.add("at least one cell produced an implausible weight: a broken or mis-attributed timer");
+        if (bracket != null && bracket.tAdvance > 0) {
+            double[] move = {bracket.tAdvance / ref.tAdvance - 1, bracket.tCopy / ref.tCopy - 1, bracket.tEval / ref.tEval - 1};
+            double worst = 0;
+            for (double m : move) worst = Math.max(worst, Math.abs(m));
+            result.bracketMove = worst;
+            String msg = String.format(Locale.ROOT, "the reference cell moved %+.1f%% / %+.1f%% / %+.1f%% (advance / copy / eval) "
+                    + "between the start and the end of the session", 100 * move[0], 100 * move[1], 100 * move[2]);
+            if (worst <= gapLimit) passes.add(msg + ": the machine held its speed");
+            else if (o.toy) passes.add("TOY: " + msg + " (reported, not enforced)");
+            else failures.add(msg + ": the machine's speed changed while measuring (thermal or power state, other load), so "
+                    + "cells measured late are not comparable with the reference measured early");
+        }
         double loadAfter = MachineProfile.loadPerCore();
         if (o.underLoad > 1) {
             long work = LoadHarness.WORK_TURNS.get(), want = (long) cells.size() * (o.underLoad - 1);
@@ -293,7 +330,9 @@ public final class Calibrator {
         s.toy = o.toy;
         Path weightsFile = o.underLoad > 1 ? out.resolve("compute_weights_load" + o.underLoad + ".properties") : idle;
         Path csv = out.resolve(o.underLoad > 1 ? "compute_profiles_load" + o.underLoad + ".csv" : Currency.PROFILES_CSV);
-        RunGuard.atomicWrite(csv, Currency.profilesCsv(cells, ref));
+        List<Cell> measuredCells = new ArrayList<>(cells);
+        if (bracket != null) { bracket.normalise(ref.tAdvance); measuredCells.add(bracket); }
+        RunGuard.atomicWrite(csv, Currency.profilesCsv(measuredCells, ref));
         if (o.underLoad > 1 && idle != null && Files.isRegularFile(idle)) reportLoadVsIdle(cells, ref, Weights.load(idle), o.underLoad);
         if (!fair) {
             System.out.println("\n  VERDICT: FAIL - weights NOT written; the currency in force is unchanged.");
