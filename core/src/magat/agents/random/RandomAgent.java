@@ -55,6 +55,7 @@ public final class RandomAgent<S, A> implements SearchAgent<S, A> {
             @Override public String id() { return "random"; }
             @Override public SearchAgent<S, A> create(long seed, TurnBudget budget) { return new RandomAgent<>(seed); }
             @Override public String description() { return "uniformly random legal actions; the floor"; }
+            @Override public boolean priced() { return false; }
         };
     }
 }
