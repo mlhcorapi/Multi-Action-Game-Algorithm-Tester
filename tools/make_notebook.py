@@ -57,6 +57,10 @@ assert ROOT not in DATA.parents and DATA != ROOT, f"data root {DATA} must be out
 
 GAME = "tribes"
 PY = sys.executable
+PUBLISHED_PORTFOLIO = ROOT / "games" / GAME / "portfolio" / "v1"
+# Workers for parallel stages. Half the logical CPUs (SMT siblings add heat, not throughput) less two
+# for the machine; MAGAT_WORKERS overrides. The machine profile (milestone 3) replaces this guess.
+WORKERS = int(os.environ.get("MAGAT_WORKERS") or max(1, (os.cpu_count() or 2) // 2 - 2))
 
 def magat(*args, check=True):
     """Run one launcher command; the launcher tees its own output to <DATA>/logs/<name>.log."""
@@ -101,6 +105,23 @@ def bundle(name, items, exclude=("seqlog_", "mutlog_", "_running.lock")):
 print("repository :", ROOT)
 print("data root  :", DATA, "(outside the clone)")
 print("python     :", PY)
+print("workers    :", WORKERS)
+'''
+
+
+PORTFOLIO_CELL = r'''
+PORTFOLIO = DATA / "portfolio" / GAME
+if (PORTFOLIO / "_split_dev.txt").exists() and (PORTFOLIO / "_split_holdout.txt").exists():
+    print(f"[skip] {PORTFOLIO} is built and frozen")
+else:
+    magat("portfolio", "build", "--game", GAME, "--out", PORTFOLIO, "--threads", WORKERS)
+    magat("portfolio", "freeze", "--portfolio", PORTFOLIO)
+print((PORTFOLIO / "split_report.txt").read_text(encoding="utf-8"))
+magat("portfolio", "verify", "--game", GAME, "--portfolio", PORTFOLIO, "--published", PUBLISHED_PORTFOLIO, "--plan", 4)
+assert_in_log("portfolio-verify", "VERIFY: PASS")
+bundle("portfolio", [PORTFOLIO / f for f in ("portfolio.csv", "_split_dev.txt", "_split_holdout.txt",
+                                             "identity.txt", "split_report.txt")]
+       + [LOGS / "portfolio-build.log", LOGS / "portfolio-freeze.log", LOGS / "portfolio-verify.log"])
 '''
 
 CELLS = [
@@ -123,6 +144,16 @@ the notebook's folder, not where the server was launched) and puts the data root
 """),
     code('magat("build", "--tests")\nmagat("test")\nmagat("layering")', tags=("build",)),
     md("""
+## Portfolio
+
+Build this machine's own copy of the portfolio from the game's scenario sources, freeze its split,
+and verify it against the published one: the same identity, every manifest row equal, and the same
+plans from both sets of scenario files. A rebuild that matches is the evidence that positions, and
+therefore every published result, reproduce here. Skips itself once the portfolio is built and frozen;
+the journal makes an interrupted build resume where it stopped.
+"""),
+    code(PORTFOLIO_CELL, tags=("portfolio",)),
+    md("""
 ## Gates
 
 The contract laws on published positions, and the equivalence gate: every ported arm must reproduce
@@ -141,8 +172,8 @@ Every moving part at toy size, minutes, exits non-zero on any failure. Run befor
     code('magat("shakedown")\nbundle("shakedown", [LOGS / "shakedown.log"])'),
     md("""
 ---
-*Portfolio build, calibration, thread sweep, experiment stages and analysis cells are added by the
-milestones that deliver them (see `MAGAT/DESIGN.md` §16).*
+*Calibration, thread sweep, experiment stages and analysis cells are added by the milestones that
+deliver them (see `MAGAT/DESIGN.md` §16).*
 """),
 ]
 
