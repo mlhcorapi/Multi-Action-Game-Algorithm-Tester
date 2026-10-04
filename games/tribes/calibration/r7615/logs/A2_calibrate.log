@@ -1,0 +1,233 @@
+
+>>>>> 2026-08-28 18:26:48 $ java -Xmx100g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dcompute.weightsFile="/home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties" -XX:+AlwaysPreTouch -cp "out:lib/*" core.data.exp.ComputeCalibrateV6 "/home/jovyan/ab_runs/stage1/_portfolio" "/home/jovyan/ab_runs/stage1/_calibration" 3 auto 6 40000,80000,400000 --suite ab
+############################################################
+# v6 compute-unit weight calibration (per config, per budget level)
+# Measures what an advance, a copy and an eval cost FOR EACH CONFIGURATION
+# AT EACH BUDGET LEVEL, relative to one reference operation, and writes them
+# where the rest of the pipeline picks them up.
+############################################################
+# SINGLE-THREADED and requires an idle machine: this is a timing measurement.
+# currently in force: advance=1.0000 copy=0.1600 eval=0.0770  (no per-config profiles)
+# suite=ab  underLoad=0  levels=[40000, 80000, 400000]  configs=18  cells=54
+# reps=3  turns(=positions)/rep per level=[8, 4, 2]  warmup=6
+# A repetition repeats the SAME positions with the SAME seeds, so variation across reps measures the machine, not the portfolio.
+# Estimator: the FASTEST repetition (interference can only slow one down).
+# Gate: the two fastest agree within 10%. Full CV is printed beside it as the disturbance diagnostic.
+# reference cell = EMCTS@40000  (its advance is 1.000 units by definition)
+------------------------------------------------------------
+[machine] compute-unit weight calibration
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical CPUs / 64 physical cores (SMT x2) | 1 NUMA node(s) | maxHeap 102400 MB | reserve 2 core(s) | worker ceiling 62
+[machine] SMT is ON. Workers are capped at physical cores: this workload is clone/bandwidth-bound, so sibling threads add heat and memory, not throughput.
+------------------------------------------------------------
+# load average before starting: 0.00 per core   (idle)
+
+[weights] warmup for level 40000: 6 turns (discarded)
+[ComputeMeter] no calibrated weights for profile 'EMCTS@40000'; this thread uses the global weights instead
+  [ 1/54] EMCTS@40000                    advance 62870.6 ns  copy  8641.6 ns  eval  3567.2 ns   (gap 0.1/0.0/0.6% | CV 2.4/0.7/0.5%)
+[ComputeMeter] no calibrated weights for profile 'AB_Baseline@40000'; this thread uses the global weights instead
+  [ 2/54] AB_Baseline@40000              advance 62912.0 ns  copy  8626.5 ns  eval  3612.6 ns   (gap 0.0/0.2/0.1% | CV 0.1/0.1/0.1%)
+[ComputeMeter] no calibrated weights for profile 'AB_Bias_e75@40000'; this thread uses the global weights instead
+  [ 3/54] AB_Bias_e75@40000              advance 65301.2 ns  copy  8550.4 ns  eval  3632.1 ns   (gap 0.0/0.4/0.3% | CV 0.1/0.2/0.4%)
+[ComputeMeter] no calibrated weights for profile 'AB_Bias_e50@40000'; this thread uses the global weights instead
+  [ 4/54] AB_Bias_e50@40000              advance 65671.9 ns  copy  8617.8 ns  eval  3654.2 ns   (gap 0.0/0.2/0.4% | CV 0.0/0.2/0.4%)
+[ComputeMeter] no calibrated weights for profile 'AB_Bias_e25@40000'; this thread uses the global weights instead
+  [ 5/54] AB_Bias_e25@40000              advance 61682.7 ns  copy  8611.3 ns  eval  3476.0 ns   (gap 0.1/0.1/0.3% | CV 0.1/0.2/0.4%)
+[ComputeMeter] no calibrated weights for profile 'AB_Bias_e10@40000'; this thread uses the global weights instead
+  [ 6/54] AB_Bias_e10@40000              advance 64839.4 ns  copy  8783.5 ns  eval  3771.6 ns   (gap 0.1/0.1/0.3% | CV 0.1/0.1/0.2%)
+[ComputeMeter] no calibrated weights for profile 'AB_Coarse_e25@40000'; this thread uses the global weights instead
+  [ 7/54] AB_Coarse_e25@40000            advance 63991.9 ns  copy  8711.4 ns  eval  3746.7 ns   (gap 0.0/0.4/0.1% | CV 0.1/0.3/0.3%)
+[ComputeMeter] no calibrated weights for profile 'AB_NoRemoval_e25@40000'; this thread uses the global weights instead
+  [ 8/54] AB_NoRemoval_e25@40000         advance 61931.0 ns  copy  8676.4 ns  eval  3493.9 ns   (gap 0.0/0.1/0.5% | CV 0.0/0.1/0.4%)
+[ComputeMeter] no calibrated weights for profile 'AB_PerBurn_e25@40000'; this thread uses the global weights instead
+  [ 9/54] AB_PerBurn_e25@40000           advance 61493.2 ns  copy  8409.2 ns  eval  3294.8 ns   (gap 0.1/0.4/0.3% | CV 0.1/0.3/0.3%)
+[ComputeMeter] no calibrated weights for profile 'AB_Shortlist15@40000'; this thread uses the global weights instead
+  [10/54] AB_Shortlist15@40000           advance 64266.7 ns  copy  8200.8 ns  eval  2824.6 ns   (gap 0.0/0.3/0.0% | CV 0.0/0.2/0.1%)
+[ComputeMeter] no calibrated weights for profile 'AB_Short15_e25@40000'; this thread uses the global weights instead
+  [11/54] AB_Short15_e25@40000           advance 60486.1 ns  copy  8469.5 ns  eval  3084.8 ns   (gap 0.1/0.0/0.4% | CV 0.1/0.3/0.4%)
+[ComputeMeter] no calibrated weights for profile 'AB_Short5_e25@40000'; this thread uses the global weights instead
+  [12/54] AB_Short5_e25@40000            advance 63057.7 ns  copy  8808.6 ns  eval  3105.8 ns   (gap 0.1/0.6/0.6% | CV 0.1/0.5/2.2%)
+[ComputeMeter] no calibrated weights for profile 'AB_Z0_Coarse@40000'; this thread uses the global weights instead
+  [13/54] AB_Z0_Coarse@40000             advance 59526.3 ns  copy  8971.8 ns  eval  3595.3 ns   (gap 0.0/0.2/0.1% | CV 0.0/1.4/1.3%)
+[ComputeMeter] no calibrated weights for profile 'AB_Z0_Mid@40000'; this thread uses the global weights instead
+  [14/54] AB_Z0_Mid@40000                advance 51972.3 ns  copy  9258.5 ns  eval  3784.7 ns   (gap 0.1/0.2/2.3% | CV 0.1/0.1/2.0%)
+[ComputeMeter] no calibrated weights for profile 'AB_Z0_Fine@40000'; this thread uses the global weights instead
+  [15/54] AB_Z0_Fine@40000               advance 57331.0 ns  copy  8771.6 ns  eval  3553.8 ns   (gap 0.2/0.2/0.3% | CV 0.1/0.2/0.3%)
+[ComputeMeter] no calibrated weights for profile 'AB_Z0_Fine_InsFine@40000'; this thread uses the global weights instead
+  [16/54] AB_Z0_Fine_InsFine@40000       advance 60151.8 ns  copy  9310.2 ns  eval  3860.0 ns   (gap 0.0/0.3/0.6% | CV 0.0/0.7/1.2%)
+[ComputeMeter] no calibrated weights for profile 'AB_Comma_Off@40000'; this thread uses the global weights instead
+  [17/54] AB_Comma_Off@40000             advance 66415.1 ns  copy  8675.9 ns  eval  3596.6 ns   (gap 0.2/0.1/0.3% | CV 0.1/0.1/0.7%)
+[ComputeMeter] no calibrated weights for profile 'AB_Comma_On@40000'; this thread uses the global weights instead
+  [18/54] AB_Comma_On@40000              advance 64476.6 ns  copy  8590.1 ns  eval  3546.0 ns   (gap 0.0/0.0/0.0% | CV 0.0/0.3/0.2%)
+
+[weights] warmup for level 80000: 6 turns (discarded)
+[ComputeMeter] no calibrated weights for profile 'EMCTS@80000'; this thread uses the global weights instead
+  [19/54] EMCTS@80000                    advance 96477.9 ns  copy 10538.2 ns  eval  4765.0 ns   (gap 0.0/0.1/0.8% | CV 0.0/0.2/0.5%)
+[ComputeMeter] no calibrated weights for profile 'AB_Baseline@80000'; this thread uses the global weights instead
+  [20/54] AB_Baseline@80000              advance 96517.1 ns  copy 10543.8 ns  eval  4741.3 ns   (gap 0.1/0.0/0.9% | CV 0.1/0.1/0.7%)
+[ComputeMeter] no calibrated weights for profile 'AB_Bias_e75@80000'; this thread uses the global weights instead
+  [21/54] AB_Bias_e75@80000              advance 90341.4 ns  copy 10093.4 ns  eval  4523.3 ns   (gap 0.0/0.1/0.4% | CV 0.1/0.1/1.2%)
+[ComputeMeter] no calibrated weights for profile 'AB_Bias_e50@80000'; this thread uses the global weights instead
+  [22/54] AB_Bias_e50@80000              advance 97945.1 ns  copy 10477.1 ns  eval  4803.0 ns   (gap 0.1/0.3/0.0% | CV 0.0/0.3/0.8%)
+[ComputeMeter] no calibrated weights for profile 'AB_Bias_e25@80000'; this thread uses the global weights instead
+  [23/54] AB_Bias_e25@80000              advance 99531.7 ns  copy 10357.8 ns  eval  4564.3 ns   (gap 0.2/0.1/2.6% | CV 0.2/0.3/1.5%)
+[ComputeMeter] no calibrated weights for profile 'AB_Bias_e10@80000'; this thread uses the global weights instead
+  [24/54] AB_Bias_e10@80000              advance 97738.2 ns  copy 10222.3 ns  eval  4593.5 ns   (gap 0.0/0.2/1.0% | CV 0.0/0.3/1.4%)
+[ComputeMeter] no calibrated weights for profile 'AB_Coarse_e25@80000'; this thread uses the global weights instead
+  [25/54] AB_Coarse_e25@80000            advance 102796.6 ns  copy 10634.6 ns  eval  4876.6 ns   (gap 0.0/0.1/2.8% | CV 0.0/0.1/1.6%)
+[ComputeMeter] no calibrated weights for profile 'AB_NoRemoval_e25@80000'; this thread uses the global weights instead
+  [26/54] AB_NoRemoval_e25@80000         advance 97432.9 ns  copy 10575.8 ns  eval  4963.6 ns   (gap 0.2/0.0/0.3% | CV 0.1/0.1/0.4%)
+[ComputeMeter] no calibrated weights for profile 'AB_PerBurn_e25@80000'; this thread uses the global weights instead
+  [27/54] AB_PerBurn_e25@80000           advance 99802.7 ns  copy 10871.3 ns  eval  5099.1 ns   (gap 0.1/0.1/0.3% | CV 0.1/0.1/0.7%)
+[ComputeMeter] no calibrated weights for profile 'AB_Shortlist15@80000'; this thread uses the global weights instead
+  [28/54] AB_Shortlist15@80000           advance 91058.3 ns  copy 10109.8 ns  eval  4007.0 ns   (gap 0.1/0.4/1.3% | CV 0.0/0.2/1.2%)
+[ComputeMeter] no calibrated weights for profile 'AB_Short15_e25@80000'; this thread uses the global weights instead
+  [29/54] AB_Short15_e25@80000           advance 98944.7 ns  copy 10346.4 ns  eval  3987.6 ns   (gap 0.0/0.6/2.1% | CV 0.1/0.6/2.0%)
+[ComputeMeter] no calibrated weights for profile 'AB_Short5_e25@80000'; this thread uses the global weights instead
+  [30/54] AB_Short5_e25@80000            advance 100607.4 ns  copy 10986.9 ns  eval  4070.1 ns   (gap 0.1/0.9/2.6% | CV 0.1/0.5/1.6%)
+[ComputeMeter] no calibrated weights for profile 'AB_Z0_Coarse@80000'; this thread uses the global weights instead
+  [31/54] AB_Z0_Coarse@80000             advance 89826.8 ns  copy 13541.2 ns  eval  4657.9 ns   (gap 0.1/0.1/3.0% | CV 0.1/0.1/2.2%)
+[ComputeMeter] no calibrated weights for profile 'AB_Z0_Mid@80000'; this thread uses the global weights instead
+  [32/54] AB_Z0_Mid@80000                advance 72837.2 ns  copy 13180.8 ns  eval  4468.9 ns   (gap 0.1/1.5/9.8% | CV 0.1/1.4/6.1%)
+[ComputeMeter] no calibrated weights for profile 'AB_Z0_Fine@80000'; this thread uses the global weights instead
+  [33/54] AB_Z0_Fine@80000               advance 74955.3 ns  copy 13201.7 ns  eval  4716.5 ns   (gap 0.0/0.2/2.8% | CV 0.0/0.4/3.8%)
+[ComputeMeter] no calibrated weights for profile 'AB_Z0_Fine_InsFine@80000'; this thread uses the global weights instead
+  [34/54] AB_Z0_Fine_InsFine@80000       advance 97639.5 ns  copy 13244.7 ns  eval  4760.9 ns   (gap 0.2/1.0/0.9% | CV 0.1/0.7/0.6%)
+[ComputeMeter] no calibrated weights for profile 'AB_Comma_Off@80000'; this thread uses the global weights instead
+  [35/54] AB_Comma_Off@80000             advance 103586.7 ns  copy 10677.0 ns  eval  4847.9 ns   (gap 0.2/0.4/0.5% | CV 0.2/0.2/0.7%)
+[ComputeMeter] no calibrated weights for profile 'AB_Comma_On@80000'; this thread uses the global weights instead
+  [36/54] AB_Comma_On@80000              advance 99576.0 ns  copy 10597.4 ns  eval  4655.6 ns   (gap 1.9/0.6/0.3% | CV 1.3/0.4/2.0%)
+
+[weights] warmup for level 400000: 6 turns (discarded)
+[ComputeMeter] no calibrated weights for profile 'EMCTS@400000'; this thread uses the global weights instead
+  [37/54] EMCTS@400000                   advance 97250.6 ns  copy 10606.2 ns  eval  5635.9 ns   (gap 0.2/0.1/0.1% | CV 0.1/0.1/0.9%)
+[ComputeMeter] no calibrated weights for profile 'AB_Baseline@400000'; this thread uses the global weights instead
+  [38/54] AB_Baseline@400000             advance 97288.7 ns  copy 10613.6 ns  eval  5663.6 ns   (gap 0.0/0.1/0.8% | CV 0.1/0.1/0.8%)
+[ComputeMeter] no calibrated weights for profile 'AB_Bias_e75@400000'; this thread uses the global weights instead
+  [39/54] AB_Bias_e75@400000             advance 83272.8 ns  copy  9798.5 ns  eval  4753.5 ns   (gap 0.0/0.2/0.2% | CV 0.1/0.2/0.2%)
+[ComputeMeter] no calibrated weights for profile 'AB_Bias_e50@400000'; this thread uses the global weights instead
+  [40/54] AB_Bias_e50@400000             advance 87795.2 ns  copy 10491.4 ns  eval  5389.7 ns   (gap 0.1/0.0/0.4% | CV 0.1/0.0/0.6%)
+[ComputeMeter] no calibrated weights for profile 'AB_Bias_e25@400000'; this thread uses the global weights instead
+  [41/54] AB_Bias_e25@400000             advance 88769.0 ns  copy 10077.7 ns  eval  5176.9 ns   (gap 0.0/0.0/0.7% | CV 0.1/0.2/1.8%)
+[ComputeMeter] no calibrated weights for profile 'AB_Bias_e10@400000'; this thread uses the global weights instead
+  [42/54] AB_Bias_e10@400000             advance 73023.5 ns  copy  9532.4 ns  eval  4359.2 ns   (gap 0.0/0.1/0.2% | CV 0.0/0.0/0.9%)
+[ComputeMeter] no calibrated weights for profile 'AB_Coarse_e25@400000'; this thread uses the global weights instead
+  [43/54] AB_Coarse_e25@400000           advance 97769.8 ns  copy 10786.6 ns  eval  5679.5 ns   (gap 0.0/0.0/0.0% | CV 0.0/0.1/0.0%)
+[ComputeMeter] no calibrated weights for profile 'AB_NoRemoval_e25@400000'; this thread uses the global weights instead
+  [44/54] AB_NoRemoval_e25@400000        advance 90888.1 ns  copy  9799.1 ns  eval  4177.6 ns   (gap 0.0/0.5/2.2% | CV 0.0/0.4/1.3%)
+[ComputeMeter] no calibrated weights for profile 'AB_PerBurn_e25@400000'; this thread uses the global weights instead
+  [45/54] AB_PerBurn_e25@400000          advance 95092.7 ns  copy 10800.1 ns  eval  5774.8 ns   (gap 0.1/0.0/0.1% | CV 0.1/0.1/0.4%)
+[ComputeMeter] no calibrated weights for profile 'AB_Shortlist15@400000'; this thread uses the global weights instead
+  [46/54] AB_Shortlist15@400000          advance 64270.3 ns  copy  9357.0 ns  eval  3708.9 ns   (gap 0.0/0.1/0.7% | CV 0.0/0.5/0.5%)
+[ComputeMeter] no calibrated weights for profile 'AB_Short15_e25@400000'; this thread uses the global weights instead
+  [47/54] AB_Short15_e25@400000          advance 72327.5 ns  copy  9727.2 ns  eval  4078.4 ns   (gap 0.0/0.8/0.6% | CV 0.0/0.5/0.4%)
+[ComputeMeter] no calibrated weights for profile 'AB_Short5_e25@400000'; this thread uses the global weights instead
+  [48/54] AB_Short5_e25@400000           advance 91996.9 ns  copy 10334.4 ns  eval  3610.7 ns   (gap 0.0/0.9/0.1% | CV 0.1/0.6/0.3%)
+[ComputeMeter] no calibrated weights for profile 'AB_Z0_Coarse@400000'; this thread uses the global weights instead
+  [49/54] AB_Z0_Coarse@400000            advance 91429.3 ns  copy 12739.1 ns  eval  3279.6 ns   (gap 0.0/0.6/0.5% | CV 0.0/0.9/2.9%)
+[ComputeMeter] no calibrated weights for profile 'AB_Z0_Mid@400000'; this thread uses the global weights instead
+  [50/54] AB_Z0_Mid@400000               advance 69228.2 ns  copy 12390.3 ns  eval  3414.0 ns   (gap 0.0/0.7/1.4% | CV 0.1/0.7/2.0%)
+[ComputeMeter] no calibrated weights for profile 'AB_Z0_Fine@400000'; this thread uses the global weights instead
+  [51/54] AB_Z0_Fine@400000              advance 54033.5 ns  copy 12513.0 ns  eval  3407.3 ns   (gap 0.1/0.3/0.7% | CV 0.1/0.2/1.3%)
+[ComputeMeter] no calibrated weights for profile 'AB_Z0_Fine_InsFine@400000'; this thread uses the global weights instead
+  [52/54] AB_Z0_Fine_InsFine@400000      advance 91371.7 ns  copy 13001.8 ns  eval  3315.6 ns   (gap 0.0/0.2/2.2% | CV 0.1/0.5/1.3%)
+[ComputeMeter] no calibrated weights for profile 'AB_Comma_Off@400000'; this thread uses the global weights instead
+  [53/54] AB_Comma_Off@400000            advance 81635.5 ns  copy  9938.9 ns  eval  4519.7 ns   (gap 0.1/0.1/0.6% | CV 0.1/0.1/0.4%)
+[ComputeMeter] no calibrated weights for profile 'AB_Comma_On@400000'; this thread uses the global weights instead
+  [54/54] AB_Comma_On@400000             advance 75646.1 ns  copy  9515.1 ns  eval  4406.7 ns   (gap 0.0/0.1/0.6% | CV 0.1/0.3/0.4%)
+  measured in 119 min
+
+=== RESULT: weights per profile (relative to one advance in EMCTS@40000 = 62870.6 ns) ===
+  profile                     W_ADVANCE     W_COPY     W_EVAL   ns/advance
+  EMCTS@40000                    1.0000     0.1375     0.0567      62870.6
+  AB_Baseline@40000              1.0007     0.1372     0.0575      62912.0
+  AB_Bias_e75@40000              1.0387     0.1360     0.0578      65301.2
+  AB_Bias_e50@40000              1.0446     0.1371     0.0581      65671.9
+  AB_Bias_e25@40000              0.9811     0.1370     0.0553      61682.7
+  AB_Bias_e10@40000              1.0313     0.1397     0.0600      64839.4
+  AB_Coarse_e25@40000            1.0178     0.1386     0.0596      63991.9
+  AB_NoRemoval_e25@40000         0.9851     0.1380     0.0556      61931.0
+  AB_PerBurn_e25@40000           0.9781     0.1338     0.0524      61493.2
+  AB_Shortlist15@40000           1.0222     0.1304     0.0449      64266.7
+  AB_Short15_e25@40000           0.9621     0.1347     0.0491      60486.1
+  AB_Short5_e25@40000            1.0030     0.1401     0.0494      63057.7
+  AB_Z0_Coarse@40000             0.9468     0.1427     0.0572      59526.3
+  AB_Z0_Mid@40000                0.8267     0.1473     0.0602      51972.3
+  AB_Z0_Fine@40000               0.9119     0.1395     0.0565      57331.0
+  AB_Z0_Fine_InsFine@40000       0.9568     0.1481     0.0614      60151.8
+  AB_Comma_Off@40000             1.0564     0.1380     0.0572      66415.1
+  AB_Comma_On@40000              1.0255     0.1366     0.0564      64476.6
+  EMCTS@80000                    1.5345     0.1676     0.0758      96477.9
+  AB_Baseline@80000              1.5352     0.1677     0.0754      96517.1
+  AB_Bias_e75@80000              1.4369     0.1605     0.0719      90341.4
+  AB_Bias_e50@80000              1.5579     0.1666     0.0764      97945.1
+  AB_Bias_e25@80000              1.5831     0.1647     0.0726      99531.7
+  AB_Bias_e10@80000              1.5546     0.1626     0.0731      97738.2
+  AB_Coarse_e25@80000            1.6351     0.1692     0.0776     102796.6
+  AB_NoRemoval_e25@80000         1.5497     0.1682     0.0789      97432.9
+  AB_PerBurn_e25@80000           1.5874     0.1729     0.0811      99802.7
+  AB_Shortlist15@80000           1.4483     0.1608     0.0637      91058.3
+  AB_Short15_e25@80000           1.5738     0.1646     0.0634      98944.7
+  AB_Short5_e25@80000            1.6002     0.1748     0.0647     100607.4
+  AB_Z0_Coarse@80000             1.4288     0.2154     0.0741      89826.8
+  AB_Z0_Mid@80000                1.1585     0.2097     0.0711      72837.2
+  AB_Z0_Fine@80000               1.1922     0.2100     0.0750      74955.3
+  AB_Z0_Fine_InsFine@80000       1.5530     0.2107     0.0757      97639.5
+  AB_Comma_Off@80000             1.6476     0.1698     0.0771     103586.7
+  AB_Comma_On@80000              1.5838     0.1686     0.0741      99576.0
+  EMCTS@400000                   1.5468     0.1687     0.0896      97250.6
+  AB_Baseline@400000             1.5474     0.1688     0.0901      97288.7
+  AB_Bias_e75@400000             1.3245     0.1559     0.0756      83272.8
+  AB_Bias_e50@400000             1.3964     0.1669     0.0857      87795.2
+  AB_Bias_e25@400000             1.4119     0.1603     0.0823      88769.0
+  AB_Bias_e10@400000             1.1615     0.1516     0.0693      73023.5
+  AB_Coarse_e25@400000           1.5551     0.1716     0.0903      97769.8
+  AB_NoRemoval_e25@400000        1.4456     0.1559     0.0664      90888.1
+  AB_PerBurn_e25@400000          1.5125     0.1718     0.0919      95092.7
+  AB_Shortlist15@400000          1.0223     0.1488     0.0590      64270.3
+  AB_Short15_e25@400000          1.1504     0.1547     0.0649      72327.5
+  AB_Short5_e25@400000           1.4633     0.1644     0.0574      91996.9
+  AB_Z0_Coarse@400000            1.4542     0.2026     0.0522      91429.3
+  AB_Z0_Mid@400000               1.1011     0.1971     0.0543      69228.2
+  AB_Z0_Fine@400000              0.8594     0.1990     0.0542      54033.5
+  AB_Z0_Fine_InsFine@400000      1.4533     0.2068     0.0527      91371.7
+  AB_Comma_Off@400000            1.2985     0.1581     0.0719      81635.5
+  AB_Comma_On@400000             1.2032     0.1513     0.0701      75646.1
+
+  Each cell above: 8 distinct position(s), each replanned once per repetition. Identical positions and seeds in every cell, so the ratios between cells are paired.
+
+=== DOES AN OPERATION COST THE SAME FOR EVERY CONFIGURATION? ===
+  (this is the question the old single-weight calibration assumed the answer to)
+       level           cheapest advance            dearest advance         spread
+       40000          AB_Z0_Mid 51972.3       AB_Comma_Off 66415.1          27.8%
+       80000          AB_Z0_Mid 72837.2       AB_Comma_Off 103586.7          42.2%
+      400000         AB_Z0_Fine 54033.5      AB_Coarse_e25 97769.8          80.9%
+
+  Same question across levels, for the reference configuration:
+       40000 units: 62870.6 ns/advance  (1.00x the floor level)
+       80000 units: 96477.9 ns/advance  (1.53x the floor level)
+      400000 units: 97250.6 ns/advance  (1.55x the floor level)
+
+=== WHAT THE OLD GLOBAL WEIGHTS WOULD HAVE MIS-ALLOCATED ===
+  Wall-clock a nominal 1,000-unit budget would really have bought, priced with
+  one global weight set (advance=1, copy=0.16, eval=0.077) against each cell's
+  own realized operation mix. Equal columns = the old scheme was already fair.
+       level     min (ms)     max (ms)     unfairness
+       40000       52.096       64.426          23.7%   (AB_Z0_Mid@40000 vs AB_Comma_Off@40000)
+       80000       72.911       99.060          35.9%   (AB_Z0_Mid@80000 vs AB_Short5_e25@80000)
+      400000       54.234       94.013          73.3%   (AB_Z0_Fine@400000 vs AB_Coarse_e25@400000)
+  A large percentage here is the bias the per-profile weights remove: the same
+  nominal budget was buying that much more compute for one agent than another.
+
+=== IS THIS A FAIR BENCHMARK? ===
+  [ok]   every cell measured cleanly (54 cells)
+  [ok]   weights are plausible in every cell
+  [ok]   machine was idle (load 0.01 per core, this job included)
+
+  VERDICT: PASS - calibration is trustworthy.
+  Weights  -> /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties  (54 profiles; loaded automatically by every later v6 job)
+  Measured -> /home/jovyan/ab_runs/stage1/_calibration/compute_profiles.csv
+  NOTE: a compute-unit now means something different, so the budget levels
+        must be re-derived (BudgetFloorProbe) before the real run, and C0
+        should now show units/ms FLAT across configurations - that is the
+        check that this calibration did its job.
+===== exit 0 after 1:59:06.663696

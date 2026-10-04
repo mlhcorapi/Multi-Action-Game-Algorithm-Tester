@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# MAGAT launcher wrapper for POSIX shells: same as `python magat.py ...` from the repository root.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+for py in python3 python py; do
+  if command -v "$py" >/dev/null 2>&1; then exec "$py" "$here/magat.py" "$@"; fi
+done
+echo "magat: no python interpreter found on PATH" >&2
+exit 127

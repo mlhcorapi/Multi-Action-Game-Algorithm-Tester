@@ -1,0 +1,4 @@
+[submodule "games/tribes/engine"]
+	path = games/tribes/engine
+	url = https://github.com/mlhcorapi/Tribes.git
+	branch = magat-engine

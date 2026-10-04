@@ -1,0 +1,10 @@
+
+>>>>> 2026-08-28 23:58:04 $ java -Xmx8g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dcompute.weightsFile="/home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties"  -cp "out:lib/*" core.data.exp.Stage0SignalRunner verify 40000 20
+[stage0-verify] cu=40000 turnLimit=20 — instrumented vs plain ExperimentalEMCTSAgent on one identical game
+[ComputeMeter] compute.wAdvance = 1.0 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 1.0)
+[ComputeMeter] compute.wCopy = 0.137451 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.16)
+[ComputeMeter] compute.wEval = 0.056738 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.077)
+[stage0-verify] instrumented: score=8131 oppScore=7344 ticks=21 turns=21 firstTurn={0:-21.0:120.0:37691:2320:373}
+[stage0-verify] plain:        score=8131 oppScore=7344 ticks=21 turns=21 firstTurn={0:-21.0:120.0:37691:2320:373}
+[stage0-verify] PASS — instrumentation is behaviourally inert
+===== exit 0 after 0:01:51.259586
