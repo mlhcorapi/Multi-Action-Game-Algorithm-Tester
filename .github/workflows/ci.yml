@@ -45,11 +45,21 @@ jobs:
       - name: Toy calibration writes, merges, and checks without writing
         run: |
           python magat.py machine
-          python magat.py calibrate --game tribes --out "$RUNNER_TEMP/calib" --arms emcts --levels 4000 --reps 2 --turns 2 --warmup 1 --toy
-          python magat.py calibrate --game tribes --out "$RUNNER_TEMP/calib" --arms emcts-comma --levels 4000 --reps 2 --warmup 1 --toy
+          python magat.py calibrate --game tribes --out "$RUNNER_TEMP/calib" --arms emcts --levels 2000,4000 --reps 2 --turns 2 --warmup 1 --toy
+          python magat.py calibrate --game tribes --out "$RUNNER_TEMP/calib" --arms emcts-comma --levels 2000,4000 --reps 2 --warmup 1 --toy
           grep -q "profile.emcts-comma@4000.wAdvance" "$RUNNER_TEMP/calib/compute_weights.properties"
           # a toy drift verdict may land either side of the gate (exit 0 or 1); anything else is a failure
           rc=0; python magat.py calibrate --check --game tribes --weights "$RUNNER_TEMP/calib/compute_weights.properties" --arms emcts-comma --levels 4000 --reps 2 --warmup 1 --toy || rc=$?
           test "$rc" -le 1
+      - name: The shipped experiment specs validate against the published currency
+        run: |
+          python magat.py experiment validate --experiment experiments/tribes/reference-ladder.json
+      - name: Toy run on dev and holdout, and a resume that skips every leaf
+        run: |
+          RUN="python magat.py run --experiment experiments/tribes/shakedown.json --portfolio $RUNNER_TEMP/toy --weights $RUNNER_TEMP/calib/compute_weights.properties --out $RUNNER_TEMP/run --threads 2 --toy"
+          $RUN --split dev
+          $RUN --split dev | grep -q "SKIP (done)"
+          $RUN --split holdout
+          test "$(wc -l < "$RUNNER_TEMP/run/dev/_completed.txt")" -eq 6
       - name: Notebook self-test
         run: python magat.py notebook selftest
