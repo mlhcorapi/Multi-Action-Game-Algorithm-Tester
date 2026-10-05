@@ -33,6 +33,12 @@ jobs:
         run: python magat.py check contract --game tribes --scenarios 4
       - name: Equivalence gate (emcts vs the thesis agent, 2 positions, 8k units)
         run: python magat.py check equivalence --game tribes --arms emcts --scenarios 2 --visits 1 --budgets 8000
+      - name: The headline arm, its control and a biased arm reproduce their thesis oracles
+        run: python magat.py check equivalence --game tribes --arms comma-z0-coarse,comma-rand15,comma-bias-e25 --scenarios 2 --visits 1 --budgets 8000
+      - name: Structure (selection equivalences, the baseline contract, mechanisms differ from their controls)
+        run: python magat.py check structure --game tribes --spec experiments/tribes/structure.json
+      - name: Replay published R7615 holdout turns field for field
+        run: python magat.py check replay --game tribes --leaf games/tribes/results/replay/Comma_Off/80000cu --turns 3
       - name: Published portfolio verifies (bins, identity, split rule)
         run: python magat.py portfolio verify --game tribes
       - name: Toy portfolio build, freeze, and verify against the published rows
