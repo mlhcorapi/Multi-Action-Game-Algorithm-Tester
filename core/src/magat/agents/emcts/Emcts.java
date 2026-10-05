@@ -127,6 +127,7 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
                     if (!isInLiveTree(incumbent)) incumbent = subtreeMax(root);
                     record.checkpoint(phase + 1, bestNode.value(), fmCalls, Meter.units(),
                             System.currentTimeMillis() - turnStart);
+                    onBridgeBurn(phase + 1);
                 }
             }
         }
@@ -134,7 +135,7 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
         double finalValue = bestNode.value();
         double avgNodeValue = nodesEvaluated > 0 ? sumNodeValue / nodesEvaluated : 0.0;
         boolean terminal = bestNode.state() != null && game.isTerminal(bestNode.state());
-        return record
+        record
                 .values(initialValue, finalValue, terminal, avgNodeValue)
                 .search(Meter.advances(), Meter.copies(), Meter.evals(), Meter.units())
                 .init(budget, initMillis)
@@ -147,8 +148,21 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
                 .telemetry("mutRepairKept", mutRepairKept)
                 .telemetry("mutRepairReplaced", mutRepairReplaced)
                 .telemetry("maxBranching", maxChildrenOnANode)
-                .telemetry("iterations", numIters)
-                .build();
+                .telemetry("iterations", numIters);
+        moreTelemetry(record);
+        return record.build();
+    }
+
+    /**
+     * Called after every bridge burn that happened, at the point the thesis tree's agent called
+     * {@code recordBridgeBurn}: after the prune and the incumbent's re-anchoring. Must not touch the
+     * forward model or the random stream.
+     */
+    protected void onBridgeBurn(int phaseNumber) {
+    }
+
+    /** Adds a subclass's telemetry to the turn's record. Observation only. */
+    protected void moreTelemetry(TurnRecord.Builder record) {
     }
 
     /** The plan the search settled on, for callers that replay it. */
