@@ -1,0 +1,16 @@
+{
+  "arm": "comma-z0-mid",
+  "budget": 400000,
+  "profile": "comma-z0-mid@400000",
+  "weights": null,
+  "status": "complete",
+  "turnsDone": 1200,
+  "failures": 0,
+  "imported": {
+    "config": "Comma_Z0_Mid",
+    "source": ".../Comma_Z0_Mid/400000cu",
+    "turnTelemetrySha256": "fb7e54caf4f9bf198399993084cf5abece901b8828ae483188fae07d426b68a9",
+    "resultsSha256": "9a3e1e903608f523084a044705c3ce75e018e01458119f268368b7b0242ba109",
+    "note": "priced by the thesis runner, which did not record the price per leaf"
+  }
+}

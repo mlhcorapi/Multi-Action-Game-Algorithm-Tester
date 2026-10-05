@@ -1,0 +1,16 @@
+{
+  "arm": "comma-short15",
+  "budget": 400000,
+  "profile": "comma-short15@400000",
+  "weights": null,
+  "status": "complete",
+  "turnsDone": 1200,
+  "failures": 0,
+  "imported": {
+    "config": "Comma_Short15",
+    "source": ".../Comma_Short15/400000cu",
+    "turnTelemetrySha256": "56a478a7b3fc513170f8042fea0c496622d46f761f784b6130bdb36b128484b7",
+    "resultsSha256": "92db11487286c81de10b8a3c69c56c58baa6f0bab35cad673a3c755b691f9a7b",
+    "note": "priced by the thesis runner, which did not record the price per leaf"
+  }
+}

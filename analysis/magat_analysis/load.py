@@ -55,6 +55,12 @@ def shown(p) -> str:
         return ".../" + "/".join(p.parts[-2:])
 
 
+def write_text(p, text: str) -> None:
+    """Write with LF line endings on every platform: outputs are byte-identical wherever they are written."""
+    with open(p, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
+
+
 def resolve(p) -> pathlib.Path:
     """A path as written in a spec or a provenance file: absolute, else relative to the repository."""
     p = pathlib.Path(str(p))
@@ -239,7 +245,7 @@ def provenance(split: Split, spec) -> dict:
         split=split.name,
         path=shown(split.path),
         game=game.get("id", "unknown"),
-        engine_commit=cfg.get("engine.commit", "unknown"),
+        engine_commit=cfg.get("engine.commit") or cfg.get("engine") or "unknown",
         portfolio_identity=p.get("identity", "unknown"),
         currency=split.currency(),
         currency_reference=w.get("reference", "unknown"),
@@ -247,7 +253,7 @@ def provenance(split: Split, spec) -> dict:
         experiment_sha256=(spec or {}).get("_sha256") or (r.get("experiment") or {}).get("sha256", ""),
         frozen_sha256=fz.get("sha256", ""),
         preregistration=(spec or {}).get("preregistration", ""),
-        magat_commit=(r.get("magat") or {}).get("commit", "unknown"),
+        magat_commit=(r.get("magat") or {}).get("commit") or (r.get("magat") or {}).get("version") or "unknown",
         toy=bool(r.get("toy", False)),
         imported=r.get("imported"),
         leaves=len(split.leaves),

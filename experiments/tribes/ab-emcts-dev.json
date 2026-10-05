@@ -1,0 +1,75 @@
+{
+  "name": "ab-emcts-dev",
+  "game": "tribes",
+  "description": "The worked result's development stages (the thesis line's stages D and E, R7615, 2026-08-29 to 2026-08-31) on the 200 development scenarios. The published run is imported in games/tribes/results/ab-emcts/dev; running this re-measures it on this machine.",
+  "portfolio": "tribes/v1",
+  "split": "dev",
+  "baseline": "emcts-comma",
+  "levels": [
+    { "budget": 80000, "visits": 8, "arms": [
+      "emcts", "emcts-bias-e25", "emcts-comma",
+      "comma-bias-e75", "comma-bias-e50", "comma-bias-e25", "comma-bias-e10",
+      "comma-bias-coarse-e25", "comma-bias-fine-e25", "comma-bias-norem-e25", "comma-bias-perburn-e25",
+      "comma-short15", "comma-short15-bias-e25", "comma-short5-bias-e25",
+      "comma-rand15", "comma-short15-coarse",
+      "comma-z0-coarse", "comma-z0-mid", "comma-z0-fine", "comma-z0-random" ] },
+    { "budget": 40000, "visits": 8, "arms": [
+      "emcts", "emcts-comma",
+      "comma-bias-e75", "comma-bias-e50", "comma-bias-e25", "comma-bias-e10",
+      "comma-bias-coarse-e25", "comma-bias-norem-e25", "comma-bias-perburn-e25",
+      "comma-short15", "comma-short15-bias-e25", "comma-short5-bias-e25" ] },
+    { "budget": 400000, "visits": 6, "arms": [
+      "emcts", "emcts-comma",
+      "comma-bias-e75", "comma-bias-e50", "comma-bias-e25", "comma-bias-e10",
+      "comma-bias-coarse-e25", "comma-bias-fine-e25", "comma-bias-norem-e25", "comma-bias-perburn-e25",
+      "comma-short15", "comma-short15-bias-e25", "comma-short5-bias-e25",
+      "comma-rand15", "comma-short15-coarse",
+      "comma-z0-coarse", "comma-z0-mid", "comma-z0-fine", "comma-z0-random" ] }
+  ],
+  "arms": [
+    { "id": "emcts" },
+    { "id": "emcts-bias-e25" },
+    { "id": "emcts-comma" },
+    { "id": "comma-bias-e75" },
+    { "id": "comma-bias-e50" },
+    { "id": "comma-bias-e25" },
+    { "id": "comma-bias-e10" },
+    { "id": "comma-bias-coarse-e25" },
+    { "id": "comma-bias-fine-e25" },
+    { "id": "comma-bias-norem-e25" },
+    { "id": "comma-bias-perburn-e25" },
+    { "id": "comma-short15", "attribution": "comma-rand15" },
+    { "id": "comma-short15-bias-e25" },
+    { "id": "comma-short5-bias-e25" },
+    { "id": "comma-rand15" },
+    { "id": "comma-short15-coarse", "attribution": "comma-rand15" },
+    { "id": "comma-z0-coarse", "attribution": "comma-z0-random" },
+    { "id": "comma-z0-mid", "attribution": "comma-z0-random" },
+    { "id": "comma-z0-fine", "attribution": "comma-z0-random" },
+    { "id": "comma-z0-random" }
+  ],
+  "sweeps": [
+    { "parameter": "selection", "arms": ["emcts-comma"], "null": "emcts" },
+    { "parameter": "epsilon", "arms": ["comma-bias-e75", "comma-bias-e50", "comma-bias-e25", "comma-bias-e10"], "null": "emcts-comma" },
+    { "parameter": "insertKeys", "arms": ["comma-bias-coarse-e25", "comma-bias-e25", "comma-bias-fine-e25"], "null": "emcts-comma" },
+    { "parameter": "shortlistK", "arms": ["comma-short15-bias-e25", "comma-short5-bias-e25"], "null": "comma-bias-e25" },
+    { "parameter": "repairKeys", "arms": ["comma-z0-coarse", "comma-z0-mid", "comma-z0-fine"], "null": "comma-z0-random" }
+  ],
+  "contrasts": [
+    { "a": "comma-z0-coarse", "b": "emcts-comma", "label": "headline" },
+    { "a": "comma-z0-coarse", "b": "comma-z0-random", "label": "the table's own contribution" },
+    { "a": "comma-short15-coarse", "b": "comma-rand15", "label": "ranking pays at coarse keys" },
+    { "a": "comma-short15", "b": "comma-rand15", "label": "ranking at mid keys" },
+    { "a": "comma-z0-fine", "b": "comma-z0-random", "label": "a fine table against no table" },
+    { "a": "comma-z0-fine", "b": "comma-z0-mid", "label": "repair keys: fine against mid" },
+    { "a": "comma-z0-mid", "b": "comma-z0-coarse", "label": "repair keys: mid against coarse" },
+    { "a": "comma-bias-coarse-e25", "b": "comma-bias-e25", "label": "insertion keys: coarse against mid" },
+    { "a": "comma-bias-e25", "b": "comma-bias-fine-e25", "label": "insertion keys: mid against fine" },
+    { "a": "comma-bias-e25", "b": "comma-bias-norem-e25", "label": "removal credit on against off" },
+    { "a": "comma-bias-e25", "b": "comma-bias-perburn-e25", "label": "a continuous table against one per burn" },
+    { "a": "comma-short15-bias-e25", "b": "comma-bias-e25", "label": "a shortlist on top of the bias" },
+    { "a": "comma-short5-bias-e25", "b": "comma-short15-bias-e25", "label": "shortlist 5 against 15, with the bias" },
+    { "a": "emcts-comma", "b": "emcts", "label": "comma selection over plus" },
+    { "a": "emcts-bias-e25", "b": "emcts", "label": "the bias on plus selection" }
+  ]
+}

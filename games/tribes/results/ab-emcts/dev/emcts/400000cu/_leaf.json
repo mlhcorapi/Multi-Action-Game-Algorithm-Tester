@@ -1,0 +1,16 @@
+{
+  "arm": "emcts",
+  "budget": 400000,
+  "profile": "emcts@400000",
+  "weights": null,
+  "status": "complete",
+  "turnsDone": 1200,
+  "failures": 0,
+  "imported": {
+    "config": "Baseline",
+    "source": ".../Baseline/400000cu",
+    "turnTelemetrySha256": "9c0c4b4505a2422b47e77098adadab8a8c452afc267d7e80eb2644bbd08f3cbd",
+    "resultsSha256": "08fe1916e540c3b2ab0699f095e529bfe7e63e3158ca3ad439f65cbb7740e857",
+    "note": "priced by the thesis runner, which did not record the price per leaf"
+  }
+}

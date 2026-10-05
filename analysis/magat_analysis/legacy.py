@@ -33,7 +33,7 @@ from collections import OrderedDict
 from decimal import Decimal
 
 from . import __version__
-from .load import ROOT, read_weights, resolve, shown
+from .load import ROOT, read_weights, resolve, shown, write_text
 
 COLUMNS = ["scenario", "source", "phase", "visit", "arm", "budget", "initial", "final", "terminal", "avg_node",
            "advances", "copies", "evals", "units", "init_advances", "init_copies", "init_evals", "init_units",
@@ -192,7 +192,7 @@ def import_legacy(tree, out, mapping=None, portfolio=None, split=None, experimen
                            imported=OrderedDict(config=config, source=shown(leaf), turnTelemetrySha256=sha256(leaf / "turn_telemetry.csv"),
                                                 resultsSha256=sha256(res_path) if res else None,
                                                 note="priced by the thesis runner, which did not record the price per leaf"))
-        (out_leaf / "_leaf.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+        write_text(out_leaf / "_leaf.json", json.dumps(meta, indent=2) + "\n")
         if complete:
             done.append(f"arm={arm};budget={budget};split={split}")
         total_rows += len(rows)
@@ -230,8 +230,8 @@ def import_legacy(tree, out, mapping=None, portfolio=None, split=None, experimen
             fz = e.parent / spec["frozen"]
             if fz.is_file():
                 run["frozen"] = OrderedDict(path=shown(fz), sha256=sha256(fz))
-    (dest / "_run.json").write_text(json.dumps(run, indent=2) + "\n", encoding="utf-8")
-    (dest / "_split.txt").write_text(split + "\n", encoding="utf-8")
-    (dest / "_completed.txt").write_text("".join(d + "\n" for d in done), encoding="utf-8")
+    write_text(dest / "_run.json", json.dumps(run, indent=2) + "\n")
+    write_text(dest / "_split.txt", split + "\n")
+    write_text(dest / "_completed.txt", "".join(d + "\n" for d in done))
     echo(f"IMPORT: OK - {len(leaves)} leaves, {total_rows:,} turns -> {dest}")
     return 0

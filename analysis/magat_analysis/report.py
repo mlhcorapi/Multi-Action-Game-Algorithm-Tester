@@ -18,6 +18,28 @@ from .stats import N_BOOT
 TABLES = ("replication", "headline", "budget_multiplier", "w7_wallclock", "gain_multiple", "contrasts", "oracle",
           "anytime", "efficiency", "variance", "terminals")
 EXIT_OK, EXIT_INPUT, EXIT_IDENTICAL = 0, 2, 5
+# The header a table is written with when it has no rows (no holdout, a single-level baseline, no curves),
+# so that every table is a CSV with columns whatever the run held.
+EMPTY = {
+    "replication": "Kind Budget Name Stratum A B DevMean DevLo DevHi HoldMean HoldLo HoldHi Replicates currency",
+    "headline": "Split Budget Arm Baseline Stratum Pairs Scenarios MeanDiff Lo Hi D RelDiff RelLo RelHi Wins Losses Ties "
+                "WinRate currency",
+    "budget_multiplier": "Split Budget Arm Baseline Cells Scenarios ArmGain BaseGains Multiplier Lo Hi EquivBudget Flag "
+                         "BootUndefined ArmMs BaseMs ArmTimeRatio TimeMultiplier TimeLo TimeHi currency",
+    "w7_wallclock": "Split Budget Arm Baseline Pairs UnitsDiff Scenarios WallDiff WallLo WallHi ClampedShare MeanArmMillis "
+                    "Verdict currency",
+    "gain_multiple": "Split Budget Arm Baseline Pairs Scenarios ArmGain BaseGain GainMultiple Lo Hi currency",
+    "contrasts": "Split Budget Kind Label A B Stratum Pairs Scenarios MeanDiff Lo Hi D WinRate currency",
+    "oracle": "Split Budget Arm Turns Arms BestShare MeanRegret currency",
+    "anytime": "Split Budget Arm Checkpoint MeanDiff Pairs currency",
+    "efficiency": "Split Budget Arm Turns MeanNodes NodesVsBase MeanUnique DupShare DupBasis MeanPlanMillis MeanUnits "
+                  "TerminalShare currency",
+    "variance": "Split Budget Arm Stratum Pairs Clusters MeanVisits SigmaB2 SigmaW2 ICC SE SEFloor ExcessOverFloorPct "
+                "VisitsWithin5Pct EquivClustersAtV1 TurnsUsed TurnsEquiv currency",
+    "terminals": "Split Budget Arm Turns TerminalShare currency",
+    "repriced": "Split Budget Arm Baseline Pairs Scenarios RepricedDiff Lo Hi ClampedShare MeanRepricedUnits currency",
+    "repriced_spend": "Split Budget Arm Turns MeanUnits MeanRepricedUnits Ratio currency",
+}
 
 
 # --------------------------------------------------------------------------- number formatting
@@ -131,12 +153,14 @@ def analyze(run, out, holdout=None, experiment=None, baseline=None, reprice=None
             parts = [p for p in parts if not p.empty]
             df = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
         combined[name] = df
-        df.to_csv(out / "tables" / f"{name}.csv", index=False, float_format="%.4f")
+        if df.empty:
+            df = pd.DataFrame(columns=EMPTY[name].split())
+        df.to_csv(out / "tables" / f"{name}.csv", index=False, float_format="%.4f", lineterminator="\n")
     if figures:
         draw(out, splits, results)
     prov = {s.name: load.provenance(s, specs[s.name]) for s in splits}
     summary = render(splits, specs, baseline, results, repl, prov, weights, n)
-    (out / "SUMMARY.md").write_text(summary, encoding="utf-8")
+    load.write_text(out / "SUMMARY.md", summary)
     write_json(out / "report.json", dict(
         magat_analysis=__version__, baseline=baseline, bootstrap_resamples=n,
         reprice=None if not weights else dict(path=weights["path"], sha256=weights["sha256"]),
@@ -157,16 +181,15 @@ def records(df: pd.DataFrame) -> list:
 
 
 def write_json(p: pathlib.Path, obj) -> None:
-    p.write_text(json.dumps(obj, indent=1, default=lambda o: o.item() if hasattr(o, "item") else str(o)) + "\n",
-                 encoding="utf-8")
+    load.write_text(p, json.dumps(obj, indent=1, default=lambda o: o.item() if hasattr(o, "item") else str(o)) + "\n")
 
 
 # --------------------------------------------------------------------------- SUMMARY.md
 def render(splits, specs, baseline, results, repl, prov, weights, n) -> str:
     order = sorted(splits, key=lambda s: (s.name != "holdout", s.name))       # the confirmatory read first
     names = [s.name for s in splits]
-    spec = next((x for x in specs.values() if x), None)
-    title = (spec or {}).get("name") or splits[0].path.name
+    spec_names = list(dict.fromkeys(x["name"] for x in specs.values() if x and x.get("name")))
+    title = " + ".join(spec_names) or splits[0].path.name
     L = [f"# {title}: MAGAT analysis", "",
          f"Splits: {', '.join(names)}. Baseline `{baseline}`. A positive difference means the arm finds a better",
          "final sequence than the baseline on the same (scenario, visit) seeds; intervals are scenario-clustered",

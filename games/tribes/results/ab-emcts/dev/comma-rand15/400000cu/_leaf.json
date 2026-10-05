@@ -1,0 +1,16 @@
+{
+  "arm": "comma-rand15",
+  "budget": 400000,
+  "profile": "comma-rand15@400000",
+  "weights": null,
+  "status": "complete",
+  "turnsDone": 1200,
+  "failures": 0,
+  "imported": {
+    "config": "Comma_Rand15",
+    "source": ".../Comma_Rand15/400000cu",
+    "turnTelemetrySha256": "0d52c58f856b5c56f37a3a803cbb6fb1022aca4a120ff2574cdc06d6400bb9e9",
+    "resultsSha256": "7f826411d10cbb84cc1ed5fadab0da0dad70d05af6f53dc89c44469efa56aef7",
+    "note": "priced by the thesis runner, which did not record the price per leaf"
+  }
+}

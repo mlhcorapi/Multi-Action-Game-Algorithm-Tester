@@ -61,6 +61,19 @@ class ImportLegacy(unittest.TestCase):
         for r in sp.turns.itertuples(index=False):
             self.assertEqual(r.final, src[(r.scenario, r.visit)])
 
+    def test_a_single_arm_tree_analyses_to_tables_that_all_have_columns(self):
+        from magat_analysis import report
+        import pandas as pd
+        self.imported()
+        out = self.tmp / "out"
+        rc = report.analyze(self.tmp / "run", out, baseline="emcts-comma", n=50, figures=False, echo=lambda *_: None)
+        self.assertEqual(rc, 0)
+        for name in report.TABLES:
+            df = pd.read_csv(out / "tables" / f"{name}.csv")
+            self.assertGreater(len(df.columns), 3, name)
+        self.assertEqual(len(pd.read_csv(out / "tables" / "efficiency.csv")), 1)
+        self.assertTrue(pd.read_csv(out / "tables" / "headline.csv").empty, "one arm: nothing to pair")
+
     def test_an_unknown_configuration_or_a_foreign_scenario_is_refused(self):
         bad_map = self.tmp / "map.json"
         bad_map.write_text(json.dumps({"Baseline": "emcts"}), encoding="utf-8")

@@ -18,5 +18,5 @@ python magat.py check replay --game tribes --leaf games/tribes/results/replay/Co
 
 On 2026-10-05 an Intel Core i9-14900HX laptop (Windows 11, JDK 26) reproduced all 20 from both the
 published scenario files and its own rebuilt portfolio. The full leaf, and the `comma-z0-coarse` and
-`comma-rand15` leaves of the same stage, reproduced 20 of 20 too; the complete stage trees are imported
-with the worked result (milestone 6).
+`comma-rand15` leaves of the same stage, reproduced 20 of 20 too. The complete stage trees are imported
+in `games/tribes/results/ab-emcts/` (the worked result), in MAGAT's leaf layout.

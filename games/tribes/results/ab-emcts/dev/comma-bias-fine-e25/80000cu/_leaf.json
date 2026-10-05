@@ -1,0 +1,16 @@
+{
+  "arm": "comma-bias-fine-e25",
+  "budget": 80000,
+  "profile": "comma-bias-fine-e25@80000",
+  "weights": null,
+  "status": "complete",
+  "turnsDone": 1600,
+  "failures": 0,
+  "imported": {
+    "config": "Comma_Fine_e25",
+    "source": ".../Comma_Fine_e25/80000cu",
+    "turnTelemetrySha256": "8d6c3ce6bb308152268b32d4779a3128e00edf51930a2fab2a105b131e3a2918",
+    "resultsSha256": "448d6cef5ee937bfd45eab6dbc97fac086cd2ccb41271bb6a903a9004ce87c1d",
+    "note": "priced by the thesis runner, which did not record the price per leaf"
+  }
+}

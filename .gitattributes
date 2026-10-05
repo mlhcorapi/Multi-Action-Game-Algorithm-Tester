@@ -1,3 +1,8 @@
 *.bin binary
 *.jar binary
 *.png binary
+# Files whose bytes are hashed into provenance (specs, frozen choices, result tables): the same bytes on
+# every platform, whatever core.autocrlf says, so a hash recorded on one machine matches the file on another.
+*.csv text eol=lf
+*.json text eol=lf
+experiments/** text eol=lf
