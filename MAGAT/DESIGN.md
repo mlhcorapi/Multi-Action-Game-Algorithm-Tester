@@ -779,6 +779,16 @@ at ≥ 2 levels (or the report cannot produce budget multipliers; a warning on `
 declares a mechanism (`AgentFactory.attributionControl()` non-null) has its control in the grid
 (principle 6; error on `holdout`, warning on `dev`); `holdout` requires `frozen`.
 
+*Amended 2026-10-05 (milestone 4): a level may list its own `arms` (the thesis schedules ran the
+baseline at some levels only); `scenarios: N` limits a run to an evenly spread N of the split (smoke
+and shakedown specs only; on the holdout it is a warning, since a partial read is still a read); arms
+may be written as bare ids; unknown keys are warnings (typos); `description` is free text the notebook
+prints. Also checked: arm ids unique, every arm in a level, sweep and contrast is in the grid, an arm's
+spec-level `attribution` is in the grid, budgets positive and unique. Arms whose budget buys no search
+(`priced() = false`, the random floor) need no price and run under the file's global weights, which
+their `_leaf.json` records. Toy weights are a warning on development and an error on the holdout unless
+the run is declared `--toy`. `magat experiment validate` runs the validator alone.*
+
 ### 9.2 Grid runner
 
 `Stage1Runner.run/runLeaf` moved as `GridRunner`: level order is the priority order; a leaf is
@@ -801,10 +811,31 @@ Three new guards, each a trap from brief §9 made structural:
 - **Portfolio and configuration lock.** The tree records the portfolio identity and `configuration()`;
   a mismatch aborts.
 
+*Amended 2026-10-05 (milestone 4):*
+- *The currency lock is per leaf price, not per file. Every `_leaf.json` records the three weights the
+  leaf ran under; a resume under a weights file with another hash proceeds if no leaf's own price
+  changed (a merge that only added arms changes none), and otherwise lists the leaves whose price
+  changed and refuses until `--retire-leaf` names every one of them. Locking on the file hash alone
+  would force re-running every leaf after any merge.*
+- *The identical-output assertion compares every complete leaf of the level on disk, including leaves
+  from earlier invocations, on (initial, final, advances, copies, evals, nodes, unique) per (scenario,
+  visit). It is exercised by `GridRunnerTest` with a renamed duplicate of `emcts`, rather than by a
+  duplicate registered in the Tribes registry for the shakedown's sake.*
+- *Exit codes: 0 complete, 1 stopped or a turn failed, 2 invalid spec, 3 tree locked by a live writer,
+  4 tree mismatch or currency lock, 5 identical arms. A failed turn is reported and leaves its leaf
+  incomplete; a re-run retries it.*
+- *The holdout ledger is appended before the first holdout turn runs, once per (run tree, spec hash): a
+  resume of the same read is not a second read, a second experiment on the same holdout is.*
+
 ### 9.3 Estimates
 
 `secPerTurn` and the machine factor stay, as `--machine-factor`, and the banner prints the model
 behind every estimate. Nothing decides on them.
+
+*Amended 2026-10-05 (milestone 4): the model is the currency itself. A unit is calibrated to the
+reference advance's wall-clock, so a turn of B units costs about B x `referenceAdvanceNanos` on the
+calibrated machine; the estimate is that times `--machine-factor` over the level's threads. No
+regression fitted to one laptop.*
 
 ---
 
@@ -827,12 +858,24 @@ governor summary, turns done.
 
 The raw op counts are on every row. That is the cross-machine promise's substrate.
 
+*Amended 2026-10-05 (milestone 4): `turns.csv` also carries `avg_node` after `terminal`; values are
+written to four decimals as every thesis CSV was, never in exponent notation. A leaf's `t_<key>`
+columns are fixed by its first turn's telemetry keys. `_leaf.json` holds arm, budget, profile, the
+three weights, threads, host, start and finish times, turns total and done, failures, seconds, the
+governor's summary and the status (`running`, `complete`, `incomplete`).*
+
 ### 10.2 Per run: `<run>/<split>/`
 
 `_run.json`: MAGAT version and git commit; game id, engine commit, `configuration()`; portfolio name
 and identity; split; weights path, hash, reference and machine header; experiment spec hash and
 `frozen` hash; `MachineProfile.summary()`; Java version; threads per level; a history of every
 `--retire-leaf`. Plus `_completed.txt`, `_split.txt`, `_running.lock`.
+
+*Amended 2026-10-05 (milestone 4): the game, configuration, portfolio and split are written once and
+enforced; the weights, experiment and frozen entries describe the latest invocation; `invocations`
+lists every one (date, host, machine, Java, the spec and weights hashes, threads per level, the
+arguments) and `retired` every retired leaf (date, leaf, turns discarded, the weights hash that
+retired it). `toy: true` marks a toy run.*
 
 ### 10.3 Data root
 
@@ -962,6 +1005,7 @@ magat run               --experiment <spec.json> --split dev|holdout|all --portf
 magat analyze           --run <dir> [--holdout <dir>] [--experiment <spec>] [--baseline arm] [--reprice <weights>] --out <dir>
 magat import-legacy     --stage1-tree <dir> --out <run> [--map tools/legacy-arms.json]
 magat bundle            --name <stage> --paths ... [--exclude seqlog_,mutlog_]
+magat experiment validate --experiment <spec.json> [--weights <file>] [--split ...] [--frozen <file>]   the validator alone
 magat shakedown         [--out <dir>]
 magat notebook build|selftest
 ```
@@ -1010,6 +1054,13 @@ written) → `calibrate --under-load 3` writes beside, not over → `probe suppo
 spec on `dev` (3 arms, 1 visit) and on `holdout` into its own tree → re-run `dev` and see every leaf
 skipped → the identical-output assertion fires on a deliberately duplicated arm → `analyze` produces
 every table → `import-legacy` on a bundled 20-row fixture → `notebook selftest` → `check_layering`.
+
+*Amended 2026-10-05 (milestone 4): the runner stage runs `experiments/tribes/shakedown.json` (3 arms,
+2 levels, 1 visit) on the toy portfolio in the toy currency: dev, a re-run that skips every leaf, the
+holdout into its own tree with a ledger entry, a retired leaf, the currency lock refusing a leaf whose
+price was changed in a copy of the weights, the shipped specs validating against the published
+currency, and a bundle. The identical-output assertion and the validator's rejection of a sweep
+without its null are asserted by `GridRunnerTest` and `ValidatorTest`, which the junit step runs.*
 
 ---
 
@@ -1104,7 +1155,7 @@ commit. `run_magat.ipynb` and `tools/shakedown.py` exist from milestone 0 and gr
 | 1 | **The seam**: `Game`, `MeteredGame`, `Meter`, `TurnBudget`, `TurnRecord`, `Episode`, `TribesGame`, `TribesState`, `Emcts` ported, `check contract`, `check equivalence` | L1–L10 pass on 8 captured positions; `emcts` reproduces its oracle on 8 scenarios × 2 visits at 8k and 40k; `check equivalence` is in the shakedown. *Done 2026-09-10; the port also reproduces the R7615's own archived verify signature for scenario 1 at 40k (`init=6231.0 final=6486.0 fm=37354 nodes=430 unique=356 units=40056.0483`), and `emcts-comma` came along for free.* |
 | 2 | Portfolio: builder, journal, manifest v1, identity, split, ledger, `random`; `TribesScenarioSources` | toy build reproducible at 1 and 4 threads; the published manifest identity (reconstructed from the archived rows, §17) reproduced by a full build on the server. *Done 2026-10-04. The toy Tribes manifest is byte-identical at 1, 2 and 4 threads (and the core test asserts it on the toy game). A full rebuild on a second machine (i9-14900HX, Windows, JDK 26, 20 threads, 15.5 min) reproduced `ec243fd7...`, all 400 rows, both split files from a fresh freeze, and identical `emcts` plans from rebuilt and published bins (`games/tribes/portfolio/v1/REBUILDS.md`); the server rebuild remains a one-command check.* |
 | 3 | Calibration: `Calibrator`, merge, `--check`, `--under-load`, `ThreadSweep`, `MachineProfile`, weights v1, R7615 import + `ORIGIN.md` | toy calibration writes and merges; the drift-math unit test (divide vs multiply) exists; the imported file loads and prices every worked-result arm. *Done 2026-10-04: toy calibration writes, merges, refuses re-pricing without `--replace`, checks without writing and writes a loaded file beside the idle one, in the shakedown and CI; `CurrencyTest` is the divide-versus-multiply test (under ratio re-denomination, §8.2 amendment); `PublishedCalibrationTest` and `magat weights --arms @worked-result` show all 34 worked-result arms priced at all three levels. A real drift check of a second machine against the R7615 currency, bracketed, is recorded in `calibration/r7615/ORIGIN.md`: advances and copies within the gate, evaluations a third cheaper (FAIL), turn prices within 4%.* |
-| 4 | Runner: spec + validator, `GridRunner`, checkpoints, compaction, currency lock, identical-output assertion, provenance, `run` and `bundle` commands | shakedown spec runs on dev and holdout, resumes, skips, retires a leaf; validator rejects a sweep without its null |
+| 4 | Runner: spec + validator, `GridRunner`, checkpoints, compaction, currency lock, identical-output assertion, provenance, `run` and `bundle` commands | shakedown spec runs on dev and holdout, resumes, skips, retires a leaf; validator rejects a sweep without its null. *Done 2026-10-05: all of it in the shakedown's runner stage and in CI; a torn partial leaf resumes to the same turns (`GridRunnerTest`); the currency lock, the tree locks and the identical-output assertion each have a test that makes them fire.* |
 | 5 | The rest of the family: `emcts-comma`, `QdeltaEmcts` and every worked-result arm; `check structure`, `probe support`, `check replay` | every arm passes its oracle gate; `check replay` reproduces 20 published `emcts-comma@80000` holdout rows on the rebuilt portfolio under the published weights |
 | 6 | Analyzer: all twelve measures, side by side, re-pricing, report; `import-legacy`; the worked result imported | the retrospective §3/§4 point estimates reproduced from the imported trees; the Python tests pass on the synthetic tree |
 | 7 | Docs (`CONTRACT`, `CURRENCY`, `METHODS`, `OPERATIONS`, `ADDING_*`, `TRAPS`, the worked-result page), full notebook, `Tribes-master/` removed, v0.1 tag once the licence is in | a fresh clone follows `README.md` through §14.2 on the toy portfolio without reading anything else |
