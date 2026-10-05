@@ -148,7 +148,8 @@ if (CALIBRATION / "compute_weights.properties").exists():
 else:
     magat("calibrate", "--game", GAME, "--portfolio", PORTFOLIO, "--out", CALIBRATION)
     assert_in_log("calibrate", "CALIBRATION: PASS")
-magat("weights", "--weights", CALIBRATION / "compute_weights.properties")
+WEIGHTS = CALIBRATION / "compute_weights.properties"     # the currency every run below spends
+magat("weights", "--weights", WEIGHTS)
 bundle("calibration", [CALIBRATION / "compute_weights.properties", CALIBRATION / "compute_profiles.csv", LOGS / "calibrate.log"])
 '''
 
@@ -169,6 +170,33 @@ if RUN_UNDER_LOAD:
     magat("calibrate", "--game", GAME, "--portfolio", PORTFOLIO, "--out", CALIBRATION,
           "--arms", "emcts,emcts-comma", "--under-load", WORKERS)
 '''
+
+def experiment_cells(game: str) -> list:
+    """One markdown and one code cell per development experiment in experiments/<game>/, so the
+    notebook cannot drift from the specs it runs. The shakedown spec runs inside the shakedown."""
+    cells = []
+    for spec in sorted((ROOT / "experiments" / game).glob("*.json")):
+        x = json.loads(spec.read_text(encoding="utf-8"))
+        if x.get("name") == "shakedown":
+            continue
+        name = x["name"]
+        levels = ", ".join(f"{l['budget']:,} x {l['visits']}" for l in x.get("levels", []))
+        arms = ", ".join(a["id"] if isinstance(a, dict) else a for a in x.get("arms", []))
+        cells.append(md(f"""
+## Experiment: {name}
+
+{x.get("description", "")}
+
+Split `{x.get("split", "all")}`; baseline `{x.get("baseline")}`; levels (budget x visits) {levels}; arms {arms}.
+Re-running the cell resumes: finished leaves are skipped, a partial leaf continues where it stopped.
+"""))
+        cells.append(code(f'''SPEC = ROOT / "experiments" / GAME / "{spec.name}"
+RUN = DATA / GAME / "runs" / "{name}"
+magat("run", "--experiment", SPEC, "--split", "{x.get("split", "all")}", "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--out", RUN)
+assert_in_log("run-{x.get("split", "all")}", "RUN: COMPLETE")
+bundle("run-{name}", [RUN / "{x.get("split", "all")}"])''', tags=("experiment",)))
+    return cells
+
 
 CELLS = [
     md("""
@@ -223,6 +251,7 @@ its thesis-tree oracle field for field. Nothing downstream runs otherwise.
          'magat("check", "equivalence", "--game", GAME, "--arms", "emcts", "--scenarios", 8, "--visits", 2, "--budgets", "8000,40000")\n'
          'assert_in_log("check-equivalence", "EQUIVALENCE: PASS")\n'
          'bundle("gates", [LOGS / "check-contract.log", LOGS / "check-equivalence.log", LOGS / "test.log"])'),
+    *experiment_cells("tribes"),
     md("""
 ## Shakedown
 
@@ -231,8 +260,8 @@ Every moving part at toy size, minutes, exits non-zero on any failure. Run befor
     code('magat("shakedown")\nbundle("shakedown", [LOGS / "shakedown.log"])'),
     md("""
 ---
-*Experiment stages and analysis cells are added by the milestones that deliver them (see
-`MAGAT/DESIGN.md` §16).*
+*Analysis cells (`magat analyze`, `SUMMARY.md`) and the holdout stage are added by the milestones that
+deliver them (see `MAGAT/DESIGN.md` §16).*
 """),
 ]
 

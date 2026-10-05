@@ -1,0 +1,3 @@
+# Frozen choices for the shakedown's toy holdout read. A real holdout's file names the champion and
+# every choice made on development, written down before the holdout is read.
+champion = emcts-comma

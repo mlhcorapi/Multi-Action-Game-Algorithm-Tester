@@ -75,14 +75,14 @@ def main(argv) -> int:
 
     step("5. Portfolio: toy build, freeze, verify against the published portfolio")
     data = pathlib.Path(os.environ.get("MAGAT_DATA") or (pathlib.Path.home() / "magat_runs")).resolve()
-    toy = data / "shakedown" / f"portfolio-{game}"
-    shutil.rmtree(toy, ignore_errors=True)
+    toy_dir = data / "shakedown" / f"portfolio-{game}"
+    shutil.rmtree(toy_dir, ignore_errors=True)
     check("toy build (2 + 1 captures from one source game each) completes",
-          [PY, ROOT / "magat.py", "portfolio", "build", "--game", game, "--out", toy,
+          [PY, ROOT / "magat.py", "portfolio", "build", "--game", game, "--out", toy_dir,
            "--targets", "single=2,dual=1", "--threads", "2"], "PORTFOLIO: COMPLETE")
-    check("freeze writes the split files", [PY, ROOT / "magat.py", "portfolio", "freeze", "--portfolio", toy], "FROZEN: ")
+    check("freeze writes the split files", [PY, ROOT / "magat.py", "portfolio", "freeze", "--portfolio", toy_dir], "FROZEN: ")
     check("every toy row equals the published row, and plans identically from both bins",
-          [PY, ROOT / "magat.py", "portfolio", "verify", "--game", game, "--portfolio", toy,
+          [PY, ROOT / "magat.py", "portfolio", "verify", "--game", game, "--portfolio", toy_dir,
            "--published", ROOT / "games" / game / "portfolio" / "v1", "--subset", "--plan", "3"], "VERIFY: PASS")
     check("the published portfolio verifies against itself (bins, identity, split rule)",
           [PY, ROOT / "magat.py", "portfolio", "verify", "--game", game], "VERIFY: PASS")
@@ -97,14 +97,15 @@ def main(argv) -> int:
     check("thread sweep writes threads.json",
           [PY, ROOT / "magat.py", "threads", "--game", game, "--out", calib, "--levels", "4000",
            "--ladder", "1,2", "--segment-seconds", "2"], "THREADS:", then=lambda: (calib / "threads.json").is_file())
-    toy = ["--levels", "4000", "--reps", "2", "--turns", "2", "--warmup", "1", "--toy"]
+    toy = ["--reps", "2", "--warmup", "1", "--toy"]
     check("calibrate writes a new (toy) currency",
-          [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts", *toy],
+          [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts", "--levels", "2000,4000",
+           "--turns", "2", *toy],
           "CALIBRATION: PASS", then=weights.is_file)
     snapshot = {}
     check("a second arm merges into it, re-denominated",
           [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts-comma",
-           "--levels", "4000", "--reps", "2", "--warmup", "1", "--toy"],
+           "--levels", "2000,4000", *toy],
           "[merge] kept the currency",
           then=lambda: "profile.emcts-comma@4000.wAdvance" in snapshot.setdefault("w", weights.read_text(encoding="utf-8")))
     check("pricing it again without --replace is refused",
@@ -112,17 +113,41 @@ def main(argv) -> int:
           "--replace", codes=(2,), then=lambda: weights.read_text(encoding="utf-8") == snapshot["w"])
     check("--check reports drift and writes nothing",
           [PY, ROOT / "magat.py", "calibrate", "--check", "--game", game, "--weights", weights, "--arms", "emcts-comma",
-           "--levels", "4000", "--reps", "2", "--warmup", "1", "--toy"],
+           "--levels", "4000", *toy],
           "largest drift", codes=(0, 1), then=lambda: weights.read_text(encoding="utf-8") == snapshot["w"])
     check("--under-load writes beside the idle file, never over it",
           [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts-comma",
-           "--under-load", "3", *toy],
+           "--under-load", "3", "--levels", "4000", "--turns", "2", *toy],
           "IDLE vs 3 THREADS",
           then=lambda: (calib / "compute_weights_load3.properties").is_file() and weights.read_text(encoding="utf-8") == snapshot["w"])
     check("the published currency prices every worked-result arm",
           [PY, ROOT / "magat.py", "weights", "--game", game, "--arms", "@worked-result"], "WEIGHTS: COVERED")
 
-    step("7. Notebook")
+    step("7. Runner: the shakedown spec on the toy portfolio and the toy currency")
+    spec = ROOT / "experiments" / game / "shakedown.json"
+    run_root = data / "shakedown" / f"run-{game}"
+    shutil.rmtree(run_root, ignore_errors=True)
+    run = [PY, ROOT / "magat.py", "run", "--experiment", spec, "--portfolio", toy_dir, "--weights", weights,
+           "--out", run_root, "--threads", "2", "--toy"]
+    check("dev: every leaf runs and is checkpointed", [*run, "--split", "dev"], "RUN: COMPLETE",
+          then=lambda: len((run_root / "dev" / "_completed.txt").read_text(encoding="utf-8").split()) == 6)
+    check("re-running the same command skips every finished leaf", [*run, "--split", "dev"], "RUN: COMPLETE",
+          then=lambda: len(list((run_root / "dev").glob("*/*cu/turns.csv"))) == 6)
+    check("holdout: runs into its own tree and is entered in the holdout ledger", [*run, "--split", "holdout"], "this read is entry 1",
+          then=lambda: (run_root / "holdout" / "_run.json").is_file())
+    check("a retired leaf is discarded and re-run", [*run, "--split", "dev", "--retire-leaf", "emcts-comma@4000"], "RETIRED emcts-comma@4000")
+    repriced = calib / "compute_weights_repriced.properties"
+    repriced.write_text(weights.read_text(encoding="utf-8").replace("profile.emcts-comma@2000.wCopy = ", "profile.emcts-comma@2000.wCopy = 9"),
+                        encoding="utf-8")
+    check("the currency lock refuses a leaf whose price changed",
+          [PY, ROOT / "magat.py", "run", "--experiment", spec, "--portfolio", toy_dir, "--weights", repriced,
+           "--out", run_root, "--threads", "2", "--toy", "--split", "dev"], "currency lock", codes=(4,))
+    check("the shipped specs validate against the published currency",
+          [PY, ROOT / "magat.py", "experiment", "validate", "--experiment", ROOT / "experiments" / game / "reference-ladder.json"],
+          "VALIDATION: PASS")
+    check("bundle zips a run tree", [PY, ROOT / "magat.py", "bundle", "--name", "shakedown-run", "--paths", run_root], "BUNDLE:")
+
+    step("8. Notebook")
     check("generated notebook is current and its setup cells run from three directories",
           [PY, ROOT / "magat.py", "notebook", "selftest"], "0 failure(s)")
 

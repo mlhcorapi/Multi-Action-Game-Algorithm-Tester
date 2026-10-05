@@ -1,0 +1,25 @@
+{
+  "name": "reference-ladder",
+  "game": "tribes",
+  "description": "The registered reference arms at the published budget ladder: the field every new arm is compared against. The worked result's own specs arrive with its arms (milestone 5).",
+  "portfolio": "tribes/v1",
+  "split": "dev",
+  "baseline": "emcts",
+  "levels": [
+    { "budget": 80000, "visits": 8 },
+    { "budget": 40000, "visits": 8 },
+    { "budget": 400000, "visits": 6 }
+  ],
+  "arms": [
+    { "id": "emcts" },
+    { "id": "emcts-comma" },
+    { "id": "random" }
+  ],
+  "sweeps": [
+    { "parameter": "selection", "arms": ["emcts-comma"], "null": "emcts" }
+  ],
+  "contrasts": [
+    { "a": "emcts-comma", "b": "emcts", "label": "comma selection over plus" },
+    { "a": "emcts", "b": "random", "label": "search over the floor" }
+  ]
+}
