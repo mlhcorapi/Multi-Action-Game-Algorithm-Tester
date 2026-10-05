@@ -7,7 +7,7 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
 <data>/logs/<name>.log with a timestamped header. The notebook calls this and nothing else.
 
     python magat.py build [--clean] [--tests]
-    python magat.py test
+    python magat.py test [--java | --python]          JUnit, then the analysis package's unit tests
     python magat.py check contract    --game tribes [--portfolio DIR] [--scenarios N] [--ids 1,2]
     python magat.py check equivalence --game tribes [--portfolio DIR] [--weights FILE] [--arms emcts] ...
     python magat.py arms --game tribes
@@ -28,6 +28,9 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py check replay    --game tribes --leaf DIR [--portfolio DIR] [--weights FILE] [--turns 20]
     python magat.py check overhead  --game tribes [--arm emcts] [--budget 40000]
     python magat.py probe support   --game tribes --arm ARM [--levels ...] [--scenarios 20] [--out DIR]
+    python magat.py analyze --run DIR [--holdout DIR] [--experiment SPEC] [--baseline ARM] [--reprice WEIGHTS] --out DIR
+    python magat.py import-legacy --stage1-tree DIR --out RUN [--map tools/legacy-arms.json] [--portfolio DIR]
+                                  [--split NAME] [--experiment SPEC] [--weights FILE] [--no-curve] [--label TEXT]
     python magat.py java <args...>          raw magat.cli.Main invocation
     python magat.py layering
     python magat.py notebook build|selftest
@@ -49,6 +52,7 @@ BUILD = pathlib.Path(os.environ.get("MAGAT_BUILD") or (ROOT / "build")).resolve(
 CLASSES = BUILD / "classes"
 TEST_CLASSES = BUILD / "test-classes"
 GAMES = ROOT / "games"
+ANALYSIS = ROOT / "analysis"              # the Python analysis package, magat_analysis
 DEFAULT_HEAP = os.environ.get("MAGAT_HEAP", "4g")
 # A portfolio build holds every capture in memory and plays a source game per worker; a thread sweep
 # and a loaded calibration hold one search tree per worker.
@@ -287,6 +291,13 @@ def bundle(argv: list) -> None:
     print(f"BUNDLE: {len(files)} files -> {out}")
 
 
+def python_analysis(args: list, log: str) -> int:
+    """Run the analysis package (numpy and pandas; matplotlib optional) in a child Python, teed like
+    every other command."""
+    os.environ["PYTHONPATH"] = os.pathsep.join(p for p in (str(ANALYSIS), os.environ.get("PYTHONPATH")) if p)
+    return run([sys.executable, "-m", "magat_analysis", *args], log=log)
+
+
 def with_published_defaults(args: list) -> list:
     """Fill --portfolio / --weights from the published artefacts of --game when not given."""
     args = list(args)
@@ -297,7 +308,7 @@ def with_published_defaults(args: list) -> list:
         if wants_portfolio and "--portfolio" not in args and "portfolio" in pub and pub["portfolio"].is_dir():
             args += ["--portfolio", str(pub["portfolio"])]
         wants_weights = ("equivalence" in args or "replay" in args or "overhead" in args or args[0] in ("weights", "run", "probe")
-                         or (args[0] == "calibrate" and "--check" in args))
+                         or (args[0] == "calibrate" and "--check" in args) or args[:2] == ["experiment", "validate"])
         if wants_weights and "--weights" not in args and "weights" in pub and pub["weights"].is_file():
             args += ["--weights", str(pub["weights"])]
         if args[:2] == ["portfolio", "verify"] and "--portfolio" not in args and "portfolio" in pub:
@@ -315,10 +326,17 @@ def main(argv: list) -> None:
     elif cmd == "build":
         build(clean="--clean" in rest, tests="--tests" in rest, force=True)
     elif cmd == "test":
-        build(tests=True)
-        for cwd, classes in test_classes().items():
-            run(["java", f"-Xmx{DEFAULT_HEAP}", "-cp", classpath(TEST_CLASSES, CLASSES),
-                 "org.junit.runner.JUnitCore", *classes], log="test", cwd=str(cwd))
+        if "--python" not in rest:
+            build(tests=True)
+            for cwd, classes in test_classes().items():
+                run(["java", f"-Xmx{DEFAULT_HEAP}", "-cp", classpath(TEST_CLASSES, CLASSES),
+                     "org.junit.runner.JUnitCore", *classes], log="test", cwd=str(cwd))
+        if "--java" not in rest:
+            os.environ["PYTHONPATH"] = os.pathsep.join(p for p in (str(ANALYSIS), os.environ.get("PYTHONPATH")) if p)
+            run([sys.executable, "-m", "unittest", "discover", "-s", str(ANALYSIS / "tests"), "-t", str(ANALYSIS), "-v"],
+                log="test")
+    elif cmd in ("analyze", "import-legacy"):
+        python_analysis([cmd, *rest], log=cmd)
     elif cmd in ("run", "experiment"):
         args = with_published_defaults(with_spec_game([cmd, *rest]))
         log = "run" if cmd == "run" else "experiment-validate"
