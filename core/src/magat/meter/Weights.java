@@ -188,8 +188,9 @@ public final class Weights {
 
     /** One line for banners. */
     public String summary() {
-        return String.format(Locale.ROOT, "%s: %d profiles, reference %s (%.1f ns/advance), global %.4f/%.4f/%.4f",
+        return String.format(Locale.ROOT, "%s: %d profiles, reference %s (%.1f ns/advance), global %.4f/%.4f/%.4f%s",
                 source == null ? "(in-memory)" : source.getFileName(), profiles.size(),
-                reference(), referenceAdvanceNanos(), global[0], global[1], global[2]);
+                reference(), referenceAdvanceNanos(), global[0], global[1], global[2],
+                "true".equals(header.get("toy")) ? "   TOY CALIBRATION, not a currency" : "");
     }
 }

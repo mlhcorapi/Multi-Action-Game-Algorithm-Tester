@@ -58,6 +58,7 @@ assert ROOT not in DATA.parents and DATA != ROOT, f"data root {DATA} must be out
 GAME = "tribes"
 PY = sys.executable
 PUBLISHED_PORTFOLIO = ROOT / "games" / GAME / "portfolio" / "v1"
+PUBLISHED_WEIGHTS = ROOT / "games" / GAME / "calibration" / "r7615" / "compute_weights.properties"
 # Workers for parallel stages. Half the logical CPUs (SMT siblings add heat, not throughput) less two
 # for the machine; MAGAT_WORKERS overrides. The machine profile (milestone 3) replaces this guess.
 WORKERS = int(os.environ.get("MAGAT_WORKERS") or max(1, (os.cpu_count() or 2) // 2 - 2))
@@ -124,6 +125,51 @@ bundle("portfolio", [PORTFOLIO / f for f in ("portfolio.csv", "_split_dev.txt", 
        + [LOGS / "portfolio-build.log", LOGS / "portfolio-freeze.log", LOGS / "portfolio-verify.log"])
 '''
 
+
+MACHINE_CELL = r'''
+magat("machine")
+'''
+
+THREADS_CELL = r'''
+CALIBRATION = DATA / "calibration" / GAME
+if (CALIBRATION / "threads.json").exists():
+    print(f"[skip] {CALIBRATION / 'threads.json'} exists")
+else:
+    magat("threads", "--game", GAME, "--portfolio", PORTFOLIO, "--out", CALIBRATION)
+print((CALIBRATION / "threads.json").read_text(encoding="utf-8"))
+bundle("threads", [CALIBRATION / "threads.json", CALIBRATION / "thread_sweep.csv", LOGS / "threads.log"])
+'''
+
+CALIBRATE_CELL = r'''
+# This machine's own currency, on this machine's own portfolio. Idle and single-threaded: stop
+# everything else first. Extending it later with a new arm is `--arms <new>`, which merges.
+if (CALIBRATION / "compute_weights.properties").exists():
+    print(f"[skip] {CALIBRATION / 'compute_weights.properties'} exists")
+else:
+    magat("calibrate", "--game", GAME, "--portfolio", PORTFOLIO, "--out", CALIBRATION)
+    assert_in_log("calibrate", "CALIBRATION: PASS")
+magat("weights", "--weights", CALIBRATION / "compute_weights.properties")
+bundle("calibration", [CALIBRATION / "compute_weights.properties", CALIBRATION / "compute_profiles.csv", LOGS / "calibrate.log"])
+'''
+
+DRIFT_CELL = r'''
+# Does this machine still spend the published currency? Re-measures the reference arms against the
+# R7615 file and writes nothing. Run it before quoting anything beside published results.
+magat("calibrate", "--check", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "emcts,emcts-comma",
+      "--weights", PUBLISHED_WEIGHTS, check=False)
+bundle("drift", [LOGS / "calibrate-check.log"])
+'''
+
+UNDER_LOAD_CELL = r'''
+# Gate A3' (off by default). The thesis resolved it: the idle currency is the ruler and wall-clock
+# (W7) is co-primary, so this is a diagnostic, not a step. It writes compute_weights_load<W>.properties
+# beside the idle file, never over it, and prints the idle-versus-loaded ratios.
+RUN_UNDER_LOAD = False
+if RUN_UNDER_LOAD:
+    magat("calibrate", "--game", GAME, "--portfolio", PORTFOLIO, "--out", CALIBRATION,
+          "--arms", "emcts,emcts-comma", "--under-load", WORKERS)
+'''
+
 CELLS = [
     md("""
 # MAGAT — run everything from here
@@ -154,6 +200,19 @@ the journal makes an interrupted build resume where it stopped.
 """),
     code(PORTFOLIO_CELL, tags=("portfolio",)),
     md("""
+## Machine, threads, calibration
+
+The machine banner first: physical cores, the worker ceiling and why. Then the thread sweep, which
+picks the knee of sustained throughput per budget level (results do not depend on it, only wall-clock
+does). Then this machine's own currency, idle and single-threaded, and the drift check against the
+published one. Each skips itself once its output exists.
+"""),
+    code(MACHINE_CELL, tags=("machine",)),
+    code(THREADS_CELL, tags=("threads",)),
+    code(CALIBRATE_CELL, tags=("calibrate",)),
+    code(DRIFT_CELL, tags=("drift",)),
+    code(UNDER_LOAD_CELL, tags=("under-load",)),
+    md("""
 ## Gates
 
 The contract laws on published positions, and the equivalence gate: every ported arm must reproduce
@@ -172,8 +231,8 @@ Every moving part at toy size, minutes, exits non-zero on any failure. Run befor
     code('magat("shakedown")\nbundle("shakedown", [LOGS / "shakedown.log"])'),
     md("""
 ---
-*Calibration, thread sweep, experiment stages and analysis cells are added by the milestones that
-deliver them (see `MAGAT/DESIGN.md` §16).*
+*Experiment stages and analysis cells are added by the milestones that deliver them (see
+`MAGAT/DESIGN.md` §16).*
 """),
 ]
 

@@ -15,6 +15,11 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py portfolio freeze --portfolio DIR
     python magat.py portfolio verify --game tribes [--portfolio DIR] [--published DIR] [--subset] [--plan N]
     python magat.py portfolio ledger --portfolio DIR
+    python magat.py machine
+    python magat.py threads   --game tribes --out DIR [--portfolio DIR] [--levels ...] [--ladder 2,4,8] [--segment-seconds 25]
+    python magat.py calibrate --game tribes --out DIR [--portfolio DIR] [--levels ...] [--arms a,b|@set] [--replace a] [--under-load W] [--toy]
+    python magat.py calibrate --check --game tribes --arms a,b [--weights FILE] [--portfolio DIR]
+    python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...]
     python magat.py java <args...>          raw magat.cli.Main invocation
     python magat.py layering
     python magat.py notebook build|selftest
@@ -37,7 +42,8 @@ CLASSES = BUILD / "classes"
 TEST_CLASSES = BUILD / "test-classes"
 GAMES = ROOT / "games"
 DEFAULT_HEAP = os.environ.get("MAGAT_HEAP", "4g")
-# A portfolio build holds every capture in memory and plays a source game per worker.
+# A portfolio build holds every capture in memory and plays a source game per worker; a thread sweep
+# and a loaded calibration hold one search tree per worker.
 BUILD_HEAP = os.environ.get("MAGAT_HEAP", "8g")
 GC_FLAGS = ["-XX:+UseG1GC", "-XX:MaxGCPauseMillis=500"]
 
@@ -215,9 +221,11 @@ def with_published_defaults(args: list) -> list:
     if "--game" in args:
         game = args[args.index("--game") + 1]
         pub = PUBLISHED.get(game, {})
-        if "check" in args and "--portfolio" not in args and "portfolio" in pub and pub["portfolio"].is_dir():
+        wants_portfolio = args[0] in ("check", "calibrate", "threads")
+        if wants_portfolio and "--portfolio" not in args and "portfolio" in pub and pub["portfolio"].is_dir():
             args += ["--portfolio", str(pub["portfolio"])]
-        if "equivalence" in args and "--weights" not in args and "weights" in pub and pub["weights"].is_file():
+        wants_weights = "equivalence" in args or args[0] == "weights" or (args[0] == "calibrate" and "--check" in args)
+        if wants_weights and "--weights" not in args and "weights" in pub and pub["weights"].is_file():
             args += ["--weights", str(pub["weights"])]
         if args[:2] == ["portfolio", "verify"] and "--portfolio" not in args and "portfolio" in pub:
             args += ["--portfolio", str(pub["portfolio"])]
@@ -238,10 +246,12 @@ def main(argv: list) -> None:
         for cwd, classes in test_classes().items():
             run(["java", f"-Xmx{DEFAULT_HEAP}", "-cp", classpath(TEST_CLASSES, CLASSES),
                  "org.junit.runner.JUnitCore", *classes], log="test", cwd=str(cwd))
-    elif cmd in ("check", "arms", "portfolio"):
-        heap = BUILD_HEAP if rest[:1] == ["build"] else None
-        java(with_published_defaults([cmd, *rest]), heap=heap,
-             log=cmd + ("-" + rest[0] if rest and not rest[0].startswith("--") else ""))
+    elif cmd in ("check", "arms", "portfolio", "calibrate", "threads", "machine", "weights"):
+        big = (cmd == "portfolio" and rest[:1] == ["build"]) or cmd == "threads" or "--under-load" in rest
+        log = cmd + ("-" + rest[0] if rest and not rest[0].startswith("--") else "")
+        if cmd == "calibrate" and "--check" in rest:
+            log = "calibrate-check"
+        java(with_published_defaults([cmd, *rest]), heap=BUILD_HEAP if big else None, log=log)
     elif cmd == "java":
         java(rest, log="java")
     elif cmd == "layering":

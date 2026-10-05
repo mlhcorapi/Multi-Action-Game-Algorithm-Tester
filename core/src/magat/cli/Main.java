@@ -27,7 +27,7 @@ import java.util.Set;
  */
 public final class Main {
 
-    public static final String VERSION = "0.1.0-m2";
+    public static final String VERSION = "0.1.0-m3";
 
     private Main() {}
 
@@ -41,6 +41,10 @@ public final class Main {
             else if (cmd.equals("check")) code = check(args);
             else if (cmd.equals("arms")) code = arms(args);
             else if (cmd.equals("portfolio")) code = PortfolioCommand.run(args);
+            else if (cmd.equals("calibrate")) code = CalibrateCommand.calibrate(args);
+            else if (cmd.equals("threads")) code = CalibrateCommand.threads(args);
+            else if (cmd.equals("machine")) code = CalibrateCommand.machine();
+            else if (cmd.equals("weights")) code = CalibrateCommand.weights(args);
             else { System.err.println("unknown command: " + cmd); usage(); code = 2; }
         } catch (IllegalArgumentException | IllegalStateException e) {
             System.err.println("error: " + e.getMessage());
@@ -60,6 +64,7 @@ public final class Main {
         System.out.println("  check equivalence --game <name> --portfolio <dir> --weights <file> [--arms emcts]");
         System.out.println("                    [--scenarios 8] [--visits 2] [--budgets 8000,40000] [--threads N] [--ids ...] [--verbose]");
         PortfolioCommand.usage();
+        CalibrateCommand.usage();
     }
 
     // ------------------------------------------------------------------ shared

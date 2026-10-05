@@ -6,6 +6,7 @@ import magat.agent.Oracle;
 import magat.game.Game;
 import magat.game.GameModule;
 
+import java.util.List;
 import java.util.Map;
 
 /** Loaded by the CLI as {@code --game tribes}. */
@@ -20,4 +21,5 @@ public final class TribesModule implements GameModule<TribesState, Action> {
     @Override public Game<TribesState, Action> game() { return game; }
     @Override public AgentRegistry<TribesState, Action> agents() { return agents; }
     @Override public Map<String, Oracle<TribesState>> oracles() { return oracles; }
+    @Override public Map<String, List<String>> armSets() { return TribesAgents.armSets(); }
 }

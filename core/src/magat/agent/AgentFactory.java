@@ -19,6 +19,15 @@ public interface AgentFactory<S, A> {
         return null;
     }
 
+    /**
+     * Whether the budget buys this arm search, so that it has a price worth calibrating. False for an
+     * arm whose work does not depend on the budget (the random floor); a calibration of it would only
+     * fail its own sample-size gate.
+     */
+    default boolean priced() {
+        return true;
+    }
+
     /** One line for banners and the registry listing. */
     default String description() {
         return "";

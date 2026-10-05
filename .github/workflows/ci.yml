@@ -40,5 +40,16 @@ jobs:
           python magat.py portfolio build --game tribes --out "$RUNNER_TEMP/toy" --targets single=2,dual=1 --threads 2
           python magat.py portfolio freeze --portfolio "$RUNNER_TEMP/toy"
           python magat.py portfolio verify --game tribes --portfolio "$RUNNER_TEMP/toy" --published games/tribes/portfolio/v1 --subset --plan 3
+      - name: The published currency prices every worked-result arm
+        run: python magat.py weights --game tribes --arms @worked-result
+      - name: Toy calibration writes, merges, and checks without writing
+        run: |
+          python magat.py machine
+          python magat.py calibrate --game tribes --out "$RUNNER_TEMP/calib" --arms emcts --levels 4000 --reps 2 --turns 2 --warmup 1 --toy
+          python magat.py calibrate --game tribes --out "$RUNNER_TEMP/calib" --arms emcts-comma --levels 4000 --reps 2 --warmup 1 --toy
+          grep -q "profile.emcts-comma@4000.wAdvance" "$RUNNER_TEMP/calib/compute_weights.properties"
+          # a toy drift verdict may land either side of the gate (exit 0 or 1); anything else is a failure
+          rc=0; python magat.py calibrate --check --game tribes --weights "$RUNNER_TEMP/calib/compute_weights.properties" --arms emcts-comma --levels 4000 --reps 2 --warmup 1 --toy || rc=$?
+          test "$rc" -le 1
       - name: Notebook self-test
         run: python magat.py notebook selftest

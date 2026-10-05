@@ -27,7 +27,11 @@ Tribes adapter, and plain EMCTS ported onto the contract and gated bit-identical
 thesis-tree implementation (including the archived verify signature computed on the reference
 machine). Milestone 2 adds the portfolio: a parallel, restart-safe builder whose output does not
 depend on the machine or the thread count, the frozen development/holdout split, the holdout ledger,
-and `portfolio verify`, which checks a rebuild against the published portfolio row by row. The first game is [Tribes](https://github.com/GAIGResearch/Tribes); the worked result is
+and `portfolio verify`, which checks a rebuild against the published portfolio row by row. Milestone 3
+adds calibration: per-(arm, budget) weights with the thesis's fastest-repetition estimator and gates,
+merging new arms into an existing currency (by cost ratio, so a faster or slower machine cancels), the
+drift check against the published R7615 currency, the loaded-machine diagnostic, the thread sweep and
+the machine profile. The first game is [Tribes](https://github.com/GAIGResearch/Tribes); the worked result is
 the AB-EMCTS line described in `Tribes-master/analysis/AB_EMCTS_RETROSPECTIVE.md`, which MAGAT
 re-analyses as its example.
 
@@ -43,6 +47,7 @@ python magat.py test
 python magat.py check contract    --game tribes
 python magat.py check equivalence --game tribes --arms emcts --scenarios 8 --visits 2 --budgets 8000,40000
 python magat.py portfolio verify  --game tribes
+python magat.py weights --game tribes --arms @worked-result
 python magat.py shakedown
 ```
 
@@ -54,6 +59,14 @@ on the 64-core reference machine, about 15 on a 24-core laptop; see
 python magat.py portfolio build  --game tribes --out ~/magat_runs/portfolio/tribes --threads 20
 python magat.py portfolio freeze --portfolio ~/magat_runs/portfolio/tribes
 python magat.py portfolio verify --game tribes --portfolio ~/magat_runs/portfolio/tribes --published games/tribes/portfolio/v1 --plan 4
+```
+
+To see whether your machine spends the published currency (idle machine, about half an hour), and to
+price a new arm into it:
+
+```bash
+python magat.py calibrate --check --game tribes --arms emcts,emcts-comma
+python magat.py calibrate --game tribes --out <dir with a copy of compute_weights.properties> --arms <new-arm>
 ```
 
 `python magat.py` with no arguments lists every command (`bin/magat` and `magat.cmd` wrap it). Run
