@@ -91,3 +91,31 @@ gate. Evaluations are about 3% of a turn's price, so an arm priced there and mer
 mis-sized by a few percent, not by a third; the per-operation gate, as pre-registered, still fails it.
 Two earlier sessions on the same laptop ran before the session bracket existed; one measured the
 reference advance 14% away from the other, which is why every session now brackets its reference.
+
+## Overhead of the metering design (`magat check overhead`)
+
+`emcts@40000` on the calibrator's eight positions, 4 repetitions, the decorator's timing and the
+engine's own hooks interleaved turn by turn. Weights are ratios to the advance, so the line that
+matters for a currency is the effect on the ratios.
+
+| Date | Machine | advance | copy | eval | effect on wCopy / wEval | dormant engine counter |
+|---|---|---|---|---|---|---|
+| 2026-10-05 | i9-14900HX laptop, Windows 11, JDK 26 | +7.5% | +7.6% | +11.0% | +0.0% / +3.3% | 1.6 ns per operation (0.003% of an advance) |
+
+The R7615 calibrated through the engine's hooks; a currency calibrated through MAGAT's decorator on
+the same machine would differ in evaluation weight by about this much. Runs time nothing, so what a
+budget buys is unaffected. The reference machine has not been measured yet:
+`python magat.py check overhead --game tribes --reps 4` on an idle R7615 records its line.
+
+## The support probe against the archived floor files
+
+`magat probe support --arm comma-bias-e25 --scenarios 20` under this currency gives the same verdict as
+`action_bias_floor_Comma_On.csv` at every level (98.3% / 98.8% / 99.9% supported, all contrast levels),
+with more mutations per turn (450 against 313 at 40k): the archived file was produced under an earlier
+currency. The plus-era `Bias_e25` probe re-run under the stage A currency it was produced under
+(`compute_weights.r7615-stageA.properties`, renamed) gives 300.9 / 371.2 / 1980.5 mutations per turn
+and 97.9% / 97.9% / 99.9% supported against the archived 290.0 / 380.9 / 2000.9 and 97.6% / 98.4% /
+99.9%. The thesis agent's code is unchanged for that arm between the probe's run and the final tree,
+and the weights are identical, so the remaining difference, about 4% in counts with identical
+verdicts, is unexplained; the archived probe most likely ran from a different build than the archive
+records. The oracle gate and the stage F replays tie the port to the final thesis code exactly.
