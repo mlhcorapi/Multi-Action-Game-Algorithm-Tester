@@ -24,6 +24,10 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
                         [--threads N] [--threads-at 400000=31] [--frozen FILE] [--retire-leaf arm@budget] [--toy]
     python magat.py experiment validate --experiment SPEC [--weights FILE] [--split ...]
     python magat.py bundle --name NAME --paths P [P ...] [--exclude seqlog_,mutlog_]
+    python magat.py check structure --game tribes --spec experiments/tribes/structure.json
+    python magat.py check replay    --game tribes --leaf DIR [--portfolio DIR] [--weights FILE] [--turns 20]
+    python magat.py check overhead  --game tribes [--arm emcts] [--budget 40000]
+    python magat.py probe support   --game tribes --arm ARM [--levels ...] [--scenarios 20] [--out DIR]
     python magat.py java <args...>          raw magat.cli.Main invocation
     python magat.py layering
     python magat.py notebook build|selftest
@@ -289,10 +293,10 @@ def with_published_defaults(args: list) -> list:
     if "--game" in args:
         game = args[args.index("--game") + 1]
         pub = PUBLISHED.get(game, {})
-        wants_portfolio = args[0] in ("check", "calibrate", "threads", "run")
+        wants_portfolio = args[0] in ("check", "calibrate", "threads", "run", "probe")
         if wants_portfolio and "--portfolio" not in args and "portfolio" in pub and pub["portfolio"].is_dir():
             args += ["--portfolio", str(pub["portfolio"])]
-        wants_weights = ("equivalence" in args or args[0] in ("weights", "run")
+        wants_weights = ("equivalence" in args or "replay" in args or "overhead" in args or args[0] in ("weights", "run", "probe")
                          or (args[0] == "calibrate" and "--check" in args))
         if wants_weights and "--weights" not in args and "weights" in pub and pub["weights"].is_file():
             args += ["--weights", str(pub["weights"])]
@@ -324,7 +328,7 @@ def main(argv: list) -> None:
         java(args, heap=BUILD_HEAP if cmd == "run" else None, log=log)
     elif cmd == "bundle":
         bundle(rest)
-    elif cmd in ("check", "arms", "portfolio", "calibrate", "threads", "machine", "weights"):
+    elif cmd in ("check", "arms", "portfolio", "calibrate", "threads", "machine", "weights", "probe"):
         big = (cmd == "portfolio" and rest[:1] == ["build"]) or cmd == "threads" or "--under-load" in rest
         log = cmd + ("-" + rest[0] if rest and not rest[0].startswith("--") else "")
         if cmd == "calibrate" and "--check" in rest:

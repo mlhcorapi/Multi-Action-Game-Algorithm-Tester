@@ -304,6 +304,36 @@ public final class TribesGame implements Game<TribesState, Action>, EngineCounte
         ComputeMeter.reset();
     }
 
+    @Override
+    public boolean engineTiming(boolean on) {
+        ComputeMeter.PROFILE = on;
+        return true;
+    }
+
+    @Override
+    public long[] engineNanos() {
+        return new long[]{ComputeMeter.advanceNanos(), ComputeMeter.copyNanos(), ComputeMeter.evalNanos()};
+    }
+
+    @Override
+    public void resetEngineNanos() {
+        ComputeMeter.resetNanos();
+    }
+
+    /** The engine's hook is a thread-local array increment; time it alone, then put the counts back. */
+    @Override
+    public long dormantCounterNanos(long calls) {
+        long[] before = engineCounts();
+        long t0 = System.nanoTime();
+        for (long i = 0; i < calls; i++) ComputeMeter.onAdvance();
+        long ns = System.nanoTime() - t0;
+        ComputeMeter.reset();
+        for (long i = 0; i < before[0]; i++) ComputeMeter.onAdvance();
+        for (long i = 0; i < before[1]; i++) ComputeMeter.onCopy();
+        for (long i = 0; i < before[2]; i++) ComputeMeter.onEval();
+        return ns;
+    }
+
     /** Wraps an engine state; for the scenario sources and the oracle. */
     static TribesState wrap(GameState gs) {
         return new TribesState(gs);
