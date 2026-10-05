@@ -63,7 +63,8 @@ def main(argv) -> int:
     check("layering holds", [PY, ROOT / "magat.py", "layering"], "0 violation(s)")
 
     step("2. Unit tests")
-    check("junit", [PY, ROOT / "magat.py", "test"], "OK (")
+    check("junit, then the analysis package (the worked result's acceptance test included)",
+          [PY, ROOT / "magat.py", "test"], "OK (")
 
     step("3. Contract laws on published positions")
     check("L1-L10 pass", [PY, ROOT / "magat.py", "check", "contract", "--game", game, "--scenarios", "4"], "CONTRACT: PASS")
@@ -157,12 +158,55 @@ def main(argv) -> int:
     check("the currency lock refuses a leaf whose price changed",
           [PY, ROOT / "magat.py", "run", "--experiment", spec, "--portfolio", toy_dir, "--weights", repriced,
            "--out", run_root, "--threads", "2", "--toy", "--split", "dev"], "currency lock", codes=(4,))
-    check("the shipped specs validate against the published currency",
-          [PY, ROOT / "magat.py", "experiment", "validate", "--experiment", ROOT / "experiments" / game / "reference-ladder.json"],
-          "VALIDATION: PASS")
+    for shipped in ("reference-ladder", "ab-emcts-dev", "ab-emcts-holdout"):
+        check(f"the shipped spec {shipped} validates against the published currency",
+              [PY, ROOT / "magat.py", "experiment", "validate", "--experiment", ROOT / "experiments" / game / f"{shipped}.json"],
+              "VALIDATION: PASS")
     check("bundle zips a run tree", [PY, ROOT / "magat.py", "bundle", "--name", "shakedown-run", "--paths", run_root], "BUNDLE:")
 
-    step("8. Notebook")
+    step("8. Analyzer: the toy run, an imported thesis leaf, the published worked result")
+    results = data / "shakedown" / f"results-{game}"
+    shutil.rmtree(results, ignore_errors=True)
+
+    def every_table(out, *extra):
+        return all((out / "tables" / f"{n}.csv").is_file() for n in (
+            "replication", "headline", "budget_multiplier", "w7_wallclock", "gain_multiple", "contrasts", "oracle",
+            "anytime", "efficiency", "variance", "terminals", *extra)) and (out / "SUMMARY.md").is_file()
+
+    def same_units(out):
+        """Re-pricing under the run's own weights must reproduce the units it ran on: the analyzer reads
+        the weights file the calibrator wrote and the counts the runner wrote, the same way they mean them."""
+        rows = (out / "tables" / "repriced_spend.csv").read_text(encoding="utf-8").splitlines()
+        h = rows[0].split(",")
+        return len(rows) > 1 and all(abs(float(r.split(",")[h.index("Ratio")]) - 1) < 1e-4 for r in rows[1:])
+
+    toy_out = results / "toy"
+    check("analyze: every table from the toy dev and holdout trees, re-priced in its own currency",
+          [PY, ROOT / "magat.py", "analyze", "--run", run_root / "dev", "--holdout", run_root / "holdout",
+           "--reprice", weights, "--out", toy_out], "ANALYZE: OK",
+          then=lambda: every_table(toy_out, "repriced", "repriced_spend") and same_units(toy_out))
+    legacy_out = results / "legacy"
+    check("import-legacy: the 20-turn thesis fixture becomes a MAGAT leaf",
+          [PY, ROOT / "magat.py", "import-legacy", "--stage1-tree", ROOT / "games" / game / "results" / "replay",
+           "--split", "holdout", "--out", legacy_out], "IMPORT: OK",
+          then=lambda: len((legacy_out / "holdout" / "emcts-comma" / "80000cu" / "turns.csv")
+                           .read_text(encoding="utf-8").splitlines()) == 21)
+    worked = ROOT / "games" / game / "results" / "ab-emcts"
+    worked_out = results / "ab-emcts"
+
+    def point_estimates(path):
+        """Every headline point estimate (intervals may move with another numpy's bootstrap stream)."""
+        rows = path.read_text(encoding="utf-8").splitlines()
+        h = rows[0].split(",")
+        return [tuple(r.split(",")[h.index(c)] for c in ("Split", "Budget", "Arm", "Stratum", "MeanDiff", "D")) for r in rows[1:]]
+
+    if worked.is_dir():
+        check("the worked result re-analyses to its published point estimates",
+              [PY, ROOT / "magat.py", "analyze", "--run", worked, "--out", worked_out], "ANALYZE: OK",
+              then=lambda: every_table(worked_out) and point_estimates(worked_out / "tables" / "headline.csv")
+              == point_estimates(worked / "report" / "tables" / "headline.csv"))
+
+    step("9. Notebook")
     check("generated notebook is current and its setup cells run from three directories",
           [PY, ROOT / "magat.py", "notebook", "selftest"], "0 failure(s)")
 
