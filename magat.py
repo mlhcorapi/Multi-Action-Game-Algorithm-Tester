@@ -20,6 +20,10 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py calibrate --game tribes --out DIR [--portfolio DIR] [--levels ...] [--arms a,b|@set] [--replace a] [--under-load W] [--toy]
     python magat.py calibrate --check --game tribes --arms a,b [--weights FILE] [--portfolio DIR]
     python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...]
+    python magat.py run --experiment SPEC [--split dev|holdout|all] [--out DIR] [--portfolio DIR] [--weights FILE]
+                        [--threads N] [--threads-at 400000=31] [--frozen FILE] [--retire-leaf arm@budget] [--toy]
+    python magat.py experiment validate --experiment SPEC [--weights FILE] [--split ...]
+    python magat.py bundle --name NAME --paths P [P ...] [--exclude seqlog_,mutlog_]
     python magat.py java <args...>          raw magat.cli.Main invocation
     python magat.py layering
     python magat.py notebook build|selftest
@@ -206,7 +210,7 @@ def java(args, heap: str = None, props=(), log: str = None, check: bool = True) 
     game = None
     if "--game" in args:
         game = args[args.index("--game") + 1]
-    sysprops = [f"-Dmagat.data={data_root()}"]
+    sysprops = [f"-Dmagat.data={data_root()}", f"-Dmagat.git.commit={git_commit()}"]
     if game:
         sysprops.append(f"-Dmagat.engine.commit={engine_commit(game)}")
         sysprops += ENGINE_PROPS.get(game, lambda d: [])(engine_dir(game))
@@ -215,16 +219,81 @@ def java(args, heap: str = None, props=(), log: str = None, check: bool = True) 
     return run(cmd, log=log or (args[0] if args else "java"), check=check)
 
 
+def git_commit() -> str:
+    """This checkout's commit, with -dirty when the tree has uncommitted changes, for provenance."""
+    try:
+        rev = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, timeout=10).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT, capture_output=True,
+                               text=True, timeout=10).stdout.strip()
+        return (rev or "unknown") + ("-dirty" if dirty else "")
+    except Exception:
+        return "unknown"
+
+
+def with_spec_game(args: list) -> list:
+    """`run` and `experiment` name their game in the spec; pass it on so the JVM gets the engine settings."""
+    args = list(args)
+    if "--experiment" in args and "--game" not in args:
+        import json
+        spec = pathlib.Path(args[args.index("--experiment") + 1])
+        try:
+            game = json.loads(spec.read_text(encoding="utf-8")).get("game")
+        except (OSError, ValueError) as e:
+            sys.exit(f"cannot read the experiment spec {spec}: {e}")
+        if game:
+            args += ["--game", game]
+    return args
+
+
+def bundle(argv: list) -> None:
+    """Zip pre-specified files of a stage into <data>/bundles/<name>.zip (the notebook's bundle(), as a command)."""
+    import glob
+    import zipfile
+    if "--name" not in argv or "--paths" not in argv:
+        sys.exit("usage: magat bundle --name NAME --paths P [P ...] [--exclude seqlog_,mutlog_]")
+    name = argv[argv.index("--name") + 1]
+    exclude = argv[argv.index("--exclude") + 1].split(",") if "--exclude" in argv else ["seqlog_", "mutlog_", "_running.lock"]
+    paths = []
+    for a in argv[argv.index("--paths") + 1:]:
+        if a.startswith("--"):
+            break
+        paths.append(a)
+    data = data_root()
+    files = set()
+    for item in paths:
+        pth = pathlib.Path(item)
+        if not pth.is_absolute():
+            pth = data / pth
+        if pth.is_dir():
+            files.update(q for q in pth.rglob("*") if q.is_file())
+        elif pth.exists():
+            files.add(pth)
+        else:
+            files.update(pathlib.Path(h) for h in glob.glob(str(pth)) if pathlib.Path(h).is_file())
+    files = sorted(f for f in files if not any(x in f.name for x in exclude))
+    out = data / "bundles" / f"{name}.zip"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in files:
+            try:
+                arc = f.resolve().relative_to(data)
+            except ValueError:
+                arc = pathlib.Path(f.name)
+            z.write(f, str(arc))
+    print(f"BUNDLE: {len(files)} files -> {out}")
+
+
 def with_published_defaults(args: list) -> list:
     """Fill --portfolio / --weights from the published artefacts of --game when not given."""
     args = list(args)
     if "--game" in args:
         game = args[args.index("--game") + 1]
         pub = PUBLISHED.get(game, {})
-        wants_portfolio = args[0] in ("check", "calibrate", "threads")
+        wants_portfolio = args[0] in ("check", "calibrate", "threads", "run")
         if wants_portfolio and "--portfolio" not in args and "portfolio" in pub and pub["portfolio"].is_dir():
             args += ["--portfolio", str(pub["portfolio"])]
-        wants_weights = "equivalence" in args or args[0] == "weights" or (args[0] == "calibrate" and "--check" in args)
+        wants_weights = ("equivalence" in args or args[0] in ("weights", "run")
+                         or (args[0] == "calibrate" and "--check" in args))
         if wants_weights and "--weights" not in args and "weights" in pub and pub["weights"].is_file():
             args += ["--weights", str(pub["weights"])]
         if args[:2] == ["portfolio", "verify"] and "--portfolio" not in args and "portfolio" in pub:
@@ -246,6 +315,15 @@ def main(argv: list) -> None:
         for cwd, classes in test_classes().items():
             run(["java", f"-Xmx{DEFAULT_HEAP}", "-cp", classpath(TEST_CLASSES, CLASSES),
                  "org.junit.runner.JUnitCore", *classes], log="test", cwd=str(cwd))
+    elif cmd in ("run", "experiment"):
+        args = with_published_defaults(with_spec_game([cmd, *rest]))
+        log = "run" if cmd == "run" else "experiment-validate"
+        if cmd == "run":
+            split = rest[rest.index("--split") + 1] if "--split" in rest else None
+            log = "run" + (f"-{split}" if split else "")
+        java(args, heap=BUILD_HEAP if cmd == "run" else None, log=log)
+    elif cmd == "bundle":
+        bundle(rest)
     elif cmd in ("check", "arms", "portfolio", "calibrate", "threads", "machine", "weights"):
         big = (cmd == "portfolio" and rest[:1] == ["build"]) or cmd == "threads" or "--under-load" in rest
         log = cmd + ("-" + rest[0] if rest and not rest[0].startswith("--") else "")
