@@ -44,7 +44,7 @@ public class GridRunnerTest {
             + " \"sweeps\": [ {\"parameter\": \"selection\", \"arms\": [\"emcts-comma\"], \"null\": \"emcts\"} ] }";
 
     /** A module over the toy game with the given extra arms registered. */
-    static GameModule<ToyGame.State, ToyGame.Move> module(ToyGame game, List<AgentFactory<ToyGame.State, ToyGame.Move>> extra) {
+    public static GameModule<ToyGame.State, ToyGame.Move> module(ToyGame game, List<AgentFactory<ToyGame.State, ToyGame.Move>> extra) {
         AgentRegistry<ToyGame.State, ToyGame.Move> r = new AgentRegistry<>();
         r.register(RandomAgent.factory());
         r.register(EmctsFactory.plain());

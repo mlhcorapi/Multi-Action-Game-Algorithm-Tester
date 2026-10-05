@@ -68,10 +68,25 @@ def main(argv) -> int:
     step("3. Contract laws on published positions")
     check("L1-L10 pass", [PY, ROOT / "magat.py", "check", "contract", "--game", game, "--scenarios", "4"], "CONTRACT: PASS")
 
-    step("4. Equivalence gate (the backbone of every cross-stage comparison)")
+    step("4. Gates and probes: equivalence, structure, replay, support, overhead")
     check("emcts reproduces the thesis agent at 8k on 2 positions",
           [PY, ROOT / "magat.py", "check", "equivalence", "--game", game, "--arms", "emcts",
            "--scenarios", "2", "--visits", "1", "--budgets", "8000"], "EQUIVALENCE: PASS")
+    check("the headline arm, its control and a biased arm reproduce theirs, counters included",
+          [PY, ROOT / "magat.py", "check", "equivalence", "--game", game, "--arms", "comma-z0-coarse,comma-rand15,comma-bias-e25",
+           "--scenarios", "2", "--visits", "1", "--budgets", "8000"], "EQUIVALENCE: PASS")
+    check("structure: the selection equivalences, the baseline contract, every mechanism differs from its control",
+          [PY, ROOT / "magat.py", "check", "structure", "--game", game, "--spec", ROOT / "experiments" / game / "structure.json"],
+          "STRUCTURE: PASS")
+    check("replay: published R7615 holdout turns reproduce field for field",
+          [PY, ROOT / "magat.py", "check", "replay", "--game", game, "--leaf",
+           ROOT / "games" / game / "results" / "replay" / "Comma_Off" / "80000cu", "--turns", "3"], "REPLAY: PASS")
+    check("support: the bias engages (toy size)",
+          [PY, ROOT / "magat.py", "probe", "support", "--game", game, "--arm", "comma-bias-e25", "--levels", "40000",
+           "--scenarios", "2"], "SUPPORT: ", codes=(0, 1))
+    check("overhead: decorator and dormant counters are measured (toy size)",
+          [PY, ROOT / "magat.py", "check", "overhead", "--game", game, "--turns", "2", "--reps", "2", "--warmup", "1"],
+          "OVERHEAD: MEASURED")
 
     step("5. Portfolio: toy build, freeze, verify against the published portfolio")
     data = pathlib.Path(os.environ.get("MAGAT_DATA") or (pathlib.Path.home() / "magat_runs")).resolve()

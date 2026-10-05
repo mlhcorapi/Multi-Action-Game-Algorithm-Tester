@@ -432,6 +432,20 @@ arms (`comma-bias-e25` etc., Appendix A) are registry entries, not new code. The
 `game.actionClass`; the arrays indexed by Tribes ordinals become an interning index per turn, which
 changes no forward-model call and no random draw (the oracle gate proves it).
 
+*Amended 2026-10-05 (milestone 5): `QdeltaEmcts` subclasses `Emcts` exactly as `Stage1BiasedAgent`
+subclasses the thesis agent (two hooks were added to `Emcts`: after a bridge burn, at the point the
+thesis called `recordBridgeBurn`, and for extra telemetry). Its table (`ActionTable`) keys classes by
+the game's `actionClass` strings in hash maps; the Tribes MID class partitions actions exactly as the
+thesis's (type, qualifier) ordinals did and sums accumulate in the same order, so every estimate is
+the same double. `QdeltaArms` holds the 31 worked-result arms beyond `emcts` and `emcts-comma` as the
+thesis `Stage1Runner` defined them, attribution controls included (`comma-z0-*` -> `comma-z0-random`,
+`comma-short15*` -> `comma-rand15`); `comma-z0-fine-insfine` is priced in the published currency but
+not registered, because the thesis dropped it before running it (at epsilon 1.00 it is `comma-z0-fine`
+under another name). The oracle of every one is `Stage1BiasedAgent` with the same parameters, and the
+gate also compares its counters (biased and uniform picks, shortlist calls and skips, statistic
+updates, zero-evaluation picks, repair units and candidate evaluations, the mutation counters, the
+maximum branching). The thesis's per-child sequence-composition log (observation only) is not ported.*
+
 ### 5.5 What an agent must promise
 
 - All forward-model work goes through the `Game` it was given (the metered one). No other handle
@@ -705,6 +719,17 @@ against the same turns timed by the engine's own hooks on the reference machine,
 `ORIGIN.md`; and (b) the engine's dormant counter cost (§2.2). Both are expected to be within noise;
 the point is that they are measured.
 
+*Amended 2026-10-05 (milestone 5): delivered as `magat check overhead`, not as part of `--check`. The
+same turns are timed through the decorator and by the engine's own hooks, interleaved turn by turn with
+the order alternating (timing all of one and then all of the other measured a laptop warming up: 14%
+first, 7.5% interleaved). On the laptop the decorator-timed cost is 7.5% above the engine-timed one for
+advances and copies and 11% for evaluations: proportional, not a fixed per-call cost, so it is the two
+timing paths compiling differently rather than dispatch. What matters for a currency is the effect on
+ratios, which the check prints: wCopy +0.0%, wEval +3.3% for a currency calibrated through the decorator
+rather than the engine's hooks (as the R7615's was). Runs time nothing, so spending is unaffected. The
+dormant engine counter costs 1.6 ns per operation, 0.003% of an advance. Neither needs a change to the
+engine fork. Recorded in `calibration/r7615/ORIGIN.md`; the R7615 itself should be measured once.*
+
 *Amended 2026-10-04 (milestone 3): deferred to milestone 5 with the other probes. (a) needs the
 engine's own nanosecond hooks driven through the oracle side by side with the port, and (b) needs a
 switch in the fork that turns the dormant counters off; neither is on the acceptance path of this
@@ -969,6 +994,26 @@ re-analysed by MAGAT.
 
 All five run in the shakedown at toy size and print PASS/FAIL; all exit non-zero on FAIL.
 
+*Amended 2026-10-05 (milestone 5):*
+- *`check structure` reads `experiments/tribes/structure.json`, which names registered arms and
+  variants (a registered EMCTS-family arm under another selection rule and k, or as `QdeltaEmcts` with
+  every mechanism at its default); every turn is priced with the fixed capture weights, identical on
+  both sides, so variants need no calibration. It asserts the thesis's LEGACY = COMMA (k = 3, 5, 10) and
+  LEGACY = DRIFT (k = 1), `comma-k5` = `emcts-comma`, the baseline contract both ways
+  (Qdelta-at-defaults = `emcts` and = `emcts-comma`), fourteen pairs that must differ (every mechanism
+  against its control and its neighbours), and the branching shape. Telemetry is compared on the keys
+  both sides report.*
+- *`check replay` reads MAGAT leaves (`turns.csv`: every column but the two wall-clock ones) and thesis
+  leaves (`turn_telemetry.csv` + `results.csv`: values, forward-model calls, units, nodes, unique,
+  duplicates, average node value, and every counter the arm reports; the thesis rows carry no copy or
+  evaluation counts). Thesis config names map to arm ids through `tools/legacy-arms.json`, generated
+  from `calibration/r7615/ORIGIN.md`. K rows are spread evenly over the turns ordered by scenario and
+  visit. `games/tribes/results/replay/` holds a 20-turn fixture of the published `emcts-comma@80000`
+  holdout leaf, which the shakedown and CI replay.*
+- *`probe support` writes the thesis's `action_bias_floor.csv` columns to
+  `support_probe_<arm>.csv`; an agent reports its counters through `SearchAgent.support()`, which
+  `Episode.planned` returns with the record.*
+
 ---
 
 ## 13. The CLI, the notebook, the shakedown
@@ -1156,7 +1201,7 @@ commit. `run_magat.ipynb` and `tools/shakedown.py` exist from milestone 0 and gr
 | 2 | Portfolio: builder, journal, manifest v1, identity, split, ledger, `random`; `TribesScenarioSources` | toy build reproducible at 1 and 4 threads; the published manifest identity (reconstructed from the archived rows, §17) reproduced by a full build on the server. *Done 2026-10-04. The toy Tribes manifest is byte-identical at 1, 2 and 4 threads (and the core test asserts it on the toy game). A full rebuild on a second machine (i9-14900HX, Windows, JDK 26, 20 threads, 15.5 min) reproduced `ec243fd7...`, all 400 rows, both split files from a fresh freeze, and identical `emcts` plans from rebuilt and published bins (`games/tribes/portfolio/v1/REBUILDS.md`); the server rebuild remains a one-command check.* |
 | 3 | Calibration: `Calibrator`, merge, `--check`, `--under-load`, `ThreadSweep`, `MachineProfile`, weights v1, R7615 import + `ORIGIN.md` | toy calibration writes and merges; the drift-math unit test (divide vs multiply) exists; the imported file loads and prices every worked-result arm. *Done 2026-10-04: toy calibration writes, merges, refuses re-pricing without `--replace`, checks without writing and writes a loaded file beside the idle one, in the shakedown and CI; `CurrencyTest` is the divide-versus-multiply test (under ratio re-denomination, §8.2 amendment); `PublishedCalibrationTest` and `magat weights --arms @worked-result` show all 34 worked-result arms priced at all three levels. A real drift check of a second machine against the R7615 currency, bracketed, is recorded in `calibration/r7615/ORIGIN.md`: advances and copies within the gate, evaluations a third cheaper (FAIL), turn prices within 4%.* |
 | 4 | Runner: spec + validator, `GridRunner`, checkpoints, compaction, currency lock, identical-output assertion, provenance, `run` and `bundle` commands | shakedown spec runs on dev and holdout, resumes, skips, retires a leaf; validator rejects a sweep without its null. *Done 2026-10-05: all of it in the shakedown's runner stage and in CI; a torn partial leaf resumes to the same turns (`GridRunnerTest`); the currency lock, the tree locks and the identical-output assertion each have a test that makes them fire.* |
-| 5 | The rest of the family: `emcts-comma`, `QdeltaEmcts` and every worked-result arm; `check structure`, `probe support`, `check replay` | every arm passes its oracle gate; `check replay` reproduces 20 published `emcts-comma@80000` holdout rows on the rebuilt portfolio under the published weights |
+| 5 | The rest of the family: `emcts-comma`, `QdeltaEmcts` and every worked-result arm; `check structure`, `probe support`, `check replay` | every arm passes its oracle gate; `check replay` reproduces 20 published `emcts-comma@80000` holdout rows on the rebuilt portfolio under the published weights. *Done 2026-10-05: all 33 oracle-gated arms pass on 8 scenarios x 2 visits at 8k and 40k (1,056 cells, counters included); the 20 rows reproduce field for field on the laptop's rebuilt portfolio, as do 20 each of the stage F `comma-z0-coarse@80000` and `comma-rand15@80000` holdout leaves. The support probe matches the archived R7615 verdicts at every level; its counts under the stage A currency differ from the archived `action_bias_floor.csv` by about 4% (300.9 against 290.0 mutations per turn at 40k) with code and weights identical as far as the archive shows, which is recorded as an open discrepancy in `ORIGIN.md`.* |
 | 6 | Analyzer: all twelve measures, side by side, re-pricing, report; `import-legacy`; the worked result imported | the retrospective §3/§4 point estimates reproduced from the imported trees; the Python tests pass on the synthetic tree |
 | 7 | Docs (`CONTRACT`, `CURRENCY`, `METHODS`, `OPERATIONS`, `ADDING_*`, `TRAPS`, the worked-result page), full notebook, `Tribes-master/` removed, v0.1 tag once the licence is in | a fresh clone follows `README.md` through §14.2 on the toy portfolio without reading anything else |
 

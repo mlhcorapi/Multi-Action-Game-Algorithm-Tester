@@ -35,7 +35,10 @@ the machine profile. Milestone 4 adds the runner: experiments are JSON specs, va
 anything runs (a parameter sweep without its null is rejected), run leaf by leaf with resume by
 re-running the same command, and guarded by a currency lock, a portfolio and configuration lock, and an
 assertion that no two arms produce identical output. The holdout is entered in a ledger when it is
-read. The first game is [Tribes](https://github.com/GAIGResearch/Tribes); the worked result is
+read. Milestone 5 completes the arm family: the 31 remaining arms of the worked result
+(the AB-EMCTS line), each gated against the thesis implementation with its mechanism counters, plus
+`check structure`, `probe support`, `check overhead`, and `check replay`, which re-plans published
+R7615 holdout turns on your machine and reproduces them field for field. The first game is [Tribes](https://github.com/GAIGResearch/Tribes); the worked result is
 the AB-EMCTS line described in `Tribes-master/analysis/AB_EMCTS_RETROSPECTIVE.md`, which MAGAT
 re-analyses as its example.
 
@@ -53,6 +56,7 @@ python magat.py check equivalence --game tribes --arms emcts --scenarios 8 --vis
 python magat.py portfolio verify  --game tribes
 python magat.py weights --game tribes --arms @worked-result
 python magat.py experiment validate --experiment experiments/tribes/reference-ladder.json
+python magat.py check replay --game tribes --leaf games/tribes/results/replay/Comma_Off/80000cu --turns 20
 python magat.py shakedown
 ```
 

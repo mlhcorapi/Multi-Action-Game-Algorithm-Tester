@@ -171,13 +171,29 @@ if RUN_UNDER_LOAD:
           "--arms", "emcts,emcts-comma", "--under-load", WORKERS)
 '''
 
+GATES_CELL = r'''
+magat("check", "contract", "--game", GAME, "--scenarios", 8)
+assert_in_log("check-contract", "CONTRACT: PASS")
+magat("check", "equivalence", "--game", GAME, "--scenarios", 8, "--visits", 2, "--budgets", "8000,40000")
+assert_in_log("check-equivalence", "EQUIVALENCE: PASS")
+magat("check", "structure", "--game", GAME, "--spec", ROOT / "experiments" / GAME / "structure.json")
+assert_in_log("check-structure", "STRUCTURE: PASS")
+magat("check", "replay", "--game", GAME, "--leaf", ROOT / "games" / GAME / "results" / "replay" / "Comma_Off" / "80000cu",
+      "--portfolio", PORTFOLIO, "--weights", PUBLISHED_WEIGHTS, "--turns", 20)
+assert_in_log("check-replay", "REPLAY: PASS")
+magat("probe", "support", "--game", GAME, "--arm", "comma-bias-e25", "--scenarios", 20, "--weights", WEIGHTS,
+      "--out", CALIBRATION, check=False)      # a failing level is a reporting level, not an error
+bundle("gates", [LOGS / f"{n}.log" for n in ("check-contract", "check-equivalence", "check-structure", "check-replay",
+                                             "probe-support", "test")] + [CALIBRATION / "support_probe_comma-bias-e25.csv"])
+'''
+
 def experiment_cells(game: str) -> list:
     """One markdown and one code cell per development experiment in experiments/<game>/, so the
     notebook cannot drift from the specs it runs. The shakedown spec runs inside the shakedown."""
     cells = []
     for spec in sorted((ROOT / "experiments" / game).glob("*.json")):
         x = json.loads(spec.read_text(encoding="utf-8"))
-        if x.get("name") == "shakedown":
+        if x.get("name") == "shakedown" or "levels" not in x:      # the shakedown's own spec; structure.json
             continue
         name = x["name"]
         levels = ", ".join(f"{l['budget']:,} x {l['visits']}" for l in x.get("levels", []))
@@ -241,16 +257,14 @@ published one. Each skips itself once its output exists.
     code(DRIFT_CELL, tags=("drift",)),
     code(UNDER_LOAD_CELL, tags=("under-load",)),
     md("""
-## Gates
+## Gates and probes
 
-The contract laws on published positions, and the equivalence gate: every ported arm must reproduce
-its thesis-tree oracle field for field. Nothing downstream runs otherwise.
+The contract laws on published positions; the equivalence gate, where every ported arm must reproduce
+its thesis-tree oracle field for field, mechanism counters included (all of them: about ten minutes);
+the structure check; the replay of published R7615 holdout turns on this machine's own portfolio; the
+support probe for the biased arms. Nothing downstream runs otherwise.
 """),
-    code('magat("check", "contract", "--game", GAME, "--scenarios", 8)\n'
-         'assert_in_log("check-contract", "CONTRACT: PASS")\n'
-         'magat("check", "equivalence", "--game", GAME, "--arms", "emcts", "--scenarios", 8, "--visits", 2, "--budgets", "8000,40000")\n'
-         'assert_in_log("check-equivalence", "EQUIVALENCE: PASS")\n'
-         'bundle("gates", [LOGS / "check-contract.log", LOGS / "check-equivalence.log", LOGS / "test.log"])'),
+    code(GATES_CELL, tags=("gates",)),
     *experiment_cells("tribes"),
     md("""
 ## Shakedown

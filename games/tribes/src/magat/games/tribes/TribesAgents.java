@@ -4,8 +4,10 @@ import core.actions.Action;
 import magat.agent.AgentRegistry;
 import magat.agent.Oracle;
 import magat.agents.emcts.EmctsFactory;
+import magat.agents.emcts.QdeltaArms;
 import magat.agents.random.RandomAgent;
 import magat.games.tribes.oracle.ThesisEmctsOracle;
+import magat.games.tribes.oracle.ThesisQdeltaOracle;
 import players.ExperimentalEMCTS.ExperimentalEMCTSParams.SelectionMode;
 
 import java.util.Arrays;
@@ -76,6 +78,7 @@ public final class TribesAgents {
         r.register(RandomAgent.factory());
         r.register(EmctsFactory.plain());
         r.register(EmctsFactory.comma(5));
+        for (QdeltaArms.Arm a : QdeltaArms.all()) r.register(a.<TribesState, Action>factory());
         return r;
     }
 
@@ -83,6 +86,7 @@ public final class TribesAgents {
         Map<String, Oracle<TribesState>> o = new LinkedHashMap<>();
         o.put("emcts", new ThesisEmctsOracle(SelectionMode.PLUS, 1));
         o.put("emcts-comma", new ThesisEmctsOracle(SelectionMode.COMMA, 5));
+        for (QdeltaArms.Arm a : QdeltaArms.all()) o.put(a.id, new ThesisQdeltaOracle(a.params));
         return o;
     }
 }

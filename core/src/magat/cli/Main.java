@@ -27,7 +27,7 @@ import java.util.Set;
  */
 public final class Main {
 
-    public static final String VERSION = "0.1.0-m4";
+    public static final String VERSION = "0.1.0-m5";
 
     private Main() {}
 
@@ -47,6 +47,10 @@ public final class Main {
             else if (cmd.equals("machine")) code = CalibrateCommand.machine();
             else if (cmd.equals("weights")) code = CalibrateCommand.weights(args);
             else if (cmd.equals("run")) code = RunCommand.run(args, argv);
+            else if (cmd.equals("probe")) {
+                if (!"support".equals(args.word(1))) throw new IllegalArgumentException("probe what? support");
+                code = ProbeCommand.support(args);
+            }
             else if (cmd.equals("experiment")) {
                 if (!"validate".equals(args.word(1))) throw new IllegalArgumentException("experiment what? validate");
                 code = RunCommand.validate(args);
@@ -72,6 +76,7 @@ public final class Main {
         PortfolioCommand.usage();
         CalibrateCommand.usage();
         RunCommand.usage();
+        ProbeCommand.usage();
     }
 
     // ------------------------------------------------------------------ shared
@@ -119,7 +124,10 @@ public final class Main {
         String what = args.word(1);
         if ("contract".equals(what)) return checkContract(args);
         if ("equivalence".equals(what)) return checkEquivalence(args);
-        throw new IllegalArgumentException("check what? contract | equivalence");
+        if ("structure".equals(what)) return ProbeCommand.structure(args);
+        if ("replay".equals(what)) return ProbeCommand.replay(args);
+        if ("overhead".equals(what)) return ProbeCommand.overhead(args);
+        throw new IllegalArgumentException("check what? contract | equivalence | structure | replay | overhead");
     }
 
     private static <S, A> int checkContract(Args args) throws Exception {

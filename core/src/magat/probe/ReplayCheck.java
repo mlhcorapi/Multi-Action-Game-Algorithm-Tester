@@ -1,0 +1,216 @@
+package magat.probe;
+
+import magat.agent.AgentFactory;
+import magat.agent.Episode;
+import magat.agent.TurnRecord;
+import magat.game.Game;
+import magat.game.Scenario;
+import magat.portfolio.Portfolio;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+/**
+ * {@code magat check replay}: the cross-machine determinism claim, tested rather than stated. Given a
+ * published leaf, a rebuilt portfolio and the published weights, re-plan K of its turns and assert
+ * that every reproducible field agrees: values, operation counts, nodes, unique sequences, priced
+ * units and the mechanism's counters. Wall-clock columns are not compared; nothing else is exempt.
+ *
+ * <p>Reads both leaf formats: MAGAT's ({@code turns.csv}) and the thesis tree's
+ * ({@code turn_telemetry.csv} and {@code results.csv}, whose rows carry no copy or evaluation counts,
+ * so those are the fields a legacy replay cannot compare).
+ */
+public final class ReplayCheck {
+
+    private ReplayCheck() {}
+
+    /** One published turn: the fields it carries, by the candidate's names. */
+    static final class Row {
+        final int scenario, visit;
+        final Map<String, Double> fields = new LinkedHashMap<>();
+
+        Row(int scenario, int visit) {
+            this.scenario = scenario;
+            this.visit = visit;
+        }
+    }
+
+    public static final class Leaf {
+        public final String format;
+        public final String arm;         // as written in the leaf (a thesis config name for a legacy leaf)
+        final List<Row> rows;
+
+        Leaf(String format, String arm, List<Row> rows) {
+            this.format = format;
+            this.arm = arm;
+            this.rows = rows;
+        }
+
+        public int size() { return rows.size(); }
+    }
+
+    public static final class Result {
+        public int replayed, reproduced;
+        public final List<String> failures = new ArrayList<>();
+        public boolean pass() { return replayed > 0 && replayed == reproduced; }
+    }
+
+    // ------------------------------------------------------------------ reading a leaf
+
+    public static Leaf read(Path dir) throws IOException {
+        if (Files.isRegularFile(dir.resolve("turns.csv"))) return readMagat(dir.resolve("turns.csv"));
+        if (Files.isRegularFile(dir.resolve("turn_telemetry.csv"))) return readLegacy(dir);
+        throw new IOException(dir + " holds neither turns.csv nor turn_telemetry.csv");
+    }
+
+    private static Leaf readMagat(Path turns) throws IOException {
+        List<String> lines = Files.readAllLines(turns, StandardCharsets.UTF_8);
+        List<String> header = Arrays.asList(lines.get(0).split(","));
+        List<Row> rows = new ArrayList<>();
+        String arm = null;
+        for (String line : lines.subList(1, lines.size())) {
+            String[] f = line.split(",", -1);
+            if (f.length != header.size()) continue;
+            Row r = new Row(Integer.parseInt(f[0]), Integer.parseInt(f[3]));
+            arm = f[4];
+            for (int i = 0; i < f.length; i++) {
+                String c = header.get(i);
+                if (Arrays.asList("scenario", "source", "phase", "visit", "arm", "budget", "plan_ms", "init_ms").contains(c) || f[i].isEmpty()) continue;
+                r.fields.put(c.startsWith("t_") ? "t:" + c.substring(2) : c, Double.parseDouble(f[i]));
+            }
+            rows.add(r);
+        }
+        return new Leaf("magat", arm, rows);
+    }
+
+    /** Thesis columns and the candidate's name for each; the telemetry ones are compared when the candidate reports them. */
+    private static final Map<String, String> LEGACY = new LinkedHashMap<>();
+    static {
+        LEGACY.put("InitialValue", "initial");
+        LEGACY.put("FinalValue", "final");
+        LEGACY.put("NodesEvaluated", "nodes");
+        LEGACY.put("UniqueSequences", "unique");
+        LEGACY.put("MutChildDuplicates", "duplicates");
+        for (String t : new String[]{"MutEvents", "MutBestGains", "MutRepairKept", "MutRepairReplaced", "BiasGreedyPicks", "BiasUniformPicks",
+                "ShortlistCalls", "ShortlistSkipped", "StatUpdates", "ZeroEvalPicks", "RepairUnits", "RepairCandidateEvals"})
+            LEGACY.put(t, "t:" + Character.toLowerCase(t.charAt(0)) + t.substring(1));
+    }
+
+    private static Leaf readLegacy(Path dir) throws IOException {
+        List<String> tele = Files.readAllLines(dir.resolve("turn_telemetry.csv"), StandardCharsets.UTF_8);
+        List<String> header = Arrays.asList(tele.get(0).split(","));
+        Map<String, Row> byKey = new TreeMap<>();
+        String arm = null;
+        for (String line : tele.subList(1, tele.size())) {
+            String[] f = line.split(",", -1);
+            if (f.length != header.size()) continue;
+            Row r = new Row(Integer.parseInt(f[header.indexOf("ScenarioId")]), Integer.parseInt(f[header.indexOf("VisitId")]));
+            arm = f[header.indexOf("Config")];
+            for (Map.Entry<String, String> e : LEGACY.entrySet()) {
+                int i = header.indexOf(e.getKey());
+                if (i >= 0 && !f[i].isEmpty()) r.fields.put(e.getValue(), Double.parseDouble(f[i]));
+            }
+            byKey.put(r.scenario + ":" + r.visit, r);
+        }
+        // results.csv repeats the turn's totals on every burn row; take them from the first.
+        Path results = dir.resolve("results.csv");
+        if (Files.isRegularFile(results)) {
+            List<String> lines = Files.readAllLines(results, StandardCharsets.UTF_8);
+            List<String> h = Arrays.asList(lines.get(0).split(","));
+            for (String line : lines.subList(1, lines.size())) {
+                String[] f = line.split(",", -1);
+                if (f.length != h.size()) continue;
+                Row r = byKey.get(f[h.indexOf("ScenarioId")] + ":" + f[h.indexOf("VisitId")]);
+                if (r == null || r.fields.containsKey("fm")) continue;
+                r.fields.put("fm", Double.parseDouble(f[h.indexOf("FmCalls")]));
+                r.fields.put("units", Double.parseDouble(f[h.indexOf("SearchUnits")]));
+                r.fields.put("avg_node", Double.parseDouble(f[h.indexOf("AvgNodeValue")]));
+            }
+        }
+        List<Row> rows = new ArrayList<>(byKey.values());
+        rows.sort((a, b) -> a.scenario != b.scenario ? Integer.compare(a.scenario, b.scenario) : Integer.compare(a.visit, b.visit));
+        return new Leaf("thesis", arm, rows);
+    }
+
+    // ------------------------------------------------------------------ replaying
+
+    /** The candidate's value of every field a published row may carry. */
+    static Map<String, Double> fieldsOf(TurnRecord r) {
+        Map<String, Double> m = new LinkedHashMap<>();
+        m.put("initial", r.initial);
+        m.put("final", r.finalValue);
+        m.put("terminal", r.terminal ? 1.0 : 0.0);
+        m.put("avg_node", r.avgNode);
+        m.put("advances", (double) r.advances);
+        m.put("copies", (double) r.copies);
+        m.put("evals", (double) r.evals);
+        m.put("units", r.units);
+        m.put("init_advances", (double) r.initAdvances);
+        m.put("init_copies", (double) r.initCopies);
+        m.put("init_evals", (double) r.initEvals);
+        m.put("init_units", r.initUnits);
+        m.put("nodes", (double) r.nodes);
+        m.put("unique", (double) r.unique);
+        m.put("duplicates", (double) r.duplicates);
+        m.put("seq_len", (double) r.sequenceLength);
+        m.put("fm", (double) r.fmCalls());
+        for (Map.Entry<String, Double> e : r.telemetry.entrySet()) m.put("t:" + e.getKey(), e.getValue());
+        return m;
+    }
+
+    public static <S, A> Result run(Game<S, A> game, Portfolio<S> portfolio, AgentFactory<S, A> arm, long budget, Leaf leaf,
+                                    int k, int threads) throws Exception {
+        List<Row> pick = new ArrayList<>();
+        int n = Math.min(k, leaf.rows.size());
+        for (int i = 0; i < n; i++) pick.add(leaf.rows.get((int) ((long) i * leaf.rows.size() / n)));
+        Result out = new Result();
+        ExecutorService pool = Executors.newFixedThreadPool(Math.max(1, threads));
+        try {
+            List<Future<List<String>>> fs = new ArrayList<>();
+            List<Row> submitted = new ArrayList<>();
+            for (Row row : pick) {
+                Scenario<S> sc = portfolio.byId(row.scenario);
+                if (sc == null) {
+                    out.failures.add("scenario " + row.scenario + " is not in this portfolio");
+                    out.replayed++;
+                    continue;
+                }
+                submitted.add(row);
+                fs.add(pool.submit(() -> compare(row, fieldsOf(Episode.run(game, sc, row.visit, arm, budget)))));
+            }
+            for (int i = 0; i < fs.size(); i++) {
+                List<String> d = fs.get(i).get();
+                out.replayed++;
+                if (d.isEmpty()) out.reproduced++;
+                else out.failures.add("scenario " + submitted.get(i).scenario + " visit " + submitted.get(i).visit + ": " + d);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        return out;
+    }
+
+    /** Differences between a published row and the candidate's, compared to four decimals. */
+    static List<String> compare(Row published, Map<String, Double> mine) {
+        List<String> d = new ArrayList<>();
+        for (Map.Entry<String, Double> e : published.fields.entrySet()) {
+            Double v = mine.get(e.getKey());
+            if (v == null) continue;     // a counter this arm does not report (a thesis superclass counted it)
+            if (Double.compare(TurnRecord.round4(v), TurnRecord.round4(e.getValue())) != 0)
+                d.add(String.format(Locale.ROOT, "%s %s vs published %s", e.getKey(), TurnRecord.round4(v), TurnRecord.round4(e.getValue())));
+        }
+        return d;
+    }
+}

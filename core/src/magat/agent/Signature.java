@@ -1,14 +1,19 @@
 package magat.agent;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Everything an equivalence gate compares between a ported arm and its oracle: the two values, the
  * search and initialization spend as raw counts, the node and unique-sequence counts, and the priced
  * units. Values and units are compared to four decimals, as the thesis tree's gate compared them;
- * counts exactly.
+ * counts exactly. An oracle may also carry mechanism telemetry (how often a bias fired, how many
+ * candidates a shortlist skipped); every key it carries that the candidate also reports is compared,
+ * to four decimals.
  */
 public final class Signature {
 
@@ -17,20 +22,30 @@ public final class Signature {
     public final long advances, copies, evals;
     public final long nodes, unique;
     public final double units;
+    public final Map<String, Double> telemetry;
 
     public Signature(double initial, double finalValue,
                      long initAdvances, long initCopies, long initEvals,
                      long advances, long copies, long evals,
                      long nodes, long unique, double units) {
+        this(initial, finalValue, initAdvances, initCopies, initEvals, advances, copies, evals, nodes, unique, units,
+                Collections.emptyMap());
+    }
+
+    public Signature(double initial, double finalValue,
+                     long initAdvances, long initCopies, long initEvals,
+                     long advances, long copies, long evals,
+                     long nodes, long unique, double units, Map<String, Double> telemetry) {
         this.initial = initial; this.finalValue = finalValue;
         this.initAdvances = initAdvances; this.initCopies = initCopies; this.initEvals = initEvals;
         this.advances = advances; this.copies = copies; this.evals = evals;
         this.nodes = nodes; this.unique = unique; this.units = units;
+        this.telemetry = Collections.unmodifiableMap(new LinkedHashMap<>(telemetry));
     }
 
     public static Signature of(TurnRecord r) {
         return new Signature(r.initial, r.finalValue, r.initAdvances, r.initCopies, r.initEvals,
-                r.advances, r.copies, r.evals, r.nodes, r.unique, r.units);
+                r.advances, r.copies, r.evals, r.nodes, r.unique, r.units, r.telemetry);
     }
 
     /**
@@ -51,6 +66,11 @@ public final class Signature {
         cmp(out, "nodes", nodes, oracle.nodes);
         cmp(out, "unique", unique, oracle.unique);
         cmp(out, "units", TurnRecord.round4(units), TurnRecord.round4(oracle.units));
+        for (Map.Entry<String, Double> e : oracle.telemetry.entrySet()) {
+            Double mine = telemetry.get(e.getKey());
+            if (mine == null) out.add("telemetry " + e.getKey() + ": the candidate does not report it");
+            else cmp(out, "telemetry " + e.getKey(), TurnRecord.round4(mine), TurnRecord.round4(e.getValue()));
+        }
         return out;
     }
 
