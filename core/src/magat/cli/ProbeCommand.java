@@ -35,6 +35,8 @@ final class ProbeCommand {
         System.out.println("  check replay      --game <name> --leaf <published leaf dir> --portfolio <dir> --weights <file> [--turns 20]");
         System.out.println("                    [--arm id] [--budget units] [--map tools/legacy-arms.json] [--threads N]");
         System.out.println("  check overhead    --game <name> --portfolio <dir> --weights <file> [--arm emcts] [--budget 40000] [--reps 3] [--turns 8]");
+        System.out.println("  check overhead --audit --game <name> --portfolio <dir> [--arms a,b|@set] [--budget 40000] [--turns 4] [--reps 2]");
+        System.out.println("                    [--warn 0.10] [--fail 0.25]: how much of each arm's turn its declared operations account for");
         System.out.println("  probe support     --game <name> --arm <id> --portfolio <dir> --weights <file> [--levels ...] [--scenarios 20]");
         System.out.println("                    [--criterion 0.80] [--out <calib dir>] [--threads N]");
     }
@@ -93,6 +95,7 @@ final class ProbeCommand {
     }
 
     static <S, A> int overhead(Args args) throws Exception {
+        if (args.flag("audit")) return audit(args);
         Main.banner("check overhead");
         GameModule<S, A> module = Games.load(args.require("game"));
         Weights w = Weights.load(Paths.get(args.require("weights")));
@@ -108,6 +111,33 @@ final class ProbeCommand {
         OverheadCheck.Result r = OverheadCheck.run(module.game(), module.agents().get(arm), budget, positions, args.getInt("reps", 3), args.getInt("warmup", 3));
         System.out.println(r.supported ? "OVERHEAD: MEASURED" : "OVERHEAD: NOT SUPPORTED");
         return 0;
+    }
+
+    /**
+     * {@code check overhead --audit}: for each arm, the share of its turn time that neither the forward model
+     * nor the operations it declares account for. Single-threaded, every turn profiled, priced with the
+     * fixed capture weights (the shares do not depend on a currency); the fastest repetition counts.
+     * Warns above {@code --warn} and fails above {@code --fail}.
+     */
+    static <S, A> int audit(Args args) throws Exception {
+        Main.banner("check overhead --audit");
+        GameModule<S, A> module = Games.load(args.require("game"));
+        Portfolio<S> p = Portfolio.load(module.game(), Paths.get(args.require("portfolio")));
+        List<String> ids = module.expandArms(args.getList("arms", new ArrayList<>(java.util.Collections.singletonList(module.referenceArm()))));
+        List<AgentFactory<S, A>> arms = new ArrayList<>();
+        for (String id : ids) arms.add(module.agents().get(id));
+        long budget = Long.parseLong(args.get("budget", "40000"));
+        int turns = args.getInt("turns", 4);
+        List<Scenario<S>> positions = new ArrayList<>();
+        for (int i = 0; i < turns; i++) positions.add(calibrationPosition(p.scenarios(), i, turns));
+        double warn = Double.parseDouble(args.get("warn", String.valueOf(OverheadCheck.AUDIT_WARN)));
+        double fail = Double.parseDouble(args.get("fail", String.valueOf(OverheadCheck.AUDIT_FAIL)));
+        System.out.println(String.format(Locale.ROOT, "# %d arm(s) @ %d, %d positions (the calibrator's pool), %d repetitions, single-threaded; "
+                + "warn above %.0f%%, fail above %.0f%% unaccounted", arms.size(), budget, turns, args.getInt("reps", 2), 100 * warn, 100 * fail));
+        List<OverheadCheck.Audit> r = OverheadCheck.audit(module.game(), arms, budget, positions, args.getInt("reps", 2), args.getInt("warmup", 1));
+        boolean ok = OverheadCheck.report(r, warn, fail);
+        System.out.println(ok ? "OVERHEAD AUDIT: PASS" : "OVERHEAD AUDIT: FAIL");
+        return ok ? 0 : 1;
     }
 
     /** The calibrator's position rule, so the overhead is measured on the positions the currency was. */

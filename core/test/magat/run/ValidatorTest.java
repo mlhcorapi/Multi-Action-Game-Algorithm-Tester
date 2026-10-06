@@ -73,6 +73,26 @@ public class ValidatorTest {
     }
 
     @Test
+    public void aVersionTwoCurrencyMustPriceEveryOperationAnArmDeclares() {
+        Experiment x = spec("{\"id\":\"emcts\"},{\"id\":\"emcts-comma\"}", "{\"parameter\":\"k\",\"arms\":[\"emcts-comma\"],\"null\":\"emcts\"}", "");
+        StringBuilder sb = new StringBuilder("magat.weights.version = 2\nreference = emcts@300\n");
+        for (String a : new String[]{"emcts", "emcts-comma"})
+            for (int b : new int[]{300, 600}) {
+                String p = "profile." + a + "@" + b + ".";
+                sb.append(p).append("w.advance = 0.5\n").append(p).append("w.copy = 0.5\n").append(p).append("w.eval = 0.5\n");
+                for (String op : magat.agents.emcts.Emcts.OPERATIONS)
+                    if (!(a.equals("emcts-comma") && b == 600 && op.equals("emcts.burn"))) sb.append(p).append("w.").append(op).append(" = 0.1\n");
+            }
+        Validator.Report r = check(x, Split.Half.DEV, Weights.parse(null, Arrays.asList(sb.toString().split("\n"))), null);
+        assertFalse(r.ok());
+        assertTrue(r.errors.toString(), says(r, "emcts-comma@600.emcts.burn", true));
+        // A version-1 currency prices the forward model only: the operations run free, which is said, not refused.
+        Validator.Report v1 = check(x, Split.Half.DEV, priced("emcts", "emcts-comma"), null);
+        assertTrue(v1.ok());
+        assertTrue(v1.warnings.toString(), says(v1, "run free", false));
+    }
+
+    @Test
     public void aMechanismNeedsItsAttributionControlInTheGrid() {
         Experiment x = spec("{\"id\":\"emcts\"},{\"id\":\"emcts-mech\"}", "", "");
         Weights w = priced("emcts", "emcts-mech");

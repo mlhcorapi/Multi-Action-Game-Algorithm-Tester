@@ -108,21 +108,35 @@ final class CalibrateCommand {
         if (!args.has("arms")) {
             for (String profile : w.profiles()) {
                 double[] x = w.profile(profile);
-                System.out.println(String.format(Locale.ROOT, "  %-40s %9.6f %9.6f %9.6f", profile, x[0], x[1], x[2]));
+                int ops = w.operations(profile).size();
+                System.out.println(String.format(Locale.ROOT, "  %-40s %9.6f %9.6f %9.6f%s", profile, x[0], x[1], x[2],
+                        ops > 0 ? String.format(Locale.ROOT, "   + %d operation(s)", ops) : ""));
             }
             return 0;
         }
         List<String> arms = args.getList("arms", new ArrayList<>());
+        GameModule<S, A> module = null;
         if (args.has("game")) {
-            GameModule<S, A> module = Games.load(args.get("game"));
+            module = Games.load(args.get("game"));
             arms = module.expandArms(arms);
         }
         long[] levels = args.getLongs("levels", new long[]{40_000L, 80_000L, 400_000L});
         List<String> want = new ArrayList<>();
         for (String a : arms) for (long l : levels) want.add(Profile.key(a, l));
-        List<String> missing = w.missing(want);
-        System.out.println(String.format(Locale.ROOT, "# %d arm(s) x %d level(s): %d of %d profiles priced", arms.size(), levels.length,
-                want.size() - missing.size(), want.size()));
+        List<String> missing = new ArrayList<>(w.missing(want));
+        // A version-2 currency prices every operation an arm declares; the game's registry says which those are.
+        if (module != null && w.version() >= 2)
+            for (String a : arms) {
+                if (!module.agents().has(a)) continue;
+                for (long l : levels) {
+                    String p = Profile.key(a, l);
+                    if (!w.has(p)) continue;
+                    for (String op : w.unpricedOperations(p, module.agents().get(a).operations())) missing.add(p + "." + op);
+                }
+            }
+        System.out.println(String.format(Locale.ROOT, "# %d arm(s) x %d level(s): %d of %d profiles priced%s", arms.size(), levels.length,
+                want.size() - w.missing(want).size(), want.size(),
+                w.version() >= 2 ? ", every declared operation checked" : " (version 1: the forward model)"));
         for (String m : missing) System.out.println("  missing: " + m);
         System.out.println(missing.isEmpty() ? "WEIGHTS: COVERED" : "WEIGHTS: " + missing.size() + " MISSING");
         return missing.isEmpty() ? 0 : 1;

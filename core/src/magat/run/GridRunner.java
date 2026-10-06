@@ -3,6 +3,7 @@ package magat.run;
 import com.eclipsesource.json.Json;
 import com.eclipsesource.json.JsonArray;
 import com.eclipsesource.json.JsonObject;
+import com.eclipsesource.json.JsonValue;
 import magat.agent.AgentFactory;
 import magat.agent.Episode;
 import magat.agent.TurnRecord;
@@ -81,6 +82,8 @@ public final class GridRunner {
         public Set<String> retire = new LinkedHashSet<>();
         public boolean toy;
         public List<String> args = new ArrayList<>();
+        /** The audit's warning: a leaf whose priced work accounts for less than (1 - this) of its plan time. */
+        public double auditWarn = 0.10;
     }
 
     public static <S, A> int run(GameModule<S, A> module, Experiment x, Portfolio<S> portfolio, Weights weights, Options o)
@@ -176,7 +179,7 @@ public final class GridRunner {
                             System.out.println("[run] SKIP (done) " + key);
                             continue;
                         }
-                        boolean complete = runLeaf(game, module.agents().get(id), level, scenarios, root, threads, weights);
+                        boolean complete = runLeaf(game, module.agents().get(id), level, scenarios, root, threads, weights, o.auditWarn);
                         if (!complete) return finish(INCOMPLETE, "leaf " + id + "@" + level.budget + " incomplete; re-run the same command to continue it");
                         RunGuard.appendLine(checkpoint, key);
                         done.add(key);
@@ -211,16 +214,19 @@ public final class GridRunner {
     // ------------------------------------------------------------------ one leaf
 
     private static <S, A> boolean runLeaf(Game<S, A> game, AgentFactory<S, A> arm, Experiment.Level level, List<Scenario<S>> scenarios,
-                                          Path root, int threads, Weights weights) throws IOException, InterruptedException {
+                                          Path root, int threads, Weights weights, double auditWarn) throws IOException, InterruptedException {
         Path dir = Leaf.dir(root, arm.id(), level.budget);
         Set<String> done = new LinkedHashSet<>();
         Leaf leaf = Leaf.open(dir, done);
         int total = scenarios.size() * level.visits;
         String profile = Profile.key(arm.id(), level.budget);
         double[] w = arm.priced() ? weights.profile(profile) : weights.global();
+        JsonObject prices = new JsonObject();
+        for (Map.Entry<String, Double> e : pricesOf(weights, arm.priced() ? profile : null).entrySet()) prices.add(e.getKey(), e.getValue());
         JsonObject meta = new JsonObject().add("arm", arm.id()).add("budget", level.budget)
                 .add("profile", arm.priced() ? profile : "global (arm is not priced)")
                 .add("weights", new JsonArray().add(w[0]).add(w[1]).add(w[2]))
+                .add("currencyVersion", weights.version()).add("prices", prices)
                 .add("threads", threads).add("host", host()).add("started", Instant.now().toString())
                 .add("turnsTotal", total).add("turnsDoneAtStart", done.size()).add("status", "running");
         writeMeta(dir, meta);
@@ -235,6 +241,8 @@ public final class GridRunner {
         LoadGovernor governor = new LoadGovernor(threads, 5_000L);
         governor.start();
         AtomicInteger finished = new AtomicInteger(done.size()), failures = new AtomicInteger(), skipped = new AtomicInteger();
+        java.util.concurrent.atomic.DoubleAdder pricedUnits = new java.util.concurrent.atomic.DoubleAdder();
+        java.util.concurrent.atomic.LongAdder planMillis = new java.util.concurrent.atomic.LongAdder();
         List<Future<?>> futures = new ArrayList<>();
         long t0 = System.currentTimeMillis();
         try {
@@ -255,6 +263,8 @@ public final class GridRunner {
                             TurnRecord r = arm.priced() ? Episode.run(game, sc, vv, arm, level.budget)
                                     : Episode.run(game, sc, vv, arm, level.budget, weights.global(), "global");
                             leaf.append(sc, vv, arm.id(), level.budget, r);
+                            pricedUnits.add(r.units + r.initUnits);
+                            planMillis.add(r.planMillis);
                             int c = finished.incrementAndGet();
                             if (c % 100 == 0 || c == total)
                                 System.out.println(String.format(Locale.ROOT, "    %s@%d: %d/%d   [%s]", arm.id(), level.budget, c, total, governor.status()));
@@ -278,9 +288,48 @@ public final class GridRunner {
         meta.set("finished", Instant.now().toString()).set("turnsDone", rows).set("failures", failures.get())
             .set("seconds", (System.currentTimeMillis() - t0) / 1000.0).set("governor", governor.status())
             .set("status", complete ? "complete" : "incomplete");
+        JsonObject audit = audit(weights, pricedUnits.sum(), planMillis.sum(), threads);
+        if (audit != null) {
+            meta.set("audit", audit);
+            double share = audit.getDouble("unpricedShare", 0);
+            if (share > auditWarn)
+                System.out.println(String.format(Locale.ROOT, "[run] audit: %.1f%% of %s@%d's plan time is not accounted for by the work its "
+                        + "currency prices (threshold %.0f%%)%s", 100 * share, arm.id(), level.budget, 100 * auditWarn,
+                        audit.getBoolean("sameMachine", false) ? (threads > 1 ? "; measured on " + threads + " threads, and contention "
+                                + "inflates it: the calibration's idle audit is the clean measure" : "")
+                                : "; the weights were calibrated on another machine, so the share includes the speed difference"));
+        }
         writeMeta(dir, meta);
         if (failures.get() > 0) System.out.println("[run] " + failures.get() + " turn(s) of " + arm.id() + "@" + level.budget + " failed; the leaf is not complete");
         return complete;
+    }
+
+    /**
+     * The run's side of the audit: the plan time the priced work predicts (units times the currency's
+     * reference-advance nanoseconds, the definition of a unit) against the plan time measured, over the
+     * turns this invocation ran. Under a version-2 currency what is left is undeclared work; under version
+     * 1 the arms' own operations too. On another machine, or many threads, it also holds the speed
+     * difference, which the record says.
+     */
+    static JsonObject audit(Weights weights, double units, long measuredMillis, int threads) {
+        double refNs = weights.referenceAdvanceNanos();
+        if (!(refNs > 0) || measuredMillis <= 0) return null;
+        double predictedMs = units * refNs / 1e6;
+        String machine = weights.header().get("machine");
+        return new JsonObject().add("unpricedShare", 1 - predictedMs / measuredMillis).add("predictedMs", predictedMs)
+                .add("measuredMs", measuredMillis).add("threads", threads)
+                .add("sameMachine", machine != null && machine.equals(MachineProfile.get().describe()))
+                .add("basis", "(units + initialization units) x referenceAdvanceNanos " + refNs + " ns, against the turns' plan milliseconds");
+    }
+
+    /** The prices a leaf runs under: its profile's every operation, or the global ones for an arm that is not priced. */
+    static Map<String, Double> pricesOf(Weights weights, String profile) {
+        if (profile != null && weights.prices(profile) != null) return weights.prices(profile);
+        Map<String, Double> g = new LinkedHashMap<>();
+        double[] w = weights.global();
+        for (int i = 0; i < 3; i++) g.put(Meter.FORWARD_MODEL_OPS.get(i), w[i]);
+        g.putAll(weights.globalOperations());
+        return g;
     }
 
     private static void writeMeta(Path dir, JsonObject meta) throws IOException {
@@ -318,16 +367,38 @@ public final class GridRunner {
                         JsonObject m = Json.parse(new String(Files.readAllBytes(meta), StandardCharsets.UTF_8)).asObject();
                         String arm = m.getString("arm", ""), profile = Profile.key(arm, m.getLong("budget", 0));
                         boolean priced = module.agents().has(arm) && module.agents().get(arm).priced();
-                        double[] now = priced ? weights.profile(profile) : weights.global();
-                        JsonArray was = m.get("weights").asArray();
-                        boolean same = now != null;
-                        for (int i = 0; same && i < 3; i++) same = Math.abs(was.get(i).asDouble() - now[i]) < 1e-12;
-                        if (!same) out.add(arm + "@" + m.getLong("budget", 0));
+                        if (!samePrices(m, priced ? profile : null, weights)) out.add(arm + "@" + m.getLong("budget", 0));
                     }
                 }
             }
         }
         return out;
+    }
+
+    /**
+     * Whether a leaf's recorded prices are what {@code weights} prices it at now: the forward model's three,
+     * and every operation either side prices. A leaf from before version 2 recorded the three only, so a
+     * version-2 file that prices its arm's own operations is a price change: published version-1 results
+     * are never continued in a version-2 currency.
+     */
+    static boolean samePrices(JsonObject meta, String profile, Weights weights) {
+        double[] now = profile != null ? weights.profile(profile) : weights.global();
+        if (now == null) return false;
+        JsonArray was = meta.get("weights").asArray();
+        for (int i = 0; i < 3; i++) if (Math.abs(was.get(i).asDouble() - now[i]) >= 1e-12) return false;
+        Map<String, Double> nowAll = pricesOf(weights, profile);
+        JsonValue recorded = meta.get("prices");
+        Map<String, Double> wasAll = new LinkedHashMap<>();
+        if (recorded != null && recorded.isObject())
+            for (JsonObject.Member mm : recorded.asObject()) wasAll.put(mm.getName(), mm.getValue().asDouble());
+        Set<String> ops = new LinkedHashSet<>(nowAll.keySet());
+        ops.addAll(wasAll.keySet());
+        ops.removeAll(Meter.FORWARD_MODEL_OPS);
+        for (String op : ops) {
+            Double a = wasAll.get(op), b = nowAll.get(op);
+            if (a == null || b == null || Math.abs(a - b) >= 1e-12) return false;
+        }
+        return true;
     }
 
     private static void retire(Path root, Path checkpoint, String leaf, Split.Half half, Provenance prov, String weightsSha) throws IOException {
