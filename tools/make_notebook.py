@@ -80,6 +80,12 @@ def assert_in_log(name, needle):
     assert needle in latest_log(name), f"'{needle}' not found in the latest {name} run - read {LOGS / (name + '.log')}"
     print(f"[gate] '{needle}' confirmed in {name}")
 
+def summary(results, until="## Budget multiplier"):
+    """Print an analysis's SUMMARY.md up to a section (the provenance, the side by side and the headline)."""
+    text = (pathlib.Path(results) / "SUMMARY.md").read_text(encoding="utf-8")
+    cut = text.find(until)
+    print(text if cut < 0 else text[:cut] + f"... the rest in {pathlib.Path(results) / 'SUMMARY.md'}")
+
 def bundle(name, items, exclude=("seqlog_", "mutlog_", "_running.lock")):
     """Zip the pre-specified files of a stage into <DATA>/bundles/<name>.zip."""
     out = BUNDLES / f"{name}.zip"
@@ -187,30 +193,78 @@ bundle("gates", [LOGS / f"{n}.log" for n in ("check-contract", "check-equivalenc
                                              "probe-support", "test")] + [CALIBRATION / "support_probe_comma-bias-e25.csv"])
 '''
 
+WORKED_CELL = r'''
+# The published worked result (the thesis's AB-EMCTS line, imported), re-analysed here in seconds. It must
+# reproduce games/tribes/results/ab-emcts/report; docs/results/tribes-ab-emcts.md sets it beside the
+# thesis retrospective, number by number.
+WORKED = DATA / GAME / "results" / "ab-emcts-published"
+magat("analyze", "--run", ROOT / "games" / GAME / "results" / "ab-emcts", "--out", WORKED)
+assert_in_log("analyze", "ANALYZE: OK")
+summary(WORKED, until="## Headline (dev)")
+bundle("worked-result", [WORKED / "SUMMARY.md", WORKED / "tables", LOGS / "analyze.log"])
+'''
+
+
 def experiment_cells(game: str) -> list:
-    """One markdown and one code cell per development experiment in experiments/<game>/, so the
-    notebook cannot drift from the specs it runs. The shakedown spec runs inside the shakedown."""
+    """One markdown and one code cell per experiment in experiments/<game>/, so the notebook cannot drift
+    from the specs it runs. A development experiment runs, is analysed, and is bundled. A holdout
+    experiment checks the currency for drift first, refuses to run until its frozen choices exist, then
+    runs and is analysed side by side with its development partner (`<x>-holdout.json` pairs with
+    `<x>-dev.json`). The shakedown spec runs inside the shakedown."""
     cells = []
-    for spec in sorted((ROOT / "experiments" / game).glob("*.json")):
+    specs = {p.name: p for p in sorted((ROOT / "experiments" / game).glob("*.json"))}
+    for spec in specs.values():
         x = json.loads(spec.read_text(encoding="utf-8"))
         if x.get("name") == "shakedown" or "levels" not in x:      # the shakedown's own spec; structure.json
             continue
-        name = x["name"]
+        name, split = x["name"], x.get("split", "all")
         levels = ", ".join(f"{l['budget']:,} x {l['visits']}" for l in x.get("levels", []))
         arms = ", ".join(a["id"] if isinstance(a, dict) else a for a in x.get("arms", []))
+        turns = sum(len(l.get("arms") or x.get("arms", [])) * l["visits"] for l in x["levels"])
         cells.append(md(f"""
 ## Experiment: {name}
 
 {x.get("description", "")}
 
-Split `{x.get("split", "all")}`; baseline `{x.get("baseline")}`; levels (budget x visits) {levels}; arms {arms}.
-Re-running the cell resumes: finished leaves are skipped, a partial leaf continues where it stopped.
+Split `{split}`; baseline `{x.get("baseline")}`; levels (budget x visits) {levels}; arms {arms}
+({turns:,} turns per scenario of the split). Re-running the cell resumes: finished leaves are skipped,
+a partial leaf continues where it stopped.
 """))
-        cells.append(code(f'''SPEC = ROOT / "experiments" / GAME / "{spec.name}"
+        head = f'''SPEC = ROOT / "experiments" / GAME / "{spec.name}"
 RUN = DATA / GAME / "runs" / "{name}"
-magat("run", "--experiment", SPEC, "--split", "{x.get("split", "all")}", "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--out", RUN)
-assert_in_log("run-{x.get("split", "all")}", "RUN: COMPLETE")
-bundle("run-{name}", [RUN / "{x.get("split", "all")}"])''', tags=("experiment",)))
+RESULTS = DATA / GAME / "results" / "{name}"
+'''
+        if split == "holdout":
+            partner = spec.name.replace("-holdout.json", "-dev.json")
+            dev_name = json.loads(specs[partner].read_text(encoding="utf-8"))["name"] if partner in specs else None
+            frozen = x.get("frozen", "")
+            body = head + f'''FROZEN = SPEC.parent / "{frozen}"
+# 1. Drift: does this machine still spend the currency the development half was priced in? Writes nothing.
+magat("calibrate", "--check", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "{x.get("baseline")}", "--weights", WEIGHTS, check=False)
+# 2. The holdout is read once, and only for choices written down before it is read.
+assert FROZEN.is_file(), f"no frozen choices at {{FROZEN}}: write them, from development only, before reading the holdout"
+print(FROZEN.read_text(encoding="utf-8"))
+magat("run", "--experiment", SPEC, "--split", "holdout", "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--frozen", FROZEN, "--out", RUN)
+assert_in_log("run-holdout", "RUN: COMPLETE")
+'''
+            if dev_name:
+                body += f'''DEV = DATA / GAME / "runs" / "{dev_name}" / "dev"
+magat("analyze", "--run", DEV, "--holdout", RUN / "holdout", "--out", RESULTS)
+'''
+            else:
+                body += '''magat("analyze", "--run", RUN / "holdout", "--out", RESULTS)
+'''
+            body += f'''assert_in_log("analyze", "ANALYZE: OK")
+summary(RESULTS)
+bundle("run-{name}", [RUN / "holdout", RESULTS / "SUMMARY.md", RESULTS / "tables", LOGS / "calibrate-check.log"])'''
+            cells.append(code(body, tags=("holdout",)))
+        else:
+            cells.append(code(head + f'''magat("run", "--experiment", SPEC, "--split", "{split}", "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--out", RUN)
+assert_in_log("run-{split}", "RUN: COMPLETE")
+magat("analyze", "--run", RUN / "{split}", "--out", RESULTS)
+assert_in_log("analyze", "ANALYZE: OK")
+summary(RESULTS)
+bundle("run-{name}", [RUN / "{split}", RESULTS / "SUMMARY.md", RESULTS / "tables"])''', tags=("experiment",)))
     return cells
 
 
@@ -265,6 +319,13 @@ the structure check; the replay of published R7615 holdout turns on this machine
 support probe for the biased arms. Nothing downstream runs otherwise.
 """),
     code(GATES_CELL, tags=("gates",)),
+    md("""
+## The worked result, re-analysed
+
+The thesis's AB-EMCTS line, imported into MAGAT's run layout: every measure of the brief, in seconds,
+from the published rows. A newcomer's first look at what a MAGAT report says.
+"""),
+    code(WORKED_CELL, tags=("worked-result",)),
     *experiment_cells("tribes"),
     md("""
 ## Shakedown
@@ -274,8 +335,7 @@ Every moving part at toy size, minutes, exits non-zero on any failure. Run befor
     code('magat("shakedown")\nbundle("shakedown", [LOGS / "shakedown.log"])'),
     md("""
 ---
-*Analysis cells (`magat analyze`, `SUMMARY.md`) and the holdout stage are added by the milestones that
-deliver them (see `MAGAT/DESIGN.md` §16).*
+*The inventory cell (what to keep, with a tick per file) arrives with milestone 7 (see `MAGAT/DESIGN.md` §16).*
 """),
 ]
 

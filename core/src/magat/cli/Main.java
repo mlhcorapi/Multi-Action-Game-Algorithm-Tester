@@ -27,7 +27,7 @@ import java.util.Set;
  */
 public final class Main {
 
-    public static final String VERSION = "0.1.0-m5";
+    public static final String VERSION = "0.1.0-m6";
 
     private Main() {}
 

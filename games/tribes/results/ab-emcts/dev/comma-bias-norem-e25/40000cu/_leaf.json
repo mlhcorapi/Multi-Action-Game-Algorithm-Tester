@@ -1,0 +1,16 @@
+{
+  "arm": "comma-bias-norem-e25",
+  "budget": 40000,
+  "profile": "comma-bias-norem-e25@40000",
+  "weights": null,
+  "status": "complete",
+  "turnsDone": 1600,
+  "failures": 0,
+  "imported": {
+    "config": "Comma_NoRem_e25",
+    "source": ".../Comma_NoRem_e25/40000cu",
+    "turnTelemetrySha256": "4f68bb240ac0a1bd4c1425995800fd719f108cb33dc6592df51560e9251f6337",
+    "resultsSha256": "0334cdd2132a0116fe59b39a733bc301cad5a46d237cfce23be15996d4b9679e",
+    "note": "priced by the thesis runner, which did not record the price per leaf"
+  }
+}

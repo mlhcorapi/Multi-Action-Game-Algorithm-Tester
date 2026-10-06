@@ -1,0 +1,16 @@
+{
+  "arm": "emcts-comma",
+  "budget": 400000,
+  "profile": "emcts-comma@400000",
+  "weights": null,
+  "status": "complete",
+  "turnsDone": 1200,
+  "failures": 0,
+  "imported": {
+    "config": "Comma_Off",
+    "source": ".../Comma_Off/400000cu",
+    "turnTelemetrySha256": "0c91f7979e4d6f649ac1aed95de81ab1b1478e6c1db9bf1af27f9fb5ff430262",
+    "resultsSha256": "7a62905e306c09ca1642fc36a468b92432c43ec4af59ace112e9dd2b226d0d46",
+    "note": "priced by the thesis runner, which did not record the price per leaf"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "arm": "comma-bias-e10",
+  "budget": 80000,
+  "profile": "comma-bias-e10@80000",
+  "weights": null,
+  "status": "complete",
+  "turnsDone": 1600,
+  "failures": 0,
+  "imported": {
+    "config": "Comma_e10",
+    "source": ".../Comma_e10/80000cu",
+    "turnTelemetrySha256": "9c08a106fa16c6d641d025dfdd0dacecab4739ec2736a90ecbba2388a712306e",
+    "resultsSha256": "5d1758b467f7be91a57f7c3a29393509638293d4a804e40fdd4d0b6ea1bf28f5",
+    "note": "priced by the thesis runner, which did not record the price per leaf"
+  }
+}

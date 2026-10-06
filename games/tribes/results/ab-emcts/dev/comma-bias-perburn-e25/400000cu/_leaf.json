@@ -1,0 +1,16 @@
+{
+  "arm": "comma-bias-perburn-e25",
+  "budget": 400000,
+  "profile": "comma-bias-perburn-e25@400000",
+  "weights": null,
+  "status": "complete",
+  "turnsDone": 1200,
+  "failures": 0,
+  "imported": {
+    "config": "Comma_PerBurn_e25",
+    "source": ".../Comma_PerBurn_e25/400000cu",
+    "turnTelemetrySha256": "2713a87bf6e15f7ab67431717bb5ad05e1e8d57040e5ce66ffc9b931de701b54",
+    "resultsSha256": "57b2b509df266181526660c7e0e56f11202aa9e80223161219b637500a19852d",
+    "note": "priced by the thesis runner, which did not record the price per leaf"
+  }
+}
