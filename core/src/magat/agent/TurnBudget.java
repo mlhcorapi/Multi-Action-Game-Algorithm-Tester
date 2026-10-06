@@ -20,6 +20,7 @@ public final class TurnBudget {
     private boolean searchBegun;
     private double initUnits;
     private long initAdvances, initCopies, initEvals;
+    private long[] initOps = new long[0];
 
     private TurnBudget(long units) {
         if (units <= 0) throw new IllegalArgumentException("budget must be positive: " + units);
@@ -34,13 +35,14 @@ public final class TurnBudget {
         return units;
     }
 
-    /** Snapshots the initialization spend and zeroes the meter; the budget bounds what follows. */
+    /** Snapshots the initialization spend (every operation's count) and zeroes the meter; the budget bounds what follows. */
     public void beginSearch() {
         if (searchBegun) throw new IllegalStateException("beginSearch() may be called once per turn");
         initUnits = Meter.units();
         initAdvances = Meter.advances();
         initCopies = Meter.copies();
         initEvals = Meter.evals();
+        initOps = Meter.counts();
         Meter.reset();
         searchBegun = true;
     }
@@ -62,4 +64,7 @@ public final class TurnBudget {
     public long initAdvances()   { return initAdvances; }
     public long initCopies()     { return initCopies; }
     public long initEvals()      { return initEvals; }
+
+    /** The initialization's count of every operation, on the meter's dense indices (empty before {@link #beginSearch}). */
+    public long[] initOperations() { return initOps.clone(); }
 }

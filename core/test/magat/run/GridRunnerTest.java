@@ -63,6 +63,7 @@ public class GridRunnerTest {
         return new AgentFactory<ToyGame.State, ToyGame.Move>() {
             @Override public String id() { return "emcts-twin"; }
             @Override public SearchAgent<ToyGame.State, ToyGame.Move> create(long seed, TurnBudget budget) { return plain.create(seed, budget); }
+            @Override public java.util.List<String> operations() { return plain.operations(); }
         };
     }
 

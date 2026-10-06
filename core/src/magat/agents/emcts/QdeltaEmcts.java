@@ -6,6 +6,7 @@ import magat.meter.Meter;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,13 @@ import java.util.Map;
  *
  * <p>A line-for-line port of the thesis tree's {@code Stage1BiasedAgent} (its sequence-composition
  * log, observation only, is not carried over); the oracle gate asserts every arm against that class.
+ *
+ * <p><b>Its own operations</b> (DESIGN §6.6), beyond {@link Emcts}'s: {@code qd.classify}, resolving
+ * an action's coarse, mid and fine classes for the credit; {@code qd.update}, one table update (timed as
+ * a batch of the one or two a child's credit makes); {@code qd.lookup}, one estimate read (timed as a
+ * batch over the candidates of one decision); {@code qd.shortlist}, one ranking of the repair candidates
+ * down to K, without its lookups; {@code qd.zeropick}, one zero-evaluation replacement, without its
+ * legal-action query and lookups. An arm declares only the ones its parameters make it perform.
  */
 public class QdeltaEmcts<S, A> extends Emcts<S, A> {
 
@@ -39,6 +47,27 @@ public class QdeltaEmcts<S, A> extends Emcts<S, A> {
     public static final int WARMUP_BURNS = 4;
     /** Observations behind a class before reading it is evidence rather than the prior. */
     public static final int MIN_SUPPORT = 3;
+
+    private static final Meter.Op CLASSIFY = Meter.register("qd.classify");
+    private static final Meter.Op UPDATE = Meter.register("qd.update");
+    private static final Meter.Op LOOKUP = Meter.register("qd.lookup");
+    private static final Meter.Op SHORTLIST = Meter.register("qd.shortlist");
+    private static final Meter.Op ZEROPICK = Meter.register("qd.zeropick");
+
+    /** The operations an arm with these parameters records: {@link Emcts#OPERATIONS}, then its own. */
+    public static List<String> operations(QdeltaParams q) {
+        List<String> ops = new ArrayList<>(Emcts.OPERATIONS);
+        ops.add("qd.classify");
+        ops.add("qd.update");
+        boolean reads = q.epsilon < 1.0 || q.repairMode == QdeltaParams.RepairMode.ZERO_EVAL
+                || q.repairMode == QdeltaParams.RepairMode.SHORTLIST_K;
+        if (reads) ops.add("qd.lookup");
+        if (q.repairMode == QdeltaParams.RepairMode.SHORTLIST_K || q.repairMode == QdeltaParams.RepairMode.SHORTLIST_RANDOM)
+            ops.add("qd.shortlist");
+        if (q.repairMode == QdeltaParams.RepairMode.ZERO_EVAL || q.repairMode == QdeltaParams.RepairMode.ZERO_EVAL_RANDOM)
+            ops.add("qd.zeropick");
+        return Collections.unmodifiableList(ops);
+    }
 
     private final QdeltaParams q;
     private final boolean needFine;
@@ -168,7 +197,7 @@ public class QdeltaEmcts<S, A> extends Emcts<S, A> {
             advance(state, seq.get(i));
             newSeq.add(seq.get(i));
         }
-        List<A> available = game.legalActions(state);
+        List<A> available = legalActions(state);
 
         String[] ins = null;
         if (!available.isEmpty()) {
@@ -179,28 +208,41 @@ public class QdeltaEmcts<S, A> extends Emcts<S, A> {
             } else {
                 double bestQ = Double.NEGATIVE_INFINITY;
                 int numTies = 0;
-                for (A cand : available) {
-                    double v = qhat(q.insertKeys, cand, state);
-                    if (v > bestQ) {
-                        bestQ = v;
-                        inserted = cand;
-                        numTies = 1;
-                    } else if (v == bestQ) {
-                        numTies++;
-                        if (rnd.nextInt(numTies) == 0) inserted = cand;
+                try (Meter.Span l = LOOKUP.span(available.size())) {
+                    for (A cand : available) {
+                        double v = qhat(q.insertKeys, cand, state);
+                        if (v > bestQ) {
+                            bestQ = v;
+                            inserted = cand;
+                            numTies = 1;
+                        } else if (v == bestQ) {
+                            numTies++;
+                            if (rnd.nextInt(numTies) == 0) inserted = cand;
+                        }
                     }
                 }
                 biasGreedyPicks++;
                 if (burnsInTurn >= WARMUP_BURNS && inserted != null) {
                     biasPicksAfterWarmup++;
-                    if (observations(q.insertKeys, inserted, state) >= MIN_SUPPORT) biasSupportedAfterWarmup++;
+                    int obs;
+                    try (Meter.Span l = LOOKUP.span()) {
+                        obs = observations(q.insertKeys, inserted, state);
+                    }
+                    if (obs >= MIN_SUPPORT) biasSupportedAfterWarmup++;
                 }
             }
-            ins = classes(inserted, state);
+            try (Meter.Span c = CLASSIFY.span()) {
+                ins = classes(inserted, state);
+            }
             newSeq.add(inserted);
         }
         // The removed action's classes, resolved on the same prefix state (read-only).
-        String[] rem = moveToMutate < seq.size() ? classes(seq.get(moveToMutate), state) : null;
+        String[] rem = null;
+        if (moveToMutate < seq.size()) {
+            try (Meter.Span c = CLASSIFY.span()) {
+                rem = classes(seq.get(moveToMutate), state);
+            }
+        }
 
         for (int i = moveToMutate + 1; i < seq.size(); i++) newSeq.add(seq.get(i));
         newSeq = truncateAtEndTurn(repair(newSeq, clone));
@@ -223,8 +265,13 @@ public class QdeltaEmcts<S, A> extends Emcts<S, A> {
         super.eval(state, node);
         if (!match) return;
         double delta = node.value() - pendingParent.value();
-        if (pendIns != null) addObservation(pendIns, delta);
-        if (q.removalCredit && pendRem != null) addObservation(pendRem, -delta);
+        int updates = (pendIns != null ? 1 : 0) + (q.removalCredit && pendRem != null ? 1 : 0);
+        if (updates > 0) {
+            try (Meter.Span u = UPDATE.span(updates)) {
+                if (pendIns != null) addObservation(pendIns, delta);
+                if (q.removalCredit && pendRem != null) addObservation(pendRem, -delta);
+            }
+        }
         pendingChild = null;
         pendingParent = null;
         pendIns = null;
@@ -255,7 +302,7 @@ public class QdeltaEmcts<S, A> extends Emcts<S, A> {
             if (game.activePlayer(state) != player) return repaired;
             boolean done;
             try {
-                done = game.isLegal(state, child.get(i));
+                done = isLegal(state, child.get(i));
             } catch (RuntimeException e) {
                 done = false;
             }
@@ -298,25 +345,29 @@ public class QdeltaEmcts<S, A> extends Emcts<S, A> {
      * sit at the prior, which is why the granularity matters here.
      */
     private A zeroEvalReplace(S state, boolean rankByTable) {
-        List<A> cands = game.legalActions(state);
-        if (cands.isEmpty()) return null;
-        zeroEvalPicks++;
-        if (!rankByTable) return cands.get(rnd.nextInt(cands.size()));
-        A best = null;
-        double bestQ = Double.NEGATIVE_INFINITY;
-        int numTies = 0;
-        for (A c : cands) {
-            double v = qhat(q.repairKeys, c, state);
-            if (v > bestQ) {
-                bestQ = v;
-                best = c;
-                numTies = 1;
-            } else if (v == bestQ) {
-                numTies++;
-                if (rnd.nextInt(numTies) == 0) best = c;
+        try (Meter.Span z = ZEROPICK.span()) {
+            List<A> cands = legalActions(state);
+            if (cands.isEmpty()) return null;
+            zeroEvalPicks++;
+            if (!rankByTable) return cands.get(rnd.nextInt(cands.size()));
+            A best = null;
+            double bestQ = Double.NEGATIVE_INFINITY;
+            int numTies = 0;
+            try (Meter.Span l = LOOKUP.span(cands.size())) {
+                for (A c : cands) {
+                    double v = qhat(q.repairKeys, c, state);
+                    if (v > bestQ) {
+                        bestQ = v;
+                        best = c;
+                        numTies = 1;
+                    } else if (v == bestQ) {
+                        numTies++;
+                        if (rnd.nextInt(numTies) == 0) best = c;
+                    }
+                }
             }
+            return best;
         }
-        return best;
     }
 
     /**
@@ -325,26 +376,34 @@ public class QdeltaEmcts<S, A> extends Emcts<S, A> {
      * survivors and the same number of random draws, so the two differ in the ranking and in nothing else.
      */
     private A shortlistedReplace(S state, boolean rankByTable) {
-        List<A> cands = game.legalActions(state);
+        List<A> cands = legalActions(state);
         if (cands.isEmpty()) return null;
         List<A> pool = cands;
         if (cands.size() > q.shortlistK) {
-            shortlistCalls++;
-            shortlistSkipped += cands.size() - q.shortlistK;
-            int n = cands.size();
-            double[] score = new double[n];
-            for (int i = 0; i < n; i++) {
-                double jitter = rnd.nextDouble();
-                score[i] = rankByTable ? qhat(q.repairKeys, cands.get(i), state) + jitter * 1e-9 : jitter;
-            }
-            pool = new ArrayList<>(q.shortlistK);
-            boolean[] taken = new boolean[n];
-            for (int k = 0; k < q.shortlistK; k++) {
-                int best = -1;
-                for (int i = 0; i < n; i++)
-                    if (!taken[i] && (best < 0 || score[i] > score[best])) best = i;
-                taken[best] = true;
-                pool.add(cands.get(best));
+            try (Meter.Span sl = SHORTLIST.span()) {
+                shortlistCalls++;
+                shortlistSkipped += cands.size() - q.shortlistK;
+                int n = cands.size();
+                double[] score = new double[n];
+                if (rankByTable) {
+                    try (Meter.Span l = LOOKUP.span(n)) {
+                        for (int i = 0; i < n; i++) {
+                            double jitter = rnd.nextDouble();
+                            score[i] = qhat(q.repairKeys, cands.get(i), state) + jitter * 1e-9;
+                        }
+                    }
+                } else {
+                    for (int i = 0; i < n; i++) score[i] = rnd.nextDouble();
+                }
+                pool = new ArrayList<>(q.shortlistK);
+                boolean[] taken = new boolean[n];
+                for (int k = 0; k < q.shortlistK; k++) {
+                    int best = -1;
+                    for (int i = 0; i < n; i++)
+                        if (!taken[i] && (best < 0 || score[i] > score[best])) best = i;
+                    taken[best] = true;
+                    pool.add(cands.get(best));
+                }
             }
         }
         A bestAction = null;

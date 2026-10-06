@@ -28,6 +28,19 @@ public interface AgentFactory<S, A> {
         return true;
     }
 
+    /**
+     * The algorithm operations this arm records through the meter, beyond the forward model's three
+     * (DESIGN §6.6): lowercase dot-separated names led by the algorithm family ({@code qd.update}). An
+     * arm records exactly these: a version-2 currency prices each per {@code (arm, budget)}, the
+     * validator refuses a run whose currency leaves one unpriced, and a turn that records an operation
+     * its factory did not declare is refused. A factory registers its names with
+     * {@link magat.meter.Meter#declare} when it is constructed. Empty for an arm whose only work is the
+     * forward model.
+     */
+    default java.util.List<String> operations() {
+        return java.util.Collections.emptyList();
+    }
+
     /** One line for banners and the registry listing. */
     default String description() {
         return "";

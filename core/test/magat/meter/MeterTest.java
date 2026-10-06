@@ -72,4 +72,132 @@ public class MeterTest {
         assertEquals(2, other[0]);
         assertEquals(1, Meter.advances());
     }
+
+    // ------------------------------------------------------------------ algorithm operations
+
+    private static final Meter.Op WORK = Meter.register("metertest.work");
+    private static final Meter.Op INNER = Meter.register("metertest.inner");
+
+    private static void spin(long nanos) {
+        long until = System.nanoTime() + nanos;
+        while (System.nanoTime() < until) { /* busy */ }
+    }
+
+    @Test
+    public void algorithmOperationsAreFreeUnderVersionOneAndPricedUnderVersionTwo() {
+        Meter.install(weights("magat.weights.version = 1", "reference = a@1",
+                "profile.a@1.wAdvance = 1.5", "profile.a@1.wCopy = 0.2", "profile.a@1.wEval = 0.05"));
+        Meter.useProfile("a@1");
+        Meter.reset();
+        Meter.onAdvance(); Meter.onCopy(); Meter.onEval();
+        double fm = Meter.units();
+        WORK.count(7);
+        INNER.count();
+        assertEquals("under version 1 an algorithm operation weighs exactly nothing: the same double", fm, Meter.units(), 0.0);
+        assertTrue(Meter.unpricedCounted(null).isEmpty());
+
+        Meter.install(weights("magat.weights.version = 2", "reference = a@1",
+                "profile.a@1.w.advance = 1.5", "profile.a@1.w.copy = 0.2", "profile.a@1.w.eval = 0.05",
+                "profile.a@1.w.metertest.work = 0.25"));
+        Meter.useProfile("a@1");
+        Meter.reset();
+        Meter.onAdvance(); Meter.onCopy(); Meter.onEval();
+        WORK.count(7);
+        assertEquals(1.5 + 0.2 + 0.05 + 7 * 0.25, Meter.units(), 1e-12);
+        assertEquals(0.25, Meter.activeWeight("metertest.work"), 0);
+        assertTrue(Meter.unpricedCounted(null).isEmpty());
+        INNER.count();
+        assertEquals("an operation a version-2 profile does not price is named", java.util.Collections.singletonList("metertest.inner"),
+                Meter.unpricedCounted(null));
+        // A probe's explicit triple prices the forward model only, whatever the file's version.
+        Meter.useWeights(new double[]{1, 0.16, 0.077}, "probe");
+        assertEquals(0.0, Meter.activeWeight("metertest.work"), 0);
+        assertTrue(Meter.unpricedCounted(null).isEmpty());
+    }
+
+    @Test
+    public void aSpanIsTimedWithoutWhatIsNestedInIt() {
+        Meter.resetNanos();
+        Meter.reset();
+        Meter.PROFILE = true;
+        try {
+            try (Meter.Span outer = WORK.span()) {
+                spin(2_000_000);
+                try (Meter.Span inner = INNER.span()) {
+                    spin(3_000_000);
+                }
+                Meter.addAdvanceNanos(1_000_000);    // a forward-model call timed by MeteredGame inside the span
+                spin(1_000_000);
+            }
+        } finally {
+            Meter.PROFILE = false;
+        }
+        int w = Meter.index("metertest.work"), in = Meter.index("metertest.inner");
+        assertEquals(1, Meter.count(w));
+        assertEquals(1, Meter.timed(w));
+        assertTrue("the inner span's own time: " + Meter.nanos(in), Meter.nanos(in) >= 3_000_000 && Meter.nanos(in) < 6_000_000);
+        // The outer span spun 3 ms of its own; the inner span's 3 ms and the advance's 1 ms are subtracted.
+        assertTrue("the outer span's own time: " + Meter.nanos(w), Meter.nanos(w) >= 1_900_000 && Meter.nanos(w) < 5_000_000);
+        assertEquals(1, Meter.timed(Meter.ADVANCE));
+    }
+
+    @Test
+    public void aBatchSpanCountsItsOccurrencesAndAnUntimedCountIsNotTimed() {
+        Meter.resetNanos();
+        Meter.reset();
+        Meter.PROFILE = true;
+        try (Meter.Span s = WORK.span(5)) {
+            spin(100_000);
+        } finally {
+            Meter.PROFILE = false;
+        }
+        WORK.count(3);
+        int w = Meter.index("metertest.work");
+        assertEquals(8, Meter.count(w));
+        assertEquals("five occurrences timed, three only counted", 5, Meter.timed(w));
+        assertTrue(Meter.nanos(w) >= 100_000);
+        // Not profiling, a span only counts.
+        Meter.resetNanos();
+        try (Meter.Span s = WORK.span()) {
+            spin(10_000);
+        }
+        assertEquals(9, Meter.count(w));
+        assertEquals(0, Meter.nanos(w));
+        assertEquals(0, Meter.timed(w));
+    }
+
+    @Test
+    public void spansCloseInnermostFirst() {
+        Meter.PROFILE = true;
+        Meter.Span a = WORK.span();
+        Meter.Span b = INNER.span();
+        try {
+            a.close();
+            fail("closing the outer span first must be refused");
+        } catch (IllegalStateException expected) {
+        } finally {
+            b.close();
+            a.close();
+            Meter.PROFILE = false;
+        }
+    }
+
+    @Test
+    public void namesFollowTheRuleAndRegistrationIsIdempotent() {
+        assertSame(WORK, Meter.register("metertest.work"));
+        assertSame(WORK, Meter.operation("metertest.work"));
+        for (String bad : new String[]{"nodot", "Qd.update", "qd.", "qd..x", "advance", "qd.up-date", "1qd.x"}) {
+            try {
+                Meter.register(bad);
+                fail(bad);
+            } catch (IllegalArgumentException expected) { }
+        }
+        try {
+            Meter.op("metertest.never.registered");
+            fail();
+        } catch (IllegalStateException expected) { }
+        assertEquals(0, Meter.index("advance"));
+        assertEquals(-1, Meter.index("metertest.never.registered"));
+        assertTrue(Meter.operations().contains("metertest.work"));
+    }
 }
