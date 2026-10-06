@@ -530,85 +530,89 @@ No curve rows (`curve.csv`) in this tree.
 ## Diversity (holdout, within-run only)
 
 How each arm spent its budget, never whether that was good. The duplicate share is per mutation event
-where the agent reports them, else per node. Agent telemetry means are in `tables/efficiency.csv`.
+where the agent reports them, else per node. `Unpriced` is the audit: the share of the plan time the
+currency's priced work does not predict, measured where the turns ran (so it also holds contention and
+any machine difference). Agent telemetry and operation counts are in `tables/efficiency.csv`.
 
-| Budget | Arm | Nodes | Unique | Dup share | Nodes vs baseline | Plan ms |
-|---|---|---|---|---|---|---|
-| 80000 | comma-rand15 | 913.9 | 825.3 | 0.072 | 2.00 | 6075 |
-| 80000 | comma-short15 | 893.9 | 809.0 | 0.070 | 1.96 | 6132 |
-| 80000 | comma-short15-coarse | 972.0 | 876.0 | 0.074 | 2.13 | 6610 |
-| 80000 | comma-z0-coarse | 1435.3 | 1293.2 | 0.077 | 3.14 | 6956 |
-| 80000 | comma-z0-fine | 1329.6 | 1178.1 | 0.084 | 2.91 | 6451 |
-| 80000 | comma-z0-mid | 1421.2 | 1279.4 | 0.076 | 3.11 | 6922 |
-| 80000 | comma-z0-random | 1373.4 | 1233.8 | 0.072 | 3.00 | 6393 |
-| 80000 | emcts-comma | 457.2 | 407.7 | 0.064 | 1.00 | 5990 |
-| 400000 | comma-rand15 | 4690.4 | 4171.0 | 0.080 | 1.88 | 21354 |
-| 400000 | comma-short15 | 5134.1 | 4545.5 | 0.080 | 2.06 | 23706 |
-| 400000 | comma-short15-coarse | 5265.4 | 4657.6 | 0.083 | 2.12 | 24303 |
-| 400000 | comma-z0-coarse | 7788.7 | 6851.2 | 0.088 | 3.13 | 25904 |
-| 400000 | comma-z0-fine | 7307.1 | 6282.5 | 0.101 | 2.94 | 23067 |
-| 400000 | comma-z0-mid | 7387.2 | 6481.6 | 0.089 | 2.97 | 24045 |
-| 400000 | comma-z0-random | 6822.6 | 6042.7 | 0.080 | 2.74 | 21294 |
-| 400000 | emcts-comma | 2488.8 | 2176.7 | 0.073 | 1.00 | 21206 |
+| Budget | Arm | Nodes | Unique | Dup share | Nodes vs baseline | Plan ms | Unpriced |
+|---|---|---|---|---|---|---|---|
+| 80000 | comma-rand15 | 913.9 | 825.3 | 0.072 | 2.00 | 6075 | - |
+| 80000 | comma-short15 | 893.9 | 809.0 | 0.070 | 1.96 | 6132 | - |
+| 80000 | comma-short15-coarse | 972.0 | 876.0 | 0.074 | 2.13 | 6610 | - |
+| 80000 | comma-z0-coarse | 1435.3 | 1293.2 | 0.077 | 3.14 | 6956 | - |
+| 80000 | comma-z0-fine | 1329.6 | 1178.1 | 0.084 | 2.91 | 6451 | - |
+| 80000 | comma-z0-mid | 1421.2 | 1279.4 | 0.076 | 3.11 | 6922 | - |
+| 80000 | comma-z0-random | 1373.4 | 1233.8 | 0.072 | 3.00 | 6393 | - |
+| 80000 | emcts-comma | 457.2 | 407.7 | 0.064 | 1.00 | 5990 | - |
+| 400000 | comma-rand15 | 4690.4 | 4171.0 | 0.080 | 1.88 | 21354 | - |
+| 400000 | comma-short15 | 5134.1 | 4545.5 | 0.080 | 2.06 | 23706 | - |
+| 400000 | comma-short15-coarse | 5265.4 | 4657.6 | 0.083 | 2.12 | 24303 | - |
+| 400000 | comma-z0-coarse | 7788.7 | 6851.2 | 0.088 | 3.13 | 25904 | - |
+| 400000 | comma-z0-fine | 7307.1 | 6282.5 | 0.101 | 2.94 | 23067 | - |
+| 400000 | comma-z0-mid | 7387.2 | 6481.6 | 0.089 | 2.97 | 24045 | - |
+| 400000 | comma-z0-random | 6822.6 | 6042.7 | 0.080 | 2.74 | 21294 | - |
+| 400000 | emcts-comma | 2488.8 | 2176.7 | 0.073 | 1.00 | 21206 | - |
 
 ## Diversity (dev, within-run only)
 
 How each arm spent its budget, never whether that was good. The duplicate share is per mutation event
-where the agent reports them, else per node. Agent telemetry means are in `tables/efficiency.csv`.
+where the agent reports them, else per node. `Unpriced` is the audit: the share of the plan time the
+currency's priced work does not predict, measured where the turns ran (so it also holds contention and
+any machine difference). Agent telemetry and operation counts are in `tables/efficiency.csv`.
 
-| Budget | Arm | Nodes | Unique | Dup share | Nodes vs baseline | Plan ms |
-|---|---|---|---|---|---|---|
-| 40000 | comma-bias-coarse-e25 | 481.7 | 308.1 | 0.197 | 1.29 | 4585 |
-| 40000 | comma-bias-e10 | 565.3 | 309.7 | 0.250 | 1.51 | 4611 |
-| 40000 | comma-bias-e25 | 532.6 | 327.8 | 0.218 | 1.42 | 4688 |
-| 40000 | comma-bias-e50 | 437.0 | 330.9 | 0.152 | 1.17 | 4465 |
-| 40000 | comma-bias-e75 | 418.9 | 355.8 | 0.099 | 1.12 | 4603 |
-| 40000 | comma-bias-norem-e25 | 388.3 | 288.7 | 0.117 | 1.04 | 4470 |
-| 40000 | comma-bias-perburn-e25 | 497.6 | 315.5 | 0.209 | 1.33 | 4482 |
-| 40000 | comma-short15 | 697.8 | 640.1 | 0.066 | 1.86 | 4540 |
-| 40000 | comma-short15-bias-e25 | 944.8 | 584.5 | 0.254 | 2.52 | 4917 |
-| 40000 | comma-short5-bias-e25 | 1189.0 | 711.0 | 0.284 | 3.18 | 5250 |
-| 40000 | emcts | 435.5 | 349.1 | 0.103 | 1.16 | 4393 |
-| 40000 | emcts-comma | 374.2 | 338.1 | 0.062 | 1.00 | 4345 |
-| 80000 | comma-bias-coarse-e25 | 620.0 | 386.5 | 0.204 | 1.31 | 5929 |
-| 80000 | comma-bias-e10 | 725.6 | 384.2 | 0.261 | 1.53 | 5919 |
-| 80000 | comma-bias-e25 | 699.5 | 417.6 | 0.228 | 1.47 | 6123 |
-| 80000 | comma-bias-e50 | 564.9 | 422.0 | 0.157 | 1.19 | 5820 |
-| 80000 | comma-bias-e75 | 513.3 | 434.4 | 0.101 | 1.08 | 5923 |
-| 80000 | comma-bias-fine-e25 | 686.4 | 384.1 | 0.322 | 1.44 | 6133 |
-| 80000 | comma-bias-norem-e25 | 524.7 | 378.3 | 0.123 | 1.10 | 5957 |
-| 80000 | comma-bias-perburn-e25 | 662.9 | 408.4 | 0.217 | 1.40 | 5925 |
-| 80000 | comma-rand15 | 939.3 | 860.8 | 0.068 | 1.98 | 6155 |
-| 80000 | comma-short15 | 917.8 | 839.7 | 0.068 | 1.93 | 6046 |
-| 80000 | comma-short15-bias-e25 | 1193.3 | 721.2 | 0.263 | 2.51 | 6248 |
-| 80000 | comma-short15-coarse | 978.3 | 894.0 | 0.070 | 2.06 | 6583 |
-| 80000 | comma-short5-bias-e25 | 1490.3 | 874.9 | 0.290 | 3.14 | 6589 |
-| 80000 | comma-z0-coarse | 1457.6 | 1332.5 | 0.072 | 3.07 | 6778 |
-| 80000 | comma-z0-fine | 1334.2 | 1194.4 | 0.082 | 2.81 | 6306 |
-| 80000 | comma-z0-mid | 1426.8 | 1296.6 | 0.073 | 3.00 | 6741 |
-| 80000 | comma-z0-random | 1369.1 | 1251.4 | 0.068 | 2.88 | 6199 |
-| 80000 | emcts | 569.2 | 443.9 | 0.113 | 1.20 | 5966 |
-| 80000 | emcts-bias-e25 | 694.6 | 371.6 | 0.259 | 1.46 | 5882 |
-| 80000 | emcts-comma | 475.0 | 428.2 | 0.063 | 1.00 | 5569 |
-| 400000 | comma-bias-coarse-e25 | 3339.5 | 1766.2 | 0.248 | 1.29 | 21592 |
-| 400000 | comma-bias-e10 | 4012.8 | 1607.1 | 0.339 | 1.55 | 20129 |
-| 400000 | comma-bias-e25 | 4432.0 | 2124.0 | 0.288 | 1.71 | 25446 |
-| 400000 | comma-bias-e50 | 2904.6 | 1990.8 | 0.190 | 1.12 | 20871 |
-| 400000 | comma-bias-e75 | 2604.7 | 2132.7 | 0.116 | 1.01 | 20894 |
-| 400000 | comma-bias-fine-e25 | 3355.3 | 1617.3 | 0.408 | 1.30 | 20966 |
-| 400000 | comma-bias-norem-e25 | 3285.7 | 1882.5 | 0.171 | 1.27 | 21756 |
-| 400000 | comma-bias-perburn-e25 | 2906.7 | 1675.9 | 0.245 | 1.12 | 18619 |
-| 400000 | comma-rand15 | 4857.3 | 4371.0 | 0.078 | 1.88 | 20666 |
-| 400000 | comma-short15 | 5291.7 | 4750.6 | 0.077 | 2.04 | 23361 |
-| 400000 | comma-short15-bias-e25 | 5951.5 | 3090.8 | 0.301 | 2.30 | 20189 |
-| 400000 | comma-short15-coarse | 4803.5 | 4316.7 | 0.078 | 1.85 | 20644 |
-| 400000 | comma-short5-bias-e25 | 7356.6 | 3843.6 | 0.317 | 2.84 | 21574 |
-| 400000 | comma-z0-coarse | 8006.5 | 7161.8 | 0.084 | 3.09 | 26129 |
-| 400000 | comma-z0-fine | 7317.7 | 6401.3 | 0.097 | 2.83 | 23243 |
-| 400000 | comma-z0-mid | 7414.6 | 6596.6 | 0.086 | 2.86 | 24270 |
-| 400000 | comma-z0-random | 6884.1 | 6223.2 | 0.075 | 2.66 | 21531 |
-| 400000 | emcts | 2538.5 | 1651.8 | 0.183 | 0.98 | 17550 |
-| 400000 | emcts-comma | 2589.7 | 2278.4 | 0.072 | 1.00 | 20822 |
+| Budget | Arm | Nodes | Unique | Dup share | Nodes vs baseline | Plan ms | Unpriced |
+|---|---|---|---|---|---|---|---|
+| 40000 | comma-bias-coarse-e25 | 481.7 | 308.1 | 0.197 | 1.29 | 4585 | - |
+| 40000 | comma-bias-e10 | 565.3 | 309.7 | 0.250 | 1.51 | 4611 | - |
+| 40000 | comma-bias-e25 | 532.6 | 327.8 | 0.218 | 1.42 | 4688 | - |
+| 40000 | comma-bias-e50 | 437.0 | 330.9 | 0.152 | 1.17 | 4465 | - |
+| 40000 | comma-bias-e75 | 418.9 | 355.8 | 0.099 | 1.12 | 4603 | - |
+| 40000 | comma-bias-norem-e25 | 388.3 | 288.7 | 0.117 | 1.04 | 4470 | - |
+| 40000 | comma-bias-perburn-e25 | 497.6 | 315.5 | 0.209 | 1.33 | 4482 | - |
+| 40000 | comma-short15 | 697.8 | 640.1 | 0.066 | 1.86 | 4540 | - |
+| 40000 | comma-short15-bias-e25 | 944.8 | 584.5 | 0.254 | 2.52 | 4917 | - |
+| 40000 | comma-short5-bias-e25 | 1189.0 | 711.0 | 0.284 | 3.18 | 5250 | - |
+| 40000 | emcts | 435.5 | 349.1 | 0.103 | 1.16 | 4393 | - |
+| 40000 | emcts-comma | 374.2 | 338.1 | 0.062 | 1.00 | 4345 | - |
+| 80000 | comma-bias-coarse-e25 | 620.0 | 386.5 | 0.204 | 1.31 | 5929 | - |
+| 80000 | comma-bias-e10 | 725.6 | 384.2 | 0.261 | 1.53 | 5919 | - |
+| 80000 | comma-bias-e25 | 699.5 | 417.6 | 0.228 | 1.47 | 6123 | - |
+| 80000 | comma-bias-e50 | 564.9 | 422.0 | 0.157 | 1.19 | 5820 | - |
+| 80000 | comma-bias-e75 | 513.3 | 434.4 | 0.101 | 1.08 | 5923 | - |
+| 80000 | comma-bias-fine-e25 | 686.4 | 384.1 | 0.322 | 1.44 | 6133 | - |
+| 80000 | comma-bias-norem-e25 | 524.7 | 378.3 | 0.123 | 1.10 | 5957 | - |
+| 80000 | comma-bias-perburn-e25 | 662.9 | 408.4 | 0.217 | 1.40 | 5925 | - |
+| 80000 | comma-rand15 | 939.3 | 860.8 | 0.068 | 1.98 | 6155 | - |
+| 80000 | comma-short15 | 917.8 | 839.7 | 0.068 | 1.93 | 6046 | - |
+| 80000 | comma-short15-bias-e25 | 1193.3 | 721.2 | 0.263 | 2.51 | 6248 | - |
+| 80000 | comma-short15-coarse | 978.3 | 894.0 | 0.070 | 2.06 | 6583 | - |
+| 80000 | comma-short5-bias-e25 | 1490.3 | 874.9 | 0.290 | 3.14 | 6589 | - |
+| 80000 | comma-z0-coarse | 1457.6 | 1332.5 | 0.072 | 3.07 | 6778 | - |
+| 80000 | comma-z0-fine | 1334.2 | 1194.4 | 0.082 | 2.81 | 6306 | - |
+| 80000 | comma-z0-mid | 1426.8 | 1296.6 | 0.073 | 3.00 | 6741 | - |
+| 80000 | comma-z0-random | 1369.1 | 1251.4 | 0.068 | 2.88 | 6199 | - |
+| 80000 | emcts | 569.2 | 443.9 | 0.113 | 1.20 | 5966 | - |
+| 80000 | emcts-bias-e25 | 694.6 | 371.6 | 0.259 | 1.46 | 5882 | - |
+| 80000 | emcts-comma | 475.0 | 428.2 | 0.063 | 1.00 | 5569 | - |
+| 400000 | comma-bias-coarse-e25 | 3339.5 | 1766.2 | 0.248 | 1.29 | 21592 | - |
+| 400000 | comma-bias-e10 | 4012.8 | 1607.1 | 0.339 | 1.55 | 20129 | - |
+| 400000 | comma-bias-e25 | 4432.0 | 2124.0 | 0.288 | 1.71 | 25446 | - |
+| 400000 | comma-bias-e50 | 2904.6 | 1990.8 | 0.190 | 1.12 | 20871 | - |
+| 400000 | comma-bias-e75 | 2604.7 | 2132.7 | 0.116 | 1.01 | 20894 | - |
+| 400000 | comma-bias-fine-e25 | 3355.3 | 1617.3 | 0.408 | 1.30 | 20966 | - |
+| 400000 | comma-bias-norem-e25 | 3285.7 | 1882.5 | 0.171 | 1.27 | 21756 | - |
+| 400000 | comma-bias-perburn-e25 | 2906.7 | 1675.9 | 0.245 | 1.12 | 18619 | - |
+| 400000 | comma-rand15 | 4857.3 | 4371.0 | 0.078 | 1.88 | 20666 | - |
+| 400000 | comma-short15 | 5291.7 | 4750.6 | 0.077 | 2.04 | 23361 | - |
+| 400000 | comma-short15-bias-e25 | 5951.5 | 3090.8 | 0.301 | 2.30 | 20189 | - |
+| 400000 | comma-short15-coarse | 4803.5 | 4316.7 | 0.078 | 1.85 | 20644 | - |
+| 400000 | comma-short5-bias-e25 | 7356.6 | 3843.6 | 0.317 | 2.84 | 21574 | - |
+| 400000 | comma-z0-coarse | 8006.5 | 7161.8 | 0.084 | 3.09 | 26129 | - |
+| 400000 | comma-z0-fine | 7317.7 | 6401.3 | 0.097 | 2.83 | 23243 | - |
+| 400000 | comma-z0-mid | 7414.6 | 6596.6 | 0.086 | 2.86 | 24270 | - |
+| 400000 | comma-z0-random | 6884.1 | 6223.2 | 0.075 | 2.66 | 21531 | - |
+| 400000 | emcts | 2538.5 | 1651.8 | 0.183 | 0.98 | 17550 | - |
+| 400000 | emcts-comma | 2589.7 | 2278.4 | 0.072 | 1.00 | 20822 | - |
 
 ## Design (holdout): scenarios versus visits
 

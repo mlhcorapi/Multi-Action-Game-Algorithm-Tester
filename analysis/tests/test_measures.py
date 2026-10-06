@@ -217,6 +217,49 @@ class SyntheticTree(unittest.TestCase):
         self.assertTrue(any("poor@1000" in n and "no copy" in n for n in notes), notes)
         self.assertNotIn("weak", set(spend.Arm))
 
+    # ------------------------------------------------------------------ currency version 2
+    def test_a_version_two_leaf_reprices_with_its_operations(self):
+        tree = syn.build_v2(self.tmp / "v2")
+        sp = load.load_split(tree)
+        w = load.read_weights(syn.write_weights_v2(self.tmp / "v2.properties"))
+        self.assertEqual(w["version"], 2)
+        self.assertEqual(w["profiles"]["good@1000"]["x.step"], 0.6)
+        table, spend, notes = measures.reprice(sp.turns, sp.leaves, w, "base", "dev", n=50)
+        self.assertEqual(notes, [])
+        for r in spend.itertuples(index=False):
+            self.assertAlmostEqual(r.Ratio, 1.0, places=9, msg=f"{r.Arm}@{r.Budget}: its own currency reproduces its units")
+        _, spend2, _ = measures.reprice(sp.turns, sp.leaves, load.read_weights(syn.write_weights_v2(self.tmp / "v2x2.properties", 2.0)),
+                                        "base", "dev", n=50)
+        self.assertTrue(np.allclose(spend2.Ratio, 2.0))
+
+    def test_currencies_that_price_different_work_are_not_mixed(self):
+        tree = syn.build_v2(self.tmp / "v2mix")
+        sp = load.load_split(tree)
+        # A version-2 leaf in a version-1 currency: the leaf counts operations the file does not price.
+        _, spend, notes = measures.reprice(sp.turns, sp.leaves, load.read_weights(syn.write_weights(self.tmp / "v1.properties")),
+                                           "base", "dev", n=50)
+        self.assertTrue(spend.empty)
+        self.assertTrue(any("x.step" in n and "does not price" in n for n in notes), notes)
+        # A file that leaves one of the leaf's operations unpriced: likewise.
+        _, spend, notes = measures.reprice(sp.turns, sp.leaves, load.read_weights(syn.write_weights_v2(self.tmp / "v2d.properties",
+                                                                                                         drop="x.look")), "base", "dev", n=50)
+        self.assertTrue(spend.empty)
+        # A version-1 leaf in a version-2 currency: the file prices operations the leaf never counted.
+        _, spend, notes = measures.reprice(self.t, self.sp.leaves, load.read_weights(syn.write_weights_v2(self.tmp / "v2b.properties")),
+                                           "base", "dev", n=50)
+        self.assertTrue(any("does not count" in n for n in notes), notes)
+
+    def test_efficiency_carries_the_audit_and_the_operation_counts(self):
+        sp = load.load_split(syn.build_v2(self.tmp / "v2eff"))
+        e = measures.efficiency(sp.turns, "base", ref_ns=50_000)
+        b = self.row(e, Arm="base", Budget=1000)
+        g = sp.turns[(sp.turns.arm == "base") & (sp.turns.budget == 1000)]
+        want = 1 - float((g["units"] + g["init_units"]).sum()) * 50_000 / 1e6 / float(g["plan_ms"].sum())
+        self.assertAlmostEqual(b.UnpricedShare, want, places=9)
+        self.assertIn("op_x.step", e.columns)
+        self.assertTrue(math.isnan(self.row(measures.efficiency(sp.turns, "base"), Arm="base", Budget=1000).UnpricedShare),
+                        "without the reference nanoseconds there is no audit")
+
     # ------------------------------------------------------------------ bootstrap
     def test_the_bootstrap_is_deterministic_per_row(self):
         d = pd.DataFrame(dict(scenario=np.repeat(np.arange(20), 3), diff=np.random.default_rng(1).normal(size=60)))

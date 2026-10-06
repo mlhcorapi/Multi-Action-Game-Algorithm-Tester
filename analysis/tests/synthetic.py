@@ -119,6 +119,53 @@ def write_spec(path: pathlib.Path) -> pathlib.Path:
     return path
 
 
+OPS = {"base": {"x.step": 0.5, "x.look": 0.01}, "good": {"x.step": 0.6, "x.look": 0.02}}
+
+
+def build_v2(root: pathlib.Path, split="dev") -> pathlib.Path:
+    """A version-2 tree: two leaves of `base` and one of `good`, each row counting two operations of the
+    arm's own (`op_x.step`, `op_x.look`) after `seq_len`, units priced on all of them (WEIGHTS and OPS)."""
+    d = root / split
+    d.mkdir(parents=True, exist_ok=True)
+    for arm, budget, equiv, ms in (("base", 1000, 1000, 100), ("base", 4000, 4000, 400), ("good", 1000, 2000, 250)):
+        w, ow = WEIGHTS[f"{arm}@{budget}"], OPS[arm]
+        lines = [",".join(COLUMNS + ["op_x.step", "op_x.look", "t_mutEvents"])]
+        for s in range(1, S + 1):
+            for v in range(V):
+                a, c, e, step, look = 1000 + s, 400 + v, 300, 40 + s, 400 + 10 * v
+                units = a * w[0] + c * w[1] + e * w[2] + step * ow["x.step"] + look * ow["x.look"]
+                initial = 1000 + 10 * s
+                final = initial + gain(equiv, s, v)
+                lines.append(",".join(str(x) for x in [s, SOURCES[s], 10, v, arm, budget, repr(initial), repr(final), 0, repr(initial),
+                                                       a, c, e, repr(units), 10, 5, 5, "10.75", ms, 3, 50 + s, 45 + s, 5, 20,
+                                                       step, look, 49 + s]))
+        leaf = d / arm / f"{budget}cu"
+        leaf.mkdir(parents=True, exist_ok=True)
+        (leaf / "turns.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        (leaf / "_leaf.json").write_text(json.dumps(dict(arm=arm, budget=budget, profile=f"{arm}@{budget}", status="complete")),
+                                         encoding="utf-8")
+    run = dict(format=1, split=split, game=dict(id="toy"), portfolio=dict(identity="synthetic"),
+               weights=dict(path="synthetic-v2.properties", sha256="0" * 64, reference="base@1000",
+                            header={"referenceAdvanceNanos": "50000"}))
+    (d / "_run.json").write_text(json.dumps(run), encoding="utf-8")
+    (d / "_split.txt").write_text(split + "\n", encoding="utf-8")
+    return d
+
+
+def write_weights_v2(path: pathlib.Path, scale=1.0, drop=None) -> pathlib.Path:
+    """The version-2 currency build_v2's units were priced in (times `scale`), without operation `drop` if given."""
+    lines = ["magat.weights.version = 2", "game = toy", "reference = base@1000", "referenceAdvanceNanos = 50000",
+             "global.w.advance = 1.0", "global.w.copy = 0.1", "global.w.eval = 0.05"]
+    for name in ("base@1000", "base@4000", "good@1000"):
+        a, c, e = WEIGHTS[name]
+        lines += [f"profile.{name}.w.advance = {a * scale}", f"profile.{name}.w.copy = {c * scale}", f"profile.{name}.w.eval = {e * scale}"]
+        for op, w in OPS[name.split("@")[0]].items():
+            if op != drop:
+                lines.append(f"profile.{name}.w.{op} = {w * scale}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
 def write_weights(path: pathlib.Path, scale=1.0) -> pathlib.Path:
     lines = ["magat.weights.version = 1", "game = toy", "reference = base@1000",
              "global.wAdvance = 1.0", "global.wCopy = 0.1", "global.wEval = 0.05"]

@@ -212,25 +212,47 @@ def comparisons(*specs) -> list:
 
 
 # --------------------------------------------------------------------------- weights files
+FORWARD_MODEL = ("advance", "copy", "eval")
+_V1_KEYS = {"wAdvance": "advance", "wCopy": "copy", "wEval": "eval"}
+
+
 def read_weights(path) -> dict:
-    """A MAGAT weights file (version 1): the header and {profile: (wAdvance, wCopy, wEval)}."""
-    header, prof = {}, {}
+    """A MAGAT weights file, version 1 or 2: the header, and every profile's prices as {op: weight}.
+
+    Version 1 prices the forward model (profile.<p>.wAdvance, wCopy, wEval); version 2 every operation an
+    arm declares (profile.<p>.w.<op>). Either way a profile's prices are keyed advance, copy, eval and the
+    operation names, so re-pricing reads one shape. Arm ids hold no dots and budgets are digits, so a
+    profile's name ends at the first dot after its '@'."""
+    header, prof, glob_ops = {}, {}, {}
     for line in pathlib.Path(path).read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, v = (s.strip() for s in line.split("=", 1))
         if k.startswith("profile."):
-            name, _, op = k[len("profile."):].rpartition(".")
-            if op in ("wAdvance", "wCopy", "wEval"):
-                prof.setdefault(name, {})[op] = float(v)
+            rest = k[len("profile."):]
+            at = rest.find("@")
+            dot = rest.find(".", at) if at >= 0 else -1
+            if dot <= 0:
+                continue
+            name, field = rest[:dot], rest[dot + 1:]
+            if field in _V1_KEYS:
+                prof.setdefault(name, {})[_V1_KEYS[field]] = float(v)
+            elif field.startswith("w."):
+                prof.setdefault(name, {})[field[2:]] = float(v)
+        elif k.startswith("global.w."):
+            glob_ops[k[len("global.w."):]] = float(v)
         else:
             header[k] = v
-    profiles = {n: (w["wAdvance"], w["wCopy"], w["wEval"]) for n, w in prof.items()
-                if all(o in w for o in ("wAdvance", "wCopy", "wEval"))}
-    glob = tuple(float(header.get(f"global.{o}", d)) for o, d in (("wAdvance", 1.0), ("wCopy", 0.0), ("wEval", 0.0)))
-    return dict(path=str(path), name=pathlib.Path(path).name, header=header, profiles=profiles, globals=glob,
-                sha256=hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest())
+    profiles = {n: w for n, w in prof.items() if all(o in w for o in FORWARD_MODEL)}
+    glob = {"advance": float(header.get("global.wAdvance", glob_ops.get("advance", 1.0))),
+            "copy": float(header.get("global.wCopy", glob_ops.get("copy", 0.0))),
+            "eval": float(header.get("global.wEval", glob_ops.get("eval", 0.0)))}
+    version = int(header.get("magat.weights.version", "1") or 1)
+    if version >= 2:
+        glob.update({o: w for o, w in glob_ops.items() if o not in FORWARD_MODEL})
+    return dict(path=str(path), name=pathlib.Path(path).name, header=header, version=version, profiles=profiles,
+                globals=glob, sha256=hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest())
 
 
 # --------------------------------------------------------------------------- provenance
