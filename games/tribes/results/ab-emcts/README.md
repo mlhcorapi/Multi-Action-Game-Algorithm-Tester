@@ -33,13 +33,33 @@ claims. Configuration names became arm ids through `tools/legacy-arms.json`.
   the currency the line ran in (`games/tribes/calibration/r7615`), in its final state. One development
   leaf, `comma-short15-coarse@400000`, ran under a price that was superseded before stage F
   (retrospective section 8); the replication table marks it as the one headline that does not replicate.
-- **Not in the repository:** the per-burn anytime curves (`curve.csv`, about 28 MB compressed for these
-  trees). Importing from the bundles without `--no-curve` produces them, and `magat analyze` then fills
-  the anytime section:
+- **Not in the repository: the per-burn anytime curves.** Each leaf's `curve.csv` holds one row per
+  bridge-burn phase of every turn: the best value found so far, and the forward-model calls and units
+  spent by then. They are kept out of the repository and published as a downloadable asset (DESIGN §17,
+  decision 7).
+
+## The downloadable asset: the full trees, anytime curves included
+
+`ab-emcts-trees-with-curves-v1.zip` (30.5 MB) holds both trees exactly as they are here plus every
+leaf's `curve.csv`. Every `turns.csv` in it is byte-identical to this directory's; the packaging script
+refuses otherwise. Unzipped, it analyses with the anytime section (#9) filled:
 
 ```bash
-python magat.py import-legacy --stage1-tree <stageE>/stage1/dev --out <run> --experiment experiments/tribes/ab-emcts-dev.json --weights games/tribes/calibration/r7615/compute_weights.properties
+python magat.py analyze --run <unzipped>/ab-emcts --out <dir>
 ```
+
+It is built from the thesis line's stage bundles, which are not public, by
+`tools/package_worked_result.py`. That script re-imports both stages with their curves, checks them
+against these trees, zips them, and prints the command that would publish the zip as a release asset.
+It uploads nothing; publishing is the owner's step.
+
+```bash
+python tools/package_worked_result.py --stage-e ~/Downloads/stageE.zip --stage-f ~/Downloads/stageF.zip
+```
+
+Built on 2026-10-06, its sha256 was `f61a96903c962a7d3a0891290732809aaab71e60c0a9f5c509680a7e8afca097`.
+The `imported.at` stamp in each `_run.json` dates a rebuild, so a later rebuild has another hash with
+the same rows.
 
 ## Re-analysing
 

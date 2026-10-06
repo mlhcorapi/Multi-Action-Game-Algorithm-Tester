@@ -127,10 +127,10 @@ def main(argv) -> int:
     check("pricing it again without --replace is refused",
           [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts-comma", "--levels", "4000", "--toy"],
           "--replace", codes=(2,), then=lambda: weights.read_text(encoding="utf-8") == snapshot["w"])
-    check("--check reports drift and writes nothing",
+    check("--check gates each cell's turn-price drift and writes nothing",
           [PY, ROOT / "magat.py", "calibrate", "--check", "--game", game, "--weights", weights, "--arms", "emcts-comma",
            "--levels", "4000", *toy],
-          "largest drift", codes=(0, 1), then=lambda: weights.read_text(encoding="utf-8") == snapshot["w"])
+          "largest drift in a turn's price", codes=(0, 1), then=lambda: weights.read_text(encoding="utf-8") == snapshot["w"])
     check("--under-load writes beside the idle file, never over it",
           [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts-comma",
            "--under-load", "3", "--levels", "4000", "--turns", "2", *toy],

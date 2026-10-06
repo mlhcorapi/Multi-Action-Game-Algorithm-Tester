@@ -313,9 +313,11 @@ public final class Calibrator {
             result.drift = Currency.drift(existing, cells, ref, Currency.DRIFT_GATE);
             result.drift.print();
             result.pass = fair && result.drift.pass();
-            System.out.println(result.pass ? "\n  VERDICT: PASS - this machine still spends the currency the stored weights define."
-                    : "\n  VERDICT: FAIL - " + (fair ? "the drift is past the gate; arms priced then and now do not spend the same "
-                    + "currency. Do not start a stage quoted beside earlier ones until this is understood." : "the measurement itself failed."));
+            System.out.println(result.pass ? "\n  VERDICT: PASS - every cell's turn costs what the stored weights say, within the gate: "
+                    + "this machine still spends the currency they define."
+                    : "\n  VERDICT: FAIL - " + (fair ? "a cell's turn price drifted past the gate; a budget priced here and one priced "
+                    + "then do not buy the same work. Do not start a stage quoted beside earlier ones until this is understood."
+                    : "the measurement itself failed."));
             System.out.println("  (nothing was written; this run only compared)");
             return result;
         }

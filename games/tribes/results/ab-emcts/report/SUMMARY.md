@@ -28,6 +28,15 @@ bootstrap 95% CIs (4,000 resamples), bold where they exclude zero.
 the null (0, or 1x for a multiplier). `ns both`: neither interval excludes it, a null that
 replicated. Every headline appears as two numbers or not at all.
 
+**What a `no` means.** When the two halves ran on the same machine in the same currency (the
+provenance table says whether they did), they differ in scenarios and in nothing else, so a `no` is
+about the scenarios or about the arm, never about the device. It has one of two causes. Either the
+development estimate was selected (it was the best of several) and shrinks toward its true value
+on scenarios that played no part in the choice: the winner's curse, and the holdout doing its job.
+Or the two halves did not measure the same arm: a price or a definition changed between them, which
+a MAGAT run's per-leaf currency lock refuses. Name the cause beside the row; a `no` is not noise to
+be averaged away.
+
 | Kind | Budget | Comparison | Development | Holdout | Replicates |
 |---|---|---|---|---|---|
 | headline | 80000 | comma-rand15 | **+139.8 [+111.8, +167.9]** | **+133.8 [+108.0, +160.5]** | yes |

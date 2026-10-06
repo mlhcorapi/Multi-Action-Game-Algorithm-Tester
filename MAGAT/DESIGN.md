@@ -713,6 +713,15 @@ thesis's absolute version is exposed to the machine's speed changing between ses
 to the reference measurement being unrepresentative of the session; the bracket detects the second, and
 a session that fails it writes nothing.*
 
+*Amended 2026-10-06 (milestone 6b): **the gate is each cell's turn-price drift**, the same 10%; drift per
+operation is still printed, as information. What a currency has to transfer is what a budget buys: an
+operation that is 3% of a turn can drift 40% relative to an advance and move the turn's price about 1%,
+which merges and compares fine, while a 10% move in a turn's price would re-size every budget of that
+arm. The turn price is each cell's own operations, counted in the session, priced now against priced as
+stored, over the operations both sides price. The laptop check recorded in `calibration/r7615/ORIGIN.md`
+(evaluations 31-38% cheaper, turn prices within 4%), FAIL under the per-operation gate, passes under
+this one; `ORIGIN.md` says so.*
+
 ### 8.4 Two measurements added to the check
 
 `--check` also reports (a) the decorator overhead: the reference cell timed through `MeteredGame`
@@ -1304,11 +1313,35 @@ on sixteen turns at two budgets, with units compared as well as values and count
 
 ## 17. Inputs and decisions needed from you
 
-*Status 2026-10-04. Decided: (1) Apache-2.0, in `LICENSE`; (2) a public fork, `mlhcorapi/Tribes`
+*Status 2026-10-06. Decided: (1) Apache-2.0, in `LICENSE`; (2) a public fork, `mlhcorapi/Tribes`
 branch `magat-engine`; (3) the stage A artefacts were supplied and are published under
 `games/tribes/portfolio/v1` and `games/tribes/calibration/r7615`; (4) port, with the oracle gate as
-the safety net (passing since milestone 1); (5) minimal-json, in `core/lib` since milestone 2.
-Still open: (6) the arm ids; (7), new with milestone 6: whether the worked result's per-burn anytime curves (about 28 MB compressed) are published, as a release asset beside the repository, or left in the archived bundles. The original text follows.*
+the safety net (passing since milestone 1); (5) minimal-json, in `core/lib` since milestone 2;
+(6) **the arm ids are fixed**: the ids of §5.4 and Appendix A, as `tools/legacy-arms.json` maps the
+thesis names onto them, are permanent (2026-10-06); (7) **the worked result's anytime curves are
+published as a downloadable asset** beside the repository, which keeps `turns.csv` only:
+`tools/package_worked_result.py` rebuilds the full trees from the stage bundles, curves included, checks
+every `turns.csv` against the repository's, zips them and prints the upload command; the upload is the
+owner's step (2026-10-06).*
+
+*Decided 2026-10-06, on the milestone 6 review:*
+- *(8) **§3.2's wall-clock equivalent stays MAGAT's paired-cell definition**: 3.2x against the
+  retrospective's 3.3x. The gap is definitional, not random: the retrospective averaged all rows there and
+  paired cells in §3.1. Resolved; `docs/results/tribes-ab-emcts.md` explains it.*
+- *(9) **The two retrospective figures not reproduced** (the "~69% of a turn" repair share, §5's
+  anti-additivity figures) stay listed as "not reproduced, derivation unknown". They are prose figures,
+  not outputs of any budget, and no re-calibration is run to chase them. A currency re-derived on the
+  development laptop would be a second currency under its own name, beside the R7615 file, never a
+  replacement for it; the milestone 6b pull request estimates its duration from the calibrator's own
+  timings.*
+- *(10) **The ten replication rows marked `no`**: development and holdout ran on the same machine in the
+  same currency, so they differ in scenarios, not devices. Each `no` is either the fine table's effect, a
+  genuine winner's-curse shrinkage (the holdout doing its job), or the stale development cell
+  `comma-short15-coarse@400000`, a price changed mid-line, which the per-leaf currency lock (§9.2) now
+  prevents. `report.py` prints what a `no` means beside the table.*
+- *(11) **The drift gate is each cell's turn price**, not each operation (§8.3 amendment).*
+
+*Nothing is open. The original text follows.*
 
 1. **Licence.** Apache-2.0 is recommended: it adds an explicit patent grant and contributor terms, which
    matter for a framework other groups will build on; MIT is equally acceptable. Milestone 0 writes the

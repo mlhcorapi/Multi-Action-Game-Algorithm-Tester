@@ -86,11 +86,17 @@ public class CurrencyTest {
     }
 
     @Test
-    public void aChangeInRatiosIsReportedAsDrift() {
+    public void aChangeInRatiosIsReportedPerOperationAndGatedOnTheTurnPrice() {
         List<Cell> cells = session(1.58, 0.81);      // copies and evals 19% cheaper relative to advances
+        // A cell whose turns are mostly copies and evaluations: its turn price moves almost as far.
+        Cell x = cells.get(1);
+        x.advances = 100; x.copies = 4000; x.evals = 4000;
         Currency.Drift d = Currency.drift(file(), cells, cells.get(0), Currency.DRIFT_GATE);
-        assertEquals(-0.19, d.worst.drift, 1e-9);
-        assertTrue(d.worst.what.startsWith("x@100.w"));
+        assertEquals(-0.19, d.worstOp.drift, 1e-9);
+        assertTrue(d.worstOp.what.startsWith("x@100.w"));
+        // stored 100*3 + 4000*0.6 + 4000*0.3 = 3900; now 300 + 4000*0.486 + 4000*0.243 = 3216
+        assertEquals(3216.0 / 3900.0 - 1, d.turnPrice.get("x@100"), 1e-12);
+        assertEquals("x@100", d.worstProfile);
         assertFalse(d.pass());
     }
 
@@ -102,8 +108,25 @@ public class CurrencyTest {
         Currency.Drift d = Currency.drift(file(), cells, cells.get(0), Currency.DRIFT_GATE);
         // stored price 1000*3 + 500*0.6 + 500*0.3 = 3450; now 3000 + 500*0.36 + 500*0.18 = 3270
         assertEquals(3270.0 / 3450.0 - 1, d.turnPrice.get("x@100"), 1e-12);
-        assertEquals(-0.4, d.worst.drift, 1e-9);
-        assertFalse("the gate stays per operation", d.pass());
+        assertEquals(-0.4, d.worstOp.drift, 1e-9);
+        assertEquals(3270.0 / 3450.0 - 1, d.worstTurnPrice, 1e-12);
+        assertTrue("the gate is the turn price: operations 40% cheaper that make up a tenth of the turn move it 5%", d.pass());
+    }
+
+    @Test
+    public void theLaptopsRecordedCheckPassesUnderTheTurnPriceGate() {
+        // ORIGIN.md, 2026-10-04: evaluations a third cheaper relative to advances, copies a few percent,
+        // advances within the gate; the turn price within 4%. A Tribes turn of emcts@40000 is roughly
+        // 40,000 advances, 1,200 copies and 1,100 evaluations of the units budget (search plus repair).
+        Cell ref = Cell.measured("ref", 100, 1000, 200, 100);
+        Cell x = Cell.measured("x", 100, 1500 * 1.03, 300 * 0.93, 150 * 0.622);
+        x.advances = 36_000; x.copies = 1_200; x.evals = 1_100;
+        List<Cell> cells = Arrays.asList(ref, x);
+        for (Cell c : cells) c.normalise(ref.tAdvance);
+        Currency.Drift d = Currency.drift(file(), cells, ref, Currency.DRIFT_GATE);
+        assertEquals(-0.378, d.worstOp.drift, 1e-3);
+        assertTrue(Math.abs(d.turnPrice.get("x@100")) < 0.10);
+        assertTrue(d.pass());
     }
 
     @Test

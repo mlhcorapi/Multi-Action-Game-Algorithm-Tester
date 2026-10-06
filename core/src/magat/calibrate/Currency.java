@@ -160,53 +160,71 @@ public final class Currency {
 
     public static final class Drift {
         public final double machineFactor;
+        /** Per operation of every compared profile: information, not the verdict. */
         public final List<DriftRow> rows;
         /**
          * Per profile: how much the price of that cell's measured work moves, now against stored, with
-         * the operations weighted by how many of each the cell performed. Informational: the gate is
-         * per operation, as pre-registered, but this is the number that says how far a merged arm's
-         * budget would be off (an evaluation drift of 40% is about 1% of a turn's price when
-         * evaluations are 3% of it).
+         * the operations weighted by how many of each the cell performed. This is the gated number: it is
+         * how far a budget priced on this machine would buy a different amount of that arm's work than
+         * the stored price says (an evaluation 40% cheaper relative to an advance moves a Tribes turn's
+         * price about 1%, because evaluations are about 3% of it).
          */
         public final java.util.Map<String, Double> turnPrice;
         public final List<String> notPriced;
-        public final DriftRow worst;
+        /** The profile whose turn price moved most, and by how much; null when nothing was compared. */
+        public final String worstProfile;
+        public final double worstTurnPrice;
+        /** The operation that moved most, for the eye; it does not decide. */
+        public final DriftRow worstOp;
         public final double gate;
 
         Drift(double machineFactor, List<DriftRow> rows, java.util.Map<String, Double> turnPrice, List<String> notPriced,
-              DriftRow worst, double gate) {
+              DriftRow worstOp, double gate) {
             this.machineFactor = machineFactor;
             this.rows = Collections.unmodifiableList(rows);
             this.turnPrice = Collections.unmodifiableMap(turnPrice);
             this.notPriced = Collections.unmodifiableList(notPriced);
-            this.worst = worst;
+            this.worstOp = worstOp;
             this.gate = gate;
+            String wp = null;
+            double wd = 0;
+            for (java.util.Map.Entry<String, Double> e : turnPrice.entrySet())
+                if (wp == null || Math.abs(e.getValue()) > Math.abs(wd)) { wp = e.getKey(); wd = e.getValue(); }
+            this.worstProfile = wp;
+            this.worstTurnPrice = wp == null ? Double.NaN : wd;
         }
 
-        public boolean pass() { return worst == null || Math.abs(worst.drift) <= gate; }
+        /** Every compared cell's turn price within the gate (vacuously true when nothing overlaps). */
+        public boolean pass() { return worstProfile == null || Math.abs(worstTurnPrice) <= gate; }
 
         public void print() {
             System.out.println(String.format(Locale.ROOT,
                     "  reference advance: x%.4f the file's (machine speed; cancels under ratio re-denomination)", machineFactor));
+            System.out.println("  per operation, in the file's unit (information: the gate is each cell's turn price, below):");
             System.out.println(String.format(Locale.ROOT, "  %-40s %10s %10s %8s", "profile.op", "stored", "now", "drift"));
             for (DriftRow r : rows)
                 System.out.println(String.format(Locale.ROOT, "  %-40s %10.4f %10.4f %7.1f%%", r.what, r.stored, r.now, 100 * r.drift));
+            if (worstOp != null)
+                System.out.println(String.format(Locale.ROOT, "  largest per-operation drift %.1f%% (%s), information", 100 * worstOp.drift, worstOp.what));
             if (!turnPrice.isEmpty()) {
-                System.out.println("  price of each cell's own work, now against stored (informational):");
+                System.out.println(String.format(Locale.ROOT, "  price of each cell's own work, now against stored (gate %.0f%%):", 100 * gate));
                 for (java.util.Map.Entry<String, Double> e : turnPrice.entrySet())
-                    System.out.println(String.format(Locale.ROOT, "  %-40s %+7.1f%%", e.getKey(), 100 * e.getValue()));
+                    System.out.println(String.format(Locale.ROOT, "  %-40s %+7.1f%%%s", e.getKey(), 100 * e.getValue(),
+                            Math.abs(e.getValue()) > gate ? "   <-- past the gate" : ""));
             }
             for (String p : notPriced) System.out.println("  " + p + ": not priced in the file, nothing to compare");
-            if (worst == null) System.out.println("  no overlapping profile to compare");
-            else System.out.println(String.format(Locale.ROOT, "  largest drift %.1f%% (%s); gate %.0f%%",
-                    100 * worst.drift, worst.what, 100 * gate));
+            if (worstProfile == null) System.out.println("  no overlapping profile to compare");
+            else System.out.println(String.format(Locale.ROOT, "  largest drift in a turn's price %.1f%% (%s); gate %.0f%%",
+                    100 * worstTurnPrice, worstProfile, 100 * gate));
         }
     }
 
     /**
-     * How far each re-measured operation has moved from the file, in the file's unit: this session's
-     * weight times {@link #factor}, over the stored weight. The reference profile's own advance is 1
-     * on both sides by construction and is skipped; its copy and eval are compared.
+     * How far each re-measured cell's price has moved from the file, in the file's unit. Per operation:
+     * this session's weight times {@link #factor}, over the stored weight (the reference profile's own
+     * advance is 1 on both sides by construction and is skipped). Per cell: the operations the cell
+     * performed, priced now against priced as stored, over the operations both sides price; that is the
+     * verdict.
      */
     public static Drift drift(Weights file, List<Cell> cells, Cell ref, double gate) {
         double f = factor(file);
