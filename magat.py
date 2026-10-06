@@ -18,7 +18,9 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py machine
     python magat.py threads   --game tribes --out DIR [--portfolio DIR] [--levels ...] [--ladder 2,4,8] [--segment-seconds 25]
     python magat.py calibrate --game tribes --out DIR [--portfolio DIR] [--levels ...] [--arms a,b|@set] [--replace a] [--under-load W] [--toy]
-    python magat.py calibrate --check --game tribes --arms a,b [--weights FILE] [--portfolio DIR]
+                              [--format 2|1] [--audit-warn 0.10]
+    python magat.py calibrate --estimate --game tribes [the same arguments]     what the session would take; writes nothing
+    python magat.py calibrate --check --game tribes --arms a,b [--weights FILE] [--portfolio DIR]   gates each cell's turn price
     python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...]
     python magat.py run --experiment SPEC [--split dev|holdout|all] [--out DIR] [--portfolio DIR] [--weights FILE]
                         [--threads N] [--threads-at 400000=31] [--frozen FILE] [--retire-leaf arm@budget] [--toy]
@@ -27,6 +29,7 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py check structure --game tribes --spec experiments/tribes/structure.json
     python magat.py check replay    --game tribes --leaf DIR [--portfolio DIR] [--weights FILE] [--turns 20]
     python magat.py check overhead  --game tribes [--arm emcts] [--budget 40000]
+    python magat.py check overhead --audit --game tribes [--arms a,b|@set] [--budget 40000] [--warn 0.10] [--fail 0.25]
     python magat.py probe support   --game tribes --arm ARM [--levels ...] [--scenarios 20] [--out DIR]
     python magat.py analyze --run DIR [--holdout DIR] [--experiment SPEC] [--baseline ARM] [--reprice WEIGHTS] --out DIR
     python magat.py import-legacy --stage1-tree DIR --out RUN [--map tools/legacy-arms.json] [--portfolio DIR]
