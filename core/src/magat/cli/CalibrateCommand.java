@@ -27,7 +27,8 @@ final class CalibrateCommand {
         System.out.println("  machine");
         System.out.println("  threads           --game <name> --portfolio <dir> --out <calib> [--levels 40000,80000,400000] [--ladder 2,4,8] [--segment-seconds 25] [--arm emcts]");
         System.out.println("  calibrate         --game <name> --portfolio <dir> --out <calib> [--levels ...] [--arms a,b|@set] [--reps 3] [--turns 8,4,2]");
-        System.out.println("                    [--warmup 6] [--replace a,b] [--under-load W] [--toy]");
+        System.out.println("                    [--warmup 6] [--replace a,b] [--under-load W] [--toy] [--format 2|1] [--audit-warn 0.10]");
+        System.out.println("  calibrate --estimate ... (the same arguments): times a few turns, prints what the session would take, writes nothing");
         System.out.println("  calibrate --check --game <name> --portfolio <dir> --weights <file> --arms a,b [--levels ...]");
         System.out.println("  weights           --weights <file> [--game <name> --arms a,b|@set --levels 40000,80000,400000]");
     }
@@ -83,13 +84,17 @@ final class CalibrateCommand {
         o.underLoad = args.getInt("under-load", 0);
         o.replace = new LinkedHashSet<>(module.expandArms(args.getList("replace", new ArrayList<>())));
         o.toy = args.flag("toy");
+        o.format = args.getInt("format", 2);
+        o.estimate = args.flag("estimate");
+        o.auditWarn = Double.parseDouble(args.get("audit-warn", String.valueOf(Calibrator.AUDIT_WARN)));
         if (check && o.underLoad > 1) throw new IllegalArgumentException("--check and --under-load measure different things; run them separately");
         if (check && o.arms == null) throw new IllegalArgumentException("--check needs --arms: the already-priced arms to re-measure");
-        Path out = check ? null : Paths.get(args.require("out")).toAbsolutePath();
+        Path out = check ? null : o.estimate && !args.has("out") ? null : Paths.get(args.require("out")).toAbsolutePath();
         Path checkFile = check ? Paths.get(args.require("weights")).toAbsolutePath() : null;
         RunGuard.install("calibration", "re-run the same command; a calibration writes only when it completes");
         Calibrator.Result r = Calibrator.run(game, module.agents(), module.referenceArm(), p, out, checkFile, o);
         RunGuard.finished();
+        if (o.estimate) return 0;
         System.out.println(r.pass ? (check ? "CHECK: PASS" : "CALIBRATION: PASS " + r.written) : (check ? "CHECK: FAIL" : "CALIBRATION: FAIL"));
         return r.pass ? 0 : 1;
     }

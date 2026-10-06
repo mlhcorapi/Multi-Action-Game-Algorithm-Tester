@@ -115,8 +115,9 @@ public final class Weights {
             if (field.startsWith("ns.")) { nanos.computeIfAbsent(name, n -> new LinkedHashMap<>()).put(field.substring(3), v); continue; }
             if (field.equals("unpriced")) unpriced.put(name, v);
         }
-        // A profile is only usable when its three forward-model weights are present and plausible, and
-        // every algorithm operation it prices has a plausible weight (zero allowed: declared, never seen).
+        // A profile is only usable when its three forward-model weights are present and plausible (0, 1000),
+        // and every algorithm operation it prices has a finite, non-negative weight (zero: declared, never
+        // seen; large: one occurrence may cost many advances).
         List<String> incomplete = new ArrayList<>();
         for (Map.Entry<String, Map<String, Double>> e : prices.entrySet()) {
             Map<String, Double> w = e.getValue();
@@ -126,7 +127,7 @@ public final class Weights {
                 if (x == null || !(x > 0 && x < 1000)) ok = false;
             }
             for (Map.Entry<String, Double> op : w.entrySet())
-                if (!Meter.FORWARD_MODEL_OPS.contains(op.getKey()) && !(op.getValue() >= 0 && op.getValue() < 1000)) ok = false;
+                if (!Meter.FORWARD_MODEL_OPS.contains(op.getKey()) && !(op.getValue() >= 0 && !op.getValue().isInfinite())) ok = false;
             if (!ok) incomplete.add(e.getKey());
         }
         for (String n : incomplete) prices.remove(n);

@@ -181,6 +181,52 @@ public class CurrencyTest {
     }
 
     @Test
+    public void versionTwoPricesTheArmsOwnOperationsAndMergesThemByTheSameFactor() {
+        // A fresh version-2 file: the reference's operations become the global ones; every cell's are priced.
+        Cell ref = Cell.measured("ref", 100, 1000, 200, 100).withOp("x.step", 500, 40);
+        Cell x = Cell.measured("x", 100, 1500, 300, 150).withOp("x.step", 250, 40).withOp("x.rank", 50_000, 4);
+        List<Cell> cells = Arrays.asList(ref, x);
+        for (Cell c : cells) c.normalise(ref.tAdvance);
+        ref.unpriced = 0.02;
+        Currency.Session s = s();
+        s.levels = "100";
+        s.portfolioIdentity = "abc";
+        s.machine = "test";
+        String text = Currency.fresh(s, cells, ref);
+        Weights w = Weights.parse(null, Arrays.asList(text.split("\n")));
+        assertEquals(2, w.version());
+        assertEquals("advance,copy,eval,x.step,x.rank", w.header().get("operations"));
+        assertEquals(0.5, w.globalOperations().get("x.step"), 1e-9);
+        assertEquals(0.25, w.prices("x@100").get("x.step"), 1e-9);
+        assertEquals("an operation may cost many advances", 50.0, w.prices("x@100").get("x.rank"), 1e-9);
+        assertEquals(50_000.0, w.nanosOf("x@100").get("x.rank"), 1e-9);
+        assertEquals(0.02, w.unpricedShare("ref@100"), 1e-9);
+
+        // Merged into a version-2 file whose reference weighs 2: every weight, the operations' included, times 2.
+        List<String> lines = Arrays.asList(text.replace("profile.ref@100.w.advance = 1.000000", "profile.ref@100.w.advance = 2.000000").split("\n"));
+        Weights file = Weights.parse(null, lines);
+        Cell ref2 = Cell.measured("ref", 100, 800, 160, 80).withOp("x.step", 400, 40);
+        Cell y = Cell.measured("y", 100, 1200, 240, 120).withOp("y.pick", 80, 10);
+        for (Cell c : Arrays.asList(ref2, y)) c.normalise(ref2.tAdvance);
+        String merged = Currency.merge(lines, file, s(), Collections.singletonList(y), ref2);
+        Weights m = Weights.parse(null, Arrays.asList(merged.split("\n")));
+        assertEquals(2 * 1.5, m.prices("y@100").get("advance"), 1e-6);
+        assertEquals(2 * 0.1, m.prices("y@100").get("y.pick"), 1e-9);
+        assertEquals("the operations line grows by what the merge adds", "advance,copy,eval,x.step,x.rank,y.pick", m.header().get("operations"));
+
+        // Drift prices the operations both sides price into the turn: here x.step got 40% dearer.
+        Cell x2 = Cell.measured("x", 100, 1500, 300, 150).withOp("x.step", 350, 40).withOp("x.rank", 50_000, 4);
+        x2.advances = 100; x2.copies = 0; x2.evals = 0;
+        for (Cell c : Arrays.asList(ref, x2)) c.normalise(ref.tAdvance);
+        Currency.Drift d = Currency.drift(w, Arrays.asList(ref, x2), ref, Currency.DRIFT_GATE);
+        // stored 100*1.5 + 40*0.25 + 4*50 = 360; now 100*1.5 + 40*0.35 + 4*50 = 364
+        assertEquals(364.0 / 360.0 - 1, d.turnPrice.get("x@100"), 1e-9);
+        assertEquals(0.4, d.worstOp.drift, 1e-9);
+        assertEquals("x@100.w.x.step", d.worstOp.what);
+        assertTrue(d.pass());
+    }
+
+    @Test
     public void theEstimatorTakesTheFastestAndGatesOnTheTwoFastest() {
         double[] reps = {110, 100, 140};
         assertEquals(100, Estimator.fastest(reps), 0);

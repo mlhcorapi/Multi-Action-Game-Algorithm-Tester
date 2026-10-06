@@ -345,12 +345,13 @@ public final class Meter {
     /**
      * Operations counted on this thread since the last {@link #reset} (or among {@code extra}) that the
      * version-2 profile in force does not price; empty under a version-1 profile, the global weights or a
-     * probe's triple, which price the forward model only by definition.
+     * probe's triple, which price the forward model only by definition, and empty while
+     * {@link #allowUnpriced} is on (the calibrator measures arms whose operations are not priced yet).
      */
     public static List<String> unpricedCounted(long[] extra) {
         State s = STATE.get();
         List<String> out = new ArrayList<>();
-        if (!s.strict) return out;
+        if (!s.strict || allowUnpriced) return out;
         int n = opCount;
         for (int i = FORWARD_MODEL; i < n; i++)
             if (!s.priced[i] && (s.counts[i] > 0 || (extra != null && i < extra.length && extra[i] > 0))) out.add(NAMES[i]);
