@@ -47,7 +47,13 @@ import-legacy` brings the thesis's run trees into MAGAT's layout. The first game
 [Tribes](https://github.com/GAIGResearch/Tribes). The worked result is the thesis's AB-EMCTS line,
 imported in [`games/tribes/results/ab-emcts/`](games/tribes/results/ab-emcts/) and re-analysed by
 MAGAT. It reproduces the thesis retrospective's numbers to the decimal; see
-[`docs/results/tribes-ab-emcts.md`](docs/results/tribes-ab-emcts.md).
+[`docs/results/tribes-ab-emcts.md`](docs/results/tribes-ab-emcts.md). Milestone 6b prices every
+operation an algorithm performs, not only the forward model's (currency version 2). An algorithm declares
+its own operations: table updates, lookups, ranking, legal-action queries, tree bookkeeping. The meter
+counts them, the calibrator prices them per (arm, budget), and the budget pays for them. An audit compares
+what is declared with the time actually spent, and `check overhead --audit` fails an arm whose work goes
+undeclared. The published R7615 currency stays version 1 (the forward model only), and every published
+turn still replays field for field.
 
 ## Quick start
 

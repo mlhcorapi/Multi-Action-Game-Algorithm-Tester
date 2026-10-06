@@ -148,15 +148,22 @@ bundle("threads", [CALIBRATION / "threads.json", CALIBRATION / "thread_sweep.csv
 
 CALIBRATE_CELL = r'''
 # This machine's own currency, on this machine's own portfolio. Idle and single-threaded: stop
-# everything else first. Extending it later with a new arm is `--arms <new>`, which merges.
+# everything else first, and plug a laptop in (on battery it runs at a fraction of its speed).
+# Version 2 (CURRENCY_VERSION = 2) prices every operation an arm declares, its own work included;
+# version 1 prices the forward model only, as the published R7615 currency does. The estimate runs first:
+# one repetition of the reference cell per level, a few minutes, then what the whole session will take.
+# Extending the currency later with a new arm is `--arms <new>`, which merges in the file's own version.
+CURRENCY_VERSION = 2
 if (CALIBRATION / "compute_weights.properties").exists():
     print(f"[skip] {CALIBRATION / 'compute_weights.properties'} exists")
 else:
-    magat("calibrate", "--game", GAME, "--portfolio", PORTFOLIO, "--out", CALIBRATION)
+    magat("calibrate", "--estimate", "--game", GAME, "--portfolio", PORTFOLIO, "--format", CURRENCY_VERSION)
+    magat("calibrate", "--game", GAME, "--portfolio", PORTFOLIO, "--out", CALIBRATION, "--format", CURRENCY_VERSION)
     assert_in_log("calibrate", "CALIBRATION: PASS")
 WEIGHTS = CALIBRATION / "compute_weights.properties"     # the currency every run below spends
 magat("weights", "--weights", WEIGHTS)
-bundle("calibration", [CALIBRATION / "compute_weights.properties", CALIBRATION / "compute_profiles.csv", LOGS / "calibrate.log"])
+bundle("calibration", [CALIBRATION / "compute_weights.properties", CALIBRATION / "compute_profiles.csv",
+                       CALIBRATION / "compute_operations.csv", LOGS / "calibrate.log"])
 '''
 
 DRIFT_CELL = r'''
@@ -184,13 +191,16 @@ magat("check", "equivalence", "--game", GAME, "--scenarios", 8, "--visits", 2, "
 assert_in_log("check-equivalence", "EQUIVALENCE: PASS")
 magat("check", "structure", "--game", GAME, "--spec", ROOT / "experiments" / GAME / "structure.json")
 assert_in_log("check-structure", "STRUCTURE: PASS")
+# The audit: each arm's declared operations and forward model account for its turn (fails above 25% unaccounted).
+magat("check", "overhead", "--audit", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "@reference", "--budget", 40000)
+assert_in_log("check-overhead", "OVERHEAD AUDIT: PASS")
 magat("check", "replay", "--game", GAME, "--leaf", ROOT / "games" / GAME / "results" / "replay" / "Comma_Off" / "80000cu",
       "--portfolio", PORTFOLIO, "--weights", PUBLISHED_WEIGHTS, "--turns", 20)
 assert_in_log("check-replay", "REPLAY: PASS")
 magat("probe", "support", "--game", GAME, "--arm", "comma-bias-e25", "--scenarios", 20, "--weights", WEIGHTS,
       "--out", CALIBRATION, check=False)      # a failing level is a reporting level, not an error
 bundle("gates", [LOGS / f"{n}.log" for n in ("check-contract", "check-equivalence", "check-structure", "check-replay",
-                                             "probe-support", "test")] + [CALIBRATION / "support_probe_comma-bias-e25.csv"])
+                                             "check-overhead", "probe-support", "test")] + [CALIBRATION / "support_probe_comma-bias-e25.csv"])
 '''
 
 WORKED_CELL = r'''

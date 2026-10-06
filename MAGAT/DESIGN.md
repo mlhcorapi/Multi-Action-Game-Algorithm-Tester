@@ -475,6 +475,13 @@ surface: `onAdvance/onCopy/onEval`, `addXNanos`, `PROFILE`, `reset`, `resetNanos
    action-bias namespaces; the arm id now carries every variant.
 3. Counting and timing are called by `MeteredGame`, not by the engine (§2.2).
 
+*Amended 2026-10-06 (milestone 6b): the meter counts and prices every operation an algorithm declares
+beside the forward model's three (§6.6). An operation is a handle registered once
+(`Meter.register("qd.update")`) holding a dense index into thread-local counts, nanoseconds and weights,
+so recording is an array increment and allocates nothing. `span()` times one occurrence while profiling,
+`span(n)` a batch of n, `count()` an untimed one. A span's time excludes the forward-model calls and spans
+nested in it. `units()` and `price()` sum over every operation; every existing call site is unchanged.*
+
 ### 6.2 The unit
 
 Unchanged from brief §3 and `COMPUTE_UNIT_CALIBRATION.md` §2: one unit is one `advance` by the
@@ -482,6 +489,15 @@ reference agent at the reference budget on the game's reference portfolio positi
 the weights were calibrated on. Every weight, `wAdvance` included, is a ratio to that operation's
 nanoseconds; per-(arm, budget) profiles; each game its own currency. The reference for Tribes is
 `emcts@40000`.
+
+*Amended 2026-10-06 (milestone 6b): the unit is unchanged: one compute unit is one EMCTS advance in the
+reference cell, the mean advance of `emcts` at the reference budget on the reference portfolio
+(`reference = emcts@40000`). Budget levels stay fixed unit counts (40,000 / 80,000 / 400,000) and are
+never re-derived per machine; that is what keeps searches deterministic and `check replay` exact. Each
+machine measures the reference cell for its own nanoseconds per unit and prices every operation of every
+arm, per (arm, budget), as its own nanoseconds over that: the ratio re-denomination of §8.2, extended
+from three operations to all of them. A machine uniformly slower cancels exactly; relative drift between
+operations does not, and the drift report states it.*
 
 ### 6.3 Weights file, version 1
 
@@ -519,6 +535,18 @@ what re-pricing and the drift report want).
 `_portfolio` directories: 105 profiles (35 arms × 3 levels), the portfolio identity
 `ec243fd7…` verified against the frozen split files.*
 
+*Amended 2026-10-06 (milestone 6b): **version 2** prices every operation. Header
+`magat.weights.version = 2` and `operations = advance,copy,eval,<op>,...` (every operation the file
+prices). `global.w.<op>` holds the reference cell's prices. Each profile has:*
+- *`profile.<arm>@<budget>.w.<op>` for `advance`, `copy`, `eval` and each operation its arm declares;*
+- *`profile.<arm>@<budget>.ns.<op>`, the measured nanoseconds;*
+- *`profile.<arm>@<budget>.unpriced`, the calibration audit's share of the cell's turn time.*
+
+*An algorithm operation's weight may be 0 (declared, never performed in the calibration turns) or many
+advances (one occurrence can cost many). The forward model keeps the (0, 1000) plausibility bound.
+Readers accept versions 1 and 2. A version-1 file prices the forward model only, so under it every
+algorithm operation weighs exactly 0.0. The published R7615 file stays version 1, unchanged.*
+
 ### 6.4 Where the profile is installed
 
 By `Episode`, from the arm id and the budget, before the agent is created (§5.1). Agents no longer
@@ -532,6 +560,72 @@ other.properties` recomputes each turn's units with another machine's weights an
 arm against the baseline's value-versus-spend curve in that currency, exactly as W7 re-scores against
 wall-clock. What re-pricing cannot do is re-run the stop rule: the search stopped under the weights it
 ran with. The report says so on every re-priced table.
+
+*Amended 2026-10-06 (milestone 6b): a version-2 row also carries one `op_<name>` count per declared
+operation, and re-pricing adds each at its price in the other file. A leaf is re-priced only when the
+other file prices exactly the operations it counts, so currencies that price different work are never
+mixed. Re-pricing a version-2 run in its own currency reproduces its units to four decimals; the
+shakedown asserts it.*
+
+### 6.6 Declaring your algorithm's operations
+
+*Added 2026-10-06 (milestone 6b): currency version 2. `ADDING_AN_ALGORITHM.md` (milestone 7) expands it.*
+
+A version-1 currency prices the forward model only. An algorithm's own work is free in compute units:
+tree bookkeeping, a learned table's updates and lookups, ranking candidates, legal-action queries. So
+an arm that does more of it gets more wall-clock per unit than its baseline. In the worked result the
+zero-evaluation arms spent 17-22% more wall-clock per unit (`ArmTimeRatio` in `budget_multiplier.csv`),
+which is why W7 had to be co-primary. Version 2 prices everything an algorithm does.
+
+1. **Declare.** `AgentFactory.operations()` lists the names: lowercase dot-separated segments, led by
+   the algorithm family (`qd.update`, `emcts.legal`). The factory registers them with `Meter.declare`
+   when it is constructed. Declare exactly what the arm's parameters make it perform.
+2. **Record**, through a handle registered once
+   (`static final Meter.Op RANK = Meter.register("qd.shortlist")`):
+   - `try (Meter.Span s = RANK.span()) { ... }` records one occurrence, timed while calibrating. Its time
+     excludes the forward-model calls and spans nested in it, so nothing is priced twice.
+   - `try (Meter.Span s = LOOKUP.span(n)) { ...n lookups... }` is **the rule for cheap operations**. A
+     lookup of tens of nanoseconds cannot be timed one call at a time without the timer dominating it,
+     so time the loop that performs it n times as one batch. Where there is no loop, fold the cheap call
+     into a coarser declared span: EMCTS's `emcts.generation` holds a generation's own bookkeeping.
+   - `OP.count()` records an untimed occurrence of an operation that is timed elsewhere; its price per
+     occurrence is learned from the timed ones. An operation that is counted but never timed fails its
+     calibration cell.
+3. **The forward model is never self-reported.** `advance`, `copy` and `evaluate` are counted and timed
+   by `MeteredGame`: they are the anchor nobody can under-report. The oracle gate compares them, and the
+   values, only. An algorithm's own operations are MAGAT-side additions, and the audit validates them.
+4. **The stop rule spends every priced operation.** `Meter.units()` sums every operation's count times
+   its price, so under version 2 a budget buys fewer forward-model calls for an arm with more work of its
+   own.
+5. **The audit compares what is declared with the time actually spent.** Per (arm, budget):
+   - the calibrator compares the turn time its priced operations account for with the turn time
+     measured, and warns above 10% unaccounted (`--audit-warn`);
+   - `magat run` records the same share per leaf from its rows (units times the reference-advance
+     nanoseconds, against plan time) and warns likewise;
+   - `magat check overhead --audit` fails above 25% (`--fail`).
+
+   The audit checks the declarations; it does not replace them.
+6. **Enforced.** A turn that records an operation its factory does not declare is refused, and so is a
+   turn under a version-2 profile that leaves one of its operations unpriced. The validator refuses a run
+   whose version-2 currency leaves a declared operation unpriced.
+
+The reference agents:
+- **`Emcts`** declares:
+  - `emcts.generation`: one generation's own work, with what is nested in it subtracted;
+  - `emcts.legal`: a legal-action query;
+  - `emcts.check`: a legality check during repair;
+  - `emcts.seqkey`: a plan key built, and looked up or stored;
+  - `emcts.burn`: a bridge burn.
+- **`QdeltaEmcts`** adds, by its parameters:
+  - `qd.classify`: an action's classes for the credit;
+  - `qd.update`: a table update, batch-timed;
+  - `qd.lookup`: an estimate read, batch-timed over a decision's candidates;
+  - `qd.shortlist`: a ranking to K, without its lookups;
+  - `qd.zeropick`: a zero-evaluation pick, without its query and lookups.
+
+On Tribes the audit finds these cover all but 0.1-0.7% of a turn. The arms' own operations are 2-15%
+of it, and the largest is the legal-action query: one costs about 1.5 advances, and zero-evaluation
+repair makes one per replacement.
 
 ---
 
@@ -663,6 +757,28 @@ and check end to end in seconds. Refused before anything is measured: a file of 
 measured on another portfolio identity, `--turns` different from the file's, and a non-version-1
 file as a merge target.*
 
+*Amended 2026-10-06 (milestone 6b):*
+- *Every cell also measures each operation its arm declares, the way it measures the forward model:*
+  - *counts from the turn's record (search and initialization);*
+  - *nanoseconds and timed occurrences from the meter;*
+  - *the fastest-repetition estimator per operation.*
+- *The two-fastest gap gate applies to every operation that is at least 1% of the turn. Below that, an
+  error of half moves the turn's price by under half a percent, so its gap is reported, not gated.
+  `MIN_OPS` stays the forward model's sample-size gate.*
+- *An operation declared but never performed is priced 0 with a note; one counted but never timed fails
+  the cell.*
+- *A new file is version 2; `--format 1` writes a forward-model-only file. A merge keeps the file's
+  version (§8.2).*
+- *`compute_operations.csv` lists every operation of every cell. `compute_profiles.csv` gains each
+  cell's seconds and its audit shares.*
+- *The audit section prints, per cell, the turn time and the shares the forward model, the arm's own
+  operations and nothing account for. It warns above `--audit-warn` (10%) and never fails a
+  calibration.*
+- *`--estimate` times one repetition of the reference cell at every level of the session (that level's
+  own positions) and prints what the session's warm-ups, cells and bracket would take, writing nothing.
+  Turn time depends on the position far more than on the arm: on Tribes an advance costs 59 us on one
+  calibration position and 392 us on another.*
+
 ### 8.2 Merge
 
 Writing into an existing file **merges**: header, globals and `referenceAdvanceNanos` untouched, new
@@ -687,6 +803,12 @@ The reference arm is measured at every level of a session but its cells are writ
 lacks them or `--replace` names the arm. `CurrencyTest` is the "divide versus multiply" test: a
 reference weight of 2.0, a machine uniformly 0.6x, 1x and 1.58x as fast, zero drift and the same merged
 weight in every case.*
+
+*Amended 2026-10-06 (milestone 6b): every price a merged cell carries, its own operations' included, is
+re-denominated by the same factor. A merge keeps the file's version. Merged into a version-1 file (a
+copy of the published R7615 currency), an arm is priced on the forward model only and the file stays
+one currency; its own operations are still measured and reported by the audit. Merged into version 2,
+the file's `operations` line grows by what the merge adds.*
 
 ### 8.3 Drift check
 
@@ -739,6 +861,12 @@ ratios, which the check prints: wCopy +0.0%, wEval +3.3% for a currency calibrat
 rather than the engine's hooks (as the R7615's was). Runs time nothing, so spending is unaffected. The
 dormant engine counter costs 1.6 ns per operation, 0.003% of an advance. Neither needs a change to the
 engine fork. Recorded in `calibration/r7615/ORIGIN.md`; the R7615 itself should be measured once.*
+
+*Amended 2026-10-06 (milestone 6b): `magat check overhead --audit` times each arm's turns with every
+operation profiled, single-threaded and priced with the fixed capture weights (a share does not depend
+on a currency). It attributes the time to the forward model, to each declared operation and to nothing,
+on the fastest repetition. It warns above `--warn` (10%) and fails above `--fail` (25%) unaccounted. On
+Tribes at 8k: 0.1-0.3% unaccounted for `emcts`, `emcts-comma`, `comma-z0-coarse` and `comma-rand15`.*
 
 *Amended 2026-10-04 (milestone 3): deferred to milestone 5 with the other probes. (a) needs the
 engine's own nanosecond hooks driven through the oracle side by side with the port, and (b) needs a
@@ -824,6 +952,10 @@ spec-level `attribution` is in the grid, budgets positive and unique. Arms whose
 their `_leaf.json` records. Toy weights are a warning on development and an error on the holdout unless
 the run is declared `--toy`. `magat experiment validate` runs the validator alone.*
 
+*Amended 2026-10-06 (milestone 6b): under a version-2 currency every operation an arm declares must be
+priced at every level it runs (an error otherwise). Under a version-1 currency the validator warns that
+the arms' own operations run free, as in every published version-1 result.*
+
 ### 9.2 Grid runner
 
 `Stage1Runner.run/runLeaf` moved as `GridRunner`: level order is the priority order; a leaf is
@@ -859,6 +991,10 @@ Three new guards, each a trap from brief §9 made structural:
 - *Exit codes: 0 complete, 1 stopped or a turn failed, 2 invalid spec, 3 tree locked by a live writer,
   4 tree mismatch or currency lock, 5 identical arms. A failed turn is reported and leaves its leaf
   incomplete; a re-run retries it.*
+- *Amended 2026-10-06 (milestone 6b): `_leaf.json` records every price a leaf runs under, its
+  operations' included, and the per-leaf lock compares all of them. A leaf from before version 2 recorded
+  the forward model's three only, so a version-2 file that prices its arm's own operations is a price
+  change. Published version-1 results are never continued in a version-2 currency.*
 - *The holdout ledger is appended before the first holdout turn runs, once per (run tree, spec hash): a
   resume of the same read is not a second read, a second experiment on the same holdout is.*
 
@@ -898,6 +1034,17 @@ written to four decimals as every thesis CSV was, never in exponent notation. A 
 columns are fixed by its first turn's telemetry keys. `_leaf.json` holds arm, budget, profile, the
 three weights, threads, host, start and finish times, turns total and done, failures, seconds, the
 governor's summary and the status (`running`, `complete`, `incomplete`).*
+
+*Amended 2026-10-06 (milestone 6b): `turns.csv` carries one `op_<name>` column per operation the arm
+declares, counting the search, after `seq_len` and before the telemetry. Every forward-model column
+keeps its place, so a version-1 tree reads as before. `_leaf.json` adds `currencyVersion`, `prices`
+(every operation's) and `audit`:*
+- *the plan time the leaf's priced units predict at the currency's reference-advance nanoseconds, and
+  the plan time measured;*
+- *the unpriced share between them;*
+- *the threads, and whether the weights were calibrated on this machine.*
+
+*Above `--audit-warn` the run says so.*
 
 ### 10.2 Per run: `<run>/<split>/`
 
@@ -968,6 +1115,10 @@ imported legacy rows. Every headline table exists in both strata.
 ### 11.4 Re-pricing
 
 §6.5. Output tables carry `currency = <weights file name>` in every row.
+
+*Amended 2026-10-06 (milestone 6b): re-pricing reads both versions and every `op_` column (§6.5).
+`efficiency.csv` gains `UnpricedShare`, the audit from the rows, blank for an imported thesis tree, and
+the mean of every `op_` count.*
 
 ### 11.5 Report
 
@@ -1055,6 +1206,7 @@ re-analysed by MAGAT.
 | `magat check structure` | `--same a=b` pairs are byte-identical over N turns, `--differ c=d` pairs are not, and the tree branches (`maxBranching ≥ 2` in telemetry); the LEGACY = COMMA and k = 1 = DRIFT equivalences become entries in `experiments/tribes/structure.json`. Runs on portfolio turns rather than full games, so it needs no game loop | `SelectionStructureCheck`, `SelectionFixCheck` |
 | `magat probe support` | an arm's `support()` counters over N scenarios per level against a criterion from the spec (Tribes/Qδ: ≥ 80% of biased picks after the warm-up burns rest on a key with ≥ 3 observations); a failing level is labelled a *reporting* level in the report | `ActionBiasFloorProbe` |
 | `magat check replay` | **new.** Given a published leaf, rebuilt scenarios and the published weights, re-run K turns and assert the rows agree field for field. The cross-machine determinism claim, tested rather than stated | — |
+| `magat check overhead --audit` | *(milestone 6b)* every arm's declared operations and forward model account for all but `--fail` (25%) of its turn time | — |
 
 All five run in the shakedown at toy size and print PASS/FAIL; all exit non-zero on FAIL.
 
@@ -1133,6 +1285,15 @@ portfolio identity, because those three are what every past mistake turned on.
 - *`experiment validate` now receives the published weights by default, like every command that prices.
   Before this, CI's "the shipped specs validate against the published currency" never checked a price.*
 
+*Amended 2026-10-06 (milestone 6b):*
+- *`calibrate` gains `--format 1|2` (a new file's version, default 2), `--audit-warn` (default 0.10) and
+  `--estimate`. `--estimate` takes the same arguments as a calibration, `--out` optional, and writes
+  nothing.*
+- *`run` gains `--audit-warn`.*
+- *`check overhead --audit --arms a,b|@set [--budget --turns --reps --warn 0.10 --fail 0.25]` is the
+  audit as a gate.*
+- *`calibrate --check` gates each cell's turn price (§8.3).*
+
 ### 13.2 `run_magat.ipynb`
 
 Generated from `tools/make_notebook.py` so it is diffable and cannot drift from the specs it names.
@@ -1171,6 +1332,11 @@ the same root and a data root outside it from all three. Installed as a pre-comm
 - *The setup cell gains `summary()`.*
 - *The inventory (item 10) arrives with milestone 7.*
 
+*Amended 2026-10-06 (milestone 6b): the calibrate cell runs `calibrate --estimate` first and then the
+calibration, in `CURRENCY_VERSION` (2 by default), and bundles `compute_operations.csv` too. The cell
+says to plug a laptop in: on battery the development laptop ran at about two thirds of its speed. The
+gates cell adds `check overhead --audit` on the reference arms.*
+
 ### 13.3 The shakedown
 
 `tools/shakedown.py`, cross-platform (the bash version used `mktemp` and `df -PT`; the filesystem
@@ -1201,6 +1367,15 @@ new analyzer stage runs three checks:*
 - *The published worked result re-analyses to its shipped point estimates.*
 
 *The analyzer's identical-output refusal is asserted by the unit tests.*
+
+*Amended 2026-10-06 (milestone 6b): the calibration stage now covers version 2 end to end:*
+- *it times an `--estimate` that writes nothing;*
+- *it writes a version-2 toy currency (every declared operation priced and audited);*
+- *the drift check is asserted on its turn-price verdict.*
+
+*The overhead stage adds `check overhead --audit` on `emcts` and `comma-z0-coarse`. The runner stage
+asserts the rows' `op_` columns. The analyzer stage's re-pricing check now reproduces units that
+include every operation.*
 
 ---
 
@@ -1259,6 +1434,10 @@ include the analysis package and the worked result's acceptance test. Every ship
 against the published currency. Three steps follow the toy run: analyse it side by side, re-priced in
 its own currency; import the replay fixture; re-analyse the worked result.*
 
+*Amended 2026-10-06 (milestone 6b): the toy calibration step runs `--estimate`, checks that the file is
+version 2 and prices the arm's operations. A new step runs `check overhead --audit`. The toy run's rows
+are checked for their `op_` columns.*
+
 ### 15.3 The engine fork
 
 `games/tribes/engine` is a submodule pointing at `mlhcorapi/Tribes`, a public GitHub fork of
@@ -1303,6 +1482,7 @@ commit. `run_magat.ipynb` and `tools/shakedown.py` exist from milestone 0 and gr
 | 4 | Runner: spec + validator, `GridRunner`, checkpoints, compaction, currency lock, identical-output assertion, provenance, `run` and `bundle` commands | shakedown spec runs on dev and holdout, resumes, skips, retires a leaf; validator rejects a sweep without its null. *Done 2026-10-05: all of it in the shakedown's runner stage and in CI; a torn partial leaf resumes to the same turns (`GridRunnerTest`); the currency lock, the tree locks and the identical-output assertion each have a test that makes them fire.* |
 | 5 | The rest of the family: `emcts-comma`, `QdeltaEmcts` and every worked-result arm; `check structure`, `probe support`, `check replay` | every arm passes its oracle gate; `check replay` reproduces 20 published `emcts-comma@80000` holdout rows on the rebuilt portfolio under the published weights. *Done 2026-10-05: all 33 oracle-gated arms pass on 8 scenarios x 2 visits at 8k and 40k (1,056 cells, counters included); the 20 rows reproduce field for field on the laptop's rebuilt portfolio, as do 20 each of the stage F `comma-z0-coarse@80000` and `comma-rand15@80000` holdout leaves. The support probe matches the archived R7615 verdicts at every level; its counts under the stage A currency differ from the archived `action_bias_floor.csv` by about 4% (300.9 against 290.0 mutations per turn at 40k) with code and weights identical as far as the archive shows, which is recorded as an open discrepancy in `ORIGIN.md`.* |
 | 6 | Analyzer: all twelve measures, side by side, re-pricing, report; `import-legacy`; the worked result imported | the retrospective §3/§4 point estimates reproduced from the imported trees; the Python tests pass on the synthetic tree. *Done 2026-10-05: eleven of the twelve measures (#12, full-game win rate, is out of v0.1 by design) on a synthetic tree whose answers are exact (27 tests). The worked result is imported: stages D and E on development and stage F on the holdout, 96,400 turns, every row checked against the published portfolio. On it the analyzer reproduces the retrospective's section 3 and 4 point estimates to the printed decimal (+244.3, +211.7, 5.4x and 6.4x, 48x, W7 +223.3, the oracle table, d = 0.62, the gain multiples, the mechanism counts), with intervals within bootstrap noise (17 tests). The one exception is section 3.2's 3.3x wall-clock equivalent, which the retrospective computed on all rows; MAGAT's paired version gives 3.2x (section 11 amendment).* |
+| 6b | Priced algorithm operations (currency version 2), and the decisions from the milestone 6 review | `QdeltaEmcts` and `Emcts` declare their operations, a toy calibration prices them and a toy run writes them; the audit reports an unpriced share and flags an undeclared busy loop; version-1 files and trees load, price, run and analyse unchanged; every arm passes the oracle gate on forward-model counts; `check replay` reproduces the 20 published rows; a version-2 toy run re-priced in its own currency reproduces its units; the drift gate is turn-price based. *In progress 2026-10-06: the meter, the weights file, the calibrator, the runner, the validator, `check replay`, `check overhead --audit` and the analyzer price every declared operation (§6.6), and version 1 is bit-identical: the 20 published holdout turns replay field for field and the oracle gate passes on eight arms covering every repair mode. Decisions (6)-(11) of §17 recorded.* |
 | 7 | Docs (`CONTRACT`, `CURRENCY`, `METHODS`, `OPERATIONS`, `ADDING_*`, `TRAPS`, the worked-result page), full notebook, `Tribes-master/` removed, v0.1 tag once the licence is in | a fresh clone follows `README.md` through §14.2 on the toy portfolio without reading anything else |
 
 Milestone 1 is the one you named as the first code milestone. Its "seam is in the right place" test is

@@ -37,6 +37,8 @@ jobs:
         run: python magat.py check equivalence --game tribes --arms emcts --scenarios 2 --visits 1 --budgets 8000
       - name: The headline arm, its control and a biased arm reproduce their thesis oracles
         run: python magat.py check equivalence --game tribes --arms comma-z0-coarse,comma-rand15,comma-bias-e25 --scenarios 2 --visits 1 --budgets 8000
+      - name: Audit (each arm's declared operations and forward model account for its turn)
+        run: python magat.py check overhead --audit --game tribes --arms emcts,comma-z0-coarse --budget 4000 --turns 2 --reps 1 --warmup 1
       - name: Structure (selection equivalences, the baseline contract, mechanisms differ from their controls)
         run: python magat.py check structure --game tribes --spec experiments/tribes/structure.json
       - name: Replay published R7615 holdout turns field for field
@@ -53,9 +55,11 @@ jobs:
       - name: Toy calibration writes, merges, and checks without writing
         run: |
           python magat.py machine
+          python magat.py calibrate --estimate --game tribes --arms emcts --levels 2000,4000 --reps 2 --turns 2 --warmup 1 --toy | grep -q "ESTIMATE: "
           python magat.py calibrate --game tribes --out "$RUNNER_TEMP/calib" --arms emcts --levels 2000,4000 --reps 2 --turns 2 --warmup 1 --toy
           python magat.py calibrate --game tribes --out "$RUNNER_TEMP/calib" --arms emcts-comma --levels 2000,4000 --reps 2 --warmup 1 --toy
-          grep -q "profile.emcts-comma@4000.wAdvance" "$RUNNER_TEMP/calib/compute_weights.properties"
+          grep -q "magat.weights.version = 2" "$RUNNER_TEMP/calib/compute_weights.properties"
+          grep -q "profile.emcts-comma@4000.w.emcts.generation" "$RUNNER_TEMP/calib/compute_weights.properties"
           # a toy drift verdict may land either side of the gate (exit 0 or 1); anything else is a failure
           rc=0; python magat.py calibrate --check --game tribes --weights "$RUNNER_TEMP/calib/compute_weights.properties" --arms emcts-comma --levels 4000 --reps 2 --warmup 1 --toy || rc=$?
           test "$rc" -le 1
@@ -71,6 +75,7 @@ jobs:
           $RUN --split dev | grep -q "SKIP (done)"
           $RUN --split holdout
           test "$(wc -l < "$RUNNER_TEMP/run/dev/_completed.txt")" -eq 6
+          head -1 "$RUNNER_TEMP/run/dev/emcts/2000cu/turns.csv" | grep -q "op_emcts.generation"
       - name: Analyze the toy run side by side, re-priced in its own currency
         run: |
           python magat.py analyze --run "$RUNNER_TEMP/run/dev" --holdout "$RUNNER_TEMP/run/holdout" --reprice "$RUNNER_TEMP/calib/compute_weights.properties" --out "$RUNNER_TEMP/analysis"
