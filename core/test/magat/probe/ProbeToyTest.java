@@ -9,6 +9,7 @@ import magat.portfolio.PortfolioBuilder;
 import magat.portfolio.Split;
 import magat.run.Experiment;
 import magat.run.GridRunner;
+import magat.testgame.BusyAgent;
 import magat.testgame.ToyGame;
 import org.junit.After;
 import org.junit.Test;
@@ -62,6 +63,53 @@ public class ProbeToyTest {
         // The same turns replayed by another arm do not reproduce.
         ReplayCheck.Result other = ReplayCheck.run(game, p, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 400, leaf, 100, 2);
         assertFalse(other.pass());
+    }
+
+    @Test
+    public void aVersionTwoLeafReplaysWithItsOperationCounts() throws Exception {
+        Path pdir = Files.createTempDirectory("magat-replay2-portfolio");
+        PortfolioBuilder.build(game, Collections.singletonMap("toy", 6), pdir, 1);
+        Split.freeze(pdir);
+        Portfolio<ToyGame.State> p = Portfolio.load(game, pdir);
+        Path work = Files.createTempDirectory("magat-replay2");
+        Weights w = Weights.load(magat.run.GridRunnerTest.weightsV2(work, "w2.properties", 0.5, "emcts", "emcts-comma"));
+        Path spec = Files.write(work.resolve("s.json"), ("{\"name\":\"r\",\"game\":\"toy\",\"baseline\":\"emcts\",\"levels\":[{\"budget\":300,\"visits\":2}],"
+                + "\"arms\":[\"emcts\",\"emcts-comma\"]}").getBytes(StandardCharsets.UTF_8));
+        GridRunner.Options o = new GridRunner.Options();
+        o.split = Split.Half.ALL;
+        o.out = work.resolve("run");
+        o.threads = 2;
+        assertEquals(GridRunner.OK, GridRunner.run(magat.run.GridRunnerTest.module(game, new ArrayList<>()), Experiment.load(spec), p, w, o));
+        Path leafDir = magat.run.Leaf.dir(o.out.resolve("all"), "emcts", 300);
+        Meter.install(w);
+        ReplayCheck.Result ok = ReplayCheck.run(game, p, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 300, ReplayCheck.read(leafDir), 100, 2);
+        assertTrue(ok.failures.toString(), ok.pass());
+
+        // An operation count tampered with is a difference, like any other field.
+        Path turns = leafDir.resolve(magat.run.Leaf.TURNS);
+        java.util.List<String> lines = new ArrayList<>(Files.readAllLines(turns, StandardCharsets.UTF_8));
+        java.util.List<String> header = java.util.Arrays.asList(lines.get(0).split(","));
+        String[] row = lines.get(1).split(",", -1);
+        int col = header.indexOf("op_emcts.legal");
+        row[col] = String.valueOf(Long.parseLong(row[col]) + 1);
+        lines.set(1, String.join(",", row));
+        Files.write(turns, (String.join("\n", lines) + "\n").getBytes(StandardCharsets.UTF_8));
+        ReplayCheck.Result bad = ReplayCheck.run(game, p, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 300, ReplayCheck.read(leafDir), 100, 2);
+        assertFalse(bad.pass());
+        assertTrue(bad.failures.toString(), bad.failures.toString().contains("op_emcts.legal"));
+    }
+
+    @Test
+    public void theAuditFailsAnArmWhoseWorkIsUndeclared() {
+        java.util.List<magat.game.Scenario<ToyGame.State>> positions = game.positions(2);
+        java.util.List<OverheadCheck.Audit> a = OverheadCheck.audit(game, java.util.Arrays.asList(
+                BusyAgent.<ToyGame.State, ToyGame.Move>factory("busy-declared", true),
+                BusyAgent.<ToyGame.State, ToyGame.Move>factory("busy-undeclared", false)), 300, positions, 2, 1);
+        assertTrue("declared: " + a.get(0).unaccounted, a.get(0).unaccounted < OverheadCheck.AUDIT_WARN);
+        assertTrue(a.get(0).shares.get(BusyAgent.WORK) > 0.5);
+        assertTrue("undeclared: " + a.get(1).unaccounted, a.get(1).unaccounted > OverheadCheck.AUDIT_FAIL);
+        assertTrue(OverheadCheck.report(a.subList(0, 1), OverheadCheck.AUDIT_WARN, OverheadCheck.AUDIT_FAIL));
+        assertFalse(OverheadCheck.report(a, OverheadCheck.AUDIT_WARN, OverheadCheck.AUDIT_FAIL));
     }
 
     @Test

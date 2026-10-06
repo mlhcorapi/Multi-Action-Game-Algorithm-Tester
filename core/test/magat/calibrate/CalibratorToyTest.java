@@ -8,6 +8,7 @@ import magat.meter.Meter;
 import magat.meter.Weights;
 import magat.portfolio.Portfolio;
 import magat.portfolio.PortfolioBuilder;
+import magat.testgame.BusyAgent;
 import magat.testgame.ToyGame;
 import org.junit.After;
 import org.junit.Test;
@@ -82,6 +83,14 @@ public class CalibratorToyTest {
         assertTrue(w1.has("emcts@600"));
         assertFalse("random is not priced", w1.has("random@300"));
         assertTrue(Files.exists(out.resolve(Currency.PROFILES_CSV)));
+        // A new file is version 2: every operation the arm declares is priced, with its nanoseconds and the audit.
+        assertEquals(2, w1.version());
+        assertEquals(new java.util.LinkedHashSet<>(magat.agents.emcts.Emcts.OPERATIONS), w1.operations("emcts@300"));
+        assertTrue(w1.prices("emcts@300").get("emcts.generation") > 0);
+        assertTrue(w1.nanosOf("emcts@300").get("emcts.legal") > 0);
+        assertFalse(Double.isNaN(w1.unpricedShare("emcts@300")));
+        assertTrue(w1.header().get("operations").startsWith("advance,copy,eval,emcts.generation"));
+        assertTrue(read(out.resolve(Currency.OPERATIONS_CSV)).contains("emcts@300,emcts,300,emcts.burn,"));
 
         // A second arm merges into the same currency; turns come from the file.
         Calibrator.Result r2 = Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-comma"));
@@ -92,7 +101,9 @@ public class CalibratorToyTest {
         assertTrue(w2.has("emcts-comma@300") && w2.has("emcts-comma@600"));
         assertEquals(w1.referenceAdvanceNanos(), w2.referenceAdvanceNanos(), 0);
         assertArrayEquals("profiles already priced are untouched", w1.profile("emcts@600"), w2.profile("emcts@600"), 0);
+        assertEquals(w1.prices("emcts@600"), w2.prices("emcts@600"));
         assertTrue(read(file).contains("# merged "));
+        assertTrue("the merged arm's operations are priced too", w2.prices("emcts-comma@300").containsKey("emcts.seqkey"));
 
         // Pricing it again without --replace is refused before anything is measured.
         String before = read(file);
@@ -106,7 +117,7 @@ public class CalibratorToyTest {
         Calibrator.Options replace = toy("emcts-comma");
         replace.replace = new LinkedHashSet<>(Collections.singletonList("emcts-comma"));
         assertTrue(Calibrator.run(game, registry(), "emcts", p, out, null, replace).pass);
-        assertEquals(1, read(file).split("profile\\.emcts-comma@300\\.wAdvance", -1).length - 1);
+        assertEquals(1, read(file).split("profile\\.emcts-comma@300\\.w\\.advance =", -1).length - 1);
 
         // Turns that differ from the file's are refused: they would measure other positions.
         Calibrator.Options wrongTurns = toy("emcts-comma");
@@ -127,6 +138,77 @@ public class CalibratorToyTest {
         assertNotNull(c.drift);
         assertFalse(c.drift.rows.isEmpty());
         assertEquals(beforeCheck, read(file));
+    }
+
+    @Test
+    public void aVersionOneFileStaysVersionOneWhenAnArmIsMergedIntoIt() throws Exception {
+        Portfolio<ToyGame.State> p = portfolio();
+        Path out = Files.createTempDirectory("magat-calib-v1");
+        Calibrator.Options first = toy("emcts");
+        first.turns = "2,2";
+        first.format = 1;
+        assertTrue(Calibrator.run(game, registry(), "emcts", p, out, null, first).pass);
+        Path file = out.resolve(Currency.WEIGHTS_FILE);
+        assertEquals(1, Weights.load(file).version());
+        Calibrator.Result r = Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-comma"));
+        assertTrue(r.pass);
+        Weights w = Weights.load(file);
+        assertEquals(1, w.version());
+        assertTrue(w.has("emcts-comma@300"));
+        assertTrue("a version-1 currency prices the forward model only", w.operations("emcts-comma@300").isEmpty());
+        assertFalse(read(file).contains(".w."));
+        // The arm's operations were still measured, for the audit: version 1 leaves them unpriced.
+        Cell comma = null;
+        for (Cell c : r.cells) if (c.profile.equals("emcts-comma@300")) comma = c;
+        assertNotNull(comma);
+        assertFalse(comma.ops.isEmpty());
+        assertTrue(comma.unpriced >= comma.unaccounted);
+    }
+
+    @Test
+    public void theAuditReportsWorkAnArmDoesNotDeclare() throws Exception {
+        Portfolio<ToyGame.State> p = portfolio();
+        Path out = Files.createTempDirectory("magat-calib-audit");
+        AgentRegistry<ToyGame.State, ToyGame.Move> reg = registry();
+        reg.register(BusyAgent.factory("busy-declared", true));
+        reg.register(BusyAgent.factory("busy-undeclared", false));
+        Calibrator.Options o = toy("emcts", "busy-declared", "busy-undeclared");
+        o.levels = new long[]{300};
+        o.turns = "2";
+        java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream was = System.out;
+        System.setOut(new java.io.PrintStream(captured, true, "UTF-8"));
+        Calibrator.Result r;
+        try {
+            r = Calibrator.run(game, reg, "emcts", p, out, null, o);
+        } finally {
+            System.setOut(was);
+        }
+        String log = captured.toString("UTF-8");
+        Cell declared = null, undeclared = null;
+        for (Cell c : r.cells) {
+            if (c.arm.equals("busy-declared")) declared = c;
+            if (c.arm.equals("busy-undeclared")) undeclared = c;
+        }
+        assertTrue("the declared loop is priced: " + declared.unpriced, declared.unpriced < Calibrator.AUDIT_WARN);
+        assertTrue("the undeclared loop is most of the turn: " + undeclared.unpriced, undeclared.unpriced > 0.5);
+        assertTrue(log, log.contains("[warn] busy-undeclared@300"));
+        assertFalse(log, log.contains("[warn] busy-declared@300"));
+        assertTrue(Weights.load(out.resolve(Currency.WEIGHTS_FILE)).prices("busy-declared@300").get(BusyAgent.WORK) > 0);
+        assertTrue(Weights.load(out.resolve(Currency.WEIGHTS_FILE)).unpricedShare("busy-undeclared@300") > 0.5);
+    }
+
+    @Test
+    public void anEstimateTimesAFewTurnsAndWritesNothing() throws Exception {
+        Path out = Files.createTempDirectory("magat-calib-estimate");
+        Calibrator.Options o = toy("emcts", "emcts-comma");
+        o.turns = "2,2";
+        o.estimate = true;
+        Calibrator.Result r = Calibrator.run(game, registry(), "emcts", portfolio(), out, null, o);
+        assertTrue(r.pass);
+        assertTrue(r.estimateSeconds > 0);
+        assertFalse(Files.exists(out.resolve(Currency.WEIGHTS_FILE)));
+        assertFalse(Files.exists(out.resolve(Currency.PROFILES_CSV)));
     }
 
     @Test

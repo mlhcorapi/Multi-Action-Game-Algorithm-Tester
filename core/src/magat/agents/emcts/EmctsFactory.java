@@ -3,7 +3,9 @@ package magat.agents.emcts;
 import magat.agent.AgentFactory;
 import magat.agent.SearchAgent;
 import magat.agent.TurnBudget;
+import magat.meter.Meter;
 
+import java.util.List;
 import java.util.function.Supplier;
 
 /**
@@ -16,6 +18,7 @@ public final class EmctsFactory<S, A> implements AgentFactory<S, A> {
     private final String description;
     private final Supplier<EmctsParams> params;
     private final String attributionControl;
+    private final List<String> operations;
 
     public EmctsFactory(String id, String description, Supplier<EmctsParams> params) {
         this(id, description, params, null);
@@ -26,6 +29,9 @@ public final class EmctsFactory<S, A> implements AgentFactory<S, A> {
         this.description = description;
         this.params = params;
         this.attributionControl = attributionControl;
+        EmctsParams p = params.get();
+        this.operations = p instanceof QdeltaParams ? QdeltaEmcts.operations((QdeltaParams) p) : Emcts.OPERATIONS;
+        Meter.declare(operations);
     }
 
     /** Plain EMCTS: greedy initialization, 21 phases, (1+1) incumbent selection, exhaustive repair. */
@@ -55,6 +61,7 @@ public final class EmctsFactory<S, A> implements AgentFactory<S, A> {
     @Override public String id() { return id; }
     @Override public String description() { return description; }
     @Override public String attributionControl() { return attributionControl; }
+    @Override public List<String> operations() { return operations; }
 
     @Override
     public SearchAgent<S, A> create(long seed, TurnBudget budget) {

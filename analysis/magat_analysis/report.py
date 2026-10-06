@@ -33,7 +33,7 @@ EMPTY = {
     "oracle": "Split Budget Arm Turns Arms BestShare MeanRegret currency",
     "anytime": "Split Budget Arm Checkpoint MeanDiff Pairs currency",
     "efficiency": "Split Budget Arm Turns MeanNodes NodesVsBase MeanUnique DupShare DupBasis MeanPlanMillis MeanUnits "
-                  "TerminalShare currency",
+                  "TerminalShare UnpricedShare currency",
     "variance": "Split Budget Arm Stratum Pairs Clusters MeanVisits SigmaB2 SigmaW2 ICC SE SEFloor ExcessOverFloorPct "
                 "VisitsWithin5Pct EquivClustersAtV1 TurnsUsed TurnsEquiv currency",
     "terminals": "Split Budget Arm Turns TerminalShare currency",
@@ -78,13 +78,21 @@ def analyse_split(sp: load.Split, baseline: str, pairs: list, n: int, weights=No
     out["contrasts"] = measures.contrasts(t, pairs, sp.name, n)
     out["oracle"] = measures.oracle(t, sp.name)
     out["anytime"] = measures.anytime(sp.curve, t, baseline, sp.name)
-    out["efficiency"] = measures.efficiency(t, baseline, sp.name)
+    out["efficiency"] = measures.efficiency(t, baseline, sp.name, ref_ns=reference_nanos(sp))
     out["variance"] = measures.variance(t, baseline, sp.name)
     out["terminals"] = measures.terminal_rates(t)
     if weights is not None:
         out["repriced"], out["repriced_spend"], notes = measures.reprice(t, sp.leaves, weights, baseline, sp.name, n)
         sp.notes.extend(notes)
     return out
+
+
+def reference_nanos(sp: load.Split):
+    """The currency's reference-advance nanoseconds, from the run's provenance (None for an imported tree)."""
+    try:
+        return float(((sp.run.get("weights") or {}).get("header") or {}).get("referenceAdvanceNanos"))
+    except (TypeError, ValueError):
+        return None
 
 
 def stamp(df: pd.DataFrame, split: str, currency: str) -> pd.DataFrame:
@@ -218,7 +226,15 @@ def render(splits, specs, baseline, results, repl, prov, weights, n) -> str:
         L += ["## Replication: development and holdout side by side", "",
               "`yes`: the holdout estimate lands inside the development interval and its own interval excludes",
               "the null (0, or 1x for a multiplier). `ns both`: neither interval excludes it, a null that",
-              "replicated. Every headline appears as two numbers or not at all.", ""]
+              "replicated. Every headline appears as two numbers or not at all.", "",
+              "**What a `no` means.** When the two halves ran on the same machine in the same currency (the",
+              "provenance table says whether they did), they differ in scenarios and in nothing else, so a `no` is",
+              "about the scenarios or about the arm, never about the device. It has one of two causes. Either the",
+              "development estimate was selected (it was the best of several) and shrinks toward its true value",
+              "on scenarios that played no part in the choice: the winner's curse, and the holdout doing its job.",
+              "Or the two halves did not measure the same arm: a price or a definition changed between them, which",
+              "a MAGAT run's per-leaf currency lock refuses. Name the cause beside the row; a `no` is not noise to",
+              "be averaged away.", ""]
         r = repl[repl.Stratum != "no-terminal"]
         m = repl[repl.Kind == "multiplier"]
         rows = []
@@ -394,10 +410,13 @@ def efficiency_section(split, R) -> list:
         return []
     L = [f"## Diversity ({split}, within-run only)", "",
          "How each arm spent its budget, never whether that was good. The duplicate share is per mutation event",
-         "where the agent reports them, else per node. Agent telemetry means are in `tables/efficiency.csv`.", ""]
+         "where the agent reports them, else per node. `Unpriced` is the audit: the share of the plan time the",
+         "currency's priced work does not predict, measured where the turns ran (so it also holds contention and",
+         "any machine difference). Agent telemetry and operation counts are in `tables/efficiency.csv`.", ""]
     rows = [[x.Budget, x.Arm, f"{x.MeanNodes:.1f}", f"{x.MeanUnique:.1f}", f"{x.DupShare:.3f}", f(x.NodesVsBase, ".2f"),
-             f"{x.MeanPlanMillis:.0f}"] for x in e.itertuples(index=False)]
-    return L + table(["Budget", "Arm", "Nodes", "Unique", "Dup share", "Nodes vs baseline", "Plan ms"], rows)
+             f"{x.MeanPlanMillis:.0f}", "-" if not np.isfinite(x.UnpricedShare) else f"{x.UnpricedShare:.1%}"]
+            for x in e.itertuples(index=False)]
+    return L + table(["Budget", "Arm", "Nodes", "Unique", "Dup share", "Nodes vs baseline", "Plan ms", "Unpriced"], rows)
 
 
 def variance_section(split, R) -> list:

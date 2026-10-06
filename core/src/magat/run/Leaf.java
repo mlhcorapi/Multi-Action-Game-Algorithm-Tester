@@ -45,6 +45,7 @@ public final class Leaf {
 
     private final Path dir;
     private List<String> telemetryKeys;          // fixed by the file's header once it exists
+    private List<String> operationKeys;          // the arm's declared operations, likewise fixed by the header
 
     private Leaf(Path dir) {
         this.dir = dir;
@@ -62,7 +63,10 @@ public final class Leaf {
         Path turns = dir.resolve(TURNS);
         if (Files.isRegularFile(turns)) {
             List<String> lines = Files.readAllLines(turns, StandardCharsets.UTF_8);
-            if (!lines.isEmpty()) l.telemetryKeys = telemetryOf(lines.get(0));
+            if (!lines.isEmpty()) {
+                l.telemetryKeys = telemetryOf(lines.get(0));
+                l.operationKeys = operationsOf(lines.get(0));
+            }
         }
         return l;
     }
@@ -120,7 +124,9 @@ public final class Leaf {
         Path turns = dir.resolve(TURNS), curve = dir.resolve(CURVE);
         if (telemetryKeys == null) {
             telemetryKeys = new ArrayList<>(r.telemetry.keySet());
+            operationKeys = new ArrayList<>(r.operations.keySet());
             List<String> header = new ArrayList<>(COLUMNS);
+            for (String k : operationKeys) header.add("op_" + k);
             for (String k : telemetryKeys) header.add("t_" + k);
             Files.write(turns, (String.join(",", header) + "\n").getBytes(StandardCharsets.UTF_8),
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
@@ -143,6 +149,11 @@ public final class Leaf {
          .append(r.initAdvances).append(',').append(r.initCopies).append(',').append(r.initEvals).append(',').append(num(r.initUnits)).append(',')
          .append(r.planMillis).append(',').append(r.initMillis).append(',')
          .append(r.nodes).append(',').append(r.unique).append(',').append(r.duplicates).append(',').append(r.sequenceLength);
+        // The arm's own operations, counted over the search (re-pricing reads them beside the forward model's).
+        for (String k : operationKeys) {
+            Long c = r.operations.get(k);
+            t.append(',').append(c == null ? "" : String.valueOf(c));
+        }
         for (String k : telemetryKeys) {
             Double v = r.telemetry.get(k);
             t.append(',').append(v == null ? "" : num(v));
@@ -181,6 +192,12 @@ public final class Leaf {
     private static List<String> telemetryOf(String header) {
         List<String> keys = new ArrayList<>();
         for (String c : header.split(",")) if (c.startsWith("t_")) keys.add(c.substring(2));
+        return keys;
+    }
+
+    private static List<String> operationsOf(String header) {
+        List<String> keys = new ArrayList<>();
+        for (String c : header.split(",")) if (c.startsWith("op_")) keys.add(c.substring(3));
         return keys;
     }
 

@@ -166,6 +166,7 @@ public final class ReplayCheck {
         m.put("duplicates", (double) r.duplicates);
         m.put("seq_len", (double) r.sequenceLength);
         m.put("fm", (double) r.fmCalls());
+        for (Map.Entry<String, Long> e : r.operations.entrySet()) m.put("op_" + e.getKey(), (double) e.getValue());
         for (Map.Entry<String, Double> e : r.telemetry.entrySet()) m.put("t:" + e.getKey(), e.getValue());
         return m;
     }

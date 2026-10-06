@@ -88,6 +88,9 @@ def main(argv) -> int:
     check("overhead: decorator and dormant counters are measured (toy size)",
           [PY, ROOT / "magat.py", "check", "overhead", "--game", game, "--turns", "2", "--reps", "2", "--warmup", "1"],
           "OVERHEAD: MEASURED")
+    check("audit: each arm's declared operations and forward model account for its turn (toy size)",
+          [PY, ROOT / "magat.py", "check", "overhead", "--audit", "--game", game, "--arms", "emcts,comma-z0-coarse",
+           "--budget", "4000", "--turns", "2", "--reps", "1", "--warmup", "1"], "OVERHEAD AUDIT: PASS")
 
     step("5. Portfolio: toy build, freeze, verify against the published portfolio")
     data = pathlib.Path(os.environ.get("MAGAT_DATA") or (pathlib.Path.home() / "magat_runs")).resolve()
@@ -114,23 +117,28 @@ def main(argv) -> int:
           [PY, ROOT / "magat.py", "threads", "--game", game, "--out", calib, "--levels", "4000",
            "--ladder", "1,2", "--segment-seconds", "2"], "THREADS:", then=lambda: (calib / "threads.json").is_file())
     toy = ["--reps", "2", "--warmup", "1", "--toy"]
-    check("calibrate writes a new (toy) currency",
+    check("--estimate times a few turns and says what the session would take, writing nothing",
+          [PY, ROOT / "magat.py", "calibrate", "--estimate", "--game", game, "--out", calib, "--arms", "emcts",
+           "--levels", "2000,4000", "--turns", "2", *toy],
+          "ESTIMATE: ", then=lambda: not weights.is_file())
+    check("calibrate writes a new (toy) currency, version 2: every declared operation priced and audited",
           [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts", "--levels", "2000,4000",
            "--turns", "2", *toy],
-          "CALIBRATION: PASS", then=weights.is_file)
+          "=== AUDIT", then=lambda: weights.is_file() and "magat.weights.version = 2" in weights.read_text(encoding="utf-8")
+          and "profile.emcts@2000.w.emcts.generation" in weights.read_text(encoding="utf-8"))
     snapshot = {}
     check("a second arm merges into it, re-denominated",
           [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts-comma",
            "--levels", "2000,4000", *toy],
           "[merge] kept the currency",
-          then=lambda: "profile.emcts-comma@4000.wAdvance" in snapshot.setdefault("w", weights.read_text(encoding="utf-8")))
+          then=lambda: "profile.emcts-comma@4000.w.advance" in snapshot.setdefault("w", weights.read_text(encoding="utf-8")))
     check("pricing it again without --replace is refused",
           [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts-comma", "--levels", "4000", "--toy"],
           "--replace", codes=(2,), then=lambda: weights.read_text(encoding="utf-8") == snapshot["w"])
-    check("--check reports drift and writes nothing",
+    check("--check gates each cell's turn-price drift and writes nothing",
           [PY, ROOT / "magat.py", "calibrate", "--check", "--game", game, "--weights", weights, "--arms", "emcts-comma",
            "--levels", "4000", *toy],
-          "largest drift", codes=(0, 1), then=lambda: weights.read_text(encoding="utf-8") == snapshot["w"])
+          "largest drift in a turn's price", codes=(0, 1), then=lambda: weights.read_text(encoding="utf-8") == snapshot["w"])
     check("--under-load writes beside the idle file, never over it",
           [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts-comma",
            "--under-load", "3", "--levels", "4000", "--turns", "2", *toy],
@@ -145,15 +153,17 @@ def main(argv) -> int:
     shutil.rmtree(run_root, ignore_errors=True)
     run = [PY, ROOT / "magat.py", "run", "--experiment", spec, "--portfolio", toy_dir, "--weights", weights,
            "--out", run_root, "--threads", "2", "--toy"]
-    check("dev: every leaf runs and is checkpointed", [*run, "--split", "dev"], "RUN: COMPLETE",
-          then=lambda: len((run_root / "dev" / "_completed.txt").read_text(encoding="utf-8").split()) == 6)
+    check("dev: every leaf runs and is checkpointed, its rows counting the arm's own operations",
+          [*run, "--split", "dev"], "RUN: COMPLETE",
+          then=lambda: len((run_root / "dev" / "_completed.txt").read_text(encoding="utf-8").split()) == 6
+          and "op_emcts.generation" in (run_root / "dev" / "emcts" / "2000cu" / "turns.csv").read_text(encoding="utf-8").splitlines()[0])
     check("re-running the same command skips every finished leaf", [*run, "--split", "dev"], "RUN: COMPLETE",
           then=lambda: len(list((run_root / "dev").glob("*/*cu/turns.csv"))) == 6)
     check("holdout: runs into its own tree and is entered in the holdout ledger", [*run, "--split", "holdout"], "this read is entry 1",
           then=lambda: (run_root / "holdout" / "_run.json").is_file())
     check("a retired leaf is discarded and re-run", [*run, "--split", "dev", "--retire-leaf", "emcts-comma@4000"], "RETIRED emcts-comma@4000")
     repriced = calib / "compute_weights_repriced.properties"
-    repriced.write_text(weights.read_text(encoding="utf-8").replace("profile.emcts-comma@2000.wCopy = ", "profile.emcts-comma@2000.wCopy = 9"),
+    repriced.write_text(weights.read_text(encoding="utf-8").replace("profile.emcts-comma@2000.w.copy = ", "profile.emcts-comma@2000.w.copy = 9"),
                         encoding="utf-8")
     check("the currency lock refuses a leaf whose price changed",
           [PY, ROOT / "magat.py", "run", "--experiment", spec, "--portfolio", toy_dir, "--weights", repriced,
@@ -181,7 +191,7 @@ def main(argv) -> int:
         return len(rows) > 1 and all(abs(float(r.split(",")[h.index("Ratio")]) - 1) < 1e-4 for r in rows[1:])
 
     toy_out = results / "toy"
-    check("analyze: every table from the toy dev and holdout trees, re-priced in its own currency",
+    check("analyze: every table from the toy trees, re-priced in their own version-2 currency (every operation)",
           [PY, ROOT / "magat.py", "analyze", "--run", run_root / "dev", "--holdout", run_root / "holdout",
            "--reprice", weights, "--out", toy_out], "ANALYZE: OK",
           then=lambda: every_table(toy_out, "repriced", "repriced_spend") and same_units(toy_out))

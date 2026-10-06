@@ -8,6 +8,8 @@ import magat.meter.Meter;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
@@ -26,8 +28,25 @@ import java.util.Random;
  * order, which the equivalence gate asserts against that class. Two initialization copies that class
  * makes and never reads (its {@code old_gs} copy and the copy handed to the root's evaluation) are
  * not made here; the oracle declares them.
+ *
+ * <p><b>Its own operations</b> (DESIGN §6.6), recorded through the meter beside the forward model's:
+ * {@code emcts.generation}, one generation's own work (choosing the node, building and repairing the
+ * children's plans, selection), timed without the operations nested in it; {@code emcts.legal}, one
+ * legal-action query; {@code emcts.check}, one legality check of a planned action during repair;
+ * {@code emcts.seqkey}, one plan key built and looked up or stored for the uniqueness count; and
+ * {@code emcts.burn}, one bridge burn (re-rooting and pruning). A version-1 currency prices none of
+ * them, so under it they change nothing: they are observation, like the telemetry.
  */
 public class Emcts<S, A> implements SearchAgent<S, A> {
+
+    /** The operations every EMCTS-family arm records, in the order its rows carry them. */
+    public static final List<String> OPERATIONS = Collections.unmodifiableList(Arrays.asList(
+            "emcts.generation", "emcts.legal", "emcts.check", "emcts.seqkey", "emcts.burn"));
+    protected static final Meter.Op GENERATION = Meter.register("emcts.generation");
+    protected static final Meter.Op LEGAL = Meter.register("emcts.legal");
+    protected static final Meter.Op CHECK = Meter.register("emcts.check");
+    protected static final Meter.Op SEQKEY = Meter.register("emcts.seqkey");
+    protected static final Meter.Op BURN = Meter.register("emcts.burn");
 
     protected final Random rnd;
     protected final EmctsParams params;
@@ -96,38 +115,42 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
                 if ((numIters - phaseStartIters) >= maxItersPerPhase) break;
 
                 numIters++;
-                Node<S, A> toMutate = nodeToExpand();
-                final int k = Math.max(1, params.childrenPerGeneration);
-                Node<S, A> bestOfGeneration = null;
-                Node<S, A> randomOfGeneration = null;
-                for (int childIdx = 0; childIdx < k; childIdx++) {
-                    if (childIdx > 0) numIters++;
-                    Node<S, A> born = expandOnce(toMutate, state);
-                    lastCreatedChild = born;
-                    if (bestOfGeneration == null || born.value() > bestOfGeneration.value())
-                        bestOfGeneration = born;
-                    // Reservoir pick, drawn for every k > 1 mode so all multi-child arms consume one
-                    // identical random stream; never drawn at k = 1, which keeps the one-child search
-                    // bit-identical to the thesis tree.
-                    if (k == 1) randomOfGeneration = born;
-                    else if (rnd.nextInt(childIdx + 1) == 0) randomOfGeneration = born;
+                try (Meter.Span g = GENERATION.span()) {
+                    Node<S, A> toMutate = nodeToExpand();
+                    final int k = Math.max(1, params.childrenPerGeneration);
+                    Node<S, A> bestOfGeneration = null;
+                    Node<S, A> randomOfGeneration = null;
+                    for (int childIdx = 0; childIdx < k; childIdx++) {
+                        if (childIdx > 0) numIters++;
+                        Node<S, A> born = expandOnce(toMutate, state);
+                        lastCreatedChild = born;
+                        if (bestOfGeneration == null || born.value() > bestOfGeneration.value())
+                            bestOfGeneration = born;
+                        // Reservoir pick, drawn for every k > 1 mode so all multi-child arms consume one
+                        // identical random stream; never drawn at k = 1, which keeps the one-child search
+                        // bit-identical to the thesis tree.
+                        if (k == 1) randomOfGeneration = born;
+                        else if (rnd.nextInt(childIdx + 1) == 0) randomOfGeneration = born;
+                    }
+                    adoptAfterGeneration(bestOfGeneration, randomOfGeneration);
                 }
-                adoptAfterGeneration(bestOfGeneration, randomOfGeneration);
             }
 
             // Bridge burn at every phase boundary except the last.
             if (phase < phases - 1 && root.children().size() > 0) {
-                Node<S, A> newRoot = standardBurnTarget();
-                if (newRoot != null && newRoot != root) {
-                    for (Node<S, A> child : root.children()) {
-                        if (child != newRoot) unlinkTree(child, newRoot);
+                try (Meter.Span b = BURN.span()) {
+                    Node<S, A> newRoot = standardBurnTarget();
+                    if (newRoot != null && newRoot != root) {
+                        for (Node<S, A> child : root.children()) {
+                            if (child != newRoot) unlinkTree(child, newRoot);
+                        }
+                        newRoot.disconnectParent();
+                        root = newRoot;
+                        if (!isInLiveTree(incumbent)) incumbent = subtreeMax(root);
+                        record.checkpoint(phase + 1, bestNode.value(), fmCalls, Meter.units(),
+                                System.currentTimeMillis() - turnStart);
+                        onBridgeBurn(phase + 1);
                     }
-                    newRoot.disconnectParent();
-                    root = newRoot;
-                    if (!isInLiveTree(incumbent)) incumbent = subtreeMax(root);
-                    record.checkpoint(phase + 1, bestNode.value(), fmCalls, Meter.units(),
-                            System.currentTimeMillis() - turnStart);
-                    onBridgeBurn(phase + 1);
                 }
             }
         }
@@ -183,7 +206,10 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
         mutRepairKept += lastRepairKept;
         mutRepairReplaced += lastRepairReplaced;
 
-        boolean childDuplicate = uniqueSeqKeys.contains(seqKey(child.sequence()));
+        boolean childDuplicate;
+        try (Meter.Span key = SEQKEY.span()) {
+            childDuplicate = uniqueSeqKeys.contains(seqKey(child.sequence()));
+        }
         double prevBest = bestNode.value();
         eval(game.copy(state), child);
         if (childDuplicate) mutChildDuplicates++;
@@ -310,7 +336,9 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
         node.refreshScore(params.bias);
         nodesEvaluated++;
         sumNodeValue += node.value();
-        uniqueSeqKeys.add(seqKey(node.sequence()));
+        try (Meter.Span key = SEQKEY.span()) {
+            uniqueSeqKeys.add(seqKey(node.sequence()));
+        }
     }
 
     protected String seqKey(List<A> seq) {
@@ -325,6 +353,20 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
         game.advance(state, move);
     }
 
+    /** The legal actions, as one {@code emcts.legal} operation. */
+    protected List<A> legalActions(S state) {
+        try (Meter.Span q = LEGAL.span()) {
+            return game.legalActions(state);
+        }
+    }
+
+    /** Whether a planned action is legal, as one {@code emcts.check} operation. */
+    protected boolean isLegal(S state, A action) {
+        try (Meter.Span c = CHECK.span()) {
+            return game.isLegal(state, action);
+        }
+    }
+
     // ------------------------------------------------------------------ operators
 
     /** The greedy 1-ply initial plan; the state given is consumed and kept by the root node. */
@@ -333,7 +375,7 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
 
         while (!game.isTerminal(state) && game.activePlayer(state) == player
                 && individual.size() < (params.nodeSize - 1)) {
-            List<A> available = game.legalActions(state);
+            List<A> available = legalActions(state);
             if (available.isEmpty()) break;
 
             A bestAction = null;
@@ -402,7 +444,7 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
             advance(state, seq.get(i));
             newSeq.add(seq.get(i));
         }
-        List<A> available = game.legalActions(state);
+        List<A> available = legalActions(state);
         if (!available.isEmpty()) {
             newSeq.add(available.get(rnd.nextInt(available.size())));
         }
@@ -429,7 +471,7 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
         for (int i = 0; i < child.size(); i++) {
             if (game.activePlayer(state) != player) return repaired;
             try {
-                boolean done = game.isLegal(state, child.get(i));
+                boolean done = isLegal(state, child.get(i));
                 if (!done) {
                     A best = greedyReplacement(state);
                     if (best != null) {
@@ -465,7 +507,7 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
 
     /** The legal action with the best 1-ply value, ties broken by a reservoir draw. */
     protected A greedyReplacement(S state) {
-        List<A> available = game.legalActions(state);
+        List<A> available = legalActions(state);
         A bestAction = null;
         double bestScore = Double.NEGATIVE_INFINITY;
         int numTies = 0;

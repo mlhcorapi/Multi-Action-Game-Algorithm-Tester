@@ -6,6 +6,10 @@ import magat.game.Scenario;
 import magat.meter.Meter;
 import magat.meter.Profile;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * One replanned turn: the sequence every runner, calibrator and probe used to spell out for itself,
  * written once. Copy the captured state, pin its stochasticity to the visit seed, install the arm's
@@ -64,10 +68,40 @@ public final class Episode {
         long seed = Seeds.visit(scenario.id, visit);
         S state = metered.inner().copy(scenario.state);    // the working copy is not the agent's spend
         metered.reseed(state, seed);
+        List<String> declared = arm.operations();
+        Meter.declare(declared);                           // registered before pricing resolves them
         Meter.reset();
         pricing.run();
         TurnBudget budget = TurnBudget.units(budgetUnits);
         SearchAgent<S, A> agent = arm.create(seed, budget);
-        return new Planned<>(agent, agent.plan(metered, state, metered.activePlayer(state), budget));
+        TurnRecord record = agent.plan(metered, state, metered.activePlayer(state), budget);
+        return new Planned<>(agent, withOperations(arm, declared, record, budget));
+    }
+
+    /**
+     * Attaches the arm's algorithm-operation counts to the record, and refuses a turn that recorded an
+     * operation its factory does not declare (it would run unpriced under a version-2 currency, and the
+     * validator could not have caught it) or that a version-2 profile in force does not price.
+     */
+    private static <S, A> TurnRecord withOperations(AgentFactory<S, A> arm, List<String> declared, TurnRecord record, TurnBudget budget) {
+        long[] search = Meter.counts(), init = budget.initOperations();
+        int n = Meter.operationCount();
+        Map<String, Long> ops = new LinkedHashMap<>(), initOps = new LinkedHashMap<>();
+        for (String name : declared) {
+            int i = Meter.index(name);
+            ops.put(name, search[i]);
+            initOps.put(name, i < init.length ? init[i] : 0L);
+        }
+        for (int i = Meter.FORWARD_MODEL; i < n; i++) {
+            boolean counted = search[i] > 0 || (i < init.length && init[i] > 0);
+            if (counted && !declared.contains(Meter.name(i)))
+                throw new IllegalStateException("arm " + arm.id() + " recorded the operation '" + Meter.name(i)
+                        + "', which its AgentFactory does not declare (declared: " + declared + ")");
+        }
+        List<String> unpriced = Meter.unpricedCounted(init);
+        if (!unpriced.isEmpty())
+            throw new IllegalStateException("arm " + arm.id() + " recorded " + unpriced + ", which the version-2 profile "
+                    + Meter.activeProfile() + " does not price; calibrate the arm's operations");
+        return declared.isEmpty() ? record : record.withOperations(ops, initOps);
     }
 }

@@ -63,6 +63,7 @@ public class GridRunnerTest {
         return new AgentFactory<ToyGame.State, ToyGame.Move>() {
             @Override public String id() { return "emcts-twin"; }
             @Override public SearchAgent<ToyGame.State, ToyGame.Move> create(long seed, TurnBudget budget) { return plain.create(seed, budget); }
+            @Override public java.util.List<String> operations() { return plain.operations(); }
         };
     }
 
@@ -80,6 +81,68 @@ public class GridRunnerTest {
         Path f = dir.resolve(name);
         Files.write(f, sb.toString().getBytes(StandardCharsets.UTF_8));
         return f;
+    }
+
+    /** A version-2 file pricing the given arms at 300 and 600, every EMCTS operation at {@code opWeight}. */
+    public static Path weightsV2(Path dir, String name, double opWeight, String... arms) throws Exception {
+        StringBuilder sb = new StringBuilder("magat.weights.version = 2\ngame = toy\nreference = emcts@300\nreferenceAdvanceNanos = 1000\n"
+                + "turnsPerRep = 2\nglobal.w.advance = 1\nglobal.w.copy = 0.16\nglobal.w.eval = 0.077\n");
+        for (String a : arms)
+            for (int b : new int[]{300, 600}) {
+                String p = "profile." + a + "@" + b + ".";
+                sb.append(p).append("w.advance = 1\n").append(p).append("w.copy = 0.16\n").append(p).append("w.eval = 0.077\n");
+                for (String op : magat.agents.emcts.Emcts.OPERATIONS) sb.append(p).append("w.").append(op).append(" = ").append(opWeight).append('\n');
+            }
+        Path f = dir.resolve(name);
+        Files.write(f, sb.toString().getBytes(StandardCharsets.UTF_8));
+        return f;
+    }
+
+    @Test
+    public void aVersionTwoRunWritesTheOperationsAndRecordsTheirPricesAndTheAudit() throws Exception {
+        Weights w = Weights.load(weightsV2(work, "w2.properties", 0.5, "emcts", "emcts-comma"));
+        assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), portfolio, w, options(Split.Half.DEV)));
+        Path leaf = Leaf.dir(out.resolve("dev"), "emcts", 600);
+        List<String> lines = Files.readAllLines(leaf.resolve(Leaf.TURNS), StandardCharsets.UTF_8);
+        List<String> header = Arrays.asList(lines.get(0).split(","));
+        int seqLen = header.indexOf("seq_len");
+        assertEquals("the forward model's columns keep their places", Leaf.COLUMNS, header.subList(0, seqLen + 1));
+        assertEquals("op_emcts.generation", header.get(seqLen + 1));
+        assertTrue(header.containsAll(Arrays.asList("op_emcts.legal", "op_emcts.check", "op_emcts.seqkey", "op_emcts.burn")));
+        String[] row = lines.get(1).split(",", -1);
+        assertTrue(Long.parseLong(row[header.indexOf("op_emcts.generation")]) > 0);
+        // units are every operation's count times its price (to the four decimals rows are written with)
+        double units = Double.parseDouble(row[header.indexOf("units")]);
+        double priced = Double.parseDouble(row[header.indexOf("advances")]) + 0.16 * Double.parseDouble(row[header.indexOf("copies")])
+                + 0.077 * Double.parseDouble(row[header.indexOf("evals")]);
+        for (String op : magat.agents.emcts.Emcts.OPERATIONS) priced += 0.5 * Double.parseDouble(row[header.indexOf("op_" + op)]);
+        assertEquals(priced, units, 1e-3);
+        String meta = read(leaf.resolve(Leaf.META));
+        assertTrue(meta.contains("\"currencyVersion\": 2"));
+        assertTrue(meta.contains("\"emcts.burn\": 0.5"));
+        // The audit (recorded when the leaf's turns took measurable time, which toy turns may not): the plan
+        // time its priced units predict at the currency's reference nanoseconds, against the time measured.
+        com.eclipsesource.json.JsonObject a = GridRunner.audit(w, 4000, 5, 2);
+        assertEquals(4000 * 1000 / 1e6, a.getDouble("predictedMs", 0), 1e-9);
+        assertEquals(1 - 4.0 / 5.0, a.getDouble("unpricedShare", 0), 1e-9);
+        assertNull("no measured time, no share", GridRunner.audit(w, 4000, 0, 2));
+        // the random floor declares nothing and keeps the plain layout
+        assertFalse(read(Leaf.dir(out.resolve("dev"), "random", 300).resolve(Leaf.TURNS)).contains("op_"));
+    }
+
+    @Test
+    public void aVersionOneTreeIsNotContinuedInAVersionTwoCurrency() throws Exception {
+        GridRunner.Options o = options(Split.Half.DEV);
+        Experiment x = Experiment.load(spec(SPEC));
+        assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio,
+                Weights.load(weights(work, "w1.properties", 0, "emcts", "emcts-comma")), o));
+        // Same forward-model prices, but the arms' own operations are now priced: every priced leaf changes price.
+        Weights v2 = Weights.load(weightsV2(work, "w2.properties", 0.5, "emcts", "emcts-comma"));
+        assertEquals(GridRunner.MISMATCH, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, v2, o));
+        // Retiring them re-runs them in the new currency.
+        o.retire = new java.util.LinkedHashSet<>(Arrays.asList("emcts@600", "emcts@300", "emcts-comma@600", "emcts-comma@300"));
+        assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, v2, o));
+        assertTrue(read(Leaf.dir(out.resolve("dev"), "emcts", 300).resolve(Leaf.TURNS)).contains("op_emcts.legal"));
     }
 
     private Path spec(String json) throws Exception {

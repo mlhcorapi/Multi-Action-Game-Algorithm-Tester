@@ -11,6 +11,10 @@ import java.util.Map;
  * What one planned turn produced: the values, the spend (raw counts always, units as priced by the
  * profile in force), the diversity counters, the anytime curve, and any agent-defined telemetry.
  * This is one row of {@code turns.csv} plus the rows of {@code curve.csv}.
+ *
+ * <p>The forward model's counts are split into the search ({@code advances}, ...) and the
+ * initialization ({@code initAdvances}, ...); so are the arm's declared algorithm operations
+ * ({@link #operations}, {@link #initOperations}), which {@link Episode} attaches after the turn.
  */
 public final class TurnRecord {
 
@@ -40,6 +44,10 @@ public final class TurnRecord {
     public final int sequenceLength;
     public final List<Checkpoint> curve;
     public final Map<String, Double> telemetry;
+    /** The arm's declared algorithm operations, counted over the search, in declaration order. */
+    public final Map<String, Long> operations;
+    /** The same operations, counted over the initialization (outside the budget, inside {@code initUnits}). */
+    public final Map<String, Long> initOperations;
 
     private TurnRecord(Builder b) {
         this.initial = b.initial; this.finalValue = b.finalValue; this.terminal = b.terminal;
@@ -52,6 +60,27 @@ public final class TurnRecord {
         this.sequenceLength = b.sequenceLength;
         this.curve = Collections.unmodifiableList(new ArrayList<>(b.curve));
         this.telemetry = Collections.unmodifiableMap(new LinkedHashMap<>(b.telemetry));
+        this.operations = Collections.emptyMap();
+        this.initOperations = Collections.emptyMap();
+    }
+
+    private TurnRecord(TurnRecord r, Map<String, Long> operations, Map<String, Long> initOperations) {
+        this.initial = r.initial; this.finalValue = r.finalValue; this.terminal = r.terminal; this.avgNode = r.avgNode;
+        this.advances = r.advances; this.copies = r.copies; this.evals = r.evals; this.units = r.units;
+        this.initAdvances = r.initAdvances; this.initCopies = r.initCopies; this.initEvals = r.initEvals;
+        this.initUnits = r.initUnits;
+        this.planMillis = r.planMillis; this.initMillis = r.initMillis;
+        this.nodes = r.nodes; this.unique = r.unique; this.duplicates = r.duplicates;
+        this.sequenceLength = r.sequenceLength;
+        this.curve = r.curve;
+        this.telemetry = r.telemetry;
+        this.operations = Collections.unmodifiableMap(new LinkedHashMap<>(operations));
+        this.initOperations = Collections.unmodifiableMap(new LinkedHashMap<>(initOperations));
+    }
+
+    /** This record with the arm's algorithm-operation counts attached ({@link Episode} does it after the turn). */
+    public TurnRecord withOperations(Map<String, Long> operations, Map<String, Long> initOperations) {
+        return new TurnRecord(this, operations, initOperations);
     }
 
     /** Search gain: what the search added over the starting plan. */

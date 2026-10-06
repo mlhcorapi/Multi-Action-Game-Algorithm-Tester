@@ -87,22 +87,34 @@ multiplier, so the two answer the same question about the same turns. On those c
 both: MAGAT's 3.2x, and that the retrospective's all-rows formula still gives 3.8x, 1.16x and 3.3x on
 these rows. "Yes, near enough 4x the thinking time" stands either way.
 
+*Decided 2026-10-06 (DESIGN §17): MAGAT's paired-cell definition stays. The gap is definitional, not
+random, and this flag is resolved.*
+
 ## What MAGAT adds
 
 - **Replication, row by row.** Every headline, contrast and multiplier appears for development and
-  holdout side by side, marked `yes`, `no` or `ns both`. Every `no` has a known cause:
-  - At 80k both `no` rows are the fine table, its contrast against no table and its multiplier. That is
-    the retrospective's one non-replication.
-  - At 400k the fine-table contrast fails again.
-  - Also at 400k, the three rows of the stale development cell (`comma-short15-coarse@400000`, run under
-    a superseded price; retrospective section 8) fail: its headline, its multiplier and its contrast
-    against `comma-rand15`.
+  holdout side by side, marked `yes`, `no` or `ns both`. Development and holdout ran on the same machine
+  (the R7615) in the same currency: they differ in scenarios, not in devices, so no `no` is a machine
+  difference. Every `no` has one of two causes:
+  - **The fine table's effect: a genuine winner's-curse shrinkage, the holdout doing its job.** At 80k
+    both `no` rows are the fine table, its contrast against no table and its multiplier. That is the
+    retrospective's one non-replication. At 400k the fine-table contrast fails again.
+  - **A stale development cell: a price changed mid-line.** At 400k the three rows of
+    `comma-short15-coarse@400000` fail: its headline, its multiplier and its contrast against
+    `comma-rand15`. That development leaf ran under a price superseded before stage F (retrospective
+    section 8). MAGAT's per-leaf currency lock now refuses to continue or extend a leaf under a price
+    other than its own, so this cannot happen in a MAGAT run.
 - **A multiplier for every arm at every budget**, each with its wall-clock twin and a flag for where the
   crossing falls. Every 400k multiplier is an extrapolation past the ladder. That is section 3.5's point
   ("the crossing point sits just past it"), here made explicit for every arm.
-- **Not reproduced, because no table computes them:** the "~69% of a turn" repair budget of section 4.3.
-  `t_repairUnits` over `units` gives 82% for `emcts-comma` on these rows, so the retrospective's
-  derivation is unknown. The same goes for the anti-additivity figures of section 5 (-19.3, -31.5, -130.3).
-  The interaction `short15-bias-e25 - short15 - bias-e25 + off` gives -42.3, -52.9 and -125.4, so it is
-  not the definition that was used.
-- **Not in the repository:** the per-burn anytime curves (see `games/tribes/results/ab-emcts/README.md`).
+- **Not reproduced, derivation unknown:** the "~69% of a turn" repair budget of section 4.3, and the
+  anti-additivity figures of section 5 (-19.3, -31.5, -130.3). Both are prose figures, not outputs of
+  any budget, and no table computes them. `t_repairUnits` over `units` gives 82% for `emcts-comma` on
+  these rows. The interaction `short15-bias-e25 - short15 - bias-e25 + off` gives -42.3, -52.9 and
+  -125.4. Neither matches, so neither is the definition the retrospective used. Re-calibrating would
+  not recover them: they do not come from the weights. A currency re-derived on another machine (the
+  development laptop, say) would be a second currency under its own name, beside the R7615 file, never
+  a replacement for it.
+- **The per-burn anytime curves** are not in the repository. They are packaged with the full imported
+  trees as a downloadable asset (`tools/package_worked_result.py`; see
+  `games/tribes/results/ab-emcts/README.md`).

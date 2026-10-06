@@ -15,7 +15,8 @@ import java.util.Set;
  * Checks an experiment before anything runs. Each rule is a design principle of the brief made
  * structural, so a flaw is found before the data exists rather than in the analysis:
  * <ul>
- *   <li>every arm registered, and priced at every level it runs (an unpriced arm spends another currency);</li>
+ *   <li>every arm registered, and priced at every level it runs (an unpriced arm spends another currency); under a
+ *       version-2 currency, priced for every operation it declares, not only the forward model's;</li>
  *   <li>the baseline in the grid at two levels or more (budget multipliers need a curve): an error on the
  *       holdout, a warning on development;</li>
  *   <li>every parameter sweep names its null and the null is in the grid (principle 5: the AB-EMCTS
@@ -80,16 +81,27 @@ public final class Validator {
         if (weights == null) {
             r.warnings.add("no weights given: pricing not checked");
         } else {
-            List<String> unpriced = new ArrayList<>();
+            List<String> unpriced = new ArrayList<>(), unpricedOps = new ArrayList<>();
+            int declaring = 0;
             for (Experiment.Level l : x.levels)
                 for (String a : x.armsAt(l)) {
                     if (!registry.has(a) || !registry.get(a).priced()) continue;
                     String p = Profile.key(a, l.budget);
-                    if (!weights.has(p)) unpriced.add(p);
+                    if (!weights.has(p)) { unpriced.add(p); continue; }
+                    List<String> declared = registry.get(a).operations();
+                    if (!declared.isEmpty()) declaring++;
+                    for (String op : weights.unpricedOperations(p, declared)) unpricedOps.add(p + "." + op);
                 }
             if (!unpriced.isEmpty())
                 r.errors.add("not priced in " + weights.source() + ": " + unpriced + ". Calibrate them (magat calibrate --arms ...) first: "
                         + "an unpriced arm would spend a different currency and nothing in a results file would say so");
+            if (!unpricedOps.isEmpty())
+                r.errors.add("operations not priced in " + weights.source() + " (version 2 prices every operation an arm declares): "
+                        + unpricedOps + ". Re-calibrate those arms (--replace): an unpriced operation would be free in one arm's budget "
+                        + "and paid for in another's");
+            if (weights.version() < 2 && declaring > 0)
+                r.warnings.add("the weights are version 1: the forward model is priced and the arms' own operations run free, as in every "
+                        + "published version-1 result; their counts are still recorded");
             if ("true".equals(weights.header().get("toy")))
                 (holdout && !toyRun ? r.errors : r.warnings).add("the weights are a TOY calibration, not a currency"
                         + (toyRun ? " (allowed: the run is declared --toy)" : ""));

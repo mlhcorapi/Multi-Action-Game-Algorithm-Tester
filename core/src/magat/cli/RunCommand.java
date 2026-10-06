@@ -24,7 +24,7 @@ final class RunCommand {
     static void usage() {
         System.out.println("  run               --game <name> --experiment <spec.json> --portfolio <dir> --weights <file> [--out <run>]");
         System.out.println("                    [--split dev|holdout|all] [--threads N] [--threads-at 400000=31,...] [--threads-file threads.json]");
-        System.out.println("                    [--machine-factor 1.5] [--frozen <file>] [--retire-leaf arm@budget,...] [--toy]");
+        System.out.println("                    [--machine-factor 1.5] [--frozen <file>] [--retire-leaf arm@budget,...] [--toy] [--audit-warn 0.10]");
         System.out.println("  experiment validate --game <name> --experiment <spec.json> [--weights <file>] [--split ...] [--frozen <file>] [--toy]");
     }
 
@@ -52,6 +52,7 @@ final class RunCommand {
         if (args.has("frozen")) o.frozen = Paths.get(args.get("frozen")).toAbsolutePath();
         o.retire = new LinkedHashSet<>(args.getList("retire-leaf", new ArrayList<>()));
         o.toy = args.flag("toy");
+        o.auditWarn = Double.parseDouble(args.get("audit-warn", "0.10"));
         o.args = Arrays.asList(argv);
         RunGuard.install("run " + x.name, "re-run the same command; finished leaves are skipped and a partial leaf continues per scenario and visit");
         int code = GridRunner.run(module, x, portfolio, weights, o);

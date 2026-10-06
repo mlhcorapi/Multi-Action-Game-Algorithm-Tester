@@ -27,7 +27,8 @@ final class CalibrateCommand {
         System.out.println("  machine");
         System.out.println("  threads           --game <name> --portfolio <dir> --out <calib> [--levels 40000,80000,400000] [--ladder 2,4,8] [--segment-seconds 25] [--arm emcts]");
         System.out.println("  calibrate         --game <name> --portfolio <dir> --out <calib> [--levels ...] [--arms a,b|@set] [--reps 3] [--turns 8,4,2]");
-        System.out.println("                    [--warmup 6] [--replace a,b] [--under-load W] [--toy]");
+        System.out.println("                    [--warmup 6] [--replace a,b] [--under-load W] [--toy] [--format 2|1] [--audit-warn 0.10]");
+        System.out.println("  calibrate --estimate ... (the same arguments): times a few turns, prints what the session would take, writes nothing");
         System.out.println("  calibrate --check --game <name> --portfolio <dir> --weights <file> --arms a,b [--levels ...]");
         System.out.println("  weights           --weights <file> [--game <name> --arms a,b|@set --levels 40000,80000,400000]");
     }
@@ -83,13 +84,17 @@ final class CalibrateCommand {
         o.underLoad = args.getInt("under-load", 0);
         o.replace = new LinkedHashSet<>(module.expandArms(args.getList("replace", new ArrayList<>())));
         o.toy = args.flag("toy");
+        o.format = args.getInt("format", 2);
+        o.estimate = args.flag("estimate");
+        o.auditWarn = Double.parseDouble(args.get("audit-warn", String.valueOf(Calibrator.AUDIT_WARN)));
         if (check && o.underLoad > 1) throw new IllegalArgumentException("--check and --under-load measure different things; run them separately");
         if (check && o.arms == null) throw new IllegalArgumentException("--check needs --arms: the already-priced arms to re-measure");
-        Path out = check ? null : Paths.get(args.require("out")).toAbsolutePath();
+        Path out = check ? null : o.estimate && !args.has("out") ? null : Paths.get(args.require("out")).toAbsolutePath();
         Path checkFile = check ? Paths.get(args.require("weights")).toAbsolutePath() : null;
         RunGuard.install("calibration", "re-run the same command; a calibration writes only when it completes");
         Calibrator.Result r = Calibrator.run(game, module.agents(), module.referenceArm(), p, out, checkFile, o);
         RunGuard.finished();
+        if (o.estimate) return 0;
         System.out.println(r.pass ? (check ? "CHECK: PASS" : "CALIBRATION: PASS " + r.written) : (check ? "CHECK: FAIL" : "CALIBRATION: FAIL"));
         return r.pass ? 0 : 1;
     }
@@ -103,21 +108,35 @@ final class CalibrateCommand {
         if (!args.has("arms")) {
             for (String profile : w.profiles()) {
                 double[] x = w.profile(profile);
-                System.out.println(String.format(Locale.ROOT, "  %-40s %9.6f %9.6f %9.6f", profile, x[0], x[1], x[2]));
+                int ops = w.operations(profile).size();
+                System.out.println(String.format(Locale.ROOT, "  %-40s %9.6f %9.6f %9.6f%s", profile, x[0], x[1], x[2],
+                        ops > 0 ? String.format(Locale.ROOT, "   + %d operation(s)", ops) : ""));
             }
             return 0;
         }
         List<String> arms = args.getList("arms", new ArrayList<>());
+        GameModule<S, A> module = null;
         if (args.has("game")) {
-            GameModule<S, A> module = Games.load(args.get("game"));
+            module = Games.load(args.get("game"));
             arms = module.expandArms(arms);
         }
         long[] levels = args.getLongs("levels", new long[]{40_000L, 80_000L, 400_000L});
         List<String> want = new ArrayList<>();
         for (String a : arms) for (long l : levels) want.add(Profile.key(a, l));
-        List<String> missing = w.missing(want);
-        System.out.println(String.format(Locale.ROOT, "# %d arm(s) x %d level(s): %d of %d profiles priced", arms.size(), levels.length,
-                want.size() - missing.size(), want.size()));
+        List<String> missing = new ArrayList<>(w.missing(want));
+        // A version-2 currency prices every operation an arm declares; the game's registry says which those are.
+        if (module != null && w.version() >= 2)
+            for (String a : arms) {
+                if (!module.agents().has(a)) continue;
+                for (long l : levels) {
+                    String p = Profile.key(a, l);
+                    if (!w.has(p)) continue;
+                    for (String op : w.unpricedOperations(p, module.agents().get(a).operations())) missing.add(p + "." + op);
+                }
+            }
+        System.out.println(String.format(Locale.ROOT, "# %d arm(s) x %d level(s): %d of %d profiles priced%s", arms.size(), levels.length,
+                want.size() - w.missing(want).size(), want.size(),
+                w.version() >= 2 ? ", every declared operation checked" : " (version 1: the forward model)"));
         for (String m : missing) System.out.println("  missing: " + m);
         System.out.println(missing.isEmpty() ? "WEIGHTS: COVERED" : "WEIGHTS: " + missing.size() + " MISSING");
         return missing.isEmpty() ? 0 : 1;

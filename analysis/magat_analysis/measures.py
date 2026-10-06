@@ -273,7 +273,12 @@ def reprice(t, leaves, weights, baseline, split="", n=N_BOOT):
 
     What re-pricing cannot do is re-run the stop rule: every search stopped when it had spent its
     budget under the weights it ran with, so a re-priced arm did not do the work it would have done
-    under the new prices. Returns (re-scored table, spend per leaf, notes)."""
+    under the new prices. Returns (re-scored table, spend per leaf, notes).
+
+    A leaf's work is its forward-model counts and, from version 2 on, one `op_<name>` count per
+    operation its arm declares. It is re-priced only when the other file prices exactly the operations
+    the leaf counts: a version-2 leaf in a version-1 currency, or a version-1 leaf in a version-2 one,
+    is named and skipped, since one side's work would be priced on an operation the other never counted."""
     t = t.copy()
     t["units_x"] = np.nan
     ran_global = {(int(m.get("budget", -1)), str(m.get("arm"))) for m in leaves
@@ -290,7 +295,18 @@ def reprice(t, leaves, weights, baseline, split="", n=N_BOOT):
         if w is None:
             notes.append(f"{arm}@{budget}: not priced in {weights['name']}, so not re-priced")
             continue
-        ux = g["advances"] * w[0] + g["copies"] * w[1] + g["evals"] * w[2]
+        counted = sorted(c[3:] for c in g.columns if c.startswith("op_") and g[c].notna().any())
+        priced = sorted(o for o in w if o not in ("advance", "copy", "eval"))
+        if counted != priced:
+            only_leaf, only_file = sorted(set(counted) - set(priced)), sorted(set(priced) - set(counted))
+            notes.append(f"{arm}@{budget}: " + "; ".join(
+                ([f"the leaf counts {only_leaf}, which {weights['name']} does not price"] if only_leaf else [])
+                + ([f"{weights['name']} prices {only_file}, which the leaf does not count"] if only_file else []))
+                + ", so it is not re-priced: the two currencies price different work")
+            continue
+        ux = g["advances"] * w["advance"] + g["copies"] * w["copy"] + g["evals"] * w["eval"]
+        for op in counted:
+            ux = ux + g["op_" + op] * w[op]
         t.loc[idx, "units_x"] = ux
         spend.append(dict(Budget=int(budget), Arm=arm, Turns=len(g), MeanUnits=float(g["units"].mean()),
                           MeanRepricedUnits=float(ux.mean()), Ratio=float(ux.mean() / g["units"].mean())
@@ -357,20 +373,32 @@ def anytime(curve, t, baseline, split="") -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------- 10: diversity
-def efficiency(t, baseline, split="") -> pd.DataFrame:
+def efficiency(t, baseline, split="", ref_ns=None) -> pd.DataFrame:
     """#10 nodes, unique sequences and the duplicate share per leaf, with the agent's own telemetry
     means appended. Within-run diagnostics of a mechanism, never a headline: they say how an arm spent
-    its budget, not whether that was good."""
+    its budget, not whether that was good.
+
+    `UnpricedShare` is the audit (DESIGN 6.6): the share of the leaf's plan time its priced units do not
+    predict, 1 - sum(units + init_units) * reference-advance ns / sum(plan_ms). It is measured where the
+    turns ran (threads, machine), so it also holds contention and any machine difference; the
+    calibration's idle audit is the clean figure. Blank without the reference nanoseconds or the
+    initialization units (an imported thesis leaf). Mean `op_` counts are appended like the telemetry."""
     rows = []
     for (budget, arm), g in t.groupby(["budget", "arm"]):
         if "t_mutEvents" in g and g["t_mutEvents"].notna().any():
             dup, basis = (g["duplicates"] / g["t_mutEvents"].replace(0, np.nan)).mean(), "per mutation event"
         else:
             dup, basis = (g["duplicates"] / g["nodes"].replace(0, np.nan)).mean(), "per node"
+        unpriced = np.nan
+        if ref_ns and "init_units" in g and g["init_units"].notna().all() and g["plan_ms"].sum() > 0:
+            unpriced = 1 - float((g["units"] + g["init_units"]).sum()) * ref_ns / 1e6 / float(g["plan_ms"].sum())
         row = dict(Budget=int(budget), Arm=arm, Turns=len(g), MeanNodes=float(g["nodes"].mean()),
                    MeanUnique=float(g["unique"].mean()), DupShare=float(dup), DupBasis=basis,
                    MeanPlanMillis=float(g["plan_ms"].mean()), MeanUnits=float(g["units"].mean()),
-                   TerminalShare=float(g["term"].mean()))
+                   TerminalShare=float(g["term"].mean()), UnpricedShare=unpriced)
+        for c in [c for c in g.columns if c.startswith("op_")]:
+            if g[c].notna().any():
+                row[c] = float(g[c].mean())
         for c in sorted(c for c in g.columns if c.startswith("t_")):
             if g[c].notna().any():
                 row[c] = float(g[c].mean())
