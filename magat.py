@@ -21,8 +21,8 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
                               [--format 2|1] [--audit-warn 0.10]
     python magat.py calibrate --estimate --game tribes [the same arguments]     what the session would take; writes nothing
     python magat.py calibrate --check --game tribes --arms a,b [--weights FILE] [--portfolio DIR]   gates each cell's turn price
-    python magat.py calibrate-offline --name NAME [--preflight] [--game tribes] [--batch 8] [--soak-minutes 10] ...
-                              this machine's own currency, unattended and offline (docs/CALIBRATING_A_MACHINE.md)
+    python magat.py calibrate-controlled --name NAME [--preflight | --plan] [--section all|next|checks|N [--redo]] ...
+                              this machine's own currency in sections, with reliability checks (docs/CALIBRATING_A_MACHINE.md)
     python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...]
     python magat.py run --experiment SPEC [--split dev|holdout|all] [--out DIR] [--portfolio DIR] [--weights FILE]
                         [--threads N] [--threads-at 400000=31] [--frozen FILE] [--retire-leaf arm@budget] [--toy]
@@ -367,8 +367,8 @@ def main(argv: list) -> None:
         run([sys.executable, ROOT / "tools" / script, *rest[1:]], log="notebook")
     elif cmd == "shakedown":
         run([sys.executable, ROOT / "tools" / "shakedown.py", *rest], log="shakedown")
-    elif cmd == "calibrate-offline":
-        run([sys.executable, ROOT / "tools" / "calibrate_offline.py", *rest], log="calibrate-offline")
+    elif cmd == "calibrate-controlled":
+        run([sys.executable, ROOT / "tools" / "calibrate_controlled.py", *rest], log="calibrate-controlled")
     else:
         sys.exit(f"unknown command '{cmd}'\n{__doc__}")
 
