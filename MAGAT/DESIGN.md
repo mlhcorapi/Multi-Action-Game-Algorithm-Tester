@@ -184,6 +184,13 @@ Multi-Action-Game-Algorithm-Tester/           (this repository)
 extraction is complete; until then it is the source being read from. Run output never lives in the
 clone: the data root defaults to `~/magat_runs` (§10.3).
 
+*Done 2026-10-07 (milestone 7): `Tribes-master/` is removed; the last commit containing it is `bb3f511`, and
+every `Tribes-master/...` reference in this document, the brief and the starting prompt points at the tree as
+it was there. The four documents behind the worked result (the retrospective, the R7615 plan, the runbook and
+`COMPUTE_UNIT_CALIBRATION.md`) are kept verbatim in `games/tribes/results/ab-emcts/thesis/`. The engine and the
+thesis agents the ports are gated against live in the engine fork. Imported results keep "the thesis tree
+(Tribes-master)" as their recorded engine: it is provenance, not a path.*
+
 ---
 
 ## 4. The `Game` contract
@@ -1430,6 +1437,10 @@ gates cell adds `check overhead --audit` on the reference arms.*
 The former drift cell is folded into the checks cell. The thread sweep writes `threads.json` into the
 currency's folder, where runs read it.*
 
+*Amended 2026-10-07 (milestone 7): item 10, the inventory, exists. It lists every bundle the stages write
+(the experiments' included, from the same spec list as their cells) with an ok/missing tick and its size, the
+files behind them, and the calibration's latest verdict per section, naming any to measure again.*
+
 ### 13.3 The shakedown
 
 `tools/shakedown.py`, cross-platform (the bash version used `mktemp` and `df -PT`; the filesystem
@@ -1586,7 +1597,7 @@ commit. `run_magat.ipynb` and `tools/shakedown.py` exist from milestone 0 and gr
 | 5 | The rest of the family: `emcts-comma`, `QdeltaEmcts` and every worked-result arm; `check structure`, `probe support`, `check replay` | every arm passes its oracle gate; `check replay` reproduces 20 published `emcts-comma@80000` holdout rows on the rebuilt portfolio under the published weights. *Done 2026-10-05: all 33 oracle-gated arms pass on 8 scenarios x 2 visits at 8k and 40k (1,056 cells, counters included); the 20 rows reproduce field for field on the laptop's rebuilt portfolio, as do 20 each of the stage F `comma-z0-coarse@80000` and `comma-rand15@80000` holdout leaves. The support probe matches the archived R7615 verdicts at every level; its counts under the stage A currency differ from the archived `action_bias_floor.csv` by about 4% (300.9 against 290.0 mutations per turn at 40k) with code and weights identical as far as the archive shows, which is recorded as an open discrepancy in `ORIGIN.md`.* |
 | 6 | Analyzer: all twelve measures, side by side, re-pricing, report; `import-legacy`; the worked result imported | the retrospective §3/§4 point estimates reproduced from the imported trees; the Python tests pass on the synthetic tree. *Done 2026-10-05: eleven of the twelve measures (#12, full-game win rate, is out of v0.1 by design) on a synthetic tree whose answers are exact (27 tests). The worked result is imported: stages D and E on development and stage F on the holdout, 96,400 turns, every row checked against the published portfolio. On it the analyzer reproduces the retrospective's section 3 and 4 point estimates to the printed decimal (+244.3, +211.7, 5.4x and 6.4x, 48x, W7 +223.3, the oracle table, d = 0.62, the gain multiples, the mechanism counts), with intervals within bootstrap noise (17 tests). The one exception is section 3.2's 3.3x wall-clock equivalent, which the retrospective computed on all rows; MAGAT's paired version gives 3.2x (section 11 amendment).* |
 | 6b | Priced algorithm operations (currency version 2), and the decisions from the milestone 6 review | `QdeltaEmcts` and `Emcts` declare their operations, a toy calibration prices them and a toy run writes them; the audit reports an unpriced share and flags an undeclared busy loop; version-1 files and trees load, price, run and analyse unchanged; every arm passes the oracle gate on forward-model counts; `check replay` reproduces the 20 published rows; a version-2 toy run re-priced in its own currency reproduces its units; the drift gate is turn-price based. *Done 2026-10-06: the meter, the weights file, the calibrator, the runner, the validator, `check replay`, `check overhead --audit` and the analyzer price every declared operation (§6.6), and version 1 is bit-identical: the 20 published holdout turns replay field for field, and all 33 arms pass the oracle gate on forward-model counts and values (1,056 cells, 8 scenarios x 2 visits at 8k and 40k). The shakedown passes (40 checks). Decisions (6)-(11) of §17 recorded.* |
-| 7 | Docs (`CONTRACT`, `CURRENCY`, `METHODS`, `OPERATIONS`, `ADDING_*`, `TRAPS`, the worked-result page), full notebook, `Tribes-master/` removed, v0.1 tag once the licence is in | a fresh clone follows `README.md` through §14.2 on the toy portfolio without reading anything else. *In progress 2026-10-07: `calibrate-controlled` (§8.7) and `docs/CALIBRATING_A_MACHINE.md`, so the development laptop and the R7615 can each be calibrated in sections, with a reliability verdict per section; the notebook's calibration stage is one cell per section; `OPERATIONS` links the guide rather than repeating it.* |
+| 7 | Docs (`CONTRACT`, `CURRENCY`, `METHODS`, `OPERATIONS`, `ADDING_*`, `TRAPS`, the worked-result page), full notebook, `Tribes-master/` removed, v0.1 tag once the licence is in | a fresh clone follows `README.md` through §14.2 on the toy portfolio without reading anything else. *Done 2026-10-07, except the tag: the docs (`docs/CONTRACT.md`, `CURRENCY.md`, `METHODS.md`, `OPERATIONS.md`, `ADDING_A_GAME.md`, `ADDING_AN_ALGORITHM.md`, `TRAPS.md`; the worked-result page was already in `docs/results/`); `docs/CALIBRATING_A_MACHINE.md` with `calibrate-controlled` (§8.7), for the development laptop and for the R7615 through JupyterHub; `FirstAgent`, the worked example of adding an algorithm, embedded verbatim in its guide (the shakedown checks it); the README's afternoon path, run as written at toy size; the notebook complete, with the calibration in sections and the inventory; `Tribes-master/` removed (§3 amendment). The v0.1 tag waits for the owner's word now that the licence (Apache-2.0) is settled.* |
 
 Milestone 1 is the one you named as the first code milestone. Its "seam is in the right place" test is
 the oracle gate on the ported plain EMCTS through `MeteredGame(TribesGame)`, not on one scenario but

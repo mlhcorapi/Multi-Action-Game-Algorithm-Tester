@@ -2,7 +2,7 @@
 retrospective's section 3 and 4 numbers, point estimates to the decimal they were printed with and
 intervals to bootstrap noise.
 
-Source: Tribes-master/analysis/AB_EMCTS_RETROSPECTIVE.md (2026-09-09), computed on the R7615 from the
+Source: games/tribes/results/ab-emcts/thesis/retrospective.md (2026-09-09), computed on the R7615 from the
 same rows by the thesis's analyze_stage1.py and by hand. The one number MAGAT does not reproduce is
 section 3.2's wall-clock equivalent (3.3x): it was computed on all rows, where section 3.1 used the cells
 paired across the ladder; MAGAT uses the paired cells for both and gets 3.2x (see

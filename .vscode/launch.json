@@ -3,14 +3,19 @@
   "configurations": [
     {
       "type": "java",
-      "name": "Launch Play",
+      "name": "MAGAT: list the Tribes arms",
+      "request": "launch",
+      "mainClass": "magat.cli.Main",
+      "args": "arms --game tribes",
+      "vmArgs": "-Dtribes.home=${workspaceFolder}/games/tribes/engine",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "java",
+      "name": "Tribes: play (the engine's own GUI)",
       "request": "launch",
       "mainClass": "Play",
-      "cwd": "${workspaceFolder}/Tribes-master",
-      "classPaths": [
-        "${workspaceFolder}/Tribes-master/bin",
-        "${workspaceFolder}/Tribes-master/lib/json.jar"
-      ]
+      "cwd": "${workspaceFolder}/games/tribes/engine"
     }
   ]
 }

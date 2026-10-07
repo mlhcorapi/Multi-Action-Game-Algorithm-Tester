@@ -36,7 +36,7 @@ def main() -> int:
     for f in sorted(ROOT.rglob("*.java")):
         rel = f.relative_to(ROOT)
         parts = rel.parts
-        if "engine" in parts or "Tribes-master" in parts or parts[0] in ("build",):
+        if "engine" in parts or parts[0] in ("build",):
             continue
         if ".raw()" in f.read_text(encoding="utf-8", errors="replace"):
             if not (parts[0] == "games" and "src" in parts):
