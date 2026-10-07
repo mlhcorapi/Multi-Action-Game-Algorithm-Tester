@@ -313,6 +313,63 @@ bundle("run-{name}", [RUN / "{split}", RESULTS / "SUMMARY.md", RESULTS / "tables
     return cells
 
 
+INVENTORY_CELL = r'''
+import json
+# Defaults, so this cell also runs on its own after a kernel restart.
+PORTFOLIO = globals().get("PORTFOLIO", DATA / "portfolio" / GAME)
+CALIBRATION = globals().get("CALIBRATION", DATA / "calibration" / f"{GAME}-{CURRENCY_NAME}")
+BUNDLED = [
+    ("portfolio", "this machine's portfolio: manifest, split files, identity, the verify log"),
+    ("threads", "the thread sweep and threads.json"),
+    ("calibration", f"the currency {CURRENCY_NAME}: weights, every section's record and verdict, the checks, the overhead"),
+    ("gates", "contract, equivalence, structure, audit, replay, support probe"),
+    ("worked-result", "the published worked result, re-analysed here"),
+@RUNS@    ("shakedown", "the shakedown's log"),
+]
+FILES = [
+    (PORTFOLIO / "identity.txt", "the portfolio's identity"),
+    (CALIBRATION / "compute_weights.properties", "this machine's currency"),
+    (CALIBRATION / "record" / "SUMMARY.md", "every calibration section's verdict"),
+    (CALIBRATION / "threads.json", "the thread choices runs read"),
+@REPORTS@]
+total, missing = 0, []
+print(f"Bundles in {BUNDLES}: download these; together they hold everything the analysis needs.")
+for name, what in BUNDLED:
+    path = BUNDLES / f"{name}.zip"
+    size = path.stat().st_size if path.is_file() else 0
+    total += size
+    if not size:
+        missing.append(name)
+    print(f"  [{'ok' if size else 'missing':7}] {path.name:32} {size / 2**20:8.1f} MB   {what}")
+print(f"  {total / 2**20:.1f} MB in all")
+print("\nThe files behind them:")
+for path, what in FILES:
+    print(f"  [{'ok' if path.exists() else 'missing':7}] {path}   ({what})")
+state = CALIBRATION / "record" / "state.json"
+if state.is_file():
+    latest = {}
+    for row in json.loads(state.read_text(encoding="utf-8")).get("sessions", []):
+        latest[row["section"]] = row.get("reliability", row.get("verdict"))
+    print("\nCalibration sections, latest verdict: " + (", ".join(f"{k} {v}" for k, v in sorted(latest.items())) or "none yet"))
+    doubtful = sorted(k for k, v in latest.items() if v != "PASS")
+    if doubtful:
+        print(f"  measure these again when the machine is quiet, with calibrate_section(k, redo=True): {doubtful}")
+print("\nINVENTORY: " + ("COMPLETE" if not missing else f"{len(missing)} bundle(s) missing: " + ", ".join(missing)))
+'''
+
+
+def inventory_cell(game: str) -> str:
+    """The inventory cell, naming the bundle and the report of every experiment the experiment cells run."""
+    names = []
+    for spec in sorted((ROOT / "experiments" / game).glob("*.json")):
+        x = json.loads(spec.read_text(encoding="utf-8"))
+        if x.get("name") != "shakedown" and "levels" in x:
+            names.append(x["name"])
+    runs = "".join(f'    ("run-{n}", "experiment {n}: its run tree and its analysis"),\n' for n in names)
+    reports = "".join(f'    (DATA / GAME / "results" / "{n}" / "SUMMARY.md", "the report of {n}"),\n' for n in names)
+    return INVENTORY_CELL.replace("@RUNS@", runs).replace("@REPORTS@", reports)
+
+
 CELLS = [
     md("""
 # MAGAT — run everything from here
@@ -399,9 +456,13 @@ Every moving part at toy size, minutes, exits non-zero on any failure. Run befor
 """),
     code('magat("shakedown")\nbundle("shakedown", [LOGS / "shakedown.log"])'),
     md("""
----
-*The inventory cell (what to keep, with a tick per file) arrives with milestone 7 (see `MAGAT/DESIGN.md` §16).*
+## Inventory
+
+What to keep from this machine: every bundle the stages above wrote, with a tick, the files behind
+them, and the calibration's section verdicts. Download the bundles; everything else can be
+regenerated from them.
 """),
+    code(inventory_cell("tribes"), tags=("inventory",)),
 ]
 
 
