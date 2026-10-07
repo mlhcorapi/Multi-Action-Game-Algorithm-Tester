@@ -61,6 +61,11 @@ def main(argv) -> int:
     step("1. Build")
     check("core, adapter, engine and tests compile", [PY, ROOT / "magat.py", "build", "--tests"], "TEST BUILD OK")
     check("layering holds", [PY, ROOT / "magat.py", "layering"], "0 violation(s)")
+    check("docs/ADDING_AN_ALGORITHM.md shows the compiled FirstAgent, verbatim",
+          [PY, "-c", "import pathlib, sys; r = pathlib.Path(sys.argv[1]); "
+                     "src = (r / 'core/src/magat/agents/first/FirstAgent.java').read_text(encoding='utf-8').replace(chr(13), '').strip(); "
+                     "doc = (r / 'docs/ADDING_AN_ALGORITHM.md').read_text(encoding='utf-8').replace(chr(13), ''); "
+                     "sys.exit(0 if '```java' + chr(10) + src + chr(10) + '```' in doc else 1)", ROOT])
 
     step("2. Unit tests")
     check("junit, then the analysis package (the worked result's acceptance test included)",
