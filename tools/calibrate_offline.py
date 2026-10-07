@@ -973,6 +973,8 @@ class Runner:
 
     def launch(self, args, phase, log_name, measure):
         """One launcher command: output streamed and kept, the measuring JVM found and tuned."""
+        if measure and self.monitor.power_lost.is_set():
+            raise PowerLost()
         self.monitor.phase = phase
         log = self.record / f"{log_name}.log"
         start = time.time()
@@ -1311,7 +1313,7 @@ def main(argv) -> int:
         passthrough += ["--portfolio", portfolio]
     toy = ["--toy"] if a.toy else []
     t_start = time.time()
-    code = 0
+    code, why = 0, None
     soak_rows, session_rows, check_rows = [], [], []
     est = None
     try:
@@ -1389,6 +1391,19 @@ def main(argv) -> int:
             print(f"  session {i}: {', '.join(b) if b else ref_arm + ' (the reference arm)'}   ~{project(est, len(b)) / 60:.0f} min")
         events(f"[plan] about {hours:.1f} h of sessions and {check_hours:.1f} h of checks at the soak's pace; "
                f"expected to finish around {finish:%H:%M} (up to 25% later if the arms run slower than the reference)")
+        if WINDOWS and not a.toy:
+            mt = facts.get("maintenance")
+            hh, mm = (int(mt[11:13]), int(mt[14:16])) if mt and len(mt) >= 16 and mt[11:13].isdigit() else (2, 0)
+            start = datetime.datetime.now()
+            due = start.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if due < start:
+                due += datetime.timedelta(days=1)
+            if due <= finish + datetime.timedelta(hours=0.25 * (hours + check_hours)):
+                events(f"[plan] WARNING: the run will still be going at {hh:02d}:{mm:02d}, when Windows' automatic maintenance "
+                       "starts on an idle machine (scans, updates). Move the maintenance time or start earlier; "
+                       "docs/CALIBRATING_A_MACHINE.md, 'Before the run', step 7")
+        if batches and not a.toy:
+            events("[plan] leave the machine alone from here: no keyboard, mouse or lid until it finishes")
 
         # ---- sessions
         failed = []
@@ -1483,7 +1498,7 @@ def main(argv) -> int:
         code = 3
     except Stop as e:
         events(f"[stop] {e.why}")
-        code = e.code
+        code, why = e.code, e.why
     except KeyboardInterrupt:
         events("[stop] interrupted; nothing a session had not finished was written")
         code = 130
@@ -1502,7 +1517,7 @@ def main(argv) -> int:
     if weights.is_file():
         subprocess.run([PY, str(MAGAT), "bundle", "--name", f"calibration-{a.game}-{a.name}", "--paths", str(out)],
                        cwd=str(ROOT), check=False)
-    verdicts = {0: "COMPLETE", 1: "INCOMPLETE - re-run the same command to measure what is missing",
+    verdicts = {0: "COMPLETE", 1: f"INCOMPLETE - {why}" if why else "INCOMPLETE - re-run the same command to measure what is missing",
                 3: "STOPPED - the machine went on battery; plug in and re-run the same command",
                 130: "INTERRUPTED - re-run the same command to continue"}
     print(f"OFFLINE CALIBRATION: {verdicts.get(code, code)}")
