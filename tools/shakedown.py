@@ -146,6 +146,16 @@ def main(argv) -> int:
           then=lambda: (calib / "compute_weights_load3.properties").is_file() and weights.read_text(encoding="utf-8") == snapshot["w"])
     check("the published currency prices every worked-result arm",
           [PY, ROOT / "magat.py", "weights", "--game", game, "--arms", "@worked-result"], "WEIGHTS: COVERED")
+    offline = data / "shakedown" / f"offline-{game}"
+    shutil.rmtree(offline, ignore_errors=True)
+    unattended = [PY, ROOT / "magat.py", "calibrate-offline", "--name", "shakedown", "--game", game, "--out", offline, "--toy",
+                  "--arms", "emcts,emcts-comma,comma-z0-coarse", "--batch", "1", "--levels", "2000,4000", "--turns", "2",
+                  "--reps", "2", "--warmup", "1", "--soak-minutes", "0", "--interval", "2"]
+    check("calibrate-offline: preflight, controls, soak, two sessions merged by ratio, the self-check, a summary (toy)",
+          unattended, "OFFLINE CALIBRATION: COMPLETE",
+          then=lambda: "profile.comma-z0-coarse@4000.w.advance" in (offline / "compute_weights.properties").read_text(encoding="utf-8")
+          and (offline / "offline" / "SUMMARY.md").is_file())
+    check("calibrate-offline again measures only what is missing: nothing", unattended, "3 already priced; 0 session(s)")
 
     step("7. Runner: the shakedown spec on the toy portfolio and the toy currency")
     spec = ROOT / "experiments" / game / "shakedown.json"

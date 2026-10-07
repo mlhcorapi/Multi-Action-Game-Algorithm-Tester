@@ -897,6 +897,44 @@ Physical cores are detected on Linux; on Windows and macOS they are assumed to b
 CPUs and the banner says so (`MAGAT_MAX_THREADS` states the ceiling). The overrides are
 `MAGAT_MAX_THREADS` and `MAGAT_RESERVE_CORES` (`-Dmagat.maxThreads`, `-Dmagat.reserveCores`).*
 
+### 8.7 Unattended calibration (`calibrate-offline`)
+
+*Added 2026-10-07 (milestone 7).* `magat calibrate-offline --name <name>` (`tools/calibrate_offline.py`)
+runs a machine's own calibration unattended, with the network off. The measurement is `magat calibrate`,
+unchanged. The tool decides how it is run and keeps the evidence; `docs/CALIBRATING_A_MACHINE.md` is the
+user's guide.
+- *A preflight that reads the machine and changes nothing: power source, battery saver, the power plan and
+  the processor settings that set the clock, the hybrid topology, network, other programs, online-only
+  OneDrive files, uptime, Windows Update, the maintenance window. It refuses a machine on battery, in
+  battery saver, running another JVM, or missing a file it needs.*
+- *Controls on the measuring JVMs only. The machine is kept awake (`SetThreadExecutionState`). On a hybrid
+  CPU the JVMs are confined to the performance cores: process affinity, inherited from the tool by the
+  launcher and the JVM. They run at high priority, with EcoQoS off (`ProcessPowerThrottling`).*
+- *A soak: `--estimate` back to back until two agree within 3%, for at least 10 and at most 45 minutes.
+  A machine that does not settle stops before anything is measured.*
+- *Sessions in batches of 8 arms, each merging by ratio (§8.2). A failed batch is retried once, and a
+  re-run measures only what the currency lacks.*
+- *Two checks that write nothing: against the published currency, and at the end against the new one.*
+- *A monitor. It watches the power source: a machine that leaves mains power has its session stopped,
+  because the development laptop runs at a third of its speed on battery. It names the programs behind
+  any sustained CPU use other than the calibration's: Windows reports no load average, so the
+  calibrator's idle check (§8.1) cannot run there. And it records, from `typeperf`, the busiest
+  performance core's clock and the thermal zones.*
+- *The clock policy (boost mode, frequency caps, maximum processor state) is locked to the currency by
+  its first session, and a resume under another policy is refused. A merge cancels a uniform change of
+  speed, but not a change in how compute-bound and memory-bound work scale against each other.*
+
+*Why batches: a session writes all or nothing, and its bracket compares its last measurement with its
+first. On the development laptop one session for everything is 3.7 h, so one noisy cell or a late
+slowdown would discard all of it. Four sessions of eight arms cost 0.6 h more (about 12 minutes of
+warm-ups and reference cells each), and each one is bracketed over about an hour.*
+
+*Toy runs on the development laptop (2026-10-07) showed the busiest performance core between 3.7 and
+5.4 GHz within single sessions, with the thermal zones at 73-75 °C: a laptop's clock follows its
+temperature. The guide therefore recommends capping the performance cores below what the cooling
+sustains, in a separate power plan. That is a setting of the machine, which the user makes; the tool
+reads it, records it and locks it.*
+
 ---
 
 ## 9. The runner and the experiment spec
@@ -1296,6 +1334,10 @@ portfolio identity, because those three are what every past mistake turned on.
   audit as a gate.*
 - *`calibrate --check` gates each cell's turn price (§8.3).*
 
+*Amended 2026-10-07 (milestone 7): `calibrate-offline --name <name> [--preflight] [--batch 8]
+[--soak-minutes 10] [--retries 1] [--no-checks] [--priority high] [--no-affinity] ...` runs the machine's
+own calibration unattended (§8.7). Output goes to `<data>/calibration/<game>-<name>/`.*
+
 ### 13.2 `run_magat.ipynb`
 
 Generated from `tools/make_notebook.py` so it is diffable and cannot drift from the specs it names.
@@ -1379,6 +1421,10 @@ new analyzer stage runs three checks:*
 asserts the rows' `op_` columns. The analyzer stage's re-pricing check now reproduces units that
 include every operation.*
 
+*Amended 2026-10-07 (milestone 7): the calibration stage runs `calibrate-offline` at toy size: preflight,
+soak, two sessions merged by ratio, the self-check, a summary. It then runs it again, and the second run
+measures nothing.*
+
 ---
 
 ## 14. The cross-machine promise, stated precisely
@@ -1440,6 +1486,10 @@ its own currency; import the replay fixture; re-analyse the worked result.*
 version 2 and prices the arm's operations. A new step runs `check overhead --audit`. The toy run's rows
 are checked for their `op_` columns.*
 
+*Amended 2026-10-07 (milestone 7): a step runs `calibrate-offline` at toy size and resumes it. On Linux
+this covers the tool's portable paths; the Windows controls run in the shakedown on the development
+laptop.*
+
 ### 15.3 The engine fork
 
 `games/tribes/engine` is a submodule pointing at `mlhcorapi/Tribes`, a public GitHub fork of
@@ -1485,7 +1535,7 @@ commit. `run_magat.ipynb` and `tools/shakedown.py` exist from milestone 0 and gr
 | 5 | The rest of the family: `emcts-comma`, `QdeltaEmcts` and every worked-result arm; `check structure`, `probe support`, `check replay` | every arm passes its oracle gate; `check replay` reproduces 20 published `emcts-comma@80000` holdout rows on the rebuilt portfolio under the published weights. *Done 2026-10-05: all 33 oracle-gated arms pass on 8 scenarios x 2 visits at 8k and 40k (1,056 cells, counters included); the 20 rows reproduce field for field on the laptop's rebuilt portfolio, as do 20 each of the stage F `comma-z0-coarse@80000` and `comma-rand15@80000` holdout leaves. The support probe matches the archived R7615 verdicts at every level; its counts under the stage A currency differ from the archived `action_bias_floor.csv` by about 4% (300.9 against 290.0 mutations per turn at 40k) with code and weights identical as far as the archive shows, which is recorded as an open discrepancy in `ORIGIN.md`.* |
 | 6 | Analyzer: all twelve measures, side by side, re-pricing, report; `import-legacy`; the worked result imported | the retrospective §3/§4 point estimates reproduced from the imported trees; the Python tests pass on the synthetic tree. *Done 2026-10-05: eleven of the twelve measures (#12, full-game win rate, is out of v0.1 by design) on a synthetic tree whose answers are exact (27 tests). The worked result is imported: stages D and E on development and stage F on the holdout, 96,400 turns, every row checked against the published portfolio. On it the analyzer reproduces the retrospective's section 3 and 4 point estimates to the printed decimal (+244.3, +211.7, 5.4x and 6.4x, 48x, W7 +223.3, the oracle table, d = 0.62, the gain multiples, the mechanism counts), with intervals within bootstrap noise (17 tests). The one exception is section 3.2's 3.3x wall-clock equivalent, which the retrospective computed on all rows; MAGAT's paired version gives 3.2x (section 11 amendment).* |
 | 6b | Priced algorithm operations (currency version 2), and the decisions from the milestone 6 review | `QdeltaEmcts` and `Emcts` declare their operations, a toy calibration prices them and a toy run writes them; the audit reports an unpriced share and flags an undeclared busy loop; version-1 files and trees load, price, run and analyse unchanged; every arm passes the oracle gate on forward-model counts; `check replay` reproduces the 20 published rows; a version-2 toy run re-priced in its own currency reproduces its units; the drift gate is turn-price based. *Done 2026-10-06: the meter, the weights file, the calibrator, the runner, the validator, `check replay`, `check overhead --audit` and the analyzer price every declared operation (§6.6), and version 1 is bit-identical: the 20 published holdout turns replay field for field, and all 33 arms pass the oracle gate on forward-model counts and values (1,056 cells, 8 scenarios x 2 visits at 8k and 40k). The shakedown passes (40 checks). Decisions (6)-(11) of §17 recorded.* |
-| 7 | Docs (`CONTRACT`, `CURRENCY`, `METHODS`, `OPERATIONS`, `ADDING_*`, `TRAPS`, the worked-result page), full notebook, `Tribes-master/` removed, v0.1 tag once the licence is in | a fresh clone follows `README.md` through §14.2 on the toy portfolio without reading anything else |
+| 7 | Docs (`CONTRACT`, `CURRENCY`, `METHODS`, `OPERATIONS`, `ADDING_*`, `TRAPS`, the worked-result page), full notebook, `Tribes-master/` removed, v0.1 tag once the licence is in | a fresh clone follows `README.md` through §14.2 on the toy portfolio without reading anything else. *In progress 2026-10-07: `calibrate-offline` (§8.7) and `docs/CALIBRATING_A_MACHINE.md`, so the development laptop can be calibrated, unattended, as a second currency; `OPERATIONS` will link the guide rather than repeat it.* |
 
 Milestone 1 is the one you named as the first code milestone. Its "seam is in the right place" test is
 the oracle gate on the ported plain EMCTS through `MeteredGame(TribesGame)`, not on one scenario but

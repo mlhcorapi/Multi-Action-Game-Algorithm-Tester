@@ -153,6 +153,9 @@ CALIBRATE_CELL = r'''
 # version 1 prices the forward model only, as the published R7615 currency does. The estimate runs first:
 # one repetition of the reference cell per level, a few minutes, then what the whole session will take.
 # Extending the currency later with a new arm is `--arms <new>`, which merges in the file's own version.
+# On a laptop or desktop you can leave alone, `python magat.py calibrate-offline --name <machine>` runs the
+# same calibration unattended and offline, in hour-long sessions, and records the conditions
+# (docs/CALIBRATING_A_MACHINE.md).
 CURRENCY_VERSION = 2
 if (CALIBRATION / "compute_weights.properties").exists():
     print(f"[skip] {CALIBRATION / 'compute_weights.properties'} exists")
