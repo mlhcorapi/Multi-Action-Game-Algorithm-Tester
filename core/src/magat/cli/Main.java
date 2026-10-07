@@ -114,9 +114,18 @@ public final class Main {
 
     private static <S, A> int arms(Args args) {
         GameModule<S, A> module = Games.load(args.require("game"));
-        for (AgentFactory<S, A> f : module.agents().all())
-            System.out.println(String.format(Locale.ROOT, "  %-24s %s%s", f.id(), f.description(),
-                    module.oracles().containsKey(f.id()) ? "   [oracle: " + module.oracles().get(f.id()).describe() + "]" : ""));
+        // --arms a,b|@set lists only those, in the order given (sets expanded), so a tool can plan with them.
+        List<String> only = args.has("arms") ? module.expandArms(args.getList("arms", new ArrayList<>())) : null;
+        List<AgentFactory<S, A>> list = new ArrayList<>();
+        if (only == null) list.addAll(module.agents().all());
+        else for (String id : only) {
+            if (!module.agents().has(id)) throw new IllegalArgumentException("unknown arm '" + id + "'; registered: " + module.agents().ids());
+            list.add(module.agents().get(id));
+        }
+        for (AgentFactory<S, A> f : list)
+            System.out.println(String.format(Locale.ROOT, "  %-24s %s%s%s%s", f.id(), f.description(),
+                    module.oracles().containsKey(f.id()) ? "   [oracle: " + module.oracles().get(f.id()).describe() + "]" : "",
+                    f.priced() ? "" : "   [not priced]", f.id().equals(module.referenceArm()) ? "   [reference]" : ""));
         return 0;
     }
 
