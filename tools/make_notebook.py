@@ -12,6 +12,9 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "notebooks" / "run_magat.ipynb"
+# Section cells for the calibration: Tribes registers 32 priced arms besides the reference arm, eight to a
+# section. A different count only means the 'rest' cell measures what the numbered cells do not.
+CAL_SECTIONS = 4
 
 
 def md(text: str) -> dict:
@@ -62,6 +65,9 @@ PUBLISHED_WEIGHTS = ROOT / "games" / GAME / "calibration" / "r7615" / "compute_w
 # Workers for parallel stages. Half the logical CPUs (SMT siblings add heat, not throughput) less two
 # for the machine; MAGAT_WORKERS overrides. The machine profile (milestone 3) replaces this guess.
 WORKERS = int(os.environ.get("MAGAT_WORKERS") or max(1, (os.cpu_count() or 2) // 2 - 2))
+# This machine's own currency: <data>/calibration/<game>-<name>. The published R7615 currency stays in
+# the repository; a new calibration of the R7615 is published beside it under this name, never over it.
+CURRENCY_NAME = os.environ.get("MAGAT_CURRENCY") or "r7615-v2"
 
 def magat(*args, check=True):
     """Run one launcher command; the launcher tees its own output to <DATA>/logs/<name>.log."""
@@ -137,7 +143,8 @@ magat("machine")
 '''
 
 THREADS_CELL = r'''
-CALIBRATION = DATA / "calibration" / GAME
+# threads.json goes beside this machine's currency: that is where a run looks for it.
+CALIBRATION = DATA / "calibration" / f"{GAME}-{CURRENCY_NAME}"
 if (CALIBRATION / "threads.json").exists():
     print(f"[skip] {CALIBRATION / 'threads.json'} exists")
 else:
@@ -147,31 +154,59 @@ bundle("threads", [CALIBRATION / "threads.json", CALIBRATION / "thread_sweep.csv
 '''
 
 CALIBRATE_CELL = r'''
-# This machine's own currency, on this machine's own portfolio. Idle and single-threaded: stop
-# everything else first, and plug a laptop in (on battery it runs at a fraction of its speed).
-# Version 2 (CURRENCY_VERSION = 2) prices every operation an arm declares, its own work included;
-# version 1 prices the forward model only, as the published R7615 currency does. The estimate runs first:
-# one repetition of the reference cell per level, a few minutes, then what the whole session will take.
-# Extending the currency later with a new arm is `--arms <new>`, which merges in the file's own version.
+# This machine's own currency, on this machine's own portfolio, in sections (calibrate-controlled; read
+# docs/CALIBRATING_A_MACHINE.md, "On a shared server"). Idle and single-threaded: nothing else of yours
+# may run while a section measures. Every section cell below skips itself once its arms are priced.
+# Version 2 (CURRENCY_VERSION = 2) prices every operation an arm declares, its own work included; version
+# 1 prices the forward model only, as the published R7615 currency does.
 CURRENCY_VERSION = 2
-if (CALIBRATION / "compute_weights.properties").exists():
-    print(f"[skip] {CALIBRATION / 'compute_weights.properties'} exists")
-else:
-    magat("calibrate", "--estimate", "--game", GAME, "--portfolio", PORTFOLIO, "--format", CURRENCY_VERSION)
-    magat("calibrate", "--game", GAME, "--portfolio", PORTFOLIO, "--out", CALIBRATION, "--format", CURRENCY_VERSION)
-    assert_in_log("calibrate", "CALIBRATION: PASS")
+CAL_BATCH = 8           # arms per section, fixed when the first section runs (8: about 1.5 h each on the R7615)
+CAL_OTHER_CPUS = 4.0    # other work on the machine, in logical CPUs, that makes a section SUSPECT
+CAL_WAIT_QUIET = 30     # minutes a section waits for the machine to drop below that before refusing to start
+CAL_SOAK_MINUTES = 0    # a server needs no warming up: the stability check is two estimates that agree within 3%
 WEIGHTS = CALIBRATION / "compute_weights.properties"     # the currency every run below spends
-magat("weights", "--weights", WEIGHTS)
-bundle("calibration", [CALIBRATION / "compute_weights.properties", CALIBRATION / "compute_profiles.csv",
-                       CALIBRATION / "compute_operations.csv", LOGS / "calibrate.log"])
+
+def calibrate_section(section, redo=False):
+    # One section (a number), "checks", or "rest" (every section still missing). Raises unless the section
+    # passed or is suspect; a suspect one is measured again with redo=True when the machine is quiet.
+    args = ["calibrate-controlled", "--name", CURRENCY_NAME, "--game", GAME, "--portfolio", PORTFOLIO,
+            "--format", CURRENCY_VERSION, "--batch", CAL_BATCH, "--other-cpus", CAL_OTHER_CPUS,
+            "--wait-quiet", CAL_WAIT_QUIET, "--soak-minutes", CAL_SOAK_MINUTES]
+    args += ["--section", "all", "--no-checks"] if section == "rest" else ["--section", section]
+    if redo:
+        args.append("--redo")
+    rc = magat(*args, check=False)
+    if rc == 5:
+        print(f"\n*** SUSPECT: see the reasons above. When the machine is quiet, run calibrate_section({section!r}, redo=True).")
+    elif rc == 4:
+        raise RuntimeError("the machine stayed busy and nothing was started: run this cell again later")
+    elif rc != 0:
+        raise RuntimeError(f"exit {rc}: run this cell again (a re-run measures only what is missing); "
+                           f"the record is {CALIBRATION / 'record' / 'SUMMARY.md'}")
+    return rc
+
+magat("calibrate-controlled", "--name", CURRENCY_NAME, "--game", GAME, "--portfolio", PORTFOLIO,
+      "--other-cpus", CAL_OTHER_CPUS, "--batch", CAL_BATCH, "--preflight")
 '''
 
-DRIFT_CELL = r'''
-# Does this machine still spend the published currency? Re-measures the reference arms against the
-# R7615 file and writes nothing. Run it before quoting anything beside published results.
-magat("calibrate", "--check", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "emcts,emcts-comma",
-      "--weights", PUBLISHED_WEIGHTS, check=False)
-bundle("drift", [LOGS / "calibrate-check.log"])
+SECTION_CELL = r'''
+calibrate_section({k})
+'''
+
+REST_CELL = r'''
+# Any section still missing: one that failed twice, or sections added since (a new arm, another batch).
+calibrate_section("rest")
+'''
+
+CHECKS_CELL = r'''
+# Two checks that write nothing: this machine against the published R7615 currency (on the R7615 itself,
+# how far its prices moved since the thesis measured them), and against its own new currency.
+calibrate_section("checks")
+# The metering overhead on this machine (ORIGIN.md lists the R7615's line as not measured yet).
+magat("check", "overhead", "--game", GAME, "--portfolio", PORTFOLIO, "--reps", 4, check=False)
+magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", "@reference")
+print((CALIBRATION / "record" / "SUMMARY.md").read_text(encoding="utf-8"))
+bundle("calibration", [CALIBRATION, LOGS / "calibrate-controlled.log", LOGS / "check-overhead.log"])
 '''
 
 UNDER_LOAD_CELL = r'''
@@ -278,6 +313,63 @@ bundle("run-{name}", [RUN / "{split}", RESULTS / "SUMMARY.md", RESULTS / "tables
     return cells
 
 
+INVENTORY_CELL = r'''
+import json
+# Defaults, so this cell also runs on its own after a kernel restart.
+PORTFOLIO = globals().get("PORTFOLIO", DATA / "portfolio" / GAME)
+CALIBRATION = globals().get("CALIBRATION", DATA / "calibration" / f"{GAME}-{CURRENCY_NAME}")
+BUNDLED = [
+    ("portfolio", "this machine's portfolio: manifest, split files, identity, the verify log"),
+    ("threads", "the thread sweep and threads.json"),
+    ("calibration", f"the currency {CURRENCY_NAME}: weights, every section's record and verdict, the checks, the overhead"),
+    ("gates", "contract, equivalence, structure, audit, replay, support probe"),
+    ("worked-result", "the published worked result, re-analysed here"),
+@RUNS@    ("shakedown", "the shakedown's log"),
+]
+FILES = [
+    (PORTFOLIO / "identity.txt", "the portfolio's identity"),
+    (CALIBRATION / "compute_weights.properties", "this machine's currency"),
+    (CALIBRATION / "record" / "SUMMARY.md", "every calibration section's verdict"),
+    (CALIBRATION / "threads.json", "the thread choices runs read"),
+@REPORTS@]
+total, missing = 0, []
+print(f"Bundles in {BUNDLES}: download these; together they hold everything the analysis needs.")
+for name, what in BUNDLED:
+    path = BUNDLES / f"{name}.zip"
+    size = path.stat().st_size if path.is_file() else 0
+    total += size
+    if not size:
+        missing.append(name)
+    print(f"  [{'ok' if size else 'missing':7}] {path.name:32} {size / 2**20:8.1f} MB   {what}")
+print(f"  {total / 2**20:.1f} MB in all")
+print("\nThe files behind them:")
+for path, what in FILES:
+    print(f"  [{'ok' if path.exists() else 'missing':7}] {path}   ({what})")
+state = CALIBRATION / "record" / "state.json"
+if state.is_file():
+    latest = {}
+    for row in json.loads(state.read_text(encoding="utf-8")).get("sessions", []):
+        latest[row["section"]] = row.get("reliability", row.get("verdict"))
+    print("\nCalibration sections, latest verdict: " + (", ".join(f"{k} {v}" for k, v in sorted(latest.items())) or "none yet"))
+    doubtful = sorted(k for k, v in latest.items() if v != "PASS")
+    if doubtful:
+        print(f"  measure these again when the machine is quiet, with calibrate_section(k, redo=True): {doubtful}")
+print("\nINVENTORY: " + ("COMPLETE" if not missing else f"{len(missing)} bundle(s) missing: " + ", ".join(missing)))
+'''
+
+
+def inventory_cell(game: str) -> str:
+    """The inventory cell, naming the bundle and the report of every experiment the experiment cells run."""
+    names = []
+    for spec in sorted((ROOT / "experiments" / game).glob("*.json")):
+        x = json.loads(spec.read_text(encoding="utf-8"))
+        if x.get("name") != "shakedown" and "levels" in x:
+            names.append(x["name"])
+    runs = "".join(f'    ("run-{n}", "experiment {n}: its run tree and its analysis"),\n' for n in names)
+    reports = "".join(f'    (DATA / GAME / "results" / "{n}" / "SUMMARY.md", "the report of {n}"),\n' for n in names)
+    return INVENTORY_CELL.replace("@RUNS@", runs).replace("@REPORTS@", reports)
+
+
 CELLS = [
     md("""
 # MAGAT — run everything from here
@@ -312,13 +404,33 @@ the journal makes an interrupted build resume where it stopped.
 
 The machine banner first: physical cores, the worker ceiling and why. Then the thread sweep, which
 picks the knee of sustained throughput per budget level (results do not depend on it, only wall-clock
-does). Then this machine's own currency, idle and single-threaded, and the drift check against the
-published one. Each skips itself once its output exists.
+does). Each skips itself once its output exists.
 """),
     code(MACHINE_CELL, tags=("machine",)),
     code(THREADS_CELL, tags=("threads",)),
+    md("""
+### This machine's currency, in sections
+
+`calibrate-controlled` prices every arm in sections of eight. Each section is one calibration session,
+about 1.5 hours on the R7615, that writes all or nothing and merges into the currency by ratio, so a
+culled server or a busy afternoon costs one section, never the whole currency. Before each section it
+waits (up to `CAL_WAIT_QUIET` minutes) for the machine to be quiet and checks that two estimates agree.
+After each it gives a verdict:
+- **PASS**: the calibrator's gates passed and nothing was seen disturbing it.
+- **SUSPECT**: the gates passed, but the machine was busy with other work (`CAL_OTHER_CPUS`), the
+  container was CPU-throttled, or the session ran at a different speed from the first. Run the cell
+  again with `redo=True` when the machine is quiet.
+- **FAIL**: nothing was written; it is retried once, and running the cell again measures what is
+  missing.
+
+Run the cells one at a time; every one skips itself once its section is priced. Keep this tab open
+while a section runs, and start nothing else in this server. `record/SUMMARY.md` in the currency's
+folder has every section's verdict, and the last cell bundles it all.
+"""),
     code(CALIBRATE_CELL, tags=("calibrate",)),
-    code(DRIFT_CELL, tags=("drift",)),
+    *[code(SECTION_CELL.replace("{k}", str(k)), tags=("calibrate", f"section-{k}")) for k in range(1, CAL_SECTIONS + 1)],
+    code(REST_CELL, tags=("calibrate",)),
+    code(CHECKS_CELL, tags=("calibrate", "checks")),
     code(UNDER_LOAD_CELL, tags=("under-load",)),
     md("""
 ## Gates and probes
@@ -344,9 +456,13 @@ Every moving part at toy size, minutes, exits non-zero on any failure. Run befor
 """),
     code('magat("shakedown")\nbundle("shakedown", [LOGS / "shakedown.log"])'),
     md("""
----
-*The inventory cell (what to keep, with a tick per file) arrives with milestone 7 (see `MAGAT/DESIGN.md` §16).*
+## Inventory
+
+What to keep from this machine: every bundle the stages above wrote, with a tick, the files behind
+them, and the calibration's section verdicts. Download the bundles; everything else can be
+regenerated from them.
 """),
+    code(inventory_cell("tribes"), tags=("inventory",)),
 ]
 
 

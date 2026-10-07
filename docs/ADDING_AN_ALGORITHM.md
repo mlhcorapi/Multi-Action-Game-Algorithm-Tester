@@ -1,0 +1,274 @@
+# Adding an algorithm
+
+An algorithm is a `SearchAgent<S, A>` written against the `Game` contract ([`CONTRACT.md`](CONTRACT.md)),
+with an `AgentFactory` that names it. Once registered it is an **arm**: priced, run, analysed and
+compared like every arm before it. This page walks through a complete example, then covers what a real
+algorithm adds: its own operations, a mechanism and its control, or an implementation it was ported
+from.
+
+## The example: `FirstAgent`
+
+`core/src/magat/agents/first/FirstAgent.java` does random restarts, the smallest search that spends a
+budget. Until the budget is gone it samples a random plan for the turn from a copy of the position,
+evaluates where the plan leaves the game, and keeps the best. No game registers it.
+`core/test/magat/agents/FirstAgentTest.java` holds it to every promise below, and the shakedown
+checks that this page shows the compiled file.
+
+```java
+package magat.agents.first;
+
+import magat.agent.AgentFactory;
+import magat.agent.SearchAgent;
+import magat.agent.TurnBudget;
+import magat.agent.TurnRecord;
+import magat.game.Game;
+import magat.meter.Meter;
+
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Random;
+import java.util.Set;
+
+/**
+ * The worked example of {@code docs/ADDING_AN_ALGORITHM.md}: random restarts, the smallest search that
+ * spends a budget. Until the budget is exhausted it samples a random plan for the turn from a copy of
+ * the position, evaluates where the plan leaves the game, and keeps the best. It declares one operation
+ * of its own, a sampled plan's work outside the forward model, so a version-2 currency prices it.
+ *
+ * <p>No game registers it; the guide shows the one line that does.
+ */
+public final class FirstAgent<S, A> implements SearchAgent<S, A> {
+
+    /** The operations it declares: one sampled plan's own work (its legal-action queries and picks). */
+    public static final List<String> OPERATIONS = Collections.singletonList("first.sample");
+    private static final Meter.Op SAMPLE = Meter.register("first.sample");
+    /** The longest plan it samples, in actions. */
+    public static final int MAX_ACTIONS = 20;
+
+    private final Random rnd;
+
+    public FirstAgent(long seed) {
+        this.rnd = new Random(seed);
+    }
+
+    @Override
+    public TurnRecord plan(Game<S, A> game, S state, int player, TurnBudget budget) {
+        long t0 = System.currentTimeMillis();
+        double initial = game.evaluate(state, player);
+        budget.beginSearch();                         // from here on, every priced operation is paid from the budget
+        double best = initial, sum = 0;
+        boolean bestTerminal = false;
+        int bestLength = 0;
+        long samples = 0, duplicates = 0;
+        Set<String> seen = new HashSet<>();
+        while (!budget.exhausted()) {
+            S s = game.copy(state);
+            StringBuilder plan = new StringBuilder();
+            int length = 0;
+            // One sample's own work. The advances inside are the meter's, and their time is not counted twice.
+            try (Meter.Span span = SAMPLE.span()) {
+                while (length < MAX_ACTIONS && !game.isTerminal(s) && game.activePlayer(s) == player) {
+                    List<A> legal = game.legalActions(s);
+                    if (legal.isEmpty()) break;
+                    A a = legal.get(rnd.nextInt(legal.size()));
+                    plan.append(game.actionKey(a)).append(';');
+                    game.advance(s, a);
+                    length++;
+                    if (game.endsTurn(a)) break;
+                }
+            }
+            double v = game.evaluate(s, player);
+            samples++;
+            sum += v;
+            if (!seen.add(plan.toString())) duplicates++;
+            if (v > best) {
+                best = v;
+                bestTerminal = game.isTerminal(s);
+                bestLength = length;
+            }
+        }
+        return TurnRecord.builder()
+                .values(initial, best, bestTerminal, samples > 0 ? sum / samples : initial)
+                .search(Meter.advances(), Meter.copies(), Meter.evals(), Meter.units())
+                .init(budget, 0)
+                .planMillis(System.currentTimeMillis() - t0)
+                .diversity(samples, seen.size(), duplicates)
+                .sequenceLength(bestLength)
+                .build();
+    }
+
+    /** The registry entry: {@code r.register(FirstAgent.factory())}. */
+    public static <S, A> AgentFactory<S, A> factory() {
+        Meter.declare(OPERATIONS);
+        return new AgentFactory<S, A>() {
+            @Override public String id() { return "first"; }
+            @Override public SearchAgent<S, A> create(long seed, TurnBudget budget) { return new FirstAgent<>(seed); }
+            @Override public List<String> operations() { return OPERATIONS; }
+            @Override public String description() { return "random restarts, the example of docs/ADDING_AN_ALGORITHM.md"; }
+        };
+    }
+}
+```
+
+What each part does:
+
+- **`plan` gets its own copy of the position** and the player to plan for. A fresh agent is created
+  for every turn, so it may keep per-turn state freely and must keep none across turns.
+- **`budget.beginSearch()`** marks the boundary: what came before is initialization, reported in the
+  `init_*` columns and excluded from the budget. An agent with no initialization never calls it, and
+  then the whole turn counts.
+- **`budget.exhausted()`** is the stop rule: units spent, at this arm's prices, reach the budget. Every
+  `copy`, `advance` and `evaluate` through `game` is counted by the meter, which the agent never touches
+  for the forward model.
+- **`new Random(seed)` is the only randomness.** The seed is the same for every arm on the same
+  `(scenario, visit)`, which makes the comparison paired.
+- **`TurnRecord`** carries the values, the raw counts and `Meter.units()`, the wall-clock, the
+  diversity counts (`nodes`, `unique`, `duplicates`), and optionally anytime checkpoints and telemetry.
+- **The factory** gives the arm its id and declares its operations. The id is permanent once a result
+  is published under it: lowercase, kebab-case, the left half of every profile key (`first@40000`), and
+  the name of its results directory.
+
+## Declaring your algorithm's operations
+
+The forward model is not all an algorithm does. Tree bookkeeping, a learned table's updates and
+lookups, ranking candidates and legal-action queries take time too. Under a version-1 currency they
+are free, so an arm doing more of them buys more wall-clock per unit than its baseline. A version-2
+currency prices them ([`CURRENCY.md`](CURRENCY.md#why-version-2)), provided the arm declares them.
+
+1. **Name them.** Lowercase, dot-separated, led by the algorithm's family: `first.sample`,
+   `emcts.legal`, `qd.update`. `AgentFactory.operations()` returns exactly what this arm's
+   parameters make it perform, and the factory registers them with `Meter.declare` when it is created.
+2. **Record them** through a handle registered once:
+   `static final Meter.Op SAMPLE = Meter.register("first.sample")`.
+   - `try (Meter.Span s = SAMPLE.span()) { ... }` records one occurrence, timed while calibrating. A
+     span's time excludes the forward-model calls and the spans nested inside it, so nothing is priced
+     twice. `FirstAgent`'s span contains advances, and the meter subtracts them.
+   - `try (Meter.Span s = LOOKUP.span(n)) { ...n lookups... }` is **the rule for cheap operations**. A
+     lookup of tens of nanoseconds cannot be timed one call at a time without the timer dominating it,
+     so time the loop that performs n of them as one batch. Where there is no loop, fold the cheap work
+     into a coarser span: EMCTS's `emcts.generation` holds a generation's own bookkeeping.
+   - `OP.count()` records an untimed occurrence of an operation that is timed elsewhere; its price is
+     learned from the timed ones. An operation that is counted but never timed fails its calibration
+     cell.
+3. **Never self-report the forward model.** `advance`, `copy` and `evaluate` are counted by
+   `MeteredGame`, the anchor nobody can under-report.
+4. **It is enforced:**
+   - a turn that records an undeclared operation is refused;
+   - so is a turn under a version-2 profile that leaves a recorded operation unpriced;
+   - the experiment validator refuses a version-2 run that leaves a declared operation unpriced.
+5. **The audit checks the declarations.** `magat check overhead --audit --arms <id>` times the arm's
+   turns and attributes the time to the forward model, to each declared operation, and to nothing. It
+   warns above 10% unaccounted and fails above 25%. Undeclared work shows up as "nothing".
+
+On Tribes, `emcts` declares five operations and `QdeltaEmcts` adds up to five more. Together they
+leave 0.1-0.7% of a turn unaccounted.
+
+## Registering it
+
+For Tribes, add one line to `TribesAgents.registry()` in
+`games/tribes/src/magat/games/tribes/TribesAgents.java`:
+
+```java
+r.register(FirstAgent.factory());
+```
+
+```bash
+python magat.py arms --game tribes
+```
+
+`first` is now listed. Before anything is measured, check its declarations:
+
+```bash
+python magat.py check overhead --audit --game tribes --arms first --budget 8000
+```
+
+## A mechanism and its control
+
+If the algorithm adds a mechanism to an existing one (a learned table, a ranking, a bias), the
+methodology only credits the mechanism against its **attribution control**: the same arm with the
+mechanism replaced by noise ([methods](METHODS.md#5-grids-carry-their-nulls-and-their-controls)).
+
+- Write the control as a parameter of the same agent, not a separate algorithm, so everything else is
+  identical.
+- Make the control consume **the same random draws** in the same order. `comma-z0-random` draws
+  uniformly exactly where `comma-z0-coarse` consults its table; otherwise the two differ in their random
+  stream as well as in the mechanism.
+- Return the control's id from `attributionControl()`; the validator then requires it in every grid
+  that has the arm.
+- A parameter sweep names its null: the setting at which the mechanism is off.
+- A learned mechanism should report its support counters from `SearchAgent.support()`, so that
+  `magat probe support` can say whether the estimates it acts on rest on enough observations.
+
+`QdeltaEmcts` (`core/src/magat/agents/emcts/`) is the worked example: one agent, with every mechanism a
+parameter. `QdeltaArms` defines 31 arms from it, controls included.
+
+## An algorithm ported from an existing implementation
+
+If the algorithm already exists elsewhere (a paper's code, a thesis tree), port it, and gate the port
+against the original rather than trusting it:
+
+1. Implement an `Oracle<S>` that drives the original implementation on a scenario with the same seed
+   and budget, and returns its signature:
+   - `initial`, `final`, `advances`, `copies`, `evals`, `nodes`, `unique`, `units`;
+   - the initialization spend;
+   - the counters.
+
+   Register it in the game module's `oracles()`.
+2. Run the oracle gate:
+
+   ```bash
+   python magat.py check equivalence --game tribes --arms <id> --scenarios 8 --visits 2 --budgets 8000,40000
+   ```
+
+   It requires the port to reproduce the original field for field, with identical weights on both
+   sides. Initialization copies the original makes and never reads are declared with
+   `deadInitCopies()`. `emcts` and every `QdeltaEmcts` arm passed this gate against the thesis's agents,
+   counters included.
+3. Add the arm's equivalences and differences to `experiments/<game>/structure.json` and run `check
+   structure`: pairs that must behave identically, and every mechanism against its control.
+
+## Pricing it, running it, comparing it
+
+1. **Price it in your machine's currency.** Measuring and comparing arms needs an idle machine.
+   - With a version-2 currency of your own, from `calibrate-controlled`, add the arm:
+
+     ```bash
+     python magat.py calibrate --game tribes --out ~/magat_runs/calibration/tribes-<machine> --arms first
+     ```
+
+     This merges into the currency by ratio, and prices its operations as well.
+   - To stay in the published (version-1) currency, merge into a copy of the R7615 file instead. Run
+     `calibrate --check --arms emcts,emcts-comma` first: the drift report says how far your machine's
+     prices are from the published ones. In a version-1 file only the forward model is priced, and the
+     arm's own operations run free, as they do in every published version-1 result.
+2. **Write a spec** with the arm, the baseline at two levels or more, and the comparisons. For example
+   `experiments/tribes/first.json`:
+
+   ```json
+   {
+     "name": "first",
+     "game": "tribes",
+     "split": "dev",
+     "baseline": "emcts-comma",
+     "levels": [ { "budget": 40000, "visits": 4 }, { "budget": 80000, "visits": 4 } ],
+     "arms": [ { "id": "emcts-comma" }, { "id": "first" } ],
+     "contrasts": [ { "a": "first", "b": "emcts-comma", "label": "random restarts against the baseline" } ]
+   }
+   ```
+
+3. **Validate it, run it on the development half, and analyse it:**
+
+   ```bash
+   python magat.py experiment validate --experiment experiments/tribes/first.json --weights <your weights>
+   python magat.py run --experiment experiments/tribes/first.json --split dev --weights <your weights> --out ~/magat_runs/tribes/runs/first
+   python magat.py analyze --run ~/magat_runs/tribes/runs/first --out ~/magat_runs/tribes/results/first
+   ```
+
+   `SUMMARY.md` gives the paired difference against the baseline in units and in seconds, the budget
+   multiplier, and the search-gain multiple. Budget multipliers are dimensionless, so they compare
+   with the published ones (`docs/results/tribes-ab-emcts.md`) across machines and currencies.
+4. **Confirm on the holdout only once.** Freeze the choices first, and run with `--split holdout
+   --frozen <file>` ([methods](METHODS.md#3-the-holdout-is-read-once)).
+
+The README's "afternoon path" does all of this at toy size in a few minutes.

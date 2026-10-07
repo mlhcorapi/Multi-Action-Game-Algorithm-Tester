@@ -61,6 +61,11 @@ def main(argv) -> int:
     step("1. Build")
     check("core, adapter, engine and tests compile", [PY, ROOT / "magat.py", "build", "--tests"], "TEST BUILD OK")
     check("layering holds", [PY, ROOT / "magat.py", "layering"], "0 violation(s)")
+    check("docs/ADDING_AN_ALGORITHM.md shows the compiled FirstAgent, verbatim",
+          [PY, "-c", "import pathlib, sys; r = pathlib.Path(sys.argv[1]); "
+                     "src = (r / 'core/src/magat/agents/first/FirstAgent.java').read_text(encoding='utf-8').replace(chr(13), '').strip(); "
+                     "doc = (r / 'docs/ADDING_AN_ALGORITHM.md').read_text(encoding='utf-8').replace(chr(13), ''); "
+                     "sys.exit(0 if '```java' + chr(10) + src + chr(10) + '```' in doc else 1)", ROOT])
 
     step("2. Unit tests")
     check("junit, then the analysis package (the worked result's acceptance test included)",
@@ -146,6 +151,22 @@ def main(argv) -> int:
           then=lambda: (calib / "compute_weights_load3.properties").is_file() and weights.read_text(encoding="utf-8") == snapshot["w"])
     check("the published currency prices every worked-result arm",
           [PY, ROOT / "magat.py", "weights", "--game", game, "--arms", "@worked-result"], "WEIGHTS: COVERED")
+    controlled = data / "shakedown" / f"controlled-{game}"
+    shutil.rmtree(controlled, ignore_errors=True)
+    priced = controlled / "compute_weights.properties"
+    sections = [PY, ROOT / "magat.py", "calibrate-controlled", "--name", "shakedown", "--game", game, "--out", controlled, "--toy",
+                "--arms", "emcts,emcts-comma,comma-z0-coarse", "--batch", "1", "--levels", "2000,4000", "--turns", "2",
+                "--reps", "2", "--warmup", "1", "--soak-minutes", "0", "--interval", "2"]
+    check("calibrate-controlled --plan: two sections, nothing measured", [*sections, "--plan"], "SECTIONS: 2",
+          then=lambda: not priced.is_file())
+    check("section 2 first: preflight, controls, stability check, one session and its verdict (toy)",
+          [*sections, "--section", "2"], "SECTION 2: ",
+          then=lambda: "profile.comma-z0-coarse@4000.w.advance" in priced.read_text(encoding="utf-8"))
+    check("then the rest, merged by ratio, and the self-check, with a summary of every section (toy)",
+          sections, "CONTROLLED CALIBRATION: COMPLETE",
+          then=lambda: "profile.emcts-comma@4000.w.advance" in priced.read_text(encoding="utf-8")
+          and "| 2 | comma-z0-coarse | yes |" in (controlled / "record" / "SUMMARY.md").read_text(encoding="utf-8"))
+    check("a priced section is not measured again without --redo", [*sections, "--section", "1"], "already priced")
 
     step("7. Runner: the shakedown spec on the toy portfolio and the toy currency")
     spec = ROOT / "experiments" / game / "shakedown.json"

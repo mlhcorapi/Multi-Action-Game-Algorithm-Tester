@@ -63,6 +63,16 @@ jobs:
           # a toy drift verdict may land either side of the gate (exit 0 or 1); anything else is a failure
           rc=0; python magat.py calibrate --check --game tribes --weights "$RUNNER_TEMP/calib/compute_weights.properties" --arms emcts-comma --levels 4000 --reps 2 --warmup 1 --toy || rc=$?
           test "$rc" -le 1
+      - name: Controlled toy calibration in sections (plan, one section, the rest and the self-check, a priced section skipped)
+        run: |
+          CC="--name ci --toy --out $RUNNER_TEMP/controlled --arms emcts,emcts-comma,comma-z0-coarse --batch 1 --levels 2000,4000 --turns 2 --reps 2 --warmup 1 --soak-minutes 0 --interval 2"
+          python magat.py calibrate-controlled $CC --plan | grep -q "SECTIONS: 2"
+          python magat.py calibrate-controlled $CC --section 2 > "$RUNNER_TEMP/section2.log" || { tail -80 "$RUNNER_TEMP/section2.log"; exit 1; }
+          grep -q "SECTION 2: " "$RUNNER_TEMP/section2.log"
+          python magat.py calibrate-controlled $CC > "$RUNNER_TEMP/rest.log" || { tail -80 "$RUNNER_TEMP/rest.log"; exit 1; }
+          grep -q "CONTROLLED CALIBRATION: COMPLETE" "$RUNNER_TEMP/rest.log"
+          grep -q "profile.emcts-comma@4000.w.advance" "$RUNNER_TEMP/controlled/compute_weights.properties"
+          python magat.py calibrate-controlled $CC --section 1 | grep -q "already priced"
       - name: The shipped experiment specs validate against the published currency
         run: |
           for s in reference-ladder ab-emcts-dev ab-emcts-holdout; do

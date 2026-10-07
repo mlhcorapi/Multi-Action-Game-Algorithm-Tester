@@ -1,9 +1,14 @@
 {
   "java.project.sourcePaths": [
-    "Tribes-master/src"
+    "core/src",
+    "core/test",
+    "games/tribes/src",
+    "games/tribes/test",
+    "games/tribes/engine/src"
   ],
   "java.project.referencedLibraries": [
-    "Tribes-master/lib/**/*.jar"
+    "core/lib/**/*.jar",
+    "games/tribes/engine/lib/**/*.jar"
   ],
-  "java.project.outputPath": "Tribes-master/bin"
+  "java.project.outputPath": "build/vscode"
 }
