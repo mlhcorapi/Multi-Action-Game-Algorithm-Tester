@@ -210,9 +210,13 @@ powercfg /setactive SCHEME_BALANCED
 Keep the "MAGAT calibration" plan, and switch back to it before any later check on this laptop.
 
 **Is the cap honoured?** The stability check prints the busiest core's clock, and the summary prints it
-for every section. Under policy A, the median should sit at the cap, and the stability check should
-settle within a few estimates. If the clock runs above the cap, use B. If it runs well below the cap,
-lower the cap, for example to 3500. The thermal zones are the firmware's ACPI zones, not the CPU's own
+for every section. On Windows that clock is approximate: it is derived from the processor's performance
+counter and the nominal frequency in the registry. On this laptop, capped at 4,000 MHz, it reads about
+4,225. Read the spread, not the level. Under policy A the clock is flat (this laptop's first calibration:
+4,180-4,250 MHz within every section, against 3,700-5,700 with boost on), and the stability check settles
+within a few estimates. A clock that wanders by hundreds of MHz, or reaches boost speeds, means the cap
+is not honoured: use B. If the stability check will not settle even with a flat clock, lower the cap,
+for example to 3500. The thermal zones are the firmware's ACPI zones, not the CPU's own
 sensor; read them as a trend.
 
 ## On a shared server (the R7615, through JupyterHub)
@@ -302,10 +306,14 @@ Then come the checks.
 
 What to do about what it finds:
 
-- **SUSPECT.** Measure the section again when the machine is quiet (the summary prints the command). If
-  it is suspect again for the same reason, the machine is not getting quieter. Decide whether that
-  reason matters for this section. If it was a short burst of other work, the gates that passed say
-  probably not.
+- **SUSPECT.** Read the reasons, remove their cause, and measure the sections again in one invocation:
+  `--section 2,3,4 --redo` (the summary prints the command). If a section is suspect again for the same
+  reason, the cause has not gone. Decide whether that reason matters for this section. If it was a short
+  burst of other work, the gates that passed say probably not.
+- **Every section after the first suspect for its speed, by a similar amount**, on a machine that was
+  steady and quiet: that was a calibrator bug, found by the laptop's first calibration and fixed on
+  2026-10-08. A merge used to measure its reference cell under the new file's own prices, a different
+  search. Measure those sections again with the fixed calibrator.
 - **FAIL.** Run the same command again.
 - **The self-check failed.** The machine changed speed during the run. Look at the clocks and the
   speeds across sections. Usually this calls for a tighter clock policy (laptop) or quieter hours
