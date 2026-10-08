@@ -1430,6 +1430,7 @@ def counter_stats(path, spans, nominal, pcores, confined=False) -> dict:
             d["perf_pct"] = (perf[0], perf[len(perf) // 2], perf[-1])
             if nominal:
                 d["mhz"] = tuple(round(x * nominal / 100) for x in d["perf_pct"])
+                d["approx"] = True            # relative to the registry's nominal frequency: read the spread, not the level
         if s["temp"]:
             d["temp_max_c"] = max(s["temp"])
         if s["passive"]:
@@ -1443,7 +1444,7 @@ def describe_counters(d) -> str:
         return "-"
     parts = []
     if "mhz" in d:
-        parts.append(f"{d['mhz'][0]}-{d['mhz'][2]} MHz (median {d['mhz'][1]})")
+        parts.append(f"{'about ' if d.get('approx') else ''}{d['mhz'][0]}-{d['mhz'][2]} MHz (median {d['mhz'][1]})")
     elif "perf_pct" in d:
         parts.append(f"{d['perf_pct'][0]:.0f}-{d['perf_pct'][2]:.0f}% of nominal")
     if d.get("busiest_on_performance_core", 1) < 1:
@@ -1520,11 +1521,12 @@ def main(argv) -> int:
     if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", a.name):
         print("--name: lower-case letters, digits, '.', '_' and '-'", file=sys.stderr)
         return 2
-    if a.section not in ("all", "next", "checks") and not a.section.isdigit():
-        print("--section: all, next, checks or a section number", file=sys.stderr)
+    numbered = re.fullmatch(r"\d+(,\d+)*", a.section) is not None
+    if a.section not in ("all", "next", "checks") and not numbered:
+        print("--section: all, next, checks, a section number, or a list of them (2,3,4)", file=sys.stderr)
         return 2
-    if a.redo and not a.section.isdigit():
-        print("--redo needs --section <number>", file=sys.stderr)
+    if a.redo and not numbered:
+        print("--redo needs --section <number>[,<number>...]", file=sys.stderr)
         return 2
     plat = platform_api()
     data = pathlib.Path(os.environ.get("MAGAT_DATA") or (pathlib.Path.home() / "magat_runs")).resolve()
@@ -1656,20 +1658,24 @@ def main(argv) -> int:
     elif a.section == "checks":
         todo_sections, todo_checks = [], checks_all or ["published", "self"]
     else:
-        k = int(a.section)
-        if not 1 <= k <= len(sections):
+        asked = list(dict.fromkeys(int(x) for x in a.section.split(",")))
+        if any(not 1 <= k <= len(sections) for k in asked):
             print(f"there are {len(sections)} section(s); --plan lists them", file=sys.stderr)
             return 2
-        todo_sections = [k] if (a.redo or k in pending_sections()) else []
+        pend = pending_sections()
+        todo_sections = [k for k in asked if a.redo or k in pend]
         todo_checks = []
     todo_checks = [c for c in todo_checks if a.redo_checks or c not in state.get("checks", {})]
     if not todo_sections and not todo_checks:
-        if a.section.isdigit():
-            last = latest(int(a.section))
-            v = (last or {}).get("reliability") or (last or {}).get("verdict") or "PASS"
-            print(f"\nsection {a.section} is already priced (last verdict {v}); --redo measures it again")
-            print(f"SECTION {a.section}: {v} (already priced)")
-            return 0 if v == "PASS" or a.toy else 5
+        if numbered:
+            worst = 0
+            for k in dict.fromkeys(int(x) for x in a.section.split(",")):
+                last = latest(k)
+                v = (last or {}).get("reliability") or (last or {}).get("verdict") or "PASS"
+                print(f"\nsection {k} is already priced (last verdict {v}); --redo measures it again")
+                print(f"SECTION {k}: {v} (already priced)")
+                worst = worst if v == "PASS" or a.toy else 5
+            return worst
         print_plan()
         print("\nCONTROLLED CALIBRATION: " + ("COMPLETE" if not pending_sections() else "nothing to do in this section"))
         return 0
@@ -1974,7 +1980,8 @@ def main(argv) -> int:
                 1: f"INCOMPLETE - {why}" if why else "INCOMPLETE - run the same command again to measure what is missing",
                 2: f"NOT STARTED - {why}", 3: "STOPPED - the machine went on battery; plug in and run the same command again",
                 4: f"NOT STARTED - {why}",
-                5: (f"SUSPECT - section(s) {suspect}: measure again with --section <n> --redo when the machine is quiet"
+                5: (f"SUSPECT - the currency is written, but section(s) {suspect} are in doubt (reasons above); once the cause "
+                    f"is gone, measure them again with --section {','.join(map(str, suspect))} --redo"
                     if suspect else "SUSPECT - the self-check failed: the machine did not hold its speed across the run"),
                 130: "INTERRUPTED - run the same command again to continue"}
     print(f"CONTROLLED CALIBRATION: {verdicts.get(code, code)}")
@@ -2091,8 +2098,10 @@ def write_summary(a, out, record, facts, plan, sections, state, soak, sessions, 
     C.append("")
     for k in redo:
         rows = [r for r in state["sessions"] if r.get("section") == k]
-        C.append(f"- Section {k} is suspect ({'; '.join(rows[-1].get('reasons', []))}). Measure it again when the machine is "
-                 f"quiet: `python magat.py calibrate-controlled --name {a.name} --section {k} --redo`")
+        C.append(f"- Section {k} is suspect: {'; '.join(rows[-1].get('reasons', []))}.")
+    if redo:
+        C.append(f"- Once the cause is gone, measure them again in one session: "
+                 f"`python magat.py calibrate-controlled --name {a.name} --section {','.join(map(str, redo))} --redo`")
     ch = state.get("checks", {})
     C += ["", "## Checks", "", "| Check | Verdict | Largest turn-price drift | When |", "|---|---|---|---|"]
     for name in ("published", "self"):

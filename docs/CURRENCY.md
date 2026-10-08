@@ -89,7 +89,11 @@ the legal-action query: one costs about 1.5 advances.
 - every cell on the same portfolio positions, with the same seeds;
 - a warm-up per budget level, and one discarded turn per cell;
 - per repetition the same turns again, with counts taken from each turn's own record;
-- **the fastest repetition** as the estimate, since interference can only slow a repetition down.
+- **the fastest repetition** as the estimate, since interference can only slow a repetition down;
+- every cell played under the same **fixed measurement weights**: advance 1, copy 0.16, eval 0.077, the
+  arms' own operations free. This holds whatever the file being extended or checked already prices. The
+  budget's stop rule decides which turn is played, so this makes every session, merge and check measure
+  the same turns.
 
 Its gates, all enforced:
 - the two fastest repetitions agree within 10% for every operation that is at least 1% of a turn;
