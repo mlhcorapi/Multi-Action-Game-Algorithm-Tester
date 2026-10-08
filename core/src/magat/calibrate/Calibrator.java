@@ -191,6 +191,8 @@ public final class Calibrator {
         System.out.println("# portfolio " + portfolio.identity() + " (" + portfolio.size() + " positions)");
         System.out.println(pricesOps ? "# currency version 2: every operation an arm declares is measured and priced"
                 : "# currency version 1: the forward model is priced; the arms' own operations are measured for the audit and stay free");
+        System.out.println(String.format(Locale.ROOT, "# every cell is measured under the fixed measurement weights (advance %s, copy %s, eval %s, "
+                + "the arms' own operations free), whatever the file prices", Weights.DEFAULT[0], Weights.DEFAULT[1], Weights.DEFAULT[2]));
         if (!toWrite.isEmpty() && existing != null)
             System.out.println("# will write " + toWrite.size() + " profile(s): " + profilesOf(toWrite));
         MachineProfile.get().printBanner("calibration");
@@ -208,7 +210,12 @@ public final class Calibrator {
         // ---- measure
         Cell bracket = null;
         Weights previous = Meter.installed();
-        Meter.install(existing);                    // cells run under their stored profile when priced, else the global weights
+        // Every cell runs under the fixed measurement weights, never under the prices of the file being
+        // extended or checked: the stop rule decides which turn is played, and a price is only comparable
+        // with one measured on the same turns. Under a file's own prices a session's reference cell plays a
+        // different, shorter search than the session that created the file (6.6% slower per advance on
+        // the development laptop under version 2), and the merge's ratio would compare unlike things.
+        Meter.install(null);
         Meter.allowUnpriced(true);
         LoadHarness.WORK_TURNS.set(0);
         long t0 = System.currentTimeMillis();
@@ -465,7 +472,7 @@ public final class Calibrator {
         for (Cell c : cells) levels.add(c.budget);
         java.util.Map<Long, Double> perTurn = new java.util.TreeMap<>();
         Weights previous = Meter.installed();
-        Meter.install(existing);
+        Meter.install(null);                         // the fixed measurement weights, as the session itself measures
         Meter.allowUnpriced(true);
         long t0all = System.nanoTime();
         try {

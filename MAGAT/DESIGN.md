@@ -788,6 +788,38 @@ file as a merge target.*
   calibration (33 arms x 3 levels, 1,534 turns) on the development laptop: 3.7 h plugged in, 11.4 h on
   battery.*
 
+*Amended 2026-10-08: **every cell is measured under the fixed measurement weights** (advance 1, copy
+0.16, eval 0.077, the arms' own operations free), in every session: a calibration, a merge, a check and an
+estimate alike, whatever the file being extended or checked prices.*
+
+*Until now a session ran its cells under the file's own prices. A cell already priced ran under its stored
+profile; an unpriced one ran under the file's global weights. A session that created a file ran everything
+under the fixed weights, because there was no file yet. The stop rule decides which turn is played, so this
+changed what a merge measured:*
+- *Its reference cell played a different, shorter search than the session that wrote the file.*
+- *Its new arms played under the file's global prices instead of the fixed weights.*
+
+*The merge's ratio therefore compared unlike things. The first full calibration of the development laptop
+(2026-10-07, four sections) found it.*
+- *Section 1 created the file. Its reference cell `emcts@40000` made 876,402 advances at 54,426 ns each.*
+- *Sections 2-4 merged into the file and ran the same cell under its new version-2 prices: 872,853 advances
+  at 57,698-58,155 ns, on a machine whose clock was flat (capped), at 43 °C and idle.*
+- *At 80k and 400k, where an advance is priced at about 1.5 units, the same cell made 32-36% fewer advances.*
+- *So the 24 arms of sections 2-4 were priced about 6% low relative to section 1's.*
+- *The self-check, run under the stored prices too, reported a -9.5% turn-price drift that was the same
+  artefact.*
+
+*`calibrate-controlled` flagged all three sections SUSPECT for running at ×1.06-1.07 the first section's
+speed. Under version 1 the effect was small: the reference cell's stored forward-model weights are close to
+the fixed ones. Version 2 prices the arms' own operations, which made it large. The fixed weights are the
+ones the R7615's stage A2 calibration measured every cell under ("currently in force: advance=1.0000
+copy=0.1600 eval=0.0770"). `CalibratorToyTest.everySessionMeasuresTheSameTurnsWhateverTheFilePrices`
+requires a fresh session, a merge and a check to play identical turns of the reference cell; with the old
+behaviour it fails at the first merge (1,032 advances against 1,264). A new file's header states the
+measurement weights. A currency's price is therefore one measured on turns played under the fixed weights.
+At the upper budget levels those turns are longer than the turns the currency's own prices then buy: the
+same residual the thesis's calibration had, which W7 measures.*
+
 ### 8.2 Merge
 
 Writing into an existing file **merges**: header, globals and `referenceAdvanceNanos` untouched, new
@@ -852,6 +884,10 @@ arm. The turn price is each cell's own operations, counted in the session, price
 stored, over the operations both sides price. The laptop check recorded in `calibration/r7615/ORIGIN.md`
 (evaluations 31-38% cheaper, turn prices within 4%), FAIL under the per-operation gate, passes under
 this one; `ORIGIN.md` says so.*
+
+*Amended 2026-10-08: a check measures under the fixed measurement weights, like the calibration it checks
+(§8.1 amendment), so it compares turns with the turns that were priced, not the shorter turns the stored
+prices would buy.*
 
 ### 8.4 Two measurements added to the check
 
@@ -975,6 +1011,14 @@ more on the laptop: each one has about 12 minutes of warm-ups and reference cell
 temperature. The guide therefore recommends capping the performance cores below what the cooling
 sustains, in a separate power plan. That is a setting of the machine, which the user makes; the tool
 reads it, records it and locks it.*
+
+*Amended 2026-10-08:*
+- *`--section` takes a list (`--section 2,3,4 --redo`), so several sections are measured again in one
+  invocation, with one stability check.*
+- *On Windows the busiest core's clock is derived from the processor's performance counter and the
+  registry's nominal frequency. It is labelled approximate: the development laptop, capped at 4,000 MHz,
+  read about 4,225. Its spread (4,180-4,250 within a section) is what shows that the cap held.*
+- *The SUSPECT verdict's advice no longer assumes the cause was other work.*
 
 *Renamed 2026-10-07: first committed as `calibrate-offline`, renamed when it took on the server, where
 "offline" would be wrong.*

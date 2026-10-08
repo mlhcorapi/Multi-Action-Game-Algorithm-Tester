@@ -20,6 +20,7 @@ mechanisms, this page says what it was holding back.
 | One long calibration session | one noisy cell, a late slowdown, or a culled Jupyter server discards hours | sections of 8 arms that merge by ratio; any section can be re-run |
 | The OS load average inside a container, or on Windows | describes the host, or nothing at all | the load harness gates on its own work; `calibrate-controlled` measures other work by CPU accounting and names it |
 | Automatic maintenance on an idle-looking machine | Windows starts scans and updates at 02:00 when nobody is typing, which an unattended calibration looks like | the preflight shows the maintenance time; the plan warns when a run will cross it |
+| A merge session measured under the prices of the file it extends | the reference cell played a different, shorter search than in the session that wrote the file, so the laptop's sections 2-4 were priced about 6% low (found 2026-10-07) | every cell, in every session and check, is measured under the fixed measurement weights; a toy test requires identical turns across sessions |
 | The decorator times operations differently from the engine's own hooks | +3.3% on the evaluation weight, against a currency calibrated through the hooks | measured by `check overhead` and recorded in `ORIGIN.md` |
 
 ## Designing experiments

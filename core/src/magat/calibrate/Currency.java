@@ -74,6 +74,9 @@ public final class Currency {
         }
         if (s.toy)
             sb.append("# TOY CALIBRATION: sample-size and stability gates were reported, not enforced. Not a currency.\n");
+        sb.append(String.format(Locale.ROOT, "# Every cell was measured under the fixed measurement weights (advance %s, copy %s, eval %s, the arms'%n"
+                + "# own operations free), whatever a file being extended prices, so every session plays the same turns.%n",
+                Weights.DEFAULT[0], Weights.DEFAULT[1], Weights.DEFAULT[2]));
         sb.append("magat.weights.version = ").append(s.version >= 2 ? 2 : 1).append('\n');
         sb.append("game = ").append(s.game).append('\n');
         sb.append("machine = ").append(s.machine).append('\n');

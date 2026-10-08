@@ -141,6 +141,35 @@ public class CalibratorToyTest {
     }
 
     @Test
+    public void everySessionMeasuresTheSameTurnsWhateverTheFilePrices() throws Exception {
+        // The stop rule decides which turn is played. Measured under the prices of the file it extends, a
+        // merge session's reference cell played a different turn from the session that wrote the file (on
+        // the development laptop, 6.6% slower per advance under version 2), and the merge's ratio compared
+        // unlike things. Every session, merge and check alike, measures under the fixed measurement weights.
+        Portfolio<ToyGame.State> p = portfolio();
+        Path out = Files.createTempDirectory("magat-calib-turns");
+        Calibrator.Options first = toy("emcts");
+        first.turns = "2,2";
+        Calibrator.Result fresh = Calibrator.run(game, registry(), "emcts", p, out, null, first);
+        Calibrator.Result merge = Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-comma"));
+        Calibrator.Options check = toy("emcts");
+        check.check = true;
+        Calibrator.Result checked = Calibrator.run(game, registry(), "emcts", p, null, out.resolve(Currency.WEIGHTS_FILE), check);
+        for (String profile : Arrays.asList("emcts@300", "emcts@600")) {
+            Cell a = measured(fresh, profile), b = measured(merge, profile), c = measured(checked, profile);
+            List<Long> turns = Arrays.asList(a.advances, a.copies, a.evals);
+            assertEquals(profile + " in the merge session", turns, Arrays.asList(b.advances, b.copies, b.evals));
+            assertEquals(profile + " in the check", turns, Arrays.asList(c.advances, c.copies, c.evals));
+        }
+    }
+
+    private static Cell measured(Calibrator.Result r, String profile) {
+        for (Cell c : r.cells) if (c.profile.equals(profile) && !"bracket".equals(c.role)) return c;
+        fail("no cell " + profile);
+        return null;
+    }
+
+    @Test
     public void aVersionOneFileStaysVersionOneWhenAnArmIsMergedIntoIt() throws Exception {
         Portfolio<ToyGame.State> p = portfolio();
         Path out = Files.createTempDirectory("magat-calib-v1");
