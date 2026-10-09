@@ -999,9 +999,14 @@ MAGAT's. A local prototype of three output-preserving changes in the engine (the
 once per tile, Dijkstra's lookups by id, build variants tested on one probe action) played the same turns
 27% faster on one worker and 38-58% faster on eight, allocating 44% less: twelve arms at 40k and two at
 400k gave identical turn signatures, and `magat check replay` reproduced the 20 published R7615 turns.
-Not adopted: it is a new engine commit, and a faster advance changes what a copy and an evaluation cost
-relative to it, so currencies would be measured anew. The parallel collector ran 4-7% faster than G1 at
-eight workers in single runs, with less of the heap in use; not adopted either, since calibrations time under G1.*
+Adopted the same day as the engine fork's third commit (§15.3 amendment). It is a new engine commit, and
+a faster advance changes what a copy and an evaluation cost relative to it: a drift check of the laptop's
+own currency on the new engine (2026-10-09) found an advance about 19% faster at 40k and 80k (54,426 to
+43,955 ns at 40k), copies and evaluations unchanged, so their weights rose by 25-36% while each cell's
+turn price moved by -4.1% to +3.0%, inside the 10% gate. Its 400k cells were measured after the laptop
+slowed down (it was on battery afterwards) and do not count. New currencies are measured on the new
+engine. The parallel collector ran 4-7% faster than G1 at eight workers in single runs, with less of the
+heap in use; not adopted either, since calibrations time under G1.*
 
 ### 8.7 Controlled calibration in sections (`calibrate-controlled`)
 
@@ -1677,6 +1682,22 @@ needs (`tools/patch_engine_paths.py`): `IO.readFile/readJSON` resolve a relative
 launcher passes the property. Credit to the Tribes authors is in MAGAT's README.
 
 *Done 2026-09-10 (milestone 1).*
+
+*Amended 2026-10-09: a third commit, `828b130` ("Faster legal-action generation, every output
+unchanged"), applied by `tools/patch_engine_perf.py`. After every advance the engine recomputes the
+active tribe's legal actions, which is 85% of a search's CPU time (§8.6). The commit computes the zone of
+control once per tile in `StepMove`, looks the path searches' nodes up by id in `Pathfinder`, tests
+`BuildFactory`'s variants on one probe action, and lets `Board.getUnitAt` answer an empty tile without a
+hash lookup. Each returns what the code it replaces returned, in the same order. It adds
+`test/MoveGenerationEquivalenceTest`, which plays seeded games forward (1,458 states) and compares every
+unit's destinations and paths, every city's build actions and every tile's unit with the original code,
+kept verbatim in the test directory. In MAGAT: every registered arm played identical turns on both
+engines (856 turns: the 33 arms at 40k and at 80k, eight of them at 400k; every field of every turn
+record), `magat check replay` reproduced the 20 published R7615 turns, and a full portfolio rebuild
+matched the published one (the identity, all 400 rows, the split and the plans). The same turns run
+1.4-1.5 times faster on eight workers (every arm, all three budgets) and about 1.3 times on one,
+allocating about 44% less. The Tribes authors have given permission for MAGAT's use of their code
+(2026-10-09).*
 
 ### 15.4 Third-party audit
 

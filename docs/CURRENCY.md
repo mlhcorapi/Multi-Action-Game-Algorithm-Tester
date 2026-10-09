@@ -159,6 +159,16 @@ development laptop's: `games/tribes/calibration/laptop-i9-14900hx/` is a version
 on 2026-10-07 to 2026-10-09, which prices every registered arm and every operation it declares. Results
 quote the currency they were priced in.
 
+**A currency describes the costs of the engine it was measured on.** On 2026-10-09 the Tribes engine's
+legal-action generation became faster without changing any output (engine `828b130`; design §15.3): an
+advance now takes less time, a copy and an evaluation the same. A result priced in a currency measured
+before then still reproduces exactly, because a budget is a count. But the currency describes the earlier
+engine's costs: on the development laptop an advance became about 19% faster at 40k and 80k while copies
+and evaluations did not, so a copy's and an evaluation's weights rose by 25-36%, and the turn prices of
+`emcts` and `emcts-comma` there moved by -4.1% to +3.0%, inside the 10% gate. (The 400k cells of that
+check were measured after the laptop slowed down, on battery, and are not counted.) Both published
+currencies were measured on the earlier engine; a new currency is measured on the current one.
+
 A run tree records the price of every leaf. Continuing a tree under a file in which a leaf's price has
 changed is refused (the **currency lock**) until `--retire-leaf` names that leaf to be re-run. A merge
 that only adds arms changes no leaf's price.

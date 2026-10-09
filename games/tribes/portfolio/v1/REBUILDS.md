@@ -15,6 +15,7 @@ maps iterate in identity-hash order. That is why the plans are compared.
 |---|---|---|---|---|---|---|---|---|---|
 | 2026-08-28 | R7615, AMD EPYC 9534 (64 cores) | Linux, JDK not recorded | 48 | 5.4 min | `ec243fd7...` | (original) | (original) | (original) | thesis `BuildV6Portfolio` |
 | 2026-10-04 | Intel Core i9-14900HX laptop (24 cores) | Windows 11, JDK 26 (`--release 11`) | 20 | 15.5 min, sharing the machine with other jobs | `ec243fd7...` | 400/400 equal | equal | equal | 0.1.0-m2 |
+| 2026-10-09 | Intel Core i9-14900HX laptop (24 cores) | Windows 11, JDK 26 (`--release 11`) | 20 | 8.7 min, alone, cores capped at 4,000 MHz | `ec243fd7...` | 400/400 equal | equal | equal | 0.1.0-m6, engine `828b130` (faster legal-action generation) |
 
-Both sources consumed exactly the attempts the R7615 did: single through attempt 36, dual through
+Every rebuild's sources consumed exactly the attempts the R7615 did: single through attempt 36, dual through
 attempt 108. The progress lines match the R7615 log line for line.

@@ -175,8 +175,9 @@ def git(*args, cwd=None) -> subprocess.CompletedProcess:
 def ensure_engines() -> None:
     """Every game's engine, before anything is compiled. A clone made without --recurse-submodules has an
     empty engine directory, which javac reports as a hundred missing packages: fetch the submodule the
-    repository pins, or say plainly what is missing. An engine at another commit than the pinned one is
-    reported, since a run's provenance records the engine's commit."""
+    repository pins, or say plainly what is missing. An engine at another commit than the pinned one (as
+    after a `git pull`, which moves the pin but not the engine) is checked out at the pinned commit when it
+    has no local changes, and reported when it has, since a run's provenance records the engine's commit."""
     modules = ROOT / ".gitmodules"
     declared = modules.read_text(encoding="utf-8") if modules.is_file() else ""
     for g in games():
@@ -205,12 +206,22 @@ def ensure_engines() -> None:
         if override or not (ROOT / ".git").exists() or not shutil.which("git"):
             continue
         rel = d.relative_to(ROOT).as_posix()
-        pinned = git("ls-tree", "HEAD", rel).stdout.split()
+        # What `git submodule update` checks out: the commit in the index ("160000 <sha> 0\t<path>").
+        staged = git("ls-files", "--stage", "--", rel).stdout.split()
+        pinned = staged[1] if len(staged) >= 2 and staged[0] == "160000" else ""
         head = git("rev-parse", "HEAD", cwd=d).stdout.strip()
-        if len(pinned) >= 3 and pinned[1] == "commit" and head and head != pinned[2]:
-            print(f"warning: the {g} engine is at {head[:10]}, but this commit of MAGAT pins {pinned[2][:10]}.\n"
-                  f"  Runs record the engine's commit; to use the pinned one: git submodule update --recursive {rel}",
-                  flush=True)
+        if pinned and head and head != pinned:
+            # `git pull` moves the pin but not the engine. With no local changes in the engine, follow the pin.
+            if not git("status", "--porcelain", cwd=d).stdout.strip():
+                print(f"# the {g} engine is at {head[:10]}, but this commit of MAGAT pins {pinned[:10]}: "
+                      f"checking out the pinned engine", flush=True)
+                run(["git", "submodule", "update", "--init", "--recursive", rel], log="build", check=False)
+                head = git("rev-parse", "HEAD", cwd=d).stdout.strip()
+            if head != pinned:
+                print(f"warning: the {g} engine is at {head[:10]} (with local changes, or the pinned commit could not be "
+                      f"fetched), but this commit of MAGAT pins {pinned[:10]}.\n"
+                      f"  Runs record the engine's commit; to use the pinned one: git submodule update --recursive {rel}",
+                      flush=True)
 
 
 def games() -> list:
