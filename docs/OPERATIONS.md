@@ -183,7 +183,7 @@ Each prints PASS or FAIL and exits non-zero on FAIL. The shakedown and CI run al
 |---|---|
 | `MAGAT_DATA` | the data root (default `~/magat_runs`) |
 | `MAGAT_BUILD` | the build output, for example out of a synced folder whose client holds files open |
-| `MAGAT_HEAP` | the JVM heap for every command. Unset, calibrations and checks get `4g`, so currencies are measured alike; portfolio builds, thread sweeps, runs and loaded calibrations get three quarters of the memory available (a container's limit, else what Linux reports available, else the physical memory), and the launcher prints which. Set it only to override both |
+| `MAGAT_HEAP` | the JVM heap for every command. Unset, calibrations and checks get `4g`, so currencies are measured alike; portfolio builds, thread sweeps, runs and loaded calibrations get 1 GB plus 256 MB per worker (`MAGAT_MAX_THREADS`, else half the logical CPUs), at most half the memory available and at least 2 GB, and the launcher prints which. Set it only to override both |
 | `MAGAT_MAX_THREADS`, `MAGAT_RESERVE_CORES` | the worker ceiling, and the cores held back |
 | `MAGAT_<GAME>_ENGINE` | another engine tree instead of the submodule |
 | `MAGAT_WORKERS`, `MAGAT_CURRENCY` | the notebook's worker count and currency name |
@@ -198,6 +198,10 @@ Each prints PASS or FAIL and exits non-zero on FAIL. The shakedown and CI run al
   record the engine's commit.
 - **A repository in a synced folder (OneDrive, Dropbox).** Builds can hit locked files; set
   `MAGAT_BUILD` outside the folder. Keep `MAGAT_DATA` outside it too, as it is by default.
+- **Memory is not what limits the thread count.** A Tribes worker holds 5-35 MB; the rest of the heap is
+  the engine's short-lived garbage (2-3 GB a second per worker), and the heap size only sets how often it
+  is collected. Cores, and the memory bandwidth that garbage takes, are the limits; the thread sweep
+  measures them. A laptop with 16 GB runs its full thread count in the launcher's heap.
 - **Timing measurements need an idle machine.** Calibrations, `check overhead` and estimates are timing
   measurements. Runs are not: their results are counts, and only their wall-clock column feels the load.
 - **Commit before a worktree can disappear.** The shakedown and the notebook self-test are cheap; run

@@ -968,6 +968,41 @@ fixed:*
 before, the error ended the command. `PeakHeapMB` in `thread_sweep.csv` is still the peak in use;
 `PerTaskHeapMB` is now the footprint after collections.*
 
+*Amended 2026-10-09, later: the heap is sized to the workers, not to the machine.* Measured on the
+development laptop (Tribes, engine `b9d27af`, G1; a fixed set of portfolio positions, warm JVM):
+
+| | held per worker after collections | allocated per turn | allocated per second per worker | time collecting |
+|---|---|---|---|---|
+| `emcts@40000`, 1 worker | 4.5 MB | 6.8 GB | 3.3 GB | 1.0% |
+| `emcts@400000`, 4 workers | 9.7 MB | 41 GB | 2.1 GB | 1.8% |
+| `comma-z0-coarse@400000`, 4 workers | 20.9 MB | 47 GB | 2.0 GB | 2.1% |
+| `comma-bias-e25@400000`, 4 workers | 9.4 MB | 56 GB | 2.1 GB | 1.7% |
+
+*A worker keeps tens of megabytes; everything else it touches is garbage within milliseconds, and G1
+lets that garbage fill whatever heap it is given before collecting. So the heap buys collection
+frequency, not room. Eight workers at 40k ran at 117-125 turns a minute in heaps from 0.5 to 8 GB
+(collecting 8.9% of the time at 0.5 GB, 2.4% at 8 GB, with 0.5 to 3.1 GB of the heap in use); twelve ran
+at 164 turns a minute in 5 GB and 168 in 16 GB (3.6% against 2.3% collecting, 3.2 against 4.6-5.3 GB in use).
+No heap and no collector changed a single turn (identical turn signatures). The three-quarters rule
+of the amendment above is therefore replaced: a portfolio build, a thread sweep, a run and a loaded
+calibration get **1 GB plus 256 MB per worker** (`MAGAT_MAX_THREADS`, else half the logical CPUs), never
+more than half the memory available (a container's limit, else what Linux reports available, else the
+physical memory), never less than 2 GB: 5 GB on the laptop, 17 GB on a 128-CPU server. The launcher
+prints the choice; `MAGAT_HEAP` overrides it; calibrations keep the 4 GB default.*
+
+*Where the time and the garbage come from (Java Flight Recorder, `emcts@40000`): 85% of a turn's CPU time
+is the engine recomputing every legal action after each advance (`GameState.computePlayerActions`). Unit
+path-finding is 50%: a Dijkstra whose neighbour function tests the zone of control by building
+neighbourhood lists and looking units up in a hash map for every node, and which finds an already-seen
+node by scanning all of them. Build variants are 15%. Every sampled allocation is the engine's; none is
+MAGAT's. A local prototype of three output-preserving changes in the engine (the zone of control computed
+once per tile, Dijkstra's lookups by id, build variants tested on one probe action) played the same turns
+27% faster on one worker and 38-58% faster on eight, allocating 44% less: twelve arms at 40k and two at
+400k gave identical turn signatures, and `magat check replay` reproduced the 20 published R7615 turns.
+Not adopted: it is a new engine commit, and a faster advance changes what a copy and an evaluation cost
+relative to it, so currencies would be measured anew. The parallel collector ran 4-7% faster than G1 at
+eight workers in single runs, with less of the heap in use; not adopted either, since calibrations time under G1.*
+
 ### 8.7 Controlled calibration in sections (`calibrate-controlled`)
 
 *Added 2026-10-07 (milestone 7).* `magat calibrate-controlled --name <name>` (`tools/calibrate_controlled.py`)
