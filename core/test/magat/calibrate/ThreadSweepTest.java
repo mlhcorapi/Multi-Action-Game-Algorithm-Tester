@@ -1,5 +1,8 @@
 package magat.calibrate;
 
+import magat.agent.AgentFactory;
+import magat.agent.SearchAgent;
+import magat.agent.TurnBudget;
 import magat.agents.emcts.EmctsFactory;
 import magat.meter.Meter;
 import magat.portfolio.Portfolio;
@@ -43,5 +46,43 @@ public class ThreadSweepTest {
         assertEquals(Integer.valueOf(levels.get(0).chosen), chosen.get(200L));
         assertTrue(Files.readAllLines(out.resolve(ThreadSweep.CSV)).get(0).startsWith("Budget,Threads"));
         assertNull(Meter.installed());
+    }
+
+    @Test
+    public void theHeapHeldAfterCollectionsCountsWhatIsLiveNotGarbage() {
+        System.gc();
+        long before = ThreadSweep.liveHeap();
+        byte[][] kept = new byte[64][];
+        for (int i = 0; i < kept.length; i++) kept[i] = new byte[1 << 20];
+        System.gc();
+        long held = ThreadSweep.liveHeap();
+        assertTrue("64 MB kept: " + ((held - before) >> 20) + " MB", held - before >= 60L << 20);
+        assertEquals(1 << 20, kept[63].length);
+        kept = null;
+        System.gc();
+        assertTrue("released", ThreadSweep.liveHeap() < held - (32L << 20));
+    }
+
+    @Test
+    public void aPointThatRunsOutOfMemoryIsReportedAsSuch() throws Exception {
+        ToyGame game = new ToyGame();
+        Path pdir = Files.createTempDirectory("magat-sweep-portfolio");
+        PortfolioBuilder.build(game, Collections.singletonMap("toy", 4), pdir, 1);
+        Portfolio<ToyGame.State> p = Portfolio.load(game, pdir);
+        AgentFactory<ToyGame.State, ToyGame.Move> greedy = new AgentFactory<ToyGame.State, ToyGame.Move>() {
+            @Override public String id() { return "greedy"; }
+            @Override public SearchAgent<ToyGame.State, ToyGame.Move> create(long seed, TurnBudget budget) {
+                throw new OutOfMemoryError("Java heap space (simulated)");
+            }
+        };
+        Meter.allowUnpriced(true);      // as ThreadSweep.run does
+        try {
+            ThreadSweep.benchmark(game, greedy, 200, 2, p.scenarios(), 1);
+            fail("an out-of-memory point must be reported");
+        } catch (ThreadSweep.OutOfMemory expected) {
+            assertTrue(expected.getCause() instanceof OutOfMemoryError);
+        } finally {
+            Meter.allowUnpriced(false);
+        }
     }
 }

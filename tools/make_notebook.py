@@ -145,6 +145,13 @@ magat("machine")
 THREADS_CELL = r'''
 # threads.json goes beside this machine's currency: that is where a run looks for it.
 CALIBRATION = DATA / "calibration" / f"{GAME}-{CURRENCY_NAME}"
+REDO_THREADS = False   # True: sweep again; the previous threads.json and thread_sweep.csv are kept, renamed
+if REDO_THREADS:
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    for f in ("threads.json", "thread_sweep.csv"):
+        if (CALIBRATION / f).exists():
+            (CALIBRATION / f).rename(CALIBRATION / f"{f}.before-{stamp}")
+            print(f"[redo] kept the previous {f} as {f}.before-{stamp}")
 if (CALIBRATION / "threads.json").exists():
     print(f"[skip] {CALIBRATION / 'threads.json'} exists")
 else:

@@ -12,6 +12,10 @@ import magat.meter.Meter;
 import magat.run.RunGuard;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryPoolMXBean;
+import java.lang.management.MemoryType;
+import java.lang.management.MemoryUsage;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -32,7 +37,9 @@ import java.util.concurrent.TimeUnit;
  * sweep is built to see them rather than assume them: all-core frequency scaling (the clock is sampled
  * before and after each point where the OS exposes it), sustained-power throttling (every point is two
  * timed segments and the knee is chosen on the second), SMT (never swept: the ladder stops at physical
- * cores) and memory (peak heap gives a per-task footprint, and a point that would not fit is skipped).
+ * cores) and memory (the heap still held after collections gives a per-task footprint, and a point that
+ * would not fit is skipped; a point that runs out of memory anyway ends the sweep, and the knee is chosen
+ * from the points before it).
  *
  * <p>The choice is the knee: the SMALLEST thread count within {@link #KNEE_TOLERANCE} of the best
  * sustained throughput. A sweep that ran out of time with fewer than three points does not report its
@@ -42,7 +49,10 @@ import java.util.concurrent.TimeUnit;
  * ({@code {"levels": {"<budget>": {"threads": n, "estimate": false}}}}), which runs read by default.
  *
  * <p>Extracted from the thesis tree's {@code ThreadCalibrationV6}: pilot-sized points, two segments,
- * the knee rule, the memory gate after two points and the truncated-sweep fallback are unchanged.
+ * the knee rule, the memory gate after two points and the truncated-sweep fallback are unchanged. Changed
+ * 2026-10-09: the gate's footprint is the heap held after collections, not the peak heap in use. The peak
+ * also counts garbage not yet collected, which grows with the heap rather than with the workers, so it
+ * projected the R7615's mid and upper thread counts past the heap and skipped them.
  */
 public final class ThreadSweep {
 
@@ -116,7 +126,7 @@ public final class ThreadSweep {
                 + " physical cores - " + machine.reserveCores() + " reserved; SMT siblings never used)");
         benchmark(game, arm, budget, Math.min(4, machine.maxWorkers()), portfolio.subList(0, Math.min(4, portfolio.size())), 2);
         System.gc();
-        long baselineHeap = usedHeap(), maxHeap = Runtime.getRuntime().maxMemory();
+        long baselineHeap = liveHeap(), maxHeap = Runtime.getRuntime().maxMemory();
 
         List<String> rows = new ArrayList<>();
         List<double[]> points = new ArrayList<>();      // {threads, sustained}
@@ -156,7 +166,9 @@ public final class ThreadSweep {
             if (perTaskMB > 0 && points.size() >= 2) {
                 double projected = (baselineHeap >> 20) + perTaskMB * threads, allowed = (maxHeap >> 20) * HEAP_SAFETY;
                 if (projected > allowed) {
-                    System.out.println(String.format(Locale.ROOT, "  %8d  SKIPPED - projected %.0f MB exceeds %.0f MB of usable heap", threads, projected, allowed));
+                    System.out.println(String.format(Locale.ROOT, "  %8d  SKIPPED - projected %.0f MB held after collections exceeds %.0f MB "
+                            + "(%.0f%% of the %.0f MB heap; more heap: MAGAT_HEAP)", threads, projected, allowed, 100 * HEAP_SAFETY,
+                            maxHeap / (double) (1 << 20)));
                     break;
                 }
             }
@@ -169,9 +181,18 @@ public final class ThreadSweep {
             double clockStart = MachineProfile.currentClockMHz();
             HeapSampler sampler = new HeapSampler();
             sampler.start();
-            long msA = benchmark(game, arm, budget, threads, subset, visits);
-            long msB = benchmark(game, arm, budget, threads, subset, visits);
-            long peak = sampler.stopAndPeak();
+            long msA, msB;
+            try {
+                msA = benchmark(game, arm, budget, threads, subset, visits);
+                msB = benchmark(game, arm, budget, threads, subset, visits);
+            } catch (OutOfMemory e) {
+                sampler.stopAndPeak();
+                System.gc();
+                System.out.println(String.format(Locale.ROOT, "  %8d  OUT OF MEMORY in a %.0f MB heap - stopping the sweep; the knee comes "
+                        + "from the points before it (more heap: MAGAT_HEAP)", threads, maxHeap / (double) (1 << 20)));
+                break;
+            }
+            long peak = sampler.stopAndPeak(), held = sampler.peakHeld();
             double clockEnd = MachineProfile.currentClockMHz();
 
             long ms = msA + msB;
@@ -185,8 +206,9 @@ public final class ThreadSweep {
             double effPct = basePerThread > 0 ? 100.0 * perThreadRate / basePerThread : 100.0;
             double clockDrop = clockStart > 0 && clockEnd > 0 ? 100.0 * (1.0 - clockEnd / clockStart) : Double.NaN;
             double peakMB = peak / (double) (1 << 20);
-            // The LATEST point's footprint, never the running maximum: peak heap holds a fixed part the workers do not own.
-            perTaskMB = Math.max(0.0, (peak - baselineHeap) / (double) (1 << 20) / threads);
+            // The LATEST point's footprint, never the running maximum: the heap holds a fixed part the workers do not own.
+            // What collections could not free, not the peak in use: the peak also counts garbage awaiting collection.
+            perTaskMB = Math.max(0.0, (held - baselineHeap) / (double) (1 << 20) / threads);
 
             System.out.println(String.format(Locale.ROOT, "  %8d %7d %8d %10d %12.1f %12.1f %8.1f%% %10.2f %10.0f%% %12.0f%s",
                     threads, perThread, 2 * segTurns, ms, rate, sustained, throttlePct, speedup, effPct, peakMB,
@@ -227,22 +249,41 @@ public final class ThreadSweep {
         return (int) points.get(points.size() - 1)[0];
     }
 
+    /** A sweep point's workers ran out of heap. */
+    static final class OutOfMemory extends RuntimeException {
+        OutOfMemory(Throwable cause) { super(cause); }
+    }
+
     /** Plans every (position, visit) pair on {@code threads} workers; returns the wall-clock in ms. */
     static <S, A> long benchmark(Game<S, A> game, AgentFactory<S, A> arm, long budget, int threads, List<Scenario<S>> subset, int visits) {
         ExecutorService pool = RunGuard.register(Executors.newFixedThreadPool(Math.max(1, threads)));
         List<Future<?>> fs = new ArrayList<>();
         long t0 = System.nanoTime();
-        for (Scenario<S> sc : subset)
-            for (int v = 0; v < visits; v++) {
-                final int visit = v;
-                fs.add(pool.submit(() -> {
-                    if (!RunGuard.stopRequested()) Episode.run(game, sc, visit, arm, budget);
-                }));
+        boolean failed = true;
+        try {
+            for (Scenario<S> sc : subset)
+                for (int v = 0; v < visits; v++) {
+                    final int visit = v;
+                    fs.add(pool.submit(() -> {
+                        if (!RunGuard.stopRequested()) Episode.run(game, sc, visit, arm, budget);
+                    }));
+                }
+            for (Future<?> f : fs) {
+                try {
+                    f.get();
+                } catch (ExecutionException e) {
+                    if (e.getCause() instanceof OutOfMemoryError) throw new OutOfMemory(e.getCause());
+                    throw new IllegalStateException("a sweep turn failed: " + e.getCause(), e);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("interrupted", e);
+                }
             }
-        for (Future<?> f : fs) {
-            try { f.get(); } catch (Exception e) { throw new IllegalStateException("a sweep turn failed: " + e.getCause(), e); }
+            failed = false;
+        } finally {
+            if (failed) pool.shutdownNow();    // a failed point's trees are released before anything else runs
+            RunGuard.shutdownAndWait(pool, 1, TimeUnit.HOURS);
         }
-        RunGuard.shutdownAndWait(pool, 1, TimeUnit.HOURS);
         return (System.nanoTime() - t0) / 1_000_000L;
     }
 
@@ -291,20 +332,41 @@ public final class ThreadSweep {
         return rt.totalMemory() - rt.freeMemory();
     }
 
-    /** Samples used heap in the background so a sweep point can report its peak. */
+    /**
+     * The heap held after each pool's most recent collection, summed over the heap's pools: the live set,
+     * plus what those collections did not reclaim. The {@link magat.run.LoadGovernor} reads the same signal.
+     * Falls back to the heap in use where the JVM reports no collection usage.
+     */
+    static long liveHeap() {
+        long sum = 0;
+        boolean any = false;
+        for (MemoryPoolMXBean p : ManagementFactory.getMemoryPoolMXBeans()) {
+            if (p.getType() != MemoryType.HEAP) continue;
+            MemoryUsage u = p.getCollectionUsage();
+            if (u == null) continue;
+            sum += u.getUsed();
+            any = true;
+        }
+        return any ? sum : usedHeap();
+    }
+
+    /** Samples the heap in the background: its peak in use (reported) and its peak held after collections (the gate's). */
     private static final class HeapSampler extends Thread {
         private volatile boolean running = true;
-        private volatile long peak = 0;
+        private volatile long peak = 0, held = 0;
 
         HeapSampler() { setDaemon(true); }
 
         @Override public void run() {
             while (running) {
-                long u = usedHeap();
+                long u = usedHeap(), h = liveHeap();
                 if (u > peak) peak = u;
+                if (h > held) held = h;
                 try { Thread.sleep(50); } catch (InterruptedException e) { return; }
             }
         }
+
+        long peakHeld() { return held; }
 
         /** Not {@code stop()}: Thread declares a final stop() up to JDK 22, a compile error on an older compiler. */
         long stopAndPeak() {

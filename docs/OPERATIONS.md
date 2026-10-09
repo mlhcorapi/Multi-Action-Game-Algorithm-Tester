@@ -183,15 +183,19 @@ Each prints PASS or FAIL and exits non-zero on FAIL. The shakedown and CI run al
 |---|---|
 | `MAGAT_DATA` | the data root (default `~/magat_runs`) |
 | `MAGAT_BUILD` | the build output, for example out of a synced folder whose client holds files open |
-| `MAGAT_HEAP` | the JVM heap (default `4g`; `8g` for portfolio builds, thread sweeps and runs). Keep calibrations at the default, so currencies are measured alike |
+| `MAGAT_HEAP` | the JVM heap for every command. Unset, calibrations and checks get `4g`, so currencies are measured alike; portfolio builds, thread sweeps, runs and loaded calibrations get three quarters of the memory available (a container's limit, else what Linux reports available, else the physical memory), and the launcher prints which. Set it only to override both |
 | `MAGAT_MAX_THREADS`, `MAGAT_RESERVE_CORES` | the worker ceiling, and the cores held back |
 | `MAGAT_<GAME>_ENGINE` | another engine tree instead of the submodule |
 | `MAGAT_WORKERS`, `MAGAT_CURRENCY` | the notebook's worker count and currency name |
 
 ## Practical notes
 
-- **Clone with submodules** (`--recurse-submodules`). The Tribes engine is a submodule; without it
-  nothing builds.
+- **Clone with submodules** (`--recurse-submodules`). The Tribes engine is a submodule, and nothing
+  builds without it. A clone made without it gets it on its first build: the launcher runs
+  `git submodule update --init` for an engine that `.gitmodules` declares but that is not checked out.
+  A copy that is not a git clone stops with the command that fetches the engine. The launcher also
+  warns when the engine is at another commit than the one this commit of MAGAT pins, because runs
+  record the engine's commit.
 - **A repository in a synced folder (OneDrive, Dropbox).** Builds can hit locked files; set
   `MAGAT_BUILD` outside the folder. Keep `MAGAT_DATA` outside it too, as it is by default.
 - **Timing measurements need an idle machine.** Calibrations, `check overhead` and estimates are timing

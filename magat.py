@@ -59,9 +59,53 @@ TEST_CLASSES = BUILD / "test-classes"
 GAMES = ROOT / "games"
 ANALYSIS = ROOT / "analysis"              # the Python analysis package, magat_analysis
 DEFAULT_HEAP = os.environ.get("MAGAT_HEAP", "4g")
-# A portfolio build holds every capture in memory and plays a source game per worker; a thread sweep
-# and a loaded calibration hold one search tree per worker.
-BUILD_HEAP = os.environ.get("MAGAT_HEAP", "8g")
+
+
+def memory_available() -> tuple:
+    """(bytes, where from) this process may use: a container's cgroup limit, else what Linux reports
+    available (a shared server's memory is not all ours), else the machine's physical memory."""
+    for f in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            v = pathlib.Path(f).read_text().strip()
+        except OSError:
+            continue
+        if v.isdigit() and int(v) < (1 << 50):
+            return int(v), "the container's memory limit"
+    try:
+        for line in pathlib.Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) * 1024, "the memory available now"
+    except OSError:
+        pass
+    if os.name == "nt":
+        import ctypes
+
+        class Status(ctypes.Structure):
+            _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong)] + [
+                (n, ctypes.c_ulonglong) for n in ("ullTotalPhys", "ullAvailPhys", "ullTotalPageFile", "ullAvailPageFile",
+                                                  "ullTotalVirtual", "ullAvailVirtual", "ullAvailExtendedVirtual")]
+        s = Status()
+        s.dwLength = ctypes.sizeof(Status)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(s)):
+            return s.ullTotalPhys, "the machine's physical memory"
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES"), "the machine's physical memory"
+    except (ValueError, OSError, AttributeError):
+        return 0, "unknown"
+
+
+def big_heap() -> tuple:
+    """The heap for work that holds a search tree (or a source game) per worker: a portfolio build, a thread
+    sweep, a run, a loaded calibration. A fixed 8g let a 64-core server sweep only its lowest thread counts:
+    the sweep skips a count whose projected footprint passes 60% of the heap. Three quarters of the memory
+    available, so the JVM's own overhead and the notebook fit beside it, and never less than the default."""
+    if "MAGAT_HEAP" in os.environ:
+        return os.environ["MAGAT_HEAP"], "MAGAT_HEAP"
+    avail, where = memory_available()
+    if avail <= 0:
+        return "8g", "the memory available is unknown"
+    gb = max(4, int(avail * 0.75) >> 30)
+    return f"{gb}g", f"three quarters of {where} ({avail / (1 << 30):.0f} GB)"
 GC_FLAGS = ["-XX:+UseG1GC", "-XX:MaxGCPauseMillis=500"]
 
 # Engine-specific JVM properties: Tribes resolves its data files against tribes.home.
@@ -104,6 +148,51 @@ def engine_commit(game: str) -> str:
                               text=True, check=True).stdout.strip()
     except Exception:
         return "unknown"
+
+
+def git(*args, cwd=None) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(cwd or ROOT), *args], capture_output=True, text=True)
+
+
+def ensure_engines() -> None:
+    """Every game's engine, before anything is compiled. A clone made without --recurse-submodules has an
+    empty engine directory, which javac reports as a hundred missing packages: fetch the submodule the
+    repository pins, or say plainly what is missing. An engine at another commit than the pinned one is
+    reported, since a run's provenance records the engine's commit."""
+    modules = ROOT / ".gitmodules"
+    declared = modules.read_text(encoding="utf-8") if modules.is_file() else ""
+    for g in games():
+        d = engine_dir(g)
+        override = os.environ.get(f"MAGAT_{g.upper()}_ENGINE")
+        if not (d / "src").is_dir():
+            if override:
+                sys.exit(f"MAGAT_{g.upper()}_ENGINE={override} has no src/ directory: point it at an engine tree")
+            rel = d.relative_to(ROOT).as_posix()
+            if f"path = {rel}" not in declared:
+                continue    # a game whose engine is not a submodule (or that has none)
+            if (ROOT / ".git").exists() and shutil.which("git"):
+                print(f"# the {g} engine ({rel}) is not checked out: fetching the submodule this repository pins",
+                      flush=True)
+                run(["git", "submodule", "update", "--init", "--recursive", rel], log="build", check=False)
+            if not (d / "src").is_dir():
+                block = declared.split(f"path = {rel}", 1)[1].split("[submodule", 1)[0]
+                field = lambda k: next((l.split("=", 1)[1].strip() for l in block.splitlines()
+                                        if l.strip().startswith(k + " ")), "?")
+                sys.exit(f"the {g} engine is missing: {d} has no src/ directory.\n"
+                         f"In a git clone of MAGAT run:  git submodule update --init --recursive {rel}\n"
+                         f"(or clone with --recurse-submodules). If this copy is not a git clone (a downloaded\n"
+                         f"archive), put the engine tree there:\n"
+                         f"  git clone --branch {field('branch')} {field('url')} {rel}")
+            continue
+        if override or not (ROOT / ".git").exists() or not shutil.which("git"):
+            continue
+        rel = d.relative_to(ROOT).as_posix()
+        pinned = git("ls-tree", "HEAD", rel).stdout.split()
+        head = git("rev-parse", "HEAD", cwd=d).stdout.strip()
+        if len(pinned) >= 3 and pinned[1] == "commit" and head and head != pinned[2]:
+            print(f"warning: the {g} engine is at {head[:10]}, but this commit of MAGAT pins {pinned[2][:10]}.\n"
+                  f"  Runs record the engine's commit; to use the pinned one: git submodule update --recursive {rel}",
+                  flush=True)
 
 
 def games() -> list:
@@ -181,6 +270,7 @@ def build(clean: bool = False, tests: bool = False, force: bool = False) -> None
     if clean:
         clean_build_dir()
     BUILD.mkdir(parents=True, exist_ok=True)
+    ensure_engines()
     srcs = java_files(source_dirs())
     if not srcs:
         sys.exit("no Java sources found")
@@ -227,6 +317,9 @@ def java(args, heap: str = None, props=(), log: str = None, check: bool = True) 
     if game:
         sysprops.append(f"-Dmagat.engine.commit={engine_commit(game)}")
         sysprops += ENGINE_PROPS.get(game, lambda d: [])(engine_dir(game))
+    if heap == "big":
+        heap, why = big_heap()
+        print(f"# heap {heap}: {why}", flush=True)
     cmd = ["java", f"-Xmx{heap or DEFAULT_HEAP}", *GC_FLAGS, *sysprops, *props,
            "-cp", classpath(CLASSES), "magat.cli.Main", *args]
     return run(cmd, log=log or (args[0] if args else "java"), check=check)
@@ -348,7 +441,7 @@ def main(argv: list) -> None:
         if cmd == "run":
             split = rest[rest.index("--split") + 1] if "--split" in rest else None
             log = "run" + (f"-{split}" if split else "")
-        java(args, heap=BUILD_HEAP if cmd == "run" else None, log=log)
+        java(args, heap="big" if cmd == "run" else None, log=log)
     elif cmd == "bundle":
         bundle(rest)
     elif cmd in ("check", "arms", "portfolio", "calibrate", "threads", "machine", "weights", "probe"):
@@ -356,7 +449,7 @@ def main(argv: list) -> None:
         log = cmd + ("-" + rest[0] if rest and not rest[0].startswith("--") else "")
         if cmd == "calibrate" and "--check" in rest:
             log = "calibrate-check"
-        java(with_published_defaults([cmd, *rest]), heap=BUILD_HEAP if big else None, log=log)
+        java(with_published_defaults([cmd, *rest]), heap="big" if big else None, log=log)
     elif cmd == "java":
         java(rest, log="java")
     elif cmd == "layering":
