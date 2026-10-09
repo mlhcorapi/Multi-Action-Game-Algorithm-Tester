@@ -106,6 +106,51 @@ def engine_commit(game: str) -> str:
         return "unknown"
 
 
+def git(*args, cwd=None) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(cwd or ROOT), *args], capture_output=True, text=True)
+
+
+def ensure_engines() -> None:
+    """Every game's engine, before anything is compiled. A clone made without --recurse-submodules has an
+    empty engine directory, which javac reports as a hundred missing packages: fetch the submodule the
+    repository pins, or say plainly what is missing. An engine at another commit than the pinned one is
+    reported, since a run's provenance records the engine's commit."""
+    modules = ROOT / ".gitmodules"
+    declared = modules.read_text(encoding="utf-8") if modules.is_file() else ""
+    for g in games():
+        d = engine_dir(g)
+        override = os.environ.get(f"MAGAT_{g.upper()}_ENGINE")
+        if not (d / "src").is_dir():
+            if override:
+                sys.exit(f"MAGAT_{g.upper()}_ENGINE={override} has no src/ directory: point it at an engine tree")
+            rel = d.relative_to(ROOT).as_posix()
+            if f"path = {rel}" not in declared:
+                continue    # a game whose engine is not a submodule (or that has none)
+            if (ROOT / ".git").exists() and shutil.which("git"):
+                print(f"# the {g} engine ({rel}) is not checked out: fetching the submodule this repository pins",
+                      flush=True)
+                run(["git", "submodule", "update", "--init", "--recursive", rel], log="build", check=False)
+            if not (d / "src").is_dir():
+                block = declared.split(f"path = {rel}", 1)[1].split("[submodule", 1)[0]
+                field = lambda k: next((l.split("=", 1)[1].strip() for l in block.splitlines()
+                                        if l.strip().startswith(k + " ")), "?")
+                sys.exit(f"the {g} engine is missing: {d} has no src/ directory.\n"
+                         f"In a git clone of MAGAT run:  git submodule update --init --recursive {rel}\n"
+                         f"(or clone with --recurse-submodules). If this copy is not a git clone (a downloaded\n"
+                         f"archive), put the engine tree there:\n"
+                         f"  git clone --branch {field('branch')} {field('url')} {rel}")
+            continue
+        if override or not (ROOT / ".git").exists() or not shutil.which("git"):
+            continue
+        rel = d.relative_to(ROOT).as_posix()
+        pinned = git("ls-tree", "HEAD", rel).stdout.split()
+        head = git("rev-parse", "HEAD", cwd=d).stdout.strip()
+        if len(pinned) >= 3 and pinned[1] == "commit" and head and head != pinned[2]:
+            print(f"warning: the {g} engine is at {head[:10]}, but this commit of MAGAT pins {pinned[2][:10]}.\n"
+                  f"  Runs record the engine's commit; to use the pinned one: git submodule update --recursive {rel}",
+                  flush=True)
+
+
 def games() -> list:
     return sorted(p.name for p in GAMES.iterdir() if p.is_dir()) if GAMES.is_dir() else []
 
@@ -181,6 +226,7 @@ def build(clean: bool = False, tests: bool = False, force: bool = False) -> None
     if clean:
         clean_build_dir()
     BUILD.mkdir(parents=True, exist_ok=True)
+    ensure_engines()
     srcs = java_files(source_dirs())
     if not srcs:
         sys.exit("no Java sources found")

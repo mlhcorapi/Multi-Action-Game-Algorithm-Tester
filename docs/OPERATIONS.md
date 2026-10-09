@@ -190,8 +190,12 @@ Each prints PASS or FAIL and exits non-zero on FAIL. The shakedown and CI run al
 
 ## Practical notes
 
-- **Clone with submodules** (`--recurse-submodules`). The Tribes engine is a submodule; without it
-  nothing builds.
+- **Clone with submodules** (`--recurse-submodules`). The Tribes engine is a submodule, and nothing
+  builds without it. A clone made without it gets it on its first build: the launcher runs
+  `git submodule update --init` for an engine that `.gitmodules` declares but that is not checked out.
+  A copy that is not a git clone stops with the command that fetches the engine. The launcher also
+  warns when the engine is at another commit than the one this commit of MAGAT pins, because runs
+  record the engine's commit.
 - **A repository in a synced folder (OneDrive, Dropbox).** Builds can hit locked files; set
   `MAGAT_BUILD` outside the folder. Keep `MAGAT_DATA` outside it too, as it is by default.
 - **Timing measurements need an idle machine.** Calibrations, `check overhead` and estimates are timing
