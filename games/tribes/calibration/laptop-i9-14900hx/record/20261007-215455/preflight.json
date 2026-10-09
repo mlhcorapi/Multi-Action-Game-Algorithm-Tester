@@ -1,0 +1,109 @@
+{
+  "facts": {
+    "time": "2026-10-07 21:54:58",
+    "argv": [
+      "--name",
+      "laptop-i9-14900hx",
+      "--preflight"
+    ],
+    "platform": "windows",
+    "cpu": "Intel(R) Core(TM) i9-14900HX",
+    "machine": "HP OMEN Gaming Laptop 16-am0xxx",
+    "python": "3.12.10",
+    "commit": "89e59d135388f9a0ccee0ab20505ece308b9275d",
+    "power": {
+      "ac": true,
+      "battery": 100,
+      "charging": false,
+      "saver": false
+    },
+    "power_settings": {
+      "plan": "MAGAT calibration (8b0ed4de-a1ca-4797-af2e-000b6ea8004e)",
+      "PERFBOOSTMODE": 2,
+      "PROCFREQMAX": 4000,
+      "PROCFREQMAX1": 4000,
+      "PROCTHROTTLEMAX": 100,
+      "PROCTHROTTLEMAX1": 100,
+      "PERFEPP": 0,
+      "PERFEPP1": 0
+    },
+    "power_mode": {
+      "effective": "best performance",
+      "chosen": "best performance"
+    },
+    "allowed_cpus": "0-31",
+    "logical_cpus": 32,
+    "measuring_cpus": "0-15",
+    "measuring_cpus_why": "the performance cores of a hybrid CPU (16 logical CPUs)",
+    "cgroup": null,
+    "other_cpus_now": 1.5118428970333835,
+    "network_up": [
+      "Wi-Fi"
+    ],
+    "online_only_files": 0,
+    "uptime_hours": 0.7099955555555556,
+    "updates_paused_until": null,
+    "maintenance": "2001-01-01T20:00:00",
+    "java": [
+      "java version \"26.0.2.1\" 2026-08-18",
+      "Java(TM) SE Runtime Environment (build 26.0.2.1+1-7)",
+      "Java HotSpot(TM) 64-Bit Server VM (build 26.0.2.1+1-7, mixed mode, sharing)"
+    ],
+    "portfolio": "C:\\Users\\mlcor\\OneDrive\\Documents\\GitHub\\Multi-Action-Game-Algorithm-Tester\\games\\tribes\\portfolio\\v1",
+    "portfolio_identity": "ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7"
+  },
+  "items": [
+    [
+      "ok",
+      "on mains power, battery 100%"
+    ],
+    [
+      "info",
+      "power plan: MAGAT calibration (8b0ed4de-a1ca-4797-af2e-000b6ea8004e); power mode best performance (in effect: best performance)"
+    ],
+    [
+      "info",
+      "clock policy: boost aggressive, performance cores capped at 4000 MHz, efficient cores capped at 4000 MHz"
+    ],
+    [
+      "ok",
+      "measuring JVMs will run on CPUs 0-15: the performance cores of a hybrid CPU (16 logical CPUs)"
+    ],
+    [
+      "warn",
+      "work on the machine now: 1.5 logical CPUs; a section is suspect above 1 of other work"
+    ],
+    [
+      "warn",
+      "online (Wi-Fi): once the preflight is clean, turn on airplane mode (or unplug the cable)"
+    ],
+    [
+      "warn",
+      "running and worth closing: claude.exe (Claude desktop); code.exe (an editor and its indexers)"
+    ],
+    [
+      "ok",
+      "the repository is in OneDrive, but every file the calibration reads is on this device"
+    ],
+    [
+      "ok",
+      "up for 0.7 h"
+    ],
+    [
+      "warn",
+      "Windows Update is not paused: pause it for a week so nothing installs mid-run"
+    ],
+    [
+      "info",
+      "automatic maintenance runs daily at 20:00 when the machine looks idle; keep the run away from it or move it (Control Panel > Security and Maintenance > Maintenance)"
+    ],
+    [
+      "ok",
+      "821 GB free under the data root"
+    ],
+    [
+      "ok",
+      "java: java version \"26.0.2.1\" 2026-08-18"
+    ]
+  ]
+}

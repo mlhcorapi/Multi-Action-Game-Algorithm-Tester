@@ -1,0 +1,641 @@
+{
+  "plan": {
+    "batch": 8,
+    "reference": "emcts",
+    "sections": [
+      [
+        "emcts-comma",
+        "emcts-bias-e75",
+        "emcts-bias-e50",
+        "emcts-bias-e25",
+        "emcts-bias-e10",
+        "emcts-bias-coarse-e25",
+        "emcts-bias-norem-e25",
+        "emcts-bias-perburn-e25"
+      ],
+      [
+        "emcts-short15",
+        "emcts-short15-bias-e25",
+        "emcts-short5-bias-e25",
+        "emcts-z0-coarse",
+        "emcts-z0-mid",
+        "emcts-z0-fine",
+        "emcts-z0-fine-insfine",
+        "comma-bias-e75"
+      ],
+      [
+        "comma-bias-e50",
+        "comma-bias-e25",
+        "comma-bias-e10",
+        "comma-bias-coarse-e25",
+        "comma-bias-norem-e25",
+        "comma-bias-perburn-e25",
+        "comma-short15",
+        "comma-short15-bias-e25"
+      ],
+      [
+        "comma-short5-bias-e25",
+        "comma-z0-coarse",
+        "comma-z0-mid",
+        "comma-z0-fine",
+        "comma-z0-random",
+        "comma-rand15",
+        "comma-short15-coarse",
+        "comma-bias-fine-e25"
+      ]
+    ]
+  },
+  "first": "20261007-231738",
+  "sessions": [
+    {
+      "section": 1,
+      "attempt": 1,
+      "redo": false,
+      "arms": [
+        "emcts-comma",
+        "emcts-bias-e75",
+        "emcts-bias-e50",
+        "emcts-bias-e25",
+        "emcts-bias-e10",
+        "emcts-bias-coarse-e25",
+        "emcts-bias-norem-e25",
+        "emcts-bias-perburn-e25"
+      ],
+      "label": "section 1",
+      "verdict": "PASS",
+      "minutes": 54.8,
+      "invocation": "20261007-231738",
+      "bracket": [
+        0.1,
+        -0.4,
+        -0.4
+      ],
+      "failures": [],
+      "other_cpus_mean": 0.2,
+      "other_cpus_worst": 0.25,
+      "load_events": 0,
+      "clock": {
+        "samples": 313,
+        "busiest_on_performance_core": 1.0,
+        "perf_pct": [
+          172.79788750866302,
+          174.67849259794704,
+          175.31108848692597
+        ],
+        "mhz": [
+          4180,
+          4225,
+          4241
+        ],
+        "temp_max_c": 43.85000000000002,
+        "passive_min_pct": 100.0
+      },
+      "reasons": [],
+      "reliability": "PASS"
+    },
+    {
+      "section": 2,
+      "attempt": 1,
+      "redo": false,
+      "arms": [
+        "emcts-short15",
+        "emcts-short15-bias-e25",
+        "emcts-short5-bias-e25",
+        "emcts-z0-coarse",
+        "emcts-z0-mid",
+        "emcts-z0-fine",
+        "emcts-z0-fine-insfine",
+        "comma-bias-e75"
+      ],
+      "label": "section 2",
+      "verdict": "PASS",
+      "minutes": 53.4,
+      "invocation": "20261007-231738",
+      "bracket": [
+        0.1,
+        -0.9,
+        0.1
+      ],
+      "speed_vs_file": 1.0658,
+      "failures": [],
+      "other_cpus_mean": 0.2,
+      "other_cpus_worst": 0.3,
+      "load_events": 0,
+      "clock": {
+        "samples": 310,
+        "busiest_on_performance_core": 1.0,
+        "perf_pct": [
+          173.3839345993585,
+          174.48486961153984,
+          175.68755318007624
+        ],
+        "mhz": [
+          4194,
+          4221,
+          4250
+        ],
+        "temp_max_c": 42.85000000000002,
+        "passive_min_pct": 100.0
+      },
+      "reasons": [
+        "ran at x1.066 the speed of the currency's first session"
+      ],
+      "reliability": "SUSPECT"
+    },
+    {
+      "section": 3,
+      "attempt": 1,
+      "redo": false,
+      "arms": [
+        "comma-bias-e50",
+        "comma-bias-e25",
+        "comma-bias-e10",
+        "comma-bias-coarse-e25",
+        "comma-bias-norem-e25",
+        "comma-bias-perburn-e25",
+        "comma-short15",
+        "comma-short15-bias-e25"
+      ],
+      "label": "section 3",
+      "verdict": "PASS",
+      "minutes": 56.1,
+      "invocation": "20261007-231738",
+      "bracket": [
+        0.1,
+        -0.8,
+        -0.1
+      ],
+      "speed_vs_file": 1.0685,
+      "failures": [],
+      "other_cpus_mean": 0.19,
+      "other_cpus_worst": 0.22,
+      "load_events": 0,
+      "clock": {
+        "samples": 321,
+        "busiest_on_performance_core": 1.0,
+        "perf_pct": [
+          173.13252765425028,
+          174.61140550927593,
+          175.30872557177508
+        ],
+        "mhz": [
+          4188,
+          4224,
+          4241
+        ],
+        "temp_max_c": 42.85000000000002,
+        "passive_min_pct": 100.0
+      },
+      "reasons": [
+        "ran at x1.069 the speed of the currency's first session"
+      ],
+      "reliability": "SUSPECT"
+    },
+    {
+      "section": 4,
+      "attempt": 1,
+      "redo": false,
+      "arms": [
+        "comma-short5-bias-e25",
+        "comma-z0-coarse",
+        "comma-z0-mid",
+        "comma-z0-fine",
+        "comma-z0-random",
+        "comma-rand15",
+        "comma-short15-coarse",
+        "comma-bias-fine-e25"
+      ],
+      "label": "section 4",
+      "verdict": "PASS",
+      "minutes": 53.8,
+      "invocation": "20261007-231738",
+      "bracket": [
+        0.1,
+        0.3,
+        -0.4
+      ],
+      "speed_vs_file": 1.0601,
+      "failures": [],
+      "other_cpus_mean": 0.19,
+      "other_cpus_worst": 0.29,
+      "load_events": 0,
+      "clock": {
+        "samples": 317,
+        "busiest_on_performance_core": 1.0,
+        "perf_pct": [
+          173.06785765363827,
+          174.58119198329186,
+          175.54851400912614
+        ],
+        "mhz": [
+          4187,
+          4223,
+          4247
+        ],
+        "temp_max_c": 42.85000000000002,
+        "passive_min_pct": 100.0
+      },
+      "reasons": [
+        "ran at x1.060 the speed of the currency's first session"
+      ],
+      "reliability": "SUSPECT"
+    },
+    {
+      "section": 1,
+      "attempt": 1,
+      "redo": true,
+      "arms": [
+        "emcts-comma",
+        "emcts-bias-e75",
+        "emcts-bias-e50",
+        "emcts-bias-e25",
+        "emcts-bias-e10",
+        "emcts-bias-coarse-e25",
+        "emcts-bias-norem-e25",
+        "emcts-bias-perburn-e25"
+      ],
+      "label": "section 1 redo",
+      "verdict": "PASS",
+      "minutes": 54.4,
+      "invocation": "20261008-215556",
+      "bracket": [
+        -0.0,
+        -0.5,
+        0.1
+      ],
+      "speed_vs_file": 0.9925,
+      "failures": [],
+      "other_cpus_mean": 0.12,
+      "other_cpus_worst": 0.14,
+      "load_events": 0,
+      "clock": {
+        "samples": 304,
+        "busiest_on_performance_core": 1.0,
+        "perf_pct": [
+          170.3961437327322,
+          174.44403939434275,
+          175.29213769337923
+        ],
+        "mhz": [
+          4122,
+          4220,
+          4240
+        ],
+        "approx": true,
+        "temp_max_c": 42.85000000000002,
+        "passive_min_pct": 100.0
+      },
+      "reasons": [],
+      "reliability": "PASS"
+    },
+    {
+      "section": 2,
+      "attempt": 1,
+      "redo": true,
+      "arms": [
+        "emcts-short15",
+        "emcts-short15-bias-e25",
+        "emcts-short5-bias-e25",
+        "emcts-z0-coarse",
+        "emcts-z0-mid",
+        "emcts-z0-fine",
+        "emcts-z0-fine-insfine",
+        "comma-bias-e75"
+      ],
+      "label": "section 2 redo",
+      "verdict": "PASS",
+      "minutes": 56.5,
+      "invocation": "20261008-215556",
+      "bracket": [
+        -0.0,
+        -1.1,
+        -0.2
+      ],
+      "speed_vs_file": 1.0065,
+      "failures": [],
+      "other_cpus_mean": 0.12,
+      "other_cpus_worst": 0.18,
+      "load_events": 0,
+      "clock": {
+        "samples": 322,
+        "busiest_on_performance_core": 1.0,
+        "perf_pct": [
+          171.64492162828168,
+          174.3266545752257,
+          175.76655298879322
+        ],
+        "mhz": [
+          4152,
+          4217,
+          4252
+        ],
+        "approx": true,
+        "temp_max_c": 42.85000000000002,
+        "passive_min_pct": 100.0
+      },
+      "reasons": [],
+      "reliability": "PASS"
+    },
+    {
+      "section": 3,
+      "attempt": 1,
+      "redo": true,
+      "arms": [
+        "comma-bias-e50",
+        "comma-bias-e25",
+        "comma-bias-e10",
+        "comma-bias-coarse-e25",
+        "comma-bias-norem-e25",
+        "comma-bias-perburn-e25",
+        "comma-short15",
+        "comma-short15-bias-e25"
+      ],
+      "label": "section 3 redo",
+      "verdict": "PASS",
+      "minutes": 56.9,
+      "invocation": "20261008-215556",
+      "bracket": [
+        0.2,
+        -0.1,
+        0.5
+      ],
+      "speed_vs_file": 0.9874,
+      "failures": [],
+      "other_cpus_mean": 0.11,
+      "other_cpus_worst": 0.14,
+      "load_events": 0,
+      "clock": {
+        "samples": 322,
+        "busiest_on_performance_core": 1.0,
+        "perf_pct": [
+          172.31701824880972,
+          174.50166605126103,
+          175.34414865601295
+        ],
+        "mhz": [
+          4168,
+          4221,
+          4242
+        ],
+        "approx": true,
+        "temp_max_c": 42.85000000000002,
+        "passive_min_pct": 100.0
+      },
+      "reasons": [],
+      "reliability": "PASS"
+    },
+    {
+      "section": 4,
+      "attempt": 1,
+      "redo": true,
+      "arms": [
+        "comma-short5-bias-e25",
+        "comma-z0-coarse",
+        "comma-z0-mid",
+        "comma-z0-fine",
+        "comma-z0-random",
+        "comma-rand15",
+        "comma-short15-coarse",
+        "comma-bias-fine-e25"
+      ],
+      "label": "section 4 redo",
+      "verdict": "PASS",
+      "minutes": 58.1,
+      "invocation": "20261008-215556",
+      "bracket": [
+        -0.1,
+        -0.6,
+        -0.4
+      ],
+      "speed_vs_file": 0.9904,
+      "failures": [],
+      "other_cpus_mean": 0.11,
+      "other_cpus_worst": 0.13,
+      "load_events": 0,
+      "clock": {
+        "samples": 328,
+        "busiest_on_performance_core": 1.0,
+        "perf_pct": [
+          171.65162109910497,
+          174.38017576759626,
+          175.7991888732527
+        ],
+        "mhz": [
+          4152,
+          4218,
+          4253
+        ],
+        "approx": true,
+        "temp_max_c": 41.85000000000002,
+        "passive_min_pct": 100.0
+      },
+      "reasons": [],
+      "reliability": "PASS"
+    }
+  ],
+  "checks": {
+    "published": {
+      "check": "published",
+      "verdict": "PASS",
+      "minutes": 15.1,
+      "label": "check published",
+      "invocation": "20261009-094245",
+      "drift": "3.6% (emcts@400000)",
+      "bracket": [
+        -0.3,
+        -0.5,
+        -0.8
+      ],
+      "other_cpus_worst": 0.12,
+      "clock": {
+        "samples": 82,
+        "busiest_on_performance_core": 1.0,
+        "perf_pct": [
+          172.26046979946526,
+          173.94365348920104,
+          175.13356248720467
+        ],
+        "mhz": [
+          4167,
+          4208,
+          4236
+        ],
+        "approx": true,
+        "temp_max_c": 41.85000000000002,
+        "passive_min_pct": 100.0
+      }
+    },
+    "self": {
+      "check": "self",
+      "verdict": "PASS",
+      "minutes": 15.3,
+      "label": "check self",
+      "invocation": "20261009-094245",
+      "drift": "-0.6% (emcts-comma@400000)",
+      "bracket": [
+        -0.2,
+        -0.4,
+        -0.2
+      ],
+      "other_cpus_worst": 0.12,
+      "clock": {
+        "samples": 84,
+        "busiest_on_performance_core": 1.0,
+        "perf_pct": [
+          172.30996473845718,
+          173.76820431273492,
+          174.7596204839087
+        ],
+        "mhz": [
+          4168,
+          4203,
+          4227
+        ],
+        "approx": true,
+        "temp_max_c": 41.85000000000002,
+        "passive_min_pct": 100.0
+      }
+    }
+  },
+  "invocations": [
+    {
+      "stamp": "20261007-231738",
+      "section": "all",
+      "redo": false,
+      "facts": {
+        "power": {
+          "ac": true,
+          "battery": 100,
+          "charging": false,
+          "saver": false
+        },
+        "power_settings": {
+          "plan": "MAGAT calibration (8b0ed4de-a1ca-4797-af2e-000b6ea8004e)",
+          "PERFBOOSTMODE": 2,
+          "PROCFREQMAX": 4000,
+          "PROCFREQMAX1": 4000,
+          "PROCTHROTTLEMAX": 100,
+          "PROCTHROTTLEMAX1": 100,
+          "PERFEPP": 0,
+          "PERFEPP1": 0
+        },
+        "power_mode": {
+          "effective": "best performance",
+          "chosen": "best performance"
+        },
+        "cgroup": null,
+        "measuring_cpus": "0-15",
+        "other_cpus_now": 0.8208133429561765,
+        "uptime_hours": 2.0876822222222224,
+        "network_up": [],
+        "commit": "89e59d135388f9a0ccee0ab20505ece308b9275d",
+        "java": [
+          "java version \"26.0.2.1\" 2026-08-18",
+          "Java(TM) SE Runtime Environment (build 26.0.2.1+1-7)",
+          "Java HotSpot(TM) 64-Bit Server VM (build 26.0.2.1+1-7, mixed mode, sharing)"
+        ]
+      }
+    },
+    {
+      "stamp": "20261008-215556",
+      "section": "1,2,3,4",
+      "redo": true,
+      "facts": {
+        "power": {
+          "ac": true,
+          "battery": 99,
+          "charging": true,
+          "saver": false
+        },
+        "power_settings": {
+          "plan": "MAGAT calibration (7c6ce635-4559-4dfb-a8e8-d51346f59f7d)",
+          "PERFBOOSTMODE": 2,
+          "PROCFREQMAX": 4000,
+          "PROCFREQMAX1": 4000,
+          "PROCTHROTTLEMAX": 100,
+          "PROCTHROTTLEMAX1": 100,
+          "PERFEPP": 0,
+          "PERFEPP1": 0
+        },
+        "power_mode": {
+          "effective": "best performance",
+          "chosen": "best performance"
+        },
+        "cgroup": null,
+        "measuring_cpus": "0-15",
+        "other_cpus_now": 0.7341552594869709,
+        "uptime_hours": 9.370004166666666,
+        "network_up": [],
+        "commit": "55566b1b7726d384cdc33a5dfe52479a8b31019a",
+        "java": [
+          "java version \"26.0.2.1\" 2026-08-18",
+          "Java(TM) SE Runtime Environment (build 26.0.2.1+1-7)",
+          "Java HotSpot(TM) 64-Bit Server VM (build 26.0.2.1+1-7, mixed mode, sharing)"
+        ]
+      }
+    },
+    {
+      "stamp": "20261009-094245",
+      "section": "checks",
+      "redo": false,
+      "facts": {
+        "power": {
+          "ac": true,
+          "battery": 100,
+          "charging": false,
+          "saver": false
+        },
+        "power_settings": {
+          "plan": "MAGAT calibration (7c6ce635-4559-4dfb-a8e8-d51346f59f7d)",
+          "PERFBOOSTMODE": 2,
+          "PROCFREQMAX": 4000,
+          "PROCFREQMAX1": 4000,
+          "PROCTHROTTLEMAX": 100,
+          "PROCTHROTTLEMAX1": 100,
+          "PERFEPP": 0,
+          "PERFEPP1": 0
+        },
+        "power_mode": {
+          "effective": "best performance",
+          "chosen": "best performance"
+        },
+        "cgroup": null,
+        "measuring_cpus": "0-15",
+        "other_cpus_now": 4.611719121236824,
+        "uptime_hours": 21.1500475,
+        "network_up": [
+          "Wi-Fi"
+        ],
+        "commit": "55566b1b7726d384cdc33a5dfe52479a8b31019a",
+        "java": [
+          "java version \"26.0.2.1\" 2026-08-18",
+          "Java(TM) SE Runtime Environment (build 26.0.2.1+1-7)",
+          "Java HotSpot(TM) 64-Bit Server VM (build 26.0.2.1+1-7, mixed mode, sharing)"
+        ]
+      }
+    }
+  ],
+  "pace": {
+    "levels": {
+      "40000": 2.3,
+      "80000": 6.81,
+      "400000": 34.7
+    },
+    "positions": {
+      "40000": 8,
+      "80000": 4,
+      "400000": 2
+    },
+    "reps": 3,
+    "warmup": 6,
+    "reference": "emcts@40000"
+  },
+  "policy": {
+    "PERFBOOSTMODE": 2,
+    "PROCFREQMAX": 4000,
+    "PROCFREQMAX1": 4000,
+    "PROCTHROTTLEMAX": 100,
+    "PROCTHROTTLEMAX1": 100,
+    "governor": null
+  }
+}

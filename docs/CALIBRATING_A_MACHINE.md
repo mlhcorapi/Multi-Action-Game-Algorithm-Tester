@@ -325,7 +325,8 @@ The R7615 file stays the published currency. A new currency is published beside 
 in `games/tribes/calibration/<name>/` (for example `r7615-v2/` or `laptop-i9-14900hx/`). That folder
 holds:
 - its `compute_weights.properties`;
-- `record/SUMMARY.md`;
+- `record/SUMMARY.md`, and usually the rest of `record/` except the raw `counters.csv` files, which
+  `monitor.csv` summarises;
 - an `ORIGIN.md`, which says the machine and the date, the clock policy (and, on a laptop, the maker's
   performance mode), the sections and their verdicts, both checks, and the commit.
 
@@ -366,3 +367,12 @@ On battery the same estimate was 11.4 hours.
 
 **The R7615**, for comparison: on 2026-08-28 the thesis's calibration of 54 cells took 1 h 59 min, and
 the laptop's reference advance has measured at 0.66-0.76 of the R7615's.
+
+**Its calibration** (2026-10-07 to 2026-10-09), under policy A:
+- The busiest core held about 4,120-4,250 MHz at no more than 43 °C.
+- The four sections took 3.9 h; every section and both checks passed.
+- Checked against the R7615 currency, its turn prices drifted by at most 3.6%.
+- The first attempt's sections 2-4 were SUSPECT because of the calibrator bug described under "Reading
+  the result". They were measured again with the fix.
+
+It is published in `games/tribes/calibration/laptop-i9-14900hx/`, and `ORIGIN.md` there has the record.
