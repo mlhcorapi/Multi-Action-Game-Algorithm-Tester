@@ -94,18 +94,36 @@ def memory_available() -> tuple:
         return 0, "unknown"
 
 
+HEAP_BASE_MB, HEAP_PER_WORKER_MB, HEAP_MIN_MB = 1024, 256, 2048
+
+
 def big_heap() -> tuple:
-    """The heap for work that holds a search tree (or a source game) per worker: a portfolio build, a thread
-    sweep, a run, a loaded calibration. A fixed 8g let a 64-core server sweep only its lowest thread counts:
-    the sweep skips a count whose projected footprint passes 60% of the heap. Three quarters of the memory
-    available, so the JVM's own overhead and the notebook fit beside it, and never less than the default."""
+    """The heap for work that runs a search per worker: a portfolio build, a thread sweep, a run, a loaded
+    calibration. Sized to the workers, not to the machine. A Tribes worker holds 5-35 MB (DESIGN 8.6); the
+    rest of its heap is the engine's short-lived garbage, about 2-3 GB a second, which G1 lets fill whatever
+    heap it is given before it collects. 256 MB of room per worker keeps collecting near 4% of the time at
+    every thread count. Workers: MAGAT_MAX_THREADS, else half the logical CPUs (one per physical core).
+    Never more than half the memory available, never less than 2 GB."""
     if "MAGAT_HEAP" in os.environ:
         return os.environ["MAGAT_HEAP"], "MAGAT_HEAP"
+    try:
+        cpus = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        cpus = os.cpu_count() or 2
+    capped = os.environ.get("MAGAT_MAX_THREADS", "").strip()
+    workers = int(capped) if capped.isdigit() and int(capped) > 0 else max(1, cpus // 2)
+    mb = HEAP_BASE_MB + HEAP_PER_WORKER_MB * workers
+    why = f"1 GB + 256 MB for each of {workers} worker(s)"
     avail, where = memory_available()
-    if avail <= 0:
-        return "8g", "the memory available is unknown"
-    gb = max(4, int(avail * 0.75) >> 30)
-    return f"{gb}g", f"three quarters of {where} ({avail / (1 << 30):.0f} GB)"
+    if avail > 0 and mb > (avail >> 21):
+        mb = avail >> 21
+        why += f", capped at half of {where} ({avail / (1 << 30):.0f} GB)"
+    if mb < HEAP_MIN_MB:
+        mb = HEAP_MIN_MB
+        why += ", raised to the 2 GB floor"
+    return f"{mb}m", why
+
+
 GC_FLAGS = ["-XX:+UseG1GC", "-XX:MaxGCPauseMillis=500"]
 
 # Engine-specific JVM properties: Tribes resolves its data files against tribes.home.

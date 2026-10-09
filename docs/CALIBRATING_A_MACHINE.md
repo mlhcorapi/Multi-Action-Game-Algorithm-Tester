@@ -276,8 +276,8 @@ The script reads what it can of these and records it. From inside the container,
 7. **Keep everything else equal.**
    - Use the same JDK as your runs.
    - Leave the heap at MAGAT's default, 4 GB, which the laptop's currency uses too: do not set
-     `MAGAT_HEAP`. The thread sweep does not need it either; the launcher sizes the sweep's heap from
-     the container's memory limit.
+     `MAGAT_HEAP`. The thread sweep does not need it either; the launcher sizes the sweep's heap to its
+     workers, within the container's memory limit.
    - Use the portfolio the notebook builds and verifies against the published one.
 
 **What to expect from the check against the published currency.** The R7615 currency was measured on
