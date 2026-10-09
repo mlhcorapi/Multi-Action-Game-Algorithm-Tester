@@ -59,9 +59,53 @@ TEST_CLASSES = BUILD / "test-classes"
 GAMES = ROOT / "games"
 ANALYSIS = ROOT / "analysis"              # the Python analysis package, magat_analysis
 DEFAULT_HEAP = os.environ.get("MAGAT_HEAP", "4g")
-# A portfolio build holds every capture in memory and plays a source game per worker; a thread sweep
-# and a loaded calibration hold one search tree per worker.
-BUILD_HEAP = os.environ.get("MAGAT_HEAP", "8g")
+
+
+def memory_available() -> tuple:
+    """(bytes, where from) this process may use: a container's cgroup limit, else what Linux reports
+    available (a shared server's memory is not all ours), else the machine's physical memory."""
+    for f in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            v = pathlib.Path(f).read_text().strip()
+        except OSError:
+            continue
+        if v.isdigit() and int(v) < (1 << 50):
+            return int(v), "the container's memory limit"
+    try:
+        for line in pathlib.Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) * 1024, "the memory available now"
+    except OSError:
+        pass
+    if os.name == "nt":
+        import ctypes
+
+        class Status(ctypes.Structure):
+            _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong)] + [
+                (n, ctypes.c_ulonglong) for n in ("ullTotalPhys", "ullAvailPhys", "ullTotalPageFile", "ullAvailPageFile",
+                                                  "ullTotalVirtual", "ullAvailVirtual", "ullAvailExtendedVirtual")]
+        s = Status()
+        s.dwLength = ctypes.sizeof(Status)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(s)):
+            return s.ullTotalPhys, "the machine's physical memory"
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES"), "the machine's physical memory"
+    except (ValueError, OSError, AttributeError):
+        return 0, "unknown"
+
+
+def big_heap() -> tuple:
+    """The heap for work that holds a search tree (or a source game) per worker: a portfolio build, a thread
+    sweep, a run, a loaded calibration. A fixed 8g let a 64-core server sweep only its lowest thread counts:
+    the sweep skips a count whose projected footprint passes 60% of the heap. Three quarters of the memory
+    available, so the JVM's own overhead and the notebook fit beside it, and never less than the default."""
+    if "MAGAT_HEAP" in os.environ:
+        return os.environ["MAGAT_HEAP"], "MAGAT_HEAP"
+    avail, where = memory_available()
+    if avail <= 0:
+        return "8g", "the memory available is unknown"
+    gb = max(4, int(avail * 0.75) >> 30)
+    return f"{gb}g", f"three quarters of {where} ({avail / (1 << 30):.0f} GB)"
 GC_FLAGS = ["-XX:+UseG1GC", "-XX:MaxGCPauseMillis=500"]
 
 # Engine-specific JVM properties: Tribes resolves its data files against tribes.home.
@@ -273,6 +317,9 @@ def java(args, heap: str = None, props=(), log: str = None, check: bool = True) 
     if game:
         sysprops.append(f"-Dmagat.engine.commit={engine_commit(game)}")
         sysprops += ENGINE_PROPS.get(game, lambda d: [])(engine_dir(game))
+    if heap == "big":
+        heap, why = big_heap()
+        print(f"# heap {heap}: {why}", flush=True)
     cmd = ["java", f"-Xmx{heap or DEFAULT_HEAP}", *GC_FLAGS, *sysprops, *props,
            "-cp", classpath(CLASSES), "magat.cli.Main", *args]
     return run(cmd, log=log or (args[0] if args else "java"), check=check)
@@ -394,7 +441,7 @@ def main(argv: list) -> None:
         if cmd == "run":
             split = rest[rest.index("--split") + 1] if "--split" in rest else None
             log = "run" + (f"-{split}" if split else "")
-        java(args, heap=BUILD_HEAP if cmd == "run" else None, log=log)
+        java(args, heap="big" if cmd == "run" else None, log=log)
     elif cmd == "bundle":
         bundle(rest)
     elif cmd in ("check", "arms", "portfolio", "calibrate", "threads", "machine", "weights", "probe"):
@@ -402,7 +449,7 @@ def main(argv: list) -> None:
         log = cmd + ("-" + rest[0] if rest and not rest[0].startswith("--") else "")
         if cmd == "calibrate" and "--check" in rest:
             log = "calibrate-check"
-        java(with_published_defaults([cmd, *rest]), heap=BUILD_HEAP if big else None, log=log)
+        java(with_published_defaults([cmd, *rest]), heap="big" if big else None, log=log)
     elif cmd == "java":
         java(rest, log="java")
     elif cmd == "layering":

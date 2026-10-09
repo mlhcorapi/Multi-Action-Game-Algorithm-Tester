@@ -183,7 +183,7 @@ Each prints PASS or FAIL and exits non-zero on FAIL. The shakedown and CI run al
 |---|---|
 | `MAGAT_DATA` | the data root (default `~/magat_runs`) |
 | `MAGAT_BUILD` | the build output, for example out of a synced folder whose client holds files open |
-| `MAGAT_HEAP` | the JVM heap (default `4g`; `8g` for portfolio builds, thread sweeps and runs). Keep calibrations at the default, so currencies are measured alike |
+| `MAGAT_HEAP` | the JVM heap for every command. Unset, calibrations and checks get `4g`, so currencies are measured alike; portfolio builds, thread sweeps, runs and loaded calibrations get three quarters of the memory available (a container's limit, else what Linux reports available, else the physical memory), and the launcher prints which. Set it only to override both |
 | `MAGAT_MAX_THREADS`, `MAGAT_RESERVE_CORES` | the worker ceiling, and the cores held back |
 | `MAGAT_<GAME>_ENGINE` | another engine tree instead of the submodule |
 | `MAGAT_WORKERS`, `MAGAT_CURRENCY` | the notebook's worker count and currency name |

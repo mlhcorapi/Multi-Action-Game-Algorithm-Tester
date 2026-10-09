@@ -952,6 +952,22 @@ Physical cores are detected on Linux; on Windows and macOS they are assumed to b
 CPUs and the banner says so (`MAGAT_MAX_THREADS` states the ceiling). The overrides are
 `MAGAT_MAX_THREADS` and `MAGAT_RESERVE_CORES` (`-Dmagat.maxThreads`, `-Dmagat.reserveCores`).*
 
+*Amended 2026-10-09: the R7615's first MAGAT sweep tested only its lowest thread counts. Two causes, both
+fixed:*
+- *The heap. The launcher gave a sweep (like a run and a portfolio build) a fixed 8 GB, where the thesis
+  had given its sweep 64-100 GB. It now gives that work three quarters of the memory available: the
+  container's limit, else what Linux reports available, else the physical memory. It prints the choice;
+  `MAGAT_HEAP` still overrides it. Calibrations keep the 4 GB default, so currencies are measured alike.*
+- *The memory gate's footprint. It was the peak heap in use, which also counts garbage awaiting
+  collection. That garbage grows with the heap, not with the workers: the thesis's own sweeps put a 400k
+  worker at 1,332 MB in a 64 GB heap and at 2,111 MB in a 100 GB one. The footprint is now the heap still
+  held after collections (summed over the heap's pools), the signal `LoadGovernor` already used. On the
+  laptop at 40k it is 4-10 MB per worker, where the peak suggested about 280.*
+
+*A point that runs out of memory anyway now ends the sweep, and the knee comes from the points before it;
+before, the error ended the command. `PeakHeapMB` in `thread_sweep.csv` is still the peak in use;
+`PerTaskHeapMB` is now the footprint after collections.*
+
 ### 8.7 Controlled calibration in sections (`calibrate-controlled`)
 
 *Added 2026-10-07 (milestone 7).* `magat calibrate-controlled --name <name>` (`tools/calibrate_controlled.py`)
