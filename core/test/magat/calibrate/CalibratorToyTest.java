@@ -63,6 +63,12 @@ public class CalibratorToyTest {
         return new String(Files.readAllBytes(p), StandardCharsets.UTF_8);
     }
 
+    /** A run's provenance hashes the weights file's bytes: they must not depend on the platform that wrote them. */
+    private static void assertLineFeedsOnly(Path out) throws Exception {
+        for (String f : new String[]{Currency.WEIGHTS_FILE, Currency.PROFILES_CSV, Currency.OPERATIONS_CSV})
+            assertFalse(f + " has a carriage return", read(out.resolve(f)).contains("\r"));
+    }
+
     @Test
     public void writesAFreshCurrencyThenMergesIntoIt() throws Exception {
         Portfolio<ToyGame.State> p = portfolio();
@@ -91,6 +97,7 @@ public class CalibratorToyTest {
         assertFalse(Double.isNaN(w1.unpricedShare("emcts@300")));
         assertTrue(w1.header().get("operations").startsWith("advance,copy,eval,emcts.generation"));
         assertTrue(read(out.resolve(Currency.OPERATIONS_CSV)).contains("emcts@300,emcts,300,emcts.burn,"));
+        assertLineFeedsOnly(out);
 
         // A second arm merges into the same currency; turns come from the file.
         Calibrator.Result r2 = Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-comma"));
@@ -104,6 +111,7 @@ public class CalibratorToyTest {
         assertEquals(w1.prices("emcts@600"), w2.prices("emcts@600"));
         assertTrue(read(file).contains("# merged "));
         assertTrue("the merged arm's operations are priced too", w2.prices("emcts-comma@300").containsKey("emcts.seqkey"));
+        assertLineFeedsOnly(out);
 
         // Pricing it again without --replace is refused before anything is measured.
         String before = read(file);

@@ -6,3 +6,7 @@
 *.csv text eol=lf
 *.json text eol=lf
 experiments/** text eol=lf
+# A currency's bytes are hashed into every run's provenance. The R7615 import was committed with CRLF line
+# ends and runs have recorded its hash, so it stays byte for byte as committed.
+*.properties text eol=lf
+games/tribes/calibration/r7615/compute_weights.properties -text

@@ -61,21 +61,21 @@ public final class Currency {
         StringBuilder sb = new StringBuilder();
         if (s.version >= 2) {
             sb.append("# MAGAT weights, version 2: the ").append(s.game).append(" currency, measured by magat calibrate.\n");
-            sb.append(String.format(Locale.ROOT, "# One unit = one advance of %s = %.3f ns on this machine. Every weight below is the%n",
+            sb.append(String.format(Locale.ROOT, "# One unit = one advance of %s = %.3f ns on this machine. Every weight below is the\n",
                     ref.profile, ref.tAdvance));
             sb.append("# price of one occurrence of an operation as a ratio to it: the forward model's (advance, copy, eval) and\n");
             sb.append("# each operation the arm declares (DESIGN 6.6), per arm and budget level, so a unit budget buys the same\n");
             sb.append("# wall-clock of all the work an arm does.\n");
         } else {
             sb.append("# MAGAT weights, version 1: the ").append(s.game).append(" currency, measured by magat calibrate.\n");
-            sb.append(String.format(Locale.ROOT, "# One unit = one advance of %s = %.3f ns on this machine. Every weight below is a%n",
+            sb.append(String.format(Locale.ROOT, "# One unit = one advance of %s = %.3f ns on this machine. Every weight below is a\n",
                     ref.profile, ref.tAdvance));
             sb.append("# ratio to it, so equal unit budgets are equal wall-clock across arms and proportional across levels.\n");
         }
         if (s.toy)
             sb.append("# TOY CALIBRATION: sample-size and stability gates were reported, not enforced. Not a currency.\n");
-        sb.append(String.format(Locale.ROOT, "# Every cell was measured under the fixed measurement weights (advance %s, copy %s, eval %s, the arms'%n"
-                + "# own operations free), whatever a file being extended prices, so every session plays the same turns.%n",
+        sb.append(String.format(Locale.ROOT, "# Every cell was measured under the fixed measurement weights (advance %s, copy %s, eval %s, the arms'\n"
+                + "# own operations free), whatever a file being extended prices, so every session plays the same turns.\n",
                 Weights.DEFAULT[0], Weights.DEFAULT[1], Weights.DEFAULT[2]));
         sb.append("magat.weights.version = ").append(s.version >= 2 ? 2 : 1).append('\n');
         sb.append("game = ").append(s.game).append('\n');
@@ -84,7 +84,7 @@ public final class Currency {
         sb.append("measured = ").append(s.measured).append('\n');
         sb.append("levels = ").append(s.levels).append('\n');
         sb.append("reference = ").append(ref.profile).append('\n');
-        sb.append(String.format(Locale.ROOT, "referenceAdvanceNanos = %.3f%n", ref.tAdvance));
+        sb.append(String.format(Locale.ROOT, "referenceAdvanceNanos = %.3f\n", ref.tAdvance));
         sb.append("turnsPerRep = ").append(s.turnsPerRep).append('\n');
         sb.append("portfolio.identity = ").append(s.portfolioIdentity).append('\n');
         sb.append("reps = ").append(s.reps).append('\n');
@@ -92,12 +92,12 @@ public final class Currency {
         if (s.version >= 2) {
             sb.append("operations = ").append(String.join(",", operations(cells, null))).append('\n');
             for (Map.Entry<String, Double> e : ref.prices().entrySet())
-                sb.append(String.format(Locale.ROOT, "global.w.%s = %s%n", e.getKey(), weight(e.getKey(), e.getValue())));
+                sb.append(String.format(Locale.ROOT, "global.w.%s = %s\n", e.getKey(), weight(e.getKey(), e.getValue())));
             sb.append("\n# profile.<arm>@<budget>.w.<op> is the price of one occurrence of <op> as a ratio to the reference advance;\n");
             sb.append("# ns.<op> its measured nanoseconds on this machine; unpriced, the calibration audit's share of the cell's turn\n");
             sb.append("# time that no priced operation accounts for.\n");
         } else {
-            sb.append(String.format(Locale.ROOT, "global.wAdvance = %.6f%nglobal.wCopy = %.6f%nglobal.wEval = %.6f%n",
+            sb.append(String.format(Locale.ROOT, "global.wAdvance = %.6f\nglobal.wCopy = %.6f\nglobal.wEval = %.6f\n",
                     ref.wAdvance, ref.wCopy, ref.wEval));
             sb.append("\n# profile.<arm>@<budget>.{wAdvance,wCopy,wEval} are ratios to the reference advance;\n");
             sb.append("# *Nanos are the measured per-operation costs on this machine.\n");
@@ -125,16 +125,16 @@ public final class Currency {
             for (Map.Entry<String, Double> e : c.prices().entrySet())
                 sb.append(p).append("w.").append(e.getKey()).append(" = ").append(weight(e.getKey(), e.getValue() * factor)).append('\n');
             for (Map.Entry<String, Double> e : c.nanos().entrySet())
-                sb.append(String.format(Locale.ROOT, "%sns.%s = %.3f%n", p, e.getKey(), e.getValue()));
-            if (!Double.isNaN(c.unpriced)) sb.append(String.format(Locale.ROOT, "%sunpriced = %.4f%n", p, c.unpriced));
+                sb.append(String.format(Locale.ROOT, "%sns.%s = %.3f\n", p, e.getKey(), e.getValue()));
+            if (!Double.isNaN(c.unpriced)) sb.append(String.format(Locale.ROOT, "%sunpriced = %.4f\n", p, c.unpriced));
             return;
         }
-        sb.append(String.format(Locale.ROOT, "%swAdvance = %.6f%n", p, c.wAdvance * factor));
-        sb.append(String.format(Locale.ROOT, "%swCopy = %.6f%n", p, c.wCopy * factor));
-        sb.append(String.format(Locale.ROOT, "%swEval = %.6f%n", p, c.wEval * factor));
-        sb.append(String.format(Locale.ROOT, "%sadvanceNanos = %.3f%n", p, c.tAdvance));
-        sb.append(String.format(Locale.ROOT, "%scopyNanos = %.3f%n", p, c.tCopy));
-        sb.append(String.format(Locale.ROOT, "%sevalNanos = %.3f%n", p, c.tEval));
+        sb.append(String.format(Locale.ROOT, "%swAdvance = %.6f\n", p, c.wAdvance * factor));
+        sb.append(String.format(Locale.ROOT, "%swCopy = %.6f\n", p, c.wCopy * factor));
+        sb.append(String.format(Locale.ROOT, "%swEval = %.6f\n", p, c.wEval * factor));
+        sb.append(String.format(Locale.ROOT, "%sadvanceNanos = %.3f\n", p, c.tAdvance));
+        sb.append(String.format(Locale.ROOT, "%scopyNanos = %.3f\n", p, c.tCopy));
+        sb.append(String.format(Locale.ROOT, "%sevalNanos = %.3f\n", p, c.tEval));
     }
 
     // ------------------------------------------------------------------ merging
@@ -188,7 +188,7 @@ public final class Currency {
         double machine = machineFactor(file, ref);
         sb.append('\n').append(String.format(Locale.ROOT,
                 "# merged %s: %d profile(s) measured against this session's %s advance (%.3f ns, x%.4f the file's), "
-                        + "re-denominated x%.6f (the file's reference weight) into this file's unit; turnsPerRep %s%s%s%n",
+                        + "re-denominated x%.6f (the file's reference weight) into this file's unit; turnsPerRep %s%s%s\n",
                 s.measured, write.size(), ref.profile, ref.tAdvance, machine, f, s.turnsPerRep,
                 version < 2 ? "; version 1: the forward model priced, the arms' own operations free" : "", s.toy ? "; TOY" : ""));
         for (Cell c : write) appendProfile(sb, c, f, version);
@@ -327,7 +327,7 @@ public final class Currency {
         StringBuilder sb = new StringBuilder("Profile,Arm,Budget,Positions,Advances,Copies,Evals,AdvanceNanos,CopyNanos,EvalNanos,"
                 + "GapAdvance,GapCopy,GapEval,CvAdvance,CvCopy,CvEval,W_ADVANCE,W_COPY,W_EVAL,Role,Status,Seconds,Unpriced,Unaccounted\n");
         for (Cell c : cells)
-            sb.append(String.format(Locale.ROOT, "%s,%s,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.6f,%.6f,%.6f,%s,%s,%.1f,%.4f,%.4f%n",
+            sb.append(String.format(Locale.ROOT, "%s,%s,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.6f,%.6f,%.6f,%s,%s,%.1f,%.4f,%.4f\n",
                     c.profile, c.arm, c.budget, c.positions, c.advances, c.copies, c.evals, c.tAdvance, c.tCopy, c.tEval,
                     c.gapAdvance, c.gapCopy, c.gapEval, c.cvAdvance, c.cvCopy, c.cvEval, c.wAdvance, c.wCopy, c.wEval,
                     c == ref ? "reference" : c.role,
@@ -344,11 +344,11 @@ public final class Currency {
             double[][] fm = {{c.advances, c.advances, c.tAdvance, c.gapAdvance, c.cvAdvance, c.wAdvance},
                     {c.copies, c.copies, c.tCopy, c.gapCopy, c.cvCopy, c.wCopy}, {c.evals, c.evals, c.tEval, c.gapEval, c.cvEval, c.wEval}};
             for (int i = 0; i < 3; i++)
-                sb.append(String.format(Locale.ROOT, "%s,%s,%d,%s,%d,%d,%.3f,%.5f,%.5f,%.9f,,%s%n", c.profile, c.arm, c.budget,
+                sb.append(String.format(Locale.ROOT, "%s,%s,%d,%s,%d,%d,%.3f,%.5f,%.5f,%.9f,,%s\n", c.profile, c.arm, c.budget,
                         magat.meter.Meter.FORWARD_MODEL_OPS.get(i), (long) fm[i][0], (long) fm[i][1], fm[i][2], fm[i][3], fm[i][4], fm[i][5], role));
             for (Map.Entry<String, Cell.OpStat> e : c.ops.entrySet()) {
                 Cell.OpStat s = e.getValue();
-                sb.append(String.format(Locale.ROOT, "%s,%s,%d,%s,%d,%d,%.3f,%.5f,%.5f,%.9f,%.5f,%s%n", c.profile, c.arm, c.budget, e.getKey(),
+                sb.append(String.format(Locale.ROOT, "%s,%s,%d,%s,%d,%d,%.3f,%.5f,%.5f,%.9f,%.5f,%s\n", c.profile, c.arm, c.budget, e.getKey(),
                         s.count, s.timed, s.t, s.gap, s.cv, s.w, s.share, role));
             }
         }
