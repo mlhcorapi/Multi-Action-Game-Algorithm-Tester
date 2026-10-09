@@ -21,7 +21,8 @@ JNI, or a state-serialization bridge fast enough that the meter still measures t
 the bridge. Budget it as a project.
 
 **Check the engine's licence** before copying any of it. Tribes' upstream repository carries none, so
-MAGAT uses it as a submodule of a fork, with credit, while permission is sought, and copies nothing in.
+MAGAT asked its authors, who gave permission, and uses it as a submodule of a fork, with credit, copying
+nothing in.
 
 If the engine reads data files relative to its working directory, give it a way to find them from
 anywhere. Tribes resolves them against `-Dtribes.home`; the launcher passes engine-specific JVM

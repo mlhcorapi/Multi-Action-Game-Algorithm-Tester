@@ -378,3 +378,11 @@ the laptop's reference advance has measured at 0.66-0.76 of the R7615's.
   the result". They were measured again with the fix.
 
 It is published in `games/tribes/calibration/laptop-i9-14900hx/`, and `ORIGIN.md` there has the record.
+It was measured on the engine before `828b130`, which made legal-action generation faster (design §15.3):
+on the new engine an advance is about 19% faster at 40k and 80k, which moved the turn prices of `emcts`
+and `emcts-comma` there by -4.1% to +3.0%, inside the drift gate; 400k has not been measured cleanly yet.
+Before pricing anything new in it, run the self-check on mains:
+```bash
+python magat.py calibrate --check --game tribes --arms emcts,emcts-comma --weights games/tribes/calibration/laptop-i9-14900hx/compute_weights.properties
+```
+If a cell is past the gate, measure a fresh currency under a new name.

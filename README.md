@@ -197,9 +197,10 @@ per stage, each skipping itself once its output exists, and each stage ending in
 Tribes is by Diego Perez-Liebana, Yu-Jhen Hsu, Stavros Emmanouilidis, Bobby Khaleque and Raluca
 Gaina: *Tribes: A New Turn-Based Strategy Game for AI*, AAAI Conference on Artificial Intelligence
 and Interactive Digital Entertainment (AIIDE), 2020. The engine MAGAT runs is a fork of their
-repository with the engine changes the thesis line required. The upstream repository carries no
-licence file, so the fork is used as a submodule with attribution while permission is sought, and none
-of it is copied into this repository.
+repository with the engine changes the thesis line required and MAGAT's own (data files found from any
+directory; faster legal-action generation with identical results). The upstream repository carries no
+licence file; the authors have given permission for MAGAT's use of their code. The fork is used as a
+submodule with attribution, and none of it is copied into this repository.
 
 ## License
 

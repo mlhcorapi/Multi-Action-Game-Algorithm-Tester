@@ -109,6 +109,17 @@ Comment lines only, made on 2026-10-09; every price is as measured.
   on every platform, and `.gitattributes` keeps currencies LF, because a run's provenance hashes the
   file's bytes.
 
+## The engine since
+
+This currency was measured on engine `b9d27af`. On 2026-10-09 MAGAT moved to `828b130`, which makes the
+engine's legal-action generation faster and changes no output (design §15.3). Results priced in this
+currency reproduce exactly on the new engine, because a budget is a count. Its prices describe the
+earlier engine's costs, though. A check on the new engine (2026-10-09) found an advance about 19% faster
+at 40k and 80k and copies and evaluations unchanged: copy and evaluation weights 25-36% higher, and the
+turn prices of `emcts` and `emcts-comma` at those levels moved by -4.1% to +3.0%, inside the 10% gate.
+Its 400k cells were measured after the laptop slowed down (it was on battery afterwards) and do not
+count. Run the self-check on mains before pricing anything new in this currency.
+
 ## Files
 
 | File | What it is |
