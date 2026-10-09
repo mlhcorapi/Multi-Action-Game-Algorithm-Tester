@@ -1,0 +1,170 @@
+
+>>>>> 2026-10-09 09:42:55 $ magat calibrate --estimate --game tribes --format 2 --arms emcts
+09:42:55 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=C:\Users\mlcor\magat_runs -Dmagat.git.commit=55566b1b7726d384cdc33a5dfe52479a8b31019a -Dmagat.engine.commit=b9d27afe62d61cee2e51a0622d22fc9a32c87437 -Dtribes.home=C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine -cp C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\build\classes;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\core\lib\minimal-json-0.9.5.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\hamcrest-core-1.3.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\json.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\junit-4.13.2.jar magat.cli.Main calibrate --estimate --game tribes --format 2 --arms emcts --portfolio C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\portfolio\v1
+09:42:55   -> C:\Users\mlcor\magat_runs\logs\calibrate.log
+09:42:55 # magat 0.1.0-m6 calibrate
+09:42:55 # data root: C:\Users\mlcor\magat_runs   engine: b9d27afe62d61cee2e51a0622d22fc9a32c87437
+09:42:56 ############################################################
+09:42:56 # compute-unit calibration: per arm, per budget level, relative to one reference advance
+09:42:56 # single-threaded; needs an idle machine: this is a timing measurement
+09:42:56 # new currency in null
+09:42:56 # reference cell emcts@40000   levels 40000,80000,400000   arms [emcts]
+09:42:56 # reps 3   turns/rep 8,4,2 over levels 40000,80000,400000   warmup 6   gap gate 10%   min ops 20000
+09:42:56 # portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7 (400 positions)
+09:42:56 # currency version 2: every operation an arm declares is measured and priced
+09:42:56 # every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+09:42:56 ------------------------------------------------------------
+09:42:56 [machine] calibration
+09:42:56 [machine] Intel64 Family 6 Model 183 Stepping 1, GenuineIntel (Windows 11/amd64) | 32 logical / 16 physical (ASSUMED) (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 1 | worker ceiling 15
+09:42:56 [machine] physical cores are not readable on this OS; assumed logical/2. Set MAGAT_MAX_THREADS=N to state the ceiling explicitly.
+09:42:56 [machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+09:42:56 ------------------------------------------------------------
+09:43:16   [estimate] emcts @ 40000: 2.32 s per turn over the level's 8 positions
+09:43:45   [estimate] emcts @ 80000: 6.80 s per turn over the level's 4 positions
+09:45:03   [estimate] emcts @ 400000: 34.84 s per turn over the level's 2 positions
+09:45:03 
+09:45:03 === ESTIMATE: WHAT THIS SESSION WOULD TAKE ON THIS MACHINE ===
+09:45:03      level  cells    turns   s per turn    minutes
+09:45:03      40000      1       62         2.32        2.4
+09:45:03      80000      1       19         6.80        2.2
+09:45:03     400000      1       13        34.84        7.5
+09:45:03   3 cells, 94 turns: about 0.2 h at the reference arm's pace, up to 0.3 h if every arm took 1.25x its time per turn (measured in 2.1 min; nothing was written)
+09:45:03 ESTIMATE: 0.2 h
+09:45:03 [exit 0] after 0:02:07.897623
+===== exit 0 after 128 s
+
+>>>>> 2026-10-09 09:45:03 $ magat calibrate --estimate --game tribes --format 2 --arms emcts
+09:45:03 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=C:\Users\mlcor\magat_runs -Dmagat.git.commit=55566b1b7726d384cdc33a5dfe52479a8b31019a -Dmagat.engine.commit=b9d27afe62d61cee2e51a0622d22fc9a32c87437 -Dtribes.home=C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine -cp C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\build\classes;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\core\lib\minimal-json-0.9.5.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\hamcrest-core-1.3.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\json.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\junit-4.13.2.jar magat.cli.Main calibrate --estimate --game tribes --format 2 --arms emcts --portfolio C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\portfolio\v1
+09:45:03   -> C:\Users\mlcor\magat_runs\logs\calibrate.log
+09:45:03 # magat 0.1.0-m6 calibrate
+09:45:03 # data root: C:\Users\mlcor\magat_runs   engine: b9d27afe62d61cee2e51a0622d22fc9a32c87437
+09:45:04 ############################################################
+09:45:04 # compute-unit calibration: per arm, per budget level, relative to one reference advance
+09:45:04 # single-threaded; needs an idle machine: this is a timing measurement
+09:45:04 # new currency in null
+09:45:04 # reference cell emcts@40000   levels 40000,80000,400000   arms [emcts]
+09:45:04 # reps 3   turns/rep 8,4,2 over levels 40000,80000,400000   warmup 6   gap gate 10%   min ops 20000
+09:45:04 # portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7 (400 positions)
+09:45:04 # currency version 2: every operation an arm declares is measured and priced
+09:45:04 # every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+09:45:04 ------------------------------------------------------------
+09:45:04 [machine] calibration
+09:45:04 [machine] Intel64 Family 6 Model 183 Stepping 1, GenuineIntel (Windows 11/amd64) | 32 logical / 16 physical (ASSUMED) (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 1 | worker ceiling 15
+09:45:04 [machine] physical cores are not readable on this OS; assumed logical/2. Set MAGAT_MAX_THREADS=N to state the ceiling explicitly.
+09:45:04 [machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+09:45:04 ------------------------------------------------------------
+09:45:24   [estimate] emcts @ 40000: 2.30 s per turn over the level's 8 positions
+09:45:52   [estimate] emcts @ 80000: 6.72 s per turn over the level's 4 positions
+09:47:09   [estimate] emcts @ 400000: 34.19 s per turn over the level's 2 positions
+09:47:09 
+09:47:09 === ESTIMATE: WHAT THIS SESSION WOULD TAKE ON THIS MACHINE ===
+09:47:09      level  cells    turns   s per turn    minutes
+09:47:09      40000      1       62         2.30        2.4
+09:47:09      80000      1       19         6.72        2.1
+09:47:09     400000      1       13        34.19        7.4
+09:47:09   3 cells, 94 turns: about 0.2 h at the reference arm's pace, up to 0.2 h if every arm took 1.25x its time per turn (measured in 2.1 min; nothing was written)
+09:47:09 ESTIMATE: 0.2 h
+09:47:09 [exit 0] after 0:02:05.782569
+===== exit 0 after 126 s
+
+>>>>> 2026-10-09 09:47:09 $ magat calibrate --estimate --game tribes --format 2 --arms emcts
+09:47:09 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=C:\Users\mlcor\magat_runs -Dmagat.git.commit=55566b1b7726d384cdc33a5dfe52479a8b31019a -Dmagat.engine.commit=b9d27afe62d61cee2e51a0622d22fc9a32c87437 -Dtribes.home=C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine -cp C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\build\classes;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\core\lib\minimal-json-0.9.5.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\hamcrest-core-1.3.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\json.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\junit-4.13.2.jar magat.cli.Main calibrate --estimate --game tribes --format 2 --arms emcts --portfolio C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\portfolio\v1
+09:47:09   -> C:\Users\mlcor\magat_runs\logs\calibrate.log
+09:47:09 # magat 0.1.0-m6 calibrate
+09:47:09 # data root: C:\Users\mlcor\magat_runs   engine: b9d27afe62d61cee2e51a0622d22fc9a32c87437
+09:47:10 ############################################################
+09:47:10 # compute-unit calibration: per arm, per budget level, relative to one reference advance
+09:47:10 # single-threaded; needs an idle machine: this is a timing measurement
+09:47:10 # new currency in null
+09:47:10 # reference cell emcts@40000   levels 40000,80000,400000   arms [emcts]
+09:47:10 # reps 3   turns/rep 8,4,2 over levels 40000,80000,400000   warmup 6   gap gate 10%   min ops 20000
+09:47:10 # portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7 (400 positions)
+09:47:10 # currency version 2: every operation an arm declares is measured and priced
+09:47:10 # every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+09:47:10 ------------------------------------------------------------
+09:47:10 [machine] calibration
+09:47:10 [machine] Intel64 Family 6 Model 183 Stepping 1, GenuineIntel (Windows 11/amd64) | 32 logical / 16 physical (ASSUMED) (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 1 | worker ceiling 15
+09:47:10 [machine] physical cores are not readable on this OS; assumed logical/2. Set MAGAT_MAX_THREADS=N to state the ceiling explicitly.
+09:47:10 [machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+09:47:10 ------------------------------------------------------------
+09:47:29   [estimate] emcts @ 40000: 2.28 s per turn over the level's 8 positions
+09:47:58   [estimate] emcts @ 80000: 6.69 s per turn over the level's 4 positions
+09:49:14   [estimate] emcts @ 400000: 34.07 s per turn over the level's 2 positions
+09:49:14 
+09:49:14 === ESTIMATE: WHAT THIS SESSION WOULD TAKE ON THIS MACHINE ===
+09:49:14      level  cells    turns   s per turn    minutes
+09:49:14      40000      1       62         2.28        2.4
+09:49:14      80000      1       19         6.69        2.1
+09:49:14     400000      1       13        34.07        7.4
+09:49:14   3 cells, 94 turns: about 0.2 h at the reference arm's pace, up to 0.2 h if every arm took 1.25x its time per turn (measured in 2.1 min; nothing was written)
+09:49:14 ESTIMATE: 0.2 h
+09:49:14 [exit 0] after 0:02:05.214940
+===== exit 0 after 125 s
+
+>>>>> 2026-10-09 09:49:14 $ magat calibrate --estimate --game tribes --format 2 --arms emcts
+09:49:14 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=C:\Users\mlcor\magat_runs -Dmagat.git.commit=55566b1b7726d384cdc33a5dfe52479a8b31019a -Dmagat.engine.commit=b9d27afe62d61cee2e51a0622d22fc9a32c87437 -Dtribes.home=C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine -cp C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\build\classes;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\core\lib\minimal-json-0.9.5.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\hamcrest-core-1.3.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\json.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\junit-4.13.2.jar magat.cli.Main calibrate --estimate --game tribes --format 2 --arms emcts --portfolio C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\portfolio\v1
+09:49:14   -> C:\Users\mlcor\magat_runs\logs\calibrate.log
+09:49:14 # magat 0.1.0-m6 calibrate
+09:49:14 # data root: C:\Users\mlcor\magat_runs   engine: b9d27afe62d61cee2e51a0622d22fc9a32c87437
+09:49:15 ############################################################
+09:49:15 # compute-unit calibration: per arm, per budget level, relative to one reference advance
+09:49:15 # single-threaded; needs an idle machine: this is a timing measurement
+09:49:15 # new currency in null
+09:49:15 # reference cell emcts@40000   levels 40000,80000,400000   arms [emcts]
+09:49:15 # reps 3   turns/rep 8,4,2 over levels 40000,80000,400000   warmup 6   gap gate 10%   min ops 20000
+09:49:15 # portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7 (400 positions)
+09:49:15 # currency version 2: every operation an arm declares is measured and priced
+09:49:15 # every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+09:49:15 ------------------------------------------------------------
+09:49:15 [machine] calibration
+09:49:15 [machine] Intel64 Family 6 Model 183 Stepping 1, GenuineIntel (Windows 11/amd64) | 32 logical / 16 physical (ASSUMED) (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 1 | worker ceiling 15
+09:49:15 [machine] physical cores are not readable on this OS; assumed logical/2. Set MAGAT_MAX_THREADS=N to state the ceiling explicitly.
+09:49:15 [machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+09:49:15 ------------------------------------------------------------
+09:49:35   [estimate] emcts @ 40000: 2.30 s per turn over the level's 8 positions
+09:50:04   [estimate] emcts @ 80000: 6.78 s per turn over the level's 4 positions
+09:51:20   [estimate] emcts @ 400000: 34.20 s per turn over the level's 2 positions
+09:51:20 
+09:51:20 === ESTIMATE: WHAT THIS SESSION WOULD TAKE ON THIS MACHINE ===
+09:51:20      level  cells    turns   s per turn    minutes
+09:51:20      40000      1       62         2.30        2.4
+09:51:20      80000      1       19         6.78        2.1
+09:51:20     400000      1       13        34.20        7.4
+09:51:20   3 cells, 94 turns: about 0.2 h at the reference arm's pace, up to 0.2 h if every arm took 1.25x its time per turn (measured in 2.1 min; nothing was written)
+09:51:20 ESTIMATE: 0.2 h
+09:51:20 [exit 0] after 0:02:05.993926
+===== exit 0 after 126 s
+
+>>>>> 2026-10-09 09:51:20 $ magat calibrate --estimate --game tribes --format 2 --arms emcts
+09:51:21 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=C:\Users\mlcor\magat_runs -Dmagat.git.commit=55566b1b7726d384cdc33a5dfe52479a8b31019a -Dmagat.engine.commit=b9d27afe62d61cee2e51a0622d22fc9a32c87437 -Dtribes.home=C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine -cp C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\build\classes;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\core\lib\minimal-json-0.9.5.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\hamcrest-core-1.3.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\json.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\junit-4.13.2.jar magat.cli.Main calibrate --estimate --game tribes --format 2 --arms emcts --portfolio C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\portfolio\v1
+09:51:21   -> C:\Users\mlcor\magat_runs\logs\calibrate.log
+09:51:21 # magat 0.1.0-m6 calibrate
+09:51:21 # data root: C:\Users\mlcor\magat_runs   engine: b9d27afe62d61cee2e51a0622d22fc9a32c87437
+09:51:21 ############################################################
+09:51:21 # compute-unit calibration: per arm, per budget level, relative to one reference advance
+09:51:21 # single-threaded; needs an idle machine: this is a timing measurement
+09:51:21 # new currency in null
+09:51:21 # reference cell emcts@40000   levels 40000,80000,400000   arms [emcts]
+09:51:21 # reps 3   turns/rep 8,4,2 over levels 40000,80000,400000   warmup 6   gap gate 10%   min ops 20000
+09:51:21 # portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7 (400 positions)
+09:51:21 # currency version 2: every operation an arm declares is measured and priced
+09:51:21 # every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+09:51:21 ------------------------------------------------------------
+09:51:21 [machine] calibration
+09:51:21 [machine] Intel64 Family 6 Model 183 Stepping 1, GenuineIntel (Windows 11/amd64) | 32 logical / 16 physical (ASSUMED) (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 1 | worker ceiling 15
+09:51:21 [machine] physical cores are not readable on this OS; assumed logical/2. Set MAGAT_MAX_THREADS=N to state the ceiling explicitly.
+09:51:21 [machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+09:51:21 ------------------------------------------------------------
+09:51:41   [estimate] emcts @ 40000: 2.30 s per turn over the level's 8 positions
+09:52:10   [estimate] emcts @ 80000: 6.81 s per turn over the level's 4 positions
+09:53:28   [estimate] emcts @ 400000: 34.70 s per turn over the level's 2 positions
+09:53:28 
+09:53:28 === ESTIMATE: WHAT THIS SESSION WOULD TAKE ON THIS MACHINE ===
+09:53:28      level  cells    turns   s per turn    minutes
+09:53:28      40000      1       62         2.30        2.4
+09:53:28      80000      1       19         6.81        2.2
+09:53:28     400000      1       13        34.70        7.5
+09:53:28   3 cells, 94 turns: about 0.2 h at the reference arm's pace, up to 0.3 h if every arm took 1.25x its time per turn (measured in 2.1 min; nothing was written)
+09:53:28 ESTIMATE: 0.2 h
+09:53:28 [exit 0] after 0:02:07.198934
+===== exit 0 after 127 s

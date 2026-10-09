@@ -168,6 +168,7 @@ Multi-Action-Game-Algorithm-Tester/           (this repository)
 |   +-- engine/                 git submodule -> the Tribes fork (§15.3)
 |   +-- src/magat/games/tribes/ TribesGame, TribesState, TribesScenarioSources, TribesAgents, oracle/*
 |   +-- calibration/r7615/      compute_weights.properties (v1), compute_profiles.csv, machine.txt, ORIGIN.md
+|   +-- calibration/laptop-i9-14900hx/  the development laptop's currency (v2), record/, ORIGIN.md (§8.7)
 |   +-- portfolio/v1/           portfolio.csv, _split_dev.txt, _split_holdout.txt, identity.txt (bins: release asset, §7.6)
 |   +-- results/ab-emcts/       the worked result: imported dev + holdout trees, report/ (SUMMARY.md, tables, report.json) (§11.6)
 +-- analysis/                   Python package `magat_analysis`, pyproject.toml, tests/
@@ -819,6 +820,17 @@ behaviour it fails at the first merge (1,032 advances against 1,264). A new file
 measurement weights. A currency's price is therefore one measured on turns played under the fixed weights.
 At the upper budget levels those turns are longer than the turns the currency's own prices then buy: the
 same residual the thesis's calibration had, which W7 measures.*
+
+*Confirmed 2026-10-09: the laptop's four sections, measured again with the fixed calibrator, all passed.
+- *They ran at ×0.987-1.006 the first section's speed.*
+- *The reference cell played identical turns in every section.*
+- *Sections 2-4's prices rose by 5-7%, and section 1's moved by at most 0.5%.*
+- *The self-check moved to -0.6%.*
+
+*The currency is published as `games/tribes/calibration/laptop-i9-14900hx/`. Its `ORIGIN.md` has the
+record. Since the same day, the calibrator writes its files with LF line ends on every platform. A run's
+provenance hashes the weights file, and `String.format`'s `%n` had given the last merge's lines CRLF on
+Windows.*
 
 ### 8.2 Merge
 

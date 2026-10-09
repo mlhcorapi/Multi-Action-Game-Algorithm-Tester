@@ -155,7 +155,9 @@ Dell PowerEdge R7615 (AMD EPYC 9534, 64 cores, JDK 11) by the thesis's calibrato
 MAGAT's version-1 format. `ORIGIN.md` there has the provenance and the name mapping, the drift checks
 of other machines against it, and the metering overhead. A new calibration is published beside it
 under its own name, never over it. Examples are a version-2 calibration of the R7615 itself, or the
-development laptop's. Results quote the currency they were priced in.
+development laptop's: `games/tribes/calibration/laptop-i9-14900hx/` is a version-2 currency, measured
+on 2026-10-07 to 2026-10-09, which prices every registered arm and every operation it declares. Results
+quote the currency they were priced in.
 
 A run tree records the price of every leaf. Continuing a tree under a file in which a leaf's price has
 changed is refused (the **currency lock**) until `--retire-leaf` names that leaf to be re-run. A merge
