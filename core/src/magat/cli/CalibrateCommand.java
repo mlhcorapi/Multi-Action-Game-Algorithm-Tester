@@ -26,12 +26,12 @@ final class CalibrateCommand {
 
     static void usage() {
         System.out.println("  machine");
-        System.out.println("  threads           --game <name> --portfolio <dir> --out <calib> [--levels 40000,80000,400000] [--ladder 2,4,8] [--segment-seconds 25] [--arm emcts]");
+        System.out.println("  threads           --game <name> --portfolio <dir> --out <calib> [--levels ...] [--ladder 2,4,8] [--segment-seconds 25] [--arm emcts]");
         System.out.println("  calibrate         --game <name> --portfolio <dir> --out <calib> [--levels ...] [--arms a,b|@set] [--reps 3] [--turns 8,4,2]");
         System.out.println("                    [--warmup 6] [--replace a,b] [--under-load W] [--toy] [--format 2|1] [--audit-warn 0.10]");
         System.out.println("  calibrate --estimate ... (the same arguments): times a few turns, prints what the session would take, writes nothing");
         System.out.println("  calibrate --check --game <name> --portfolio <dir> --weights <file> --arms a,b [--levels ...]");
-        System.out.println("  weights           --weights <file> [--game <name> --arms a,b|@set --levels 40000,80000,400000]");
+        System.out.println("  weights           --weights <file> [--game <name> --arms a,b|@set --levels ...]   (default: the file's own levels)");
     }
 
     static int machine() {
@@ -124,7 +124,10 @@ final class CalibrateCommand {
             module = Games.load(args.get("game"));
             arms = module.expandArms(arms);
         }
-        long[] levels = args.getLongs("levels", new long[]{40_000L, 80_000L, 400_000L});
+        // The file's own levels unless --levels names others (a file without them is the thesis's ladder).
+        String fileLevels = w.header().get("levels");
+        long[] levels = args.getLongs("levels", fileLevels != null ? Arrays.stream(fileLevels.split(",")).mapToLong(x -> Long.parseLong(x.trim())).toArray()
+                : new long[]{40_000L, 80_000L, 400_000L});
         List<String> want = new ArrayList<>();
         for (String a : arms) for (long l : levels) want.add(Profile.key(a, l));
         List<String> missing = new ArrayList<>(w.missing(want));

@@ -75,9 +75,11 @@ jobs:
           python magat.py calibrate-controlled $CC --section 1 | grep -q "already priced"
       - name: The shipped experiment specs validate against the published currency
         run: |
-          for s in reference-ladder ab-emcts-dev ab-emcts-holdout; do
+          for s in ab-emcts-dev ab-emcts-holdout; do
             python magat.py experiment validate --experiment experiments/tribes/$s.json
           done
+          # The reference ladder runs at the published levels, which no published currency prices yet.
+          python magat.py experiment validate --no-weights --experiment experiments/tribes/reference-ladder.json
       - name: Toy run on dev and holdout, and a resume that skips every leaf
         run: |
           RUN="python magat.py run --experiment experiments/tribes/shakedown.json --portfolio $RUNNER_TEMP/toy --weights $RUNNER_TEMP/calib/compute_weights.properties --out $RUNNER_TEMP/run --threads 2 --toy"

@@ -1,15 +1,15 @@
 {
   "name": "reference-ladder",
   "game": "tribes",
-  "description": "The registered reference arms at the published budget ladder: the field every new arm is compared against. The worked result's own specs arrive with its arms (milestone 5).",
+  "description": "The registered reference arms at the published levels (games/tribes/levels.json: 500, 1000 and 5000 ms of a whole turn on the R7615): the field every new arm is compared against.",
   "portfolio": "tribes/v1",
   "split": "dev",
   "baseline": "emcts",
   "initialization": "in-budget",
   "levels": [
-    { "budget": 80000, "visits": 8 },
-    { "budget": 40000, "visits": 8 },
-    { "budget": 400000, "visits": 6 }
+    { "budget": 20000, "visits": 8 },
+    { "budget": 9500, "visits": 8 },
+    { "budget": 101500, "visits": 6 }
   ],
   "arms": [
     { "id": "emcts" },

@@ -23,12 +23,13 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py calibrate --check --game tribes --arms a,b [--weights FILE] [--portfolio DIR]   gates each cell's turn price
     python magat.py calibrate-controlled --name NAME [--preflight | --plan] [--section all|next|checks|N [--redo]] ...
                               this machine's own currency in sections, with reliability checks (docs/CALIBRATING_A_MACHINE.md)
-    python magat.py calibrate-time --game tribes [--times 500,1000,5000] [--positions 64] [--tolerance 0.05] [--round 500]
-                              the levels that are those milliseconds of thinking time here (run on the reference machine)
+    python magat.py calibrate-time --game tribes --remeasure [--times 500,1000,5000] [--positions 64] [--tolerance 0.05] [--round 500]
+                              the levels that are those milliseconds of thinking time here (a maintainer's tool, run on the
+                              reference machine; refused without --remeasure once games/<game>/levels.json is published)
     python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...]
     python magat.py run --experiment SPEC [--split dev|holdout|all] [--out DIR] [--portfolio DIR] [--weights FILE]
                         [--threads N] [--threads-at 400000=31] [--frozen FILE] [--retire-leaf arm@budget] [--toy]
-    python magat.py experiment validate --experiment SPEC [--weights FILE] [--split ...]
+    python magat.py experiment validate --experiment SPEC [--weights FILE | --no-weights] [--split ...]
     python magat.py bundle --name NAME --paths P [P ...] [--exclude seqlog_,mutlog_]
     python magat.py check structure --game tribes --spec experiments/tribes/structure.json
     python magat.py check replay    --game tribes --leaf DIR [--portfolio DIR] [--weights FILE] [--turns 20]
@@ -441,8 +442,12 @@ def python_analysis(args: list, log: str) -> int:
 
 
 def with_published_defaults(args: list) -> list:
-    """Fill --portfolio / --weights from the published artefacts of --game when not given."""
+    """Fill --portfolio / --weights from the published artefacts of --game when not given. --no-weights: none
+    (`experiment validate` then checks a spec's structure, not its pricing)."""
     args = list(args)
+    no_weights = "--no-weights" in args
+    if no_weights:
+        args.remove("--no-weights")
     if "--game" in args:
         game = args[args.index("--game") + 1]
         pub = PUBLISHED.get(game, {})
@@ -451,7 +456,7 @@ def with_published_defaults(args: list) -> list:
             args += ["--portfolio", str(pub["portfolio"])]
         wants_weights = ("equivalence" in args or "replay" in args or "overhead" in args or args[0] in ("weights", "run", "probe")
                          or (args[0] == "calibrate" and "--check" in args) or args[:2] == ["experiment", "validate"])
-        if wants_weights and "--weights" not in args and "weights" in pub and pub["weights"].is_file():
+        if wants_weights and not no_weights and "--weights" not in args and "weights" in pub and pub["weights"].is_file():
             args += ["--weights", str(pub["weights"])]
         if args[:2] == ["portfolio", "verify"] and "--portfolio" not in args and "portfolio" in pub:
             args += ["--portfolio", str(pub["portfolio"])]
