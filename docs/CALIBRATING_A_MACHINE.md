@@ -11,16 +11,18 @@ ratio to one reference advance measured in the same session. A good currency nee
 - **Conditions written down.** A later `calibrate --check` on the same machine has to reproduce them, or
   it reports drift that is really a change of settings.
 
-**The order of work.** First the levels, then the currencies. `magat calibrate-time` runs once, on the
-reference machine (the R7615 for Tribes), and finds the levels that are 500, 1000 and 5000 ms of a whole
-turn there ([units as time](CURRENCY.md#units-as-time)); its `levels.json` is published as
-`games/<game>/levels.json`. Every currency is then measured at those levels, under a new `--name` (a
-currency keeps the levels and the initialization policy it was first measured with). The notebook does
-this in order on the R7615; on the laptop, `calibrate-controlled` takes the published levels by itself.
+**The levels come first, and they are published.** A currency is measured at the game's published
+levels, `games/<game>/levels.json`: for Tribes 9,500 / 20,000 / 101,500 units, which are 500, 1000 and
+5000 ms of a whole turn on the R7615 ([units as time](CURRENCY.md#units-as-time)). `calibrate-controlled`
+and the notebook take them by themselves. A currency keeps the levels and the initialization policy it
+was first measured with, so a currency begun at other levels continues under its own name and a new one
+needs a new `--name`.
 
-```bash
-python magat.py calibrate-time --game tribes
-```
+The levels are measured on the reference machine alone, with `magat calibrate-time`. That is a
+maintainer's job, done from `notebooks/maintainers/measure_levels.ipynb` and only after a change to what a
+turn costs, such as a new engine commit. New levels mean every currency must be measured again, so the
+tool refuses to run without `--remeasure` once a game's levels are published, and the main notebook never
+runs it.
 
 The calibrator enforces what it can see. A cell's two fastest repetitions must agree within 10% (the
 gap gate), and every session measures its reference cell again at the end (the bracket). A session
@@ -335,7 +337,7 @@ What to do about what it finds:
 ## Publishing it
 
 The R7615 file stays the published currency. A new currency is published beside it, never over it,
-in `games/tribes/calibration/<name>/` (for example `r7615-v2/` or `laptop-i9-14900hx/`). That folder
+in `games/tribes/calibration/<name>/` (for example `r7615-time/` or `laptop-i9-14900hx/`). That folder
 holds:
 - its `compute_weights.properties`;
 - `record/SUMMARY.md`, and usually the rest of `record/` except the raw `counters.csv` files, which
@@ -344,7 +346,8 @@ holds:
   performance mode), the sections and their verdicts, both checks, and the commit.
 
 The reference machine's levels are published as `games/<game>/levels.json`, with its `SUMMARY.md` as
-`games/<game>/levels.md`, and its `ORIGIN.md` names them.
+`games/<game>/levels.md` and the rest of the measurement in `games/<game>/levels-record/`. A currency's
+`ORIGIN.md` names the levels it was measured at.
 
 Results computed under it quote its name.
 

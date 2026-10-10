@@ -28,7 +28,7 @@ wrap it). It:
 | `threads` | the thread sweep: the knee of sustained throughput per budget level, into `threads.json` |
 | `calibrate`, `calibrate --estimate`, `calibrate --check` | [the currency](CURRENCY.md#calibrating) |
 | `calibrate-controlled` | a calibration in sections, with reliability checks ([guide](CALIBRATING_A_MACHINE.md)) |
-| `calibrate-time [--times 500,1000,5000]` | the levels that are those milliseconds of thinking time on this machine (run on the reference machine; [units as time](CURRENCY.md#units-as-time)) |
+| `calibrate-time --remeasure [--times 500,1000,5000]` | the levels that are those milliseconds of thinking time on this machine: a maintainer's tool for the reference machine, refused without `--remeasure` once the game's levels are published ([units as time](CURRENCY.md#units-as-time)) |
 | `weights --weights F [--game G --arms ...]` | what a weights file prices; exit 1 if anything asked for is missing |
 | `check contract \| equivalence \| structure \| replay \| overhead` | the gates (below) |
 | `check time (--weights F \| --fixed-weights) [--levels ...] [--arms ...] [--targets ms,...]` | single-threaded whole turns over positions spread across the portfolio: each level's thinking time on this machine |
@@ -201,9 +201,9 @@ Each prints PASS or FAIL and exits non-zero on FAIL. The shakedown and CI run al
 - **A repository in a synced folder (OneDrive, Dropbox).** Builds can hit locked files; set
   `MAGAT_BUILD` outside the folder. Keep `MAGAT_DATA` outside it too, as it is by default.
 - **Which levels.** `--levels` when named; else the levels of the file a calibration extends or checks;
-  else the game's published `games/<game>/levels.json` (500, 1000 and 5000 ms on the reference machine,
-  found by `calibrate-time`); else 40,000 / 80,000 / 400,000. The launcher passes the published ones as
-  `--default-levels`.
+  else the game's published `games/<game>/levels.json` (for Tribes 9,500 / 20,000 / 101,500 units: 500,
+  1000 and 5000 ms on the R7615, found by `calibrate-time`); else 40,000 / 80,000 / 400,000. The launcher
+  passes the published ones as `--default-levels`. `weights` reports a file's coverage at its own levels.
 - **Memory is not what limits the thread count.** A Tribes worker holds 5-35 MB; the rest of the heap is
   the engine's short-lived garbage (2-3 GB a second per worker), and the heap size only sets how often it
   is collected. Cores, and the memory bandwidth that garbage takes, are the limits; the thread sweep
