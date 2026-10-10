@@ -2,6 +2,7 @@ package magat.probe;
 
 import magat.agent.AgentFactory;
 import magat.agent.Episode;
+import magat.agent.TurnBudget;
 import magat.agent.TurnRecord;
 import magat.game.Game;
 import magat.game.Scenario;
@@ -50,11 +51,14 @@ public final class ReplayCheck {
     public static final class Leaf {
         public final String format;
         public final String arm;         // as written in the leaf (a thesis config name for a legacy leaf)
+        /** How the leaf's turns were budgeted: the thesis's always outside; a MAGAT run's as its {@code _run.json} records. */
+        public final TurnBudget.Initialization initialization;
         final List<Row> rows;
 
-        Leaf(String format, String arm, List<Row> rows) {
+        Leaf(String format, String arm, TurnBudget.Initialization initialization, List<Row> rows) {
             this.format = format;
             this.arm = arm;
+            this.initialization = initialization;
             this.rows = rows;
         }
 
@@ -70,12 +74,22 @@ public final class ReplayCheck {
     // ------------------------------------------------------------------ reading a leaf
 
     public static Leaf read(Path dir) throws IOException {
-        if (Files.isRegularFile(dir.resolve("turns.csv"))) return readMagat(dir.resolve("turns.csv"));
+        if (Files.isRegularFile(dir.resolve("turns.csv"))) return readMagat(dir.resolve("turns.csv"), initializationOf(dir));
         if (Files.isRegularFile(dir.resolve("turn_telemetry.csv"))) return readLegacy(dir);
         throw new IOException(dir + " holds neither turns.csv nor turn_telemetry.csv");
     }
 
-    private static Leaf readMagat(Path turns) throws IOException {
+    /** The run's recorded initialization: {@code <split>/_run.json} above {@code <arm>/<budget>cu}; a run without one is the thesis's. */
+    private static TurnBudget.Initialization initializationOf(Path leafDir) throws IOException {
+        Path abs = leafDir.toAbsolutePath();
+        Path run = abs.getParent() == null || abs.getParent().getParent() == null ? null : abs.getParent().getParent().resolve("_run.json");
+        if (run == null || !Files.isRegularFile(run)) return TurnBudget.Initialization.OUTSIDE_BUDGET;
+        com.eclipsesource.json.JsonValue v = com.eclipsesource.json.Json.parse(new String(Files.readAllBytes(run), StandardCharsets.UTF_8))
+                .asObject().get("initialization");
+        return v == null || !v.isString() ? TurnBudget.Initialization.OUTSIDE_BUDGET : TurnBudget.Initialization.of(v.asString());
+    }
+
+    private static Leaf readMagat(Path turns, TurnBudget.Initialization initialization) throws IOException {
         List<String> lines = Files.readAllLines(turns, StandardCharsets.UTF_8);
         List<String> header = Arrays.asList(lines.get(0).split(","));
         List<Row> rows = new ArrayList<>();
@@ -92,7 +106,7 @@ public final class ReplayCheck {
             }
             rows.add(r);
         }
-        return new Leaf("magat", arm, rows);
+        return new Leaf("magat", arm, initialization, rows);
     }
 
     /** Thesis columns and the candidate's name for each; the telemetry ones are compared when the candidate reports them. */
@@ -141,7 +155,7 @@ public final class ReplayCheck {
         }
         List<Row> rows = new ArrayList<>(byKey.values());
         rows.sort((a, b) -> a.scenario != b.scenario ? Integer.compare(a.scenario, b.scenario) : Integer.compare(a.visit, b.visit));
-        return new Leaf("thesis", arm, rows);
+        return new Leaf("thesis", arm, TurnBudget.Initialization.OUTSIDE_BUDGET, rows);
     }
 
     // ------------------------------------------------------------------ replaying
@@ -171,8 +185,20 @@ public final class ReplayCheck {
         return m;
     }
 
+    // A leaf's turns are replayed as they were budgeted (the thesis's: the initialization outside the budget).
     public static <S, A> Result run(Game<S, A> game, Portfolio<S> portfolio, AgentFactory<S, A> arm, long budget, Leaf leaf,
                                     int k, int threads) throws Exception {
+        TurnBudget.Initialization was = TurnBudget.initialization();
+        TurnBudget.setInitialization(leaf.initialization);
+        try {
+            return replay(game, portfolio, arm, budget, leaf, k, threads);
+        } finally {
+            TurnBudget.setInitialization(was);
+        }
+    }
+
+    private static <S, A> Result replay(Game<S, A> game, Portfolio<S> portfolio, AgentFactory<S, A> arm, long budget, Leaf leaf,
+                                        int k, int threads) throws Exception {
         List<Row> pick = new ArrayList<>();
         int n = Math.min(k, leaf.rows.size());
         for (int i = 0; i < n; i++) pick.add(leaf.rows.get((int) ((long) i * leaf.rows.size() / n)));

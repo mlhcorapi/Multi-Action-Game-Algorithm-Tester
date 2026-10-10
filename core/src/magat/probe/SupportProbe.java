@@ -2,6 +2,7 @@ package magat.probe;
 
 import magat.agent.AgentFactory;
 import magat.agent.Episode;
+import magat.agent.TurnBudget;
 import magat.game.Game;
 import magat.game.Scenario;
 import magat.run.RunGuard;
@@ -55,8 +56,20 @@ public final class SupportProbe {
         }
     }
 
+    // The thesis's floor files: its budgets bounded the search alone, the initialization outside it (TurnBudget).
     public static <S, A> List<Level> run(Game<S, A> game, AgentFactory<S, A> arm, List<Scenario<S>> scenarios, long[] budgets,
                                          int threads, double criterion, Path csv) throws Exception {
+        TurnBudget.Initialization was = TurnBudget.initialization();
+        TurnBudget.setInitialization(TurnBudget.Initialization.OUTSIDE_BUDGET);
+        try {
+            return probe(game, arm, scenarios, budgets, threads, criterion, csv);
+        } finally {
+            TurnBudget.setInitialization(was);
+        }
+    }
+
+    private static <S, A> List<Level> probe(Game<S, A> game, AgentFactory<S, A> arm, List<Scenario<S>> scenarios, long[] budgets,
+                                            int threads, double criterion, Path csv) throws Exception {
         List<Level> out = new ArrayList<>();
         for (long budget : budgets) {
             Level level = new Level(budget);

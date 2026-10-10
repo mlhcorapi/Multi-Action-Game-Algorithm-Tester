@@ -100,6 +100,56 @@ public class ProbeToyTest {
     }
 
     @Test
+    public void aRunWithItsInitializationInTheBudgetReplaysAsItWasBudgeted() throws Exception {
+        Path pdir = Files.createTempDirectory("magat-replay3-portfolio");
+        PortfolioBuilder.build(game, Collections.singletonMap("toy", 6), pdir, 1);
+        Split.freeze(pdir);
+        Portfolio<ToyGame.State> p = Portfolio.load(game, pdir);
+        Path work = Files.createTempDirectory("magat-replay3");
+        Weights w = Weights.load(magat.run.GridRunnerTest.weightsV2(work, "w2.properties", 0.5, "emcts", "emcts-comma"));
+        Path spec = Files.write(work.resolve("s.json"), ("{\"name\":\"r\",\"game\":\"toy\",\"baseline\":\"emcts\",\"initialization\":\"in-budget\","
+                + "\"levels\":[{\"budget\":300,\"visits\":2}],\"arms\":[\"emcts\",\"emcts-comma\"]}").getBytes(StandardCharsets.UTF_8));
+        GridRunner.Options o = new GridRunner.Options();
+        o.split = Split.Half.ALL;
+        o.out = work.resolve("run");
+        o.threads = 2;
+        assertEquals(GridRunner.OK, GridRunner.run(magat.run.GridRunnerTest.module(game, new ArrayList<>()), Experiment.load(spec), p, w, o));
+        assertEquals("the run leaves the JVM's policy as it found it", magat.agent.TurnBudget.Initialization.IN_BUDGET,
+                magat.agent.TurnBudget.initialization());
+        assertTrue(new String(Files.readAllBytes(o.out.resolve("all").resolve("_run.json")), StandardCharsets.UTF_8)
+                .contains("\"initialization\": \"in-budget\""));
+        Path leafDir = magat.run.Leaf.dir(o.out.resolve("all"), "emcts", 300);
+        ReplayCheck.Leaf leaf = ReplayCheck.read(leafDir);
+        assertEquals(magat.agent.TurnBudget.Initialization.IN_BUDGET, leaf.initialization);
+        Meter.install(w);
+        ReplayCheck.Result ok = ReplayCheck.run(game, p, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 300, leaf, 100, 2);
+        assertTrue(ok.failures.toString(), ok.pass());
+    }
+
+    @Test
+    public void aTimeCheckReportsEveryTurnOfEveryArmAtEveryLevel() throws Exception {
+        java.util.List<magat.game.Scenario<ToyGame.State>> positions = game.positions(5);
+        java.util.List<TimeCheck.Cell> cells = TimeCheck.run(game, java.util.Arrays.asList(EmctsFactory.<ToyGame.State, ToyGame.Move>plain(),
+                EmctsFactory.<ToyGame.State, ToyGame.Move>comma(3)), positions, new long[]{300, 600}, new double[]{1000, 1000}, 4, 1, true);
+        assertEquals(4, cells.size());
+        for (TimeCheck.Cell c : cells) {
+            assertEquals(4, c.ms.length);
+            assertTrue(c.meanMs > 0 && c.minMs <= c.medianMs && c.medianMs <= c.maxMs && c.q1Ms <= c.q3Ms);
+            assertTrue("a turn spends its level, its initialization included (" + c.meanUnits + ")", c.meanUnits >= c.budget * 0.9);
+            assertTrue(c.meanInitUnits > 0);
+            assertEquals(c.meanMs / 1000, c.ratio(), 1e-12);
+            assertFalse("a toy turn is nowhere near a second", c.within(0.05));
+        }
+        assertEquals("emcts@300 then emcts-comma@300", "emcts-comma", cells.get(1).arm);
+        assertEquals(600, cells.get(2).budget);
+        Path out = Files.createTempDirectory("magat-time").resolve("time.json");
+        TimeCheck.write(out, TimeCheck.json(cells, "fixed", 4, "toy"));
+        String json = new String(Files.readAllBytes(out), StandardCharsets.UTF_8);
+        assertTrue(json.contains("\"mean_ms\"") && json.contains("\"ratio\"") && json.contains("\"initialization\": \"in-budget\""));
+        assertFalse("profiling is left as it was found", Meter.PROFILE);
+    }
+
+    @Test
     public void theAuditFailsAnArmWhoseWorkIsUndeclared() {
         java.util.List<magat.game.Scenario<ToyGame.State>> positions = game.positions(2);
         java.util.List<OverheadCheck.Audit> a = OverheadCheck.audit(game, java.util.Arrays.asList(

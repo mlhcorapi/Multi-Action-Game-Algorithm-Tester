@@ -269,7 +269,15 @@ public class CalibratorToyTest {
         List<magat.game.Scenario<ToyGame.State>> s = portfolio().scenarios();
         // Eight turns at the bottom level and two at the top: the top level's positions are a subset.
         for (int i = 0; i < 2; i++)
-            assertSame(Calibrator.positionFor(s, i, 2), Calibrator.positionFor(s, i * 4, 8));
+            assertSame(Calibrator.positionFor(s, i, 2, 8), Calibrator.positionFor(s, i * 4, 8, 8));
+        // The pool is the most turns any level runs: 8 for every 8,4,2 file (its positions unchanged), 16 for 16,8,4.
+        assertEquals(8, Calibrator.pool(new int[]{8, 4, 2}));
+        assertEquals(16, Calibrator.pool(new int[]{16, 8, 4}));
+        for (int i = 0; i < 8; i++)
+            assertSame("a pool of eight picks the positions it always did", s.get((int) (((long) i * 37) % s.size())),
+                    Calibrator.positionFor(s, i, 8, 8));
+        for (int i = 0; i < 4; i++)
+            assertSame(Calibrator.positionFor(s, i, 4, 16), Calibrator.positionFor(s, i * 4, 16, 16));
         assertEquals(8, Calibrator.turnsFor(40_000, new long[]{40_000, 80_000, 400_000}, new int[]{8, 4, 2}));
         assertEquals(2, Calibrator.turnsFor(400_000, new long[]{40_000, 80_000, 400_000}, new int[]{8, 4, 2}));
         assertEquals("an unlisted level takes the nearest listed level below it", 4,

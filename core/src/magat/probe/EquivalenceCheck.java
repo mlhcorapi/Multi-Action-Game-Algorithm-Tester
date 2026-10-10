@@ -5,6 +5,7 @@ import magat.agent.Episode;
 import magat.agent.Oracle;
 import magat.agent.Seeds;
 import magat.agent.Signature;
+import magat.agent.TurnBudget;
 import magat.agent.TurnRecord;
 import magat.game.Game;
 import magat.game.Scenario;
@@ -58,9 +59,22 @@ public final class EquivalenceCheck {
 
     private EquivalenceCheck() {}
 
+    // The thesis's turns: its budgets bounded the search alone, the initialization outside it (TurnBudget).
     public static <S, A> Result run(Game<S, A> game, AgentFactory<S, A> arm, Oracle<S> oracle,
                                     List<Scenario<S>> scenarios, int visits, long[] budgets,
                                     Weights weights, int threads) throws Exception {
+        TurnBudget.Initialization was = TurnBudget.initialization();
+        TurnBudget.setInitialization(TurnBudget.Initialization.OUTSIDE_BUDGET);
+        try {
+            return compare(game, arm, oracle, scenarios, visits, budgets, weights, threads);
+        } finally {
+            TurnBudget.setInitialization(was);
+        }
+    }
+
+    private static <S, A> Result compare(Game<S, A> game, AgentFactory<S, A> arm, Oracle<S> oracle,
+                                         List<Scenario<S>> scenarios, int visits, long[] budgets,
+                                         Weights weights, int threads) throws Exception {
         Result result = new Result(arm.id());
         ExecutorService pool = Executors.newFixedThreadPool(Math.max(1, threads));
         try {

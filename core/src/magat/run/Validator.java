@@ -57,6 +57,12 @@ public final class Validator {
         if (x.game == null) r.errors.add("the spec names no game");
         else if (!x.game.equals(game)) r.errors.add("the spec is for game '" + x.game + "', not '" + game + "'");
         for (String k : x.unknownKeys) r.warnings.add("unknown key '" + k + "' (ignored; a typo?)");
+        if (x.initialization == null)
+            r.errors.add("initialization '" + x.initializationValue + "': in-budget (MAGAT's standard) or outside-budget (the thesis's)");
+        else if (!x.initializationDeclared)
+            r.warnings.add("no \"initialization\": each turn's initialization stays outside its budget, as the thesis ran (and as a spec "
+                    + "written before 2026-10-10 means); declare \"initialization\": \"in-budget\" for MAGAT's standard, where a level is the "
+                    + "whole turn's thinking time");
 
         // ---- levels and arms
         if (x.levels.isEmpty()) r.errors.add("no levels");

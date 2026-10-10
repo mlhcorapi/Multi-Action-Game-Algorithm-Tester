@@ -3,6 +3,7 @@ package magat.calibrate;
 import magat.agent.AgentFactory;
 import magat.agent.AgentRegistry;
 import magat.agent.Episode;
+import magat.agent.TurnBudget;
 import magat.agent.TurnRecord;
 import magat.game.Game;
 import magat.game.Scenario;
@@ -52,10 +53,13 @@ import java.util.TreeSet;
  */
 public final class Calibrator {
 
-    /** Size of the position pool; levels that run fewer turns take a spread subset of the same pool. */
-    public static final int POSITION_POOL = 8;
-    /** Per level: the zero-evaluation arms make four times fewer copies, so the bottom level needs eight turns. */
-    public static final String DEFAULT_TURNS = "8,4,2";
+    /**
+     * Per level, for a new currency. The position pool is the largest entry (sixteen positions), and levels
+     * that run fewer turns take a spread subset of the same pool. A file keeps the turns it was measured with:
+     * every {@code 8,4,2} file (the thesis's and MAGAT's before 2026-10-10) has a pool of eight, as before.
+     * Sixteen, because a turn's time depends on its position several-fold, far more than on the arm.
+     */
+    public static final String DEFAULT_TURNS = "16,8,4";
     public static final int DEFAULT_REPS = 3;
     public static final int DEFAULT_WARMUP = 6;
     public static final long MIN_OPS = 20_000;
@@ -66,8 +70,14 @@ public final class Calibrator {
 
     private Calibrator() {}
 
+    /** The levels when nothing names them: no {@code --levels}, no file to extend, no published default. */
+    public static final long[] FALLBACK_LEVELS = {40_000L, 80_000L, 400_000L};
+
     public static final class Options {
-        public long[] levels = {40_000L, 80_000L, 400_000L};
+        /** Explicit levels ({@code --levels}); null takes the file's, else {@link #defaultLevels}, else {@link #FALLBACK_LEVELS}. */
+        public long[] levels;
+        /** The game's published levels ({@code --default-levels}, from {@code games/<game>/levels.json}); used for a new currency. */
+        public long[] defaultLevels;
         /** Arm ids to price; null means every registered arm whose budget buys search. */
         public List<String> arms;
         public int reps = DEFAULT_REPS;
@@ -122,8 +132,24 @@ public final class Calibrator {
             throw new IllegalStateException(existingPath + " was measured on portfolio " + existing.portfolioIdentity()
                     + "; this portfolio is " + portfolio.identity() + ". Turns-per-rep selects positions out of a portfolio, so "
                     + "a calibration on another one measures different material.");
+        long[] levels = o.levels != null ? o.levels
+                : existing != null && existing.header().get("levels") != null ? parseLongs(existing.header().get("levels"))
+                : o.defaultLevels != null ? o.defaultLevels : FALLBACK_LEVELS;
+        // A file's turns were measured with its initialization policy (a file without one is the thesis's: outside).
+        TurnBudget.Initialization initialization = TurnBudget.initialization();
+        if (existing != null && o.underLoad <= 1) {
+            String had = existing.header().get("initialization");
+            TurnBudget.Initialization fileInit = had == null ? TurnBudget.Initialization.OUTSIDE_BUDGET : TurnBudget.Initialization.of(had);
+            if (fileInit != initialization && !o.check)
+                throw new IllegalStateException(existingPath + " was measured with the initialization " + fileInit + " the budget; this "
+                        + "session plays turns with it " + initialization + ". A merge would price unlike turns: calibrate a new currency, "
+                        + "or pass --initialization " + fileInit.id + " to extend this one as it was measured.");
+            if (fileInit != initialization)
+                System.out.println("# note: " + existingPath + " was measured with the initialization " + fileInit + " the budget; this "
+                        + "check plays turns with it " + initialization + " (pass --initialization " + fileInit.id + " to match)");
+        }
         String reference = existing != null && existing.reference() != null ? existing.reference()
-                : Profile.key(referenceArm, Arrays.stream(o.levels).min().orElse(40_000L));
+                : Profile.key(referenceArm, Arrays.stream(levels).min().orElse(40_000L));
         String refArm = Profile.arm(reference);
         long refBudget = Profile.budget(reference);
         if (!registry.has(refArm)) throw new IllegalStateException("the reference arm '" + refArm + "' is not registered");
@@ -134,7 +160,7 @@ public final class Calibrator {
         for (String a : arms) if (!registry.has(a)) throw new IllegalArgumentException("unknown arm '" + a + "'; registered: " + registry.ids());
 
         TreeSet<Long> levelSet = new TreeSet<>();
-        for (long l : o.levels) levelSet.add(l);
+        for (long l : levels) levelSet.add(l);
         String levelsHeader = existing != null && existing.header().get("levels") != null ? existing.header().get("levels") : join(levelSet);
         String turnsSpec = o.turns != null ? o.turns
                 : existing != null && existing.turnsPerRep() != null ? existing.turnsPerRep() : DEFAULT_TURNS;
@@ -144,6 +170,7 @@ public final class Calibrator {
                     + "would measure different material (the 55% phantom drift). Leave --turns unset.");
         long[] turnLevels = parseLongs(levelsHeader);
         int[] turns = parseInts(turnsSpec);
+        int pool = pool(turns);
 
         List<Cell> cells = new ArrayList<>();
         Cell ref = null;
@@ -188,7 +215,9 @@ public final class Calibrator {
         System.out.println("# reference cell " + reference + "   levels " + join(levelSet) + "   arms " + arms);
         System.out.println("# reps " + o.reps + "   turns/rep " + turnsSpec + " over levels " + levelsHeader + "   warmup " + o.warmup
                 + "   gap gate " + gapLimitPct + "%   min ops " + MIN_OPS + (o.toy ? " (reported, not enforced)" : ""));
-        System.out.println("# portfolio " + portfolio.identity() + " (" + portfolio.size() + " positions)");
+        System.out.println("# portfolio " + portfolio.identity() + " (" + portfolio.size() + " positions; a pool of " + pool + " of them)");
+        System.out.println("# initialization: " + initialization + (initialization == TurnBudget.Initialization.IN_BUDGET
+                ? " (each turn's budget pays for its initial plan)" : " (each turn's initial plan is outside its budget, as the thesis ran)"));
         System.out.println(pricesOps ? "# currency version 2: every operation an arm declares is measured and priced"
                 : "# currency version 1: the forward model is priced; the arms' own operations are measured for the audit and stay free");
         System.out.println(String.format(Locale.ROOT, "# every cell is measured under the fixed measurement weights (advance %s, copy %s, eval %s, "
@@ -198,7 +227,7 @@ public final class Calibrator {
         MachineProfile.get().printBanner("calibration");
         if (o.estimate) {
             Result er = new Result();
-            er.estimateSeconds = estimate(game, registry.get(refArm), cells, refBudget, portfolio.scenarios(), o, turnLevels, turns, existing);
+            er.estimateSeconds = estimate(game, registry.get(refArm), cells, refBudget, portfolio.scenarios(), o, turnLevels, turns, pool, existing);
             er.pass = true;
             return er;
         }
@@ -235,14 +264,14 @@ public final class Calibrator {
                     AgentFactory<S, A> refFactory = registry.get(refArm);
                     Meter.PROFILE = true;          // warm the timed code path, not the untimed one
                     for (int i = 0; i < o.warmup; i++)
-                        Episode.run(game, positionFor(scenarios, i % POSITION_POOL, POSITION_POOL), 9_000 + i, refFactory, c.budget);
+                        Episode.run(game, positionFor(scenarios, i % pool, pool, pool), 9_000 + i, refFactory, c.budget);
                     Meter.PROFILE = false;
                     System.gc();                   // each level starts from a comparable heap
                 }
                 int n = turnsFor(c.budget, turnLevels, turns);
                 LoadHarness load = o.underLoad > 1 ? LoadHarness.start(game, arm, c.budget, scenarios, o.underLoad - 1) : null;
                 try {
-                    measure(game, arm, c, scenarios, o.reps, n, minOps, gapLimit, pricesOps);
+                    measure(game, arm, c, scenarios, o.reps, n, pool, minOps, gapLimit, pricesOps);
                 } finally {
                     if (load != null) load.stop();
                 }
@@ -263,14 +292,14 @@ public final class Calibrator {
                 AgentFactory<S, A> refFactory = registry.get(refArm);
                 Meter.PROFILE = true;
                 for (int i = 0; i < o.warmup; i++)
-                    Episode.run(game, positionFor(scenarios, i % POSITION_POOL, POSITION_POOL), 9_000 + i, refFactory, refBudget);
+                    Episode.run(game, positionFor(scenarios, i % pool, pool, pool), 9_000 + i, refFactory, refBudget);
                 Meter.PROFILE = false;
                 System.gc();
                 LoadHarness load = o.underLoad > 1 ? LoadHarness.start(game, refFactory, refBudget, scenarios, o.underLoad - 1) : null;
                 try {
                     bracket = new Cell(refArm, refBudget);
                     bracket.role = "bracket";
-                    measure(game, refFactory, bracket, scenarios, o.reps, turnsFor(refBudget, turnLevels, turns), minOps, gapLimit, pricesOps);
+                    measure(game, refFactory, bracket, scenarios, o.reps, turnsFor(refBudget, turnLevels, turns), pool, minOps, gapLimit, pricesOps);
                 } finally {
                     if (load != null) load.stop();
                 }
@@ -401,7 +430,7 @@ public final class Calibrator {
      * divide every turn's nanoseconds by the last turn's search count).
      */
     private static <S, A> void measure(Game<S, A> game, AgentFactory<S, A> arm, Cell c, List<Scenario<S>> scenarios,
-                                       int reps, int turns, long minOps, double gapLimit, boolean pricesOps) {
+                                       int reps, int turns, int pool, long minOps, double gapLimit, boolean pricesOps) {
         long cellStart = System.nanoTime();
         List<String> declared = arm.operations();
         Meter.declare(declared);
@@ -411,13 +440,13 @@ public final class Calibrator {
             c.ops.put(declared.get(j), new Cell.OpStat());
         }
         Meter.PROFILE = true;
-        Episode.run(game, positionFor(scenarios, 0, turns), 9_500, arm, c.budget);
+        Episode.run(game, positionFor(scenarios, 0, turns, pool), 9_500, arm, c.budget);
         Meter.PROFILE = false;
         for (int rep = 0; rep < reps; rep++) {
             long adv = 0, cop = 0, ev = 0, nsA = 0, nsC = 0, nsE = 0, wall = 0, opNs = 0;
             long[] opCount = new long[idx.length], opTimed = new long[idx.length], opNanos = new long[idx.length];
             for (int i = 0; i < turns; i++) {
-                Scenario<S> sc = positionFor(scenarios, i, turns);
+                Scenario<S> sc = positionFor(scenarios, i, turns, pool);
                 Meter.resetNanos();
                 Meter.PROFILE = true;
                 // visit 0 in every repetition: a repetition must repeat, or the spread stops describing the machine
@@ -467,7 +496,7 @@ public final class Calibrator {
      * upper end of the printed range allows for. Writes nothing.
      */
     static <S, A> double estimate(Game<S, A> game, AgentFactory<S, A> ref, List<Cell> cells, long refBudget, List<Scenario<S>> scenarios,
-                                  Options o, long[] turnLevels, int[] turns, Weights existing) {
+                                  Options o, long[] turnLevels, int[] turns, int pool, Weights existing) {
         TreeSet<Long> levels = new TreeSet<>();
         for (Cell c : cells) levels.add(c.budget);
         java.util.Map<Long, Double> perTurn = new java.util.TreeMap<>();
@@ -481,9 +510,9 @@ public final class Calibrator {
                 // here, since a turn's time depends on its position far more than on the arm.
                 int n = turnsFor(level, turnLevels, turns);
                 Meter.PROFILE = true;
-                Episode.run(game, positionFor(scenarios, 0, n), 9_000, ref, level);        // discarded
+                Episode.run(game, positionFor(scenarios, 0, n, pool), 9_000, ref, level);        // discarded
                 long t0 = System.nanoTime();
-                for (int i = 0; i < n; i++) Episode.run(game, positionFor(scenarios, i, n), 0, ref, level);
+                for (int i = 0; i < n; i++) Episode.run(game, positionFor(scenarios, i, n, pool), 0, ref, level);
                 Meter.PROFILE = false;
                 perTurn.put(level, (System.nanoTime() - t0) / 1e9 / n);
                 System.out.println(String.format(Locale.ROOT, "  [estimate] %s @ %d: %.2f s per turn over the level's %d positions",
@@ -549,8 +578,16 @@ public final class Calibrator {
      * budget, so every level measures the same positions (a weight means its ratio to the reference
      * cell, which sits at another level); the stride spreads the pool across the portfolio.
      */
-    static <S> Scenario<S> positionFor(List<Scenario<S>> portfolio, int i, int turns) {
-        int slot = (int) ((long) i * POSITION_POOL / Math.max(1, turns));
+    /** The position pool of a session: the most turns any level runs. */
+    static int pool(int[] turns) {
+        int p = 1;
+        for (int t : turns) p = Math.max(p, t);
+        return p;
+    }
+
+    /** Turn {@code i} of {@code turns} at a level, out of a pool of {@code pool} positions spread over the portfolio. */
+    public static <S> Scenario<S> positionFor(List<Scenario<S>> portfolio, int i, int turns, int pool) {
+        int slot = (int) ((long) i * pool / Math.max(1, turns));
         return portfolio.get((int) (((long) slot * 37) % portfolio.size()));
     }
 

@@ -1,5 +1,6 @@
 package magat.cli;
 
+import magat.agent.TurnBudget;
 import magat.calibrate.Calibrator;
 import magat.calibrate.ThreadSweep;
 import magat.game.Game;
@@ -50,7 +51,8 @@ final class CalibrateCommand {
         Game<S, A> game = module.game();
         Portfolio<S> p = Portfolio.load(game, Paths.get(args.require("portfolio")));
         ThreadSweep.Options o = new ThreadSweep.Options();
-        o.levels = args.getLongs("levels", o.levels);
+        o.levels = args.getLongs("levels", args.getLongs("default-levels", o.levels));
+        TurnBudget.setInitialization(TurnBudget.Initialization.of(args.get("initialization", TurnBudget.Initialization.IN_BUDGET.id)));
         if (args.has("ladder")) {
             long[] l = args.getLongs("ladder", null);
             o.ladder = new int[l.length];
@@ -76,7 +78,9 @@ final class CalibrateCommand {
         Portfolio<S> p = Portfolio.load(game, Paths.get(args.require("portfolio")));
         Calibrator.Options o = new Calibrator.Options();
         o.check = check;
-        o.levels = args.getLongs("levels", o.levels);
+        o.levels = args.getLongs("levels", null);
+        o.defaultLevels = args.getLongs("default-levels", null);
+        TurnBudget.setInitialization(TurnBudget.Initialization.of(args.get("initialization", TurnBudget.Initialization.IN_BUDGET.id)));
         if (args.has("arms")) o.arms = module.expandArms(args.getList("arms", new ArrayList<>()));
         o.reps = args.getInt("reps", o.reps);
         o.turns = args.get("turns");

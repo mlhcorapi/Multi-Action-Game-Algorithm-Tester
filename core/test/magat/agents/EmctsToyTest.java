@@ -39,6 +39,25 @@ public class EmctsToyTest {
     }
 
     @Test
+    public void inTheBudgetTheWholeTurnSpendsItOutsideTheSearchAloneDoes() {
+        TurnRecord in = Episode.run(game, positions.get(0), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 2_000);
+        magat.agent.TurnBudget.setInitialization(magat.agent.TurnBudget.Initialization.OUTSIDE_BUDGET);
+        TurnRecord out;
+        try {
+            out = Episode.run(game, positions.get(0), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 2_000);
+        } finally {
+            magat.agent.TurnBudget.setInitialization(magat.agent.TurnBudget.Initialization.IN_BUDGET);
+        }
+        assertTrue(in.initUnits > 0);
+        assertEquals("the same greedy initialization either way", in.initUnits, out.initUnits, 1e-9);
+        double turn = in.units + in.initUnits;
+        assertTrue("in the budget, the turn reaches it (" + turn + ")", turn >= 2_000 * 20 / 21);
+        assertTrue("and overshoots by one iteration at most", turn < 2_000 + 60);
+        assertTrue("outside, the search alone reaches it (" + out.units + ")", out.units >= 2_000 * 20 / 21);
+        assertTrue("so the search in the budget is the shorter by the initialization", in.units < out.units);
+    }
+
+    @Test
     public void searchRunsWithinBudgetAndImproves() {
         TurnRecord r = Episode.run(game, positions.get(0), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 2_000);
         assertTrue("final >= initial", r.finalValue >= r.initial);
