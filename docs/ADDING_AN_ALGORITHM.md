@@ -56,7 +56,7 @@ public final class FirstAgent<S, A> implements SearchAgent<S, A> {
     public TurnRecord plan(Game<S, A> game, S state, int player, TurnBudget budget) {
         long t0 = System.currentTimeMillis();
         double initial = game.evaluate(state, player);
-        budget.beginSearch();                         // from here on, every priced operation is paid from the budget
+        budget.beginSearch();                         // the initial evaluation is the initialization (in the budget, by default)
         double best = initial, sum = 0;
         boolean bestTerminal = false;
         int bestLength = 0;
@@ -116,8 +116,9 @@ What each part does:
 - **`plan` gets its own copy of the position** and the player to plan for. A fresh agent is created
   for every turn, so it may keep per-turn state freely and must keep none across turns.
 - **`budget.beginSearch()`** marks the boundary: what came before is initialization, reported in the
-  `init_*` columns and excluded from the budget. An agent with no initialization never calls it, and
-  then the whole turn counts.
+  `init_*` columns. It is paid from the budget (the search gets what is left), so a level is the whole
+  turn's thinking time, and an expensive initialization is not free. An agent with no initialization
+  never calls it, and then the whole turn counts.
 - **`budget.exhausted()`** is the stop rule: units spent, at this arm's prices, reach the budget. Every
   `copy`, `advance` and `evaluate` through `game` is counted by the meter, which the agent never touches
   for the forward model.
@@ -251,6 +252,7 @@ against the original rather than trusting it:
      "game": "tribes",
      "split": "dev",
      "baseline": "emcts-comma",
+     "initialization": "in-budget",
      "levels": [ { "budget": 40000, "visits": 4 }, { "budget": 80000, "visits": 4 } ],
      "arms": [ { "id": "emcts-comma" }, { "id": "first" } ],
      "contrasts": [ { "a": "first", "b": "emcts-comma", "label": "random restarts against the baseline" } ]

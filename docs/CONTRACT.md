@@ -127,10 +127,12 @@ it is empty for agents without a learned mechanism.
 
 ### `TurnBudget`
 
-- `beginSearch()` snapshots the initialization spend and resets the meter: the budget bounds what
-  follows. An agent with no initialization phase never calls it, and the whole turn counts.
-- `exhausted()` is `Meter.units() >= units`.
-- `ceiling(phase, phases)` is the EMCTS phase rule, `(phase+1) * units / phases`.
+- `beginSearch()` snapshots the initialization spend and resets the meter. In the budget, the default,
+  the search then gets what the initialization left, so the whole turn spends the budget; outside it
+  (the thesis's rule, `"initialization": "outside-budget"`) the budget bounds the search alone. An
+  agent with no initialization phase never calls it, and the whole turn counts.
+- `exhausted()` is `Meter.units() >=` the search's share.
+- `ceiling(phase, phases)` is the EMCTS phase rule, `(phase+1) * share / phases`, whole units.
 - `units()` is the budget.
 
 ### `TurnRecord`
@@ -141,7 +143,7 @@ it is empty for agents without a learned mechanism.
 | `terminal` | whether the best plan reaches a terminal state |
 | `advances`, `copies`, `evals`, `units` | the search's spend after `beginSearch()`: raw counts always, units priced by the profile in force |
 | `operations` | the count of each declared operation (one `op_<name>` column each in `turns.csv`) |
-| `initAdvances` ... `initUnits`, `initMillis`, `initOperations` | the initialization's spend, reported and excluded from the budget |
+| `initAdvances` ... `initUnits`, `initMillis`, `initOperations` | the initialization's spend, reported separately and paid from the budget (unless the turn is budgeted outside it) |
 | `planMillis` | the wall-clock of the whole episode: co-primary evidence, never a budget |
 | `nodes`, `unique`, `duplicates` | candidates evaluated, the distinct plans among them, and the candidates whose plan had already been evaluated |
 | `sequenceLength` | the actions in the final plan |

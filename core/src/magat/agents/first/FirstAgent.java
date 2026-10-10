@@ -39,7 +39,7 @@ public final class FirstAgent<S, A> implements SearchAgent<S, A> {
     public TurnRecord plan(Game<S, A> game, S state, int player, TurnBudget budget) {
         long t0 = System.currentTimeMillis();
         double initial = game.evaluate(state, player);
-        budget.beginSearch();                         // from here on, every priced operation is paid from the budget
+        budget.beginSearch();                         // the initial evaluation is the initialization (in the budget, by default)
         double best = initial, sum = 0;
         boolean bestTerminal = false;
         int bestLength = 0;

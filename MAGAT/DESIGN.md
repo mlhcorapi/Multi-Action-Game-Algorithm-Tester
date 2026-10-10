@@ -382,11 +382,13 @@ public interface SearchAgent<S, A> {
 }
 
 public final class TurnBudget {
-    /** Snapshots initialization spend and resets the meter: the budget bounds what follows.
-     *  An agent with no initialization phase never calls it and the whole turn counts. */
+    /** Snapshots initialization spend and resets the meter. In the budget (the default since
+     *  2026-10-10) the search then gets what the initialization left; outside it (the thesis's
+     *  rule) the budget bounds the search alone. An agent with no initialization phase never
+     *  calls it and the whole turn counts. */
     void beginSearch();
-    boolean exhausted();           // Meter.units() >= units
-    double ceiling(int phase, int phases);   // (phase+1) * units / phases — the EMCTS phase rule
+    boolean exhausted();           // Meter.units() >= the search's share
+    double ceiling(int phase, int phases);   // (phase+1) * share / phases — the EMCTS phase rule
     double units();                // the budget
 }
 ```
@@ -398,7 +400,7 @@ generic part of the telemetry row):
 |---|---|
 | `initial`, `final` | value of the starting plan and of the best plan found |
 | `advances`, `copies`, `evals`, `units` | search spend after `beginSearch()`; raw counts always, units priced by the profile in force |
-| `initAdvances`, `initCopies`, `initEvals`, `initUnits`, `initMillis` | initialization spend, reported and excluded from the budget |
+| `initAdvances`, `initCopies`, `initEvals`, `initUnits`, `initMillis` | initialization spend, reported separately; paid from the budget unless the turn's policy is `outside-budget` (§6.2 amendment of 2026-10-10) |
 | `planMillis` | wall-clock of the whole episode (co-primary evidence, never a budget) |
 | `nodes`, `unique`, `duplicates` | candidates evaluated, distinct sequences among them, candidates whose sequence had already been evaluated |
 | `terminal` | the best plan reaches a terminal state (replaces the ±1e9 magnitude test) |
@@ -506,6 +508,31 @@ machine measures the reference cell for its own nanoseconds per unit and prices 
 arm, per (arm, budget), as its own nanoseconds over that: the ratio re-denomination of §8.2, extended
 from three operations to all of them. A machine uniformly slower cancels exactly; relative drift between
 operations does not, and the drift report states it.*
+
+*Amended 2026-10-10: a level is a round amount of thinking time on the reference machine.* Levels stay
+fixed unit counts, but they are chosen so that each is T milliseconds of a whole turn, its
+initialization included, single-threaded on the R7615, averaged over positions spread across the
+portfolio: 500, 1000 and 5000 ms, each found within 5% by `magat calibrate-time` (§8.8), rounded to the
+nearest 500 units, and published in `games/<game>/levels.json`. A level's prices make its units buy the
+same time for every arm, so the reference arm's time is the level's time, and a result at a level reads
+"as though each arm had thought for T ms, single-threaded, on the R7615". The mean is the anchor because
+units equalise arms, not positions: on the laptop a turn's time per unit ranged from 12 to 68 µs over 40
+positions (quartiles 24-44), mostly with the number of units on the board, whose moves the engine
+recomputes after every advance. The thesis's levels (40,000 / 80,000 / 400,000) stay with the worked
+result.
+
+*Also amended 2026-10-10: a turn's initialization is paid from its budget*
+(`TurnBudget.Initialization.IN_BUDGET`). The search gets what the initialization left, so the whole turn
+spends the level. EMCTS's greedy initial plan, a copy, an advance and an evaluation for every legal
+action at every step, cost 600-3,200 units at 20,000 on six Tribes positions; outside the budget those
+turns ran 3-18% over their level, and an algorithm whose initialization is costly got that work free.
+The thesis's rule (`OUTSIDE_BUDGET`) remains where turns are compared with the thesis's: the oracle
+gate, the support probe and the replay of thesis leaves (a MAGAT leaf replays as its `_run.json` says it
+was budgeted). A spec declares `"initialization"`; one that does not keeps the thesis's rule, so the
+worked result's specs, whose hashes its results record, mean what they meant. A currency records the
+policy its turns were measured under; a merge across policies is refused, and a check plays the checked
+file's. The structure check's budget rose from 8,000 to 12,000 units, so that its selection rules still have
+a search to differ in once the initial plan is paid.*
 
 ### 6.3 Weights file, version 1
 
@@ -1093,6 +1120,43 @@ reads it, records it and locks it.*
 
 ---
 
+### 8.8 Levels as thinking time (`calibrate-time`, `check time`)
+
+*Added 2026-10-10.* `magat check time` plays an arm's whole turns at levels, single-threaded and
+without the meter's profiling (as a run plays them), one turn on each of N positions spread evenly over
+the portfolio (64 by default), under a currency or the fixed measurement weights, and reports each
+level's mean, median, quartiles and range in milliseconds, the initialization's share, and the distance
+from a target. `magat calibrate-time` (`tools/calibrate_time.py`) uses it on the reference machine:
+
+1. A probe of the reference arm at 20,000 units under the fixed measurement weights gives a first
+   time per unit, so a first guess for each target time.
+2. Each iteration calibrates the reference arm at the guesses (`magat calibrate`, a working currency of
+   its own, so each level has its own prices) and times it under that currency. A level whose mean is
+   more than 5% from its time is rescaled by target over measured, and the iteration repeats (four at
+   most).
+3. The found levels are rounded to the nearest 500 units and timed once more there; `levels.json`
+   records the levels, what was found before rounding, every iteration, and the measured mean, median,
+   quartiles and range of each.
+
+Published as `games/<game>/levels.json`, the levels are what the launcher passes as `--default-levels`
+to `calibrate`, `threads` and `check time` when no `--levels` is named; the calibrator ranks them below
+the levels of a file it extends or checks. On the laptop (engine `828b130`) a probe under the fixed
+weights put a turn at about 34 µs per unit (1000 ms near 29,000 units) and the median initialization at
+about 1,500 units, 50-60 ms; the R7615's own measurement sets the published levels.
+
+New currencies measure the same 16 positions at every level (`16,16,16` turns per repetition). A turn's
+time depends on its position several-fold, far more than on the arm or the level, so levels priced on
+different subsets price a unit differently. The laptop's first time calibration, with `16,8,4`, found a
+unit 33.7 µs at the 500 ms level (16 positions), 24.0 µs at 1000 ms (8) and 26.1 µs at 5000 ms (4): the
+levels still came out within 5% of their times (15,000 / 41,000 / 199,000 units), but 1000 ms took 2.7
+times the units of 500 ms. On the same positions a unit is the same time at every level: run again with
+`16,16,16`, the laptop found 31.7-32.4 µs per unit at all three levels, the reference arm's advance priced
+1.00 / 1.00 / 0.97 across them, every level within 2% at the first guess, and levels of 16,000 / 31,000 /
+155,000 units (+5.1% / -1.5% / +1.0% at the rounded values; rounding 15,508 to 16,000 moved the first by
+3%). The laptop's are an illustration; the R7615's are the published ones. The cost is about the old
+calibration's: 16 x (0.5 + 1 + 5) s per repetition, against 8 x 2.5 + 4 x 5 + 2 x 25.
+Every `8,4,2` file keeps its pool of 8, so its checks and merges measure the positions it was measured on.
+
 ## 9. The runner and the experiment spec
 
 ### 9.1 Experiment spec
@@ -1151,6 +1215,11 @@ the run is declared `--toy`. `magat experiment validate` runs the validator alon
 *Amended 2026-10-06 (milestone 6b): under a version-2 currency every operation an arm declares must be
 priced at every level it runs (an error otherwise). Under a version-1 currency the validator warns that
 the arms' own operations run free, as in every published version-1 result.*
+
+*Amended 2026-10-10: `"initialization": "in-budget"` pays each turn's initialization from its budget, so a
+level is the whole turn (§6.2); `"outside-budget"` is the thesis's rule. A spec that does not declare it
+keeps the thesis's rule, and the validator warns; any other value is an error. The runner sets the policy
+for the run and records it in `_run.json`.*
 
 ### 9.2 Grid runner
 

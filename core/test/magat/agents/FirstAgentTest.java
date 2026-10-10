@@ -42,7 +42,7 @@ public class FirstAgentTest {
         TurnRecord r = Episode.run(game, positions.get(0), 0, first, 1_500, Weights.DEFAULT, "toy");
         assertEquals(FirstAgent.OPERATIONS, new ArrayList<>(r.operations.keySet()));
         assertEquals("one sample per node", r.nodes, r.operations.get("first.sample").longValue());
-        assertTrue("it stops once the budget is spent", r.units >= 1_500);
+        assertTrue("the turn spends its budget, its initialization included", r.units + r.initUnits >= 1_500);
         assertTrue("it keeps the best plan, so it never ends below where it started", r.finalValue >= r.initial);
         assertEquals(r.nodes, r.unique + r.duplicates);
     }

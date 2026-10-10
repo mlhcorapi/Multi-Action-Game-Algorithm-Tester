@@ -40,7 +40,7 @@ import java.util.concurrent.Future;
  * which re-run a registered EMCTS-family arm under another selection rule and offspring count, or as
  * {@code QdeltaEmcts} with every mechanism at its do-nothing default:
  * <pre>
- * { "budget": 8000, "scenarios": 4, "visits": 1,
+ * { "budget": 12000, "scenarios": 4, "visits": 1,
  *   "variants": { "legacy-k5": { "base": "emcts", "selection": "LEGACY", "k": 5 },
  *                 "qdelta-defaults": { "base": "emcts", "qdelta": true } },
  *   "same":   [ ["legacy-k5", "comma-k5"] ],
@@ -63,7 +63,8 @@ public final class StructureCheck {
     public static <S, A> Result run(Game<S, A> game, AgentRegistry<S, A> registry, List<Scenario<S>> portfolio, Path spec, int threads)
             throws Exception {
         JsonObject o = Json.parse(new String(Files.readAllBytes(spec), StandardCharsets.UTF_8)).asObject();
-        long budget = o.getLong("budget", 8000);
+        // 12,000 since 2026-10-10: the initial plan is paid from the budget, and the selection rules need search to differ.
+        long budget = o.getLong("budget", 12000);
         int visits = o.getInt("visits", 1);
         int n = Math.min(o.getInt("scenarios", 4), portfolio.size());
         List<Scenario<S>> positions = new ArrayList<>();

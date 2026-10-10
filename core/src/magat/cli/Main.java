@@ -72,6 +72,8 @@ public final class Main {
         System.out.println("  arms  --game <name>");
         System.out.println("  check contract    --game <name> --portfolio <dir> [--scenarios 8] [--ids 1,2,...]");
         System.out.println("  check equivalence --game <name> --portfolio <dir> --weights <file> [--arms emcts]");
+        System.out.println("  check time        --game <name> --portfolio <dir> (--weights <file> | --fixed-weights) --levels a,b [--arms ...] "
+                + "[--targets ms,ms] [--positions 64] [--tolerance 0.05] [--out time.json]");
         System.out.println("                    [--scenarios 8] [--visits 2] [--budgets 8000,40000] [--threads N] [--ids ...] [--verbose]");
         PortfolioCommand.usage();
         CalibrateCommand.usage();
@@ -136,7 +138,8 @@ public final class Main {
         if ("structure".equals(what)) return ProbeCommand.structure(args);
         if ("replay".equals(what)) return ProbeCommand.replay(args);
         if ("overhead".equals(what)) return ProbeCommand.overhead(args);
-        throw new IllegalArgumentException("check what? contract | equivalence | structure | replay | overhead");
+        if ("time".equals(what)) return ProbeCommand.time(args);
+        throw new IllegalArgumentException("check what? contract | equivalence | structure | replay | overhead | time");
     }
 
     private static <S, A> int checkContract(Args args) throws Exception {

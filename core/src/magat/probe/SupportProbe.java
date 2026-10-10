@@ -55,6 +55,7 @@ public final class SupportProbe {
         }
     }
 
+    /** Under the JVM's initialization policy, which the command sets to the currency's (the thesis's floor files: outside). */
     public static <S, A> List<Level> run(Game<S, A> game, AgentFactory<S, A> arm, List<Scenario<S>> scenarios, long[] budgets,
                                          int threads, double criterion, Path csv) throws Exception {
         List<Level> out = new ArrayList<>();

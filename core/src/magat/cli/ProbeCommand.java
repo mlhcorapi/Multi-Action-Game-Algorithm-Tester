@@ -3,6 +3,7 @@ package magat.cli;
 import com.eclipsesource.json.Json;
 import com.eclipsesource.json.JsonObject;
 import magat.agent.AgentFactory;
+import magat.agent.TurnBudget;
 import magat.calibrate.Calibrator;
 import magat.game.Game;
 import magat.game.GameModule;
@@ -14,12 +15,15 @@ import magat.probe.OverheadCheck;
 import magat.probe.ReplayCheck;
 import magat.probe.StructureCheck;
 import magat.probe.SupportProbe;
+import magat.probe.TimeCheck;
+import magat.run.RunGuard;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -140,10 +144,64 @@ final class ProbeCommand {
         return ok ? 0 : 1;
     }
 
-    /** The calibrator's position rule, so the overhead is measured on the positions the currency was. */
+    /** The calibrator's position rule (a pool of eight for its eight turns), so the overhead is measured on the positions a currency was. */
     private static <S> Scenario<S> calibrationPosition(List<Scenario<S>> portfolio, int i, int turns) {
-        int slot = (int) ((long) i * Calibrator.POSITION_POOL / Math.max(1, turns));
-        return portfolio.get((int) (((long) slot * 37) % portfolio.size()));
+        return Calibrator.positionFor(portfolio, i, turns, Math.max(8, turns));
+    }
+
+    /**
+     * {@code magat check time}: single-threaded whole turns of arms at levels under a currency (or the fixed
+     * measurement weights), over positions spread across the portfolio; the mean is the level's thinking time.
+     */
+    static <S, A> int time(Args args) throws Exception {
+        Main.banner("check time");
+        GameModule<S, A> module = Games.load(args.require("game"));
+        Portfolio<S> p = Portfolio.load(module.game(), Paths.get(args.require("portfolio")));
+        TurnBudget.setInitialization(TurnBudget.Initialization.of(args.get("initialization", TurnBudget.Initialization.IN_BUDGET.id)));
+        long[] levels = args.getLongs("levels", args.getLongs("default-levels", null));
+        if (levels == null) throw new IllegalArgumentException("check time needs --levels (no published levels for this game)");
+        List<String> armIds = args.has("arms") ? module.expandArms(args.getList("arms", new ArrayList<>()))
+                : java.util.Collections.singletonList(module.referenceArm());
+        List<AgentFactory<S, A>> arms = new ArrayList<>();
+        for (String a : armIds) arms.add(module.agents().get(a));
+        double[] targets = null;
+        if (args.has("targets")) {
+            long[] t = args.getLongs("targets", null);
+            if (t.length != levels.length) throw new IllegalArgumentException("--targets needs one time (ms) per level");
+            targets = new double[t.length];
+            for (int i = 0; i < t.length; i++) targets[i] = t[i];
+        }
+        boolean fixed = args.flag("fixed-weights");
+        String weights = "fixed measurement weights";
+        if (!fixed) {
+            Weights w = Weights.load(Paths.get(args.require("weights")));
+            Meter.install(w);
+            weights = w.source().toAbsolutePath().toString();
+        }
+        int positions = args.getInt("positions", TimeCheck.DEFAULT_POSITIONS);
+        double tolerance = Double.parseDouble(args.get("tolerance", String.valueOf(TimeCheck.DEFAULT_TOLERANCE)));
+        System.out.println(String.format(Locale.ROOT, "# %d arm(s) at %s, single-threaded, one turn on each of %d positions spread over the "
+                + "portfolio; priced by %s; initialization %s", arms.size(), Arrays.toString(levels), Math.min(positions, p.size()),
+                weights, TurnBudget.initialization()));
+        System.out.println(TimeCheck.header());
+        RunGuard.install("check time", "re-run the same command");
+        List<TimeCheck.Cell> cells = TimeCheck.run(module.game(), arms, p.scenarios(), levels, targets, positions,
+                args.getInt("warmup", TimeCheck.DEFAULT_WARMUP), fixed);
+        RunGuard.finished();
+        if (args.has("out")) {
+            Path out = Paths.get(args.get("out")).toAbsolutePath();
+            TimeCheck.write(out, TimeCheck.json(cells, weights, Math.min(positions, p.size()), module.game().id()));
+            System.out.println("# -> " + out);
+        }
+        if (targets == null) {
+            System.out.println("TIME: MEASURED");
+            return 0;
+        }
+        boolean ok = true;
+        for (TimeCheck.Cell c : cells) ok &= c.within(tolerance);
+        System.out.println(ok ? String.format(Locale.ROOT, "TIME: PASS (every cell's mean within %.0f%% of its target)", 100 * tolerance)
+                : String.format(Locale.ROOT, "TIME: OUTSIDE (a cell's mean is more than %.0f%% from its target)", 100 * tolerance));
+        return ok ? 0 : 1;
     }
 
     static <S, A> int support(Args args) throws Exception {
@@ -153,7 +211,13 @@ final class ProbeCommand {
         Meter.install(w);
         Portfolio<S> p = Portfolio.load(module.game(), Paths.get(args.require("portfolio")));
         AgentFactory<S, A> arm = module.agents().get(args.require("arm"));
-        long[] levels = args.getLongs("levels", new long[]{40_000L, 80_000L, 400_000L});
+        // The currency's own levels, and its turns' initialization policy (a file without one is the thesis's).
+        String fileLevels = w.header().get("levels");
+        long[] levels = args.getLongs("levels", fileLevels != null ? Arrays.stream(fileLevels.split(",")).mapToLong(x -> Long.parseLong(x.trim())).toArray()
+                : new long[]{40_000L, 80_000L, 400_000L});
+        String init = w.header().get("initialization");
+        TurnBudget.setInitialization(init == null ? TurnBudget.Initialization.OUTSIDE_BUDGET : TurnBudget.Initialization.of(init));
+        System.out.println("# initialization " + TurnBudget.initialization() + ", as " + w.source().getFileName() + " was measured");
         int n = Math.min(args.getInt("scenarios", 20), p.size());
         double criterion = Double.parseDouble(args.get("criterion", String.valueOf(SupportProbe.CRITERION)));
         Path csv = args.has("out") ? Paths.get(args.get("out")).resolve("support_probe_" + arm.id() + ".csv") : null;

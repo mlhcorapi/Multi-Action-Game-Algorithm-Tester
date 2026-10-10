@@ -151,6 +151,16 @@ def main(argv) -> int:
           then=lambda: (calib / "compute_weights_load3.properties").is_file() and weights.read_text(encoding="utf-8") == snapshot["w"])
     check("the published currency prices every worked-result arm",
           [PY, ROOT / "magat.py", "weights", "--game", game, "--arms", "@worked-result"], "WEIGHTS: COVERED")
+    check("check time: whole turns under the toy currency, single-threaded, against a target",
+          [PY, ROOT / "magat.py", "check", "time", "--game", game, "--weights", weights, "--arms", "emcts,emcts-comma",
+           "--levels", "2000,4000", "--targets", "100,200", "--positions", "3", "--warmup", "1",
+           "--out", calib / "time.json"], "TIME: ", codes=(0, 1), then=lambda: (calib / "time.json").is_file())
+    timed = data / "shakedown" / f"levels-{game}"
+    shutil.rmtree(timed, ignore_errors=True)
+    check("calibrate-time: probe, calibrate, time, rescale, round, levels.json (toy)",
+          [PY, ROOT / "magat.py", "calibrate-time", "--game", game, "--toy", "--times", "300,600", "--positions", "3",
+           "--round", "100", "--probe", "2000", "--max-iterations", "2", "--out", timed], "CALIBRATE-TIME: PASS",
+          then=lambda: '"time_ms": 600' in (timed / "levels.json").read_text(encoding="utf-8"))
     controlled = data / "shakedown" / f"controlled-{game}"
     shutil.rmtree(controlled, ignore_errors=True)
     priced = controlled / "compute_weights.properties"
