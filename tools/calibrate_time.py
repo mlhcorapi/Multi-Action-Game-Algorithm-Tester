@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Find the budget levels, in compute units, that are round amounts of thinking time on this machine.
 
-    python magat.py calibrate-time --game tribes                          500, 1000 and 5000 ms
-    python magat.py calibrate-time --game tribes --times 500,1000,5000 --positions 64 --tolerance 0.05
+    python magat.py calibrate-time --game tribes --remeasure              500, 1000 and 5000 ms
+    python magat.py calibrate-time --game tribes --remeasure --times 500,1000,5000 --positions 64 --tolerance 0.05
 
-Run on the reference machine (the R7615 for Tribes), idle, single-threaded like a calibration. A level's
-units then mean "this many milliseconds of thinking, initialization included, on the reference machine,
-averaged over the portfolio's positions", and every machine that spends the same currency compares arms as
-though they had run there. DESIGN 8.8 and docs/CURRENCY.md say why the mean over positions is the anchor.
+A maintainer's tool, run on the reference machine (the R7615 for Tribes), idle, single-threaded like a
+calibration, from notebooks/maintainers/measure_levels.ipynb. Once a game's levels are published
+(games/<game>/levels.json) every currency is measured at them, so new levels mean every currency must be
+measured again: the tool refuses to run without --remeasure (the toy run of the shakedown excepted).
+
+A level's units mean "this many milliseconds of thinking, initialization included, on the reference
+machine, averaged over the portfolio's positions", and every machine that spends the same currency compares
+arms as though they had run there. DESIGN 8.8 and docs/CURRENCY.md say why the mean over positions is the anchor.
 
 1. A probe: the reference arm's whole turns at one budget under the fixed measurement weights give a first
    time per unit, so a first guess of the units for each time.
@@ -72,7 +76,20 @@ def main(argv) -> int:
     ap.add_argument("--out", help="default: <data>/calibration/<game>-levels")
     ap.add_argument("--redo", action="store_true", help="measure again over an existing levels.json")
     ap.add_argument("--toy", action="store_true", help="toy sizes for the shakedown: tiny times, few positions, nothing enforced")
+    ap.add_argument("--remeasure", action="store_true",
+                    help="measure although the game's levels are published (a maintainer's decision: every currency follows)")
     a = ap.parse_args(argv)
+
+    published = ROOT / "games" / a.game / "levels.json"
+    if published.is_file() and not (a.remeasure or a.toy):
+        doc = json.loads(published.read_text(encoding="utf-8"))
+        print(f"The levels of {a.game} are published in {published.relative_to(ROOT).as_posix()}: "
+              + ", ".join(f"{lv['time_ms']} ms = {lv['units']:,} units" for lv in doc["levels"])
+              + f" (measured {doc.get('measured', '?')}).\nEvery currency and experiment is measured at them; this machine "
+              "uses them as they are. Measuring them again is a maintainer's job on the reference machine, after a change "
+              "to what a turn costs (notebooks/maintainers/measure_levels.ipynb); it takes --remeasure.")
+        print("CALIBRATE-TIME: REFUSED (the levels are published)")
+        return 3
 
     times = [int(t) for t in a.times.split(",")]
     if sorted(times) != times or len(set(times)) != len(times) or times[0] <= 0:

@@ -5,9 +5,9 @@ and records where it cannot, with a reliability verdict for every section.
     python magat.py calibrate-controlled --name laptop-i9-14900hx --preflight   the checklist; measures nothing
     python magat.py calibrate-controlled --name laptop-i9-14900hx --plan        the sections; measures nothing
     python magat.py calibrate-controlled --name laptop-i9-14900hx               every section, then the checks
-    python magat.py calibrate-controlled --name r7615-v2 --section 2            one section (one notebook cell)
-    python magat.py calibrate-controlled --name r7615-v2 --section 2 --redo     section 2 measured again
-    python magat.py calibrate-controlled --name r7615-v2 --section checks       the two drift checks
+    python magat.py calibrate-controlled --name r7615-time --section 2          one section (one notebook cell)
+    python magat.py calibrate-controlled --name r7615-time --section 2 --redo   section 2 measured again
+    python magat.py calibrate-controlled --name r7615-time --section checks     the two drift checks
 
 The measurement is `magat calibrate`, unchanged: the same cells, gates, bracket and merge. This script
 decides how it is run and keeps the evidence. docs/CALIBRATING_A_MACHINE.md is the guide.
@@ -1481,7 +1481,7 @@ def main(argv) -> int:
         pass
     ap = argparse.ArgumentParser(prog="magat calibrate-controlled", description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--name", required=True, help="the currency's name, e.g. laptop-i9-14900hx or r7615-v2")
+    ap.add_argument("--name", required=True, help="the currency's name, e.g. laptop-i9-14900hx-time or r7615-time")
     ap.add_argument("--game", default="tribes")
     ap.add_argument("--out", help="the calibration directory (default <data>/calibration/<game>-<name>)")
     ap.add_argument("--portfolio", help="default: the game's published portfolio")

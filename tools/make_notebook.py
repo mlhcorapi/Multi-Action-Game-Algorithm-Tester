@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Generate notebooks/run_magat.ipynb.
+"""Generate notebooks/run_magat.ipynb and notebooks/maintainers/measure_levels.ipynb.
 
-The notebook is generated, never hand-edited, so it is diffable and cannot drift from the CLI. One
+The notebooks are generated, never hand-edited, so they are diffable and cannot drift from the CLI. One
 cell per stage; setup cells (tagged "setup") skip themselves once their outputs exist; every stage
 ends with a bundle cell. `tools/notebook_selftest.py` executes the setup cells from three launch
 directories and must pass before a commit.
+
+run_magat.ipynb is what every machine runs: it reads the game's published levels and never measures
+them. measure_levels.ipynb is the maintainers' notebook that measures them, on the reference machine
+only, so nobody changes the levels by running the main notebook from top to bottom.
 """
 import json
 import pathlib
@@ -12,6 +16,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "notebooks" / "run_magat.ipynb"
+OUT_LEVELS = ROOT / "notebooks" / "maintainers" / "measure_levels.ipynb"
 # Section cells for the calibration: Tribes registers 32 priced arms besides the reference arm, eight to a
 # section. A different count only means the 'rest' cell measures what the numbered cells do not.
 CAL_SECTIONS = 4
@@ -67,7 +72,9 @@ PUBLISHED_WEIGHTS = ROOT / "games" / GAME / "calibration" / "r7615" / "compute_w
 WORKERS = int(os.environ.get("MAGAT_WORKERS") or max(1, (os.cpu_count() or 2) // 2 - 2))
 # This machine's own currency: <data>/calibration/<game>-<name>. The published R7615 currency stays in
 # the repository; a new calibration of the R7615 is published beside it under this name, never over it.
-CURRENCY_NAME = os.environ.get("MAGAT_CURRENCY") or "r7615-v2"
+# A currency keeps the levels it was first measured at: "r7615-time" is the first at the published levels
+# (games/<game>/levels.json); "r7615-v2" was the name for one at the thesis's 40,000 / 80,000 / 400,000.
+CURRENCY_NAME = os.environ.get("MAGAT_CURRENCY") or "r7615-time"
 
 def magat(*args, check=True):
     """Run one launcher command; the launcher tees its own output to <DATA>/logs/<name>.log."""
@@ -142,24 +149,21 @@ MACHINE_CELL = r'''
 magat("machine")
 '''
 
-TIME_LEVELS_CELL = r'''
-# The budget levels as thinking time: the units that are LEVEL_TIMES milliseconds of a whole turn (its
-# initialization included), single-threaded, averaged over positions spread across the portfolio
-# (docs/CURRENCY.md, "Units as time"). They are measured once, on the reference machine (the R7615 for
-# Tribes), and published as games/<game>/levels.json; every other machine uses the published ones.
+LEVELS_CELL = r'''
+# The budget levels, read from the game's published games/<game>/levels.json: the units that are 500, 1000
+# and 5000 ms of a whole turn (its initialization included), single-threaded on the reference machine,
+# averaged over positions spread across the portfolio (docs/CURRENCY.md, "Units as time"). This notebook
+# never measures them: every currency is measured at the published levels, whatever machine it is on.
 import json
-LEVEL_TIMES = "500,1000,5000"
-PUBLISHED_LEVELS = ROOT / "games" / GAME / "levels.json"
-MEASURED_LEVELS = DATA / "calibration" / f"{GAME}-levels" / "levels.json"
-MEASURE_LEVELS = not PUBLISHED_LEVELS.exists()     # True here on the reference machine until its levels are published
-if MEASURE_LEVELS and not MEASURED_LEVELS.exists():
-    magat("calibrate-time", "--game", GAME, "--portfolio", PORTFOLIO, "--times", LEVEL_TIMES)
-LEVELS_FILE = MEASURED_LEVELS if MEASURE_LEVELS else PUBLISHED_LEVELS
-LEVELS = ",".join(str(lv["units"]) for lv in json.loads(LEVELS_FILE.read_text(encoding="utf-8"))["levels"])
-print(f"levels from {LEVELS_FILE}: {LEVELS}")
-if MEASURE_LEVELS:
-    print((MEASURED_LEVELS.parent / "SUMMARY.md").read_text(encoding="utf-8"))
-    bundle("levels", [MEASURED_LEVELS, MEASURED_LEVELS.parent / "SUMMARY.md", LOGS / "calibrate-time.log"])
+LEVELS_FILE = ROOT / "games" / GAME / "levels.json"
+assert LEVELS_FILE.is_file(), f"{LEVELS_FILE} is missing: the levels are published with the repository (pull it again)"
+LEVELS_DOC = json.loads(LEVELS_FILE.read_text(encoding="utf-8"))
+LEVEL_UNITS = [int(lv["units"]) for lv in LEVELS_DOC["levels"]]
+LEVELS = ",".join(map(str, LEVEL_UNITS))
+MID_LEVEL = LEVEL_UNITS[len(LEVEL_UNITS) // 2]     # the level single-level checks run at
+print(f"levels of {GAME}, measured {LEVELS_DOC['measured']} on {LEVELS_DOC['machine'].split(' | ')[0]}:")
+for lv in LEVELS_DOC["levels"]:
+    print(f"  {lv['units']:>9,} units = {lv['time_ms']:>5,} ms of thinking on the reference machine (measured {lv['measured']['mean_ms']:,.0f} ms)")
 '''
 
 THREADS_CELL = r'''
@@ -226,12 +230,16 @@ calibrate_section("rest")
 '''
 
 CHECKS_CELL = r'''
-# Two checks that write nothing: this machine against the published R7615 currency (on the R7615 itself,
-# how far its prices moved since the thesis measured them), and against its own new currency.
+# Two checks that write nothing. Against its own new currency, at the published levels: did this machine
+# hold its speed across the calibration? Against the published R7615 currency, at that file's own levels
+# (the thesis's 40,000 / 80,000 / 400,000, its initialization outside the budget): how far this machine's
+# prices are from the thesis's (on the R7615 itself, how far they moved since the thesis measured them).
 calibrate_section("checks")
-# The metering overhead on this machine (ORIGIN.md lists the R7615's line as not measured yet).
-magat("check", "overhead", "--game", GAME, "--portfolio", PORTFOLIO, "--reps", 4, check=False)
-magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", "@reference")
+# The metering overhead on this machine, at the middle level of the new currency (ORIGIN.md lists the
+# R7615's line as not measured yet).
+magat("check", "overhead", "--game", GAME, "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--budget", MID_LEVEL,
+      "--reps", 4, check=False)
+magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", "@reference", "--levels", LEVELS)
 print((CALIBRATION / "record" / "SUMMARY.md").read_text(encoding="utf-8"))
 bundle("calibration", [CALIBRATION, LOGS / "calibrate-controlled.log", LOGS / "check-overhead.log"])
 '''
@@ -254,7 +262,7 @@ assert_in_log("check-equivalence", "EQUIVALENCE: PASS")
 magat("check", "structure", "--game", GAME, "--spec", ROOT / "experiments" / GAME / "structure.json")
 assert_in_log("check-structure", "STRUCTURE: PASS")
 # The audit: each arm's declared operations and forward model account for its turn (fails above 25% unaccounted).
-magat("check", "overhead", "--audit", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "@reference", "--budget", 40000)
+magat("check", "overhead", "--audit", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "@reference", "--budget", MID_LEVEL)
 assert_in_log("check-overhead", "OVERHEAD AUDIT: PASS")
 magat("check", "replay", "--game", GAME, "--leaf", ROOT / "games" / GAME / "results" / "replay" / "Comma_Off" / "80000cu",
       "--portfolio", PORTFOLIO, "--weights", PUBLISHED_WEIGHTS, "--turns", 20)
@@ -347,7 +355,6 @@ PORTFOLIO = globals().get("PORTFOLIO", DATA / "portfolio" / GAME)
 CALIBRATION = globals().get("CALIBRATION", DATA / "calibration" / f"{GAME}-{CURRENCY_NAME}")
 BUNDLED = [
     ("portfolio", "this machine's portfolio: manifest, split files, identity, the verify log"),
-    ("levels", "the budget levels as thinking time (on the reference machine, until they are published)"),
     ("threads", "the thread sweep and threads.json"),
     ("calibration", f"the currency {CURRENCY_NAME}: weights, every section's record and verdict, the checks, the overhead"),
     ("gates", "contract, equivalence, structure, audit, replay, support probe"),
@@ -359,7 +366,6 @@ FILES = [
     (CALIBRATION / "compute_weights.properties", "this machine's currency"),
     (CALIBRATION / "record" / "SUMMARY.md", "every calibration section's verdict"),
     (CALIBRATION / "threads.json", "the thread choices runs read"),
-    (DATA / "calibration" / f"{GAME}-levels" / "levels.json", "the levels measured here (the reference machine only)"),
 @REPORTS@]
 total, missing = 0, []
 print(f"Bundles in {BUNDLES}: download these; together they hold everything the analysis needs.")
@@ -437,16 +443,17 @@ does). Each skips itself once its output exists.
 """),
     code(MACHINE_CELL, tags=("machine",)),
     md("""
-### Levels as thinking time
+### The levels
 
 A budget level is a number of compute units, chosen so that it is a round amount of thinking time on
-the reference machine: 500, 1000 and 5000 ms of a whole turn, single-threaded, averaged over positions
-spread across the portfolio. `calibrate-time` finds them on the R7615 (about half an hour): it guesses,
-calibrates the reference arm at the guesses, times its turns, rescales until every level is within 5%,
-and rounds to the nearest 500 units. Bundle `levels` holds the result, to publish as
-`games/<game>/levels.json`; on any other machine this cell reads the published file and measures nothing.
+the reference machine: 500, 1000 and 5000 ms of a whole turn, single-threaded on the R7615, averaged
+over positions spread across the portfolio. They are published with the repository
+(`games/<game>/levels.json`, with the record behind them), and every currency, check and experiment
+below runs at them. This cell reads them; it never measures them. Measuring them again is a
+maintainer's job on the reference machine (`notebooks/maintainers/measure_levels.ipynb`), because new
+levels mean every currency must be measured again.
 """),
-    code(TIME_LEVELS_CELL, tags=("levels",)),
+    code(LEVELS_CELL, tags=("levels",)),
     code(THREADS_CELL, tags=("threads",)),
     md("""
 ### This machine's currency, in sections
@@ -506,9 +513,94 @@ regenerated from them.
 ]
 
 
-def build() -> dict:
+MEASURE_LEVELS_CELL = r'''
+# Measure the levels again: the units that are LEVEL_TIMES milliseconds of a whole turn of the reference
+# arm (its initialization included), single-threaded, averaged over LEVEL_POSITIONS positions spread across
+# the portfolio, within 5%, rounded to 500 units. About an hour on the R7615. It writes
+# <data>/calibration/<game>-levels and never touches the published file; publishing is a pull request.
+import json
+REMEASURE = False        # True only on the reference machine, deliberately: see the cell above
+LEVEL_TIMES = "500,1000,5000"
+LEVEL_POSITIONS = 64
+PUBLISHED_LEVELS = ROOT / "games" / GAME / "levels.json"
+MEASURED = DATA / "calibration" / f"{GAME}-levels"
+BUILT = DATA / "portfolio" / GAME
+PORTFOLIO = BUILT if (BUILT / "_split_dev.txt").exists() else PUBLISHED_PORTFOLIO
+print(f"portfolio: {PORTFOLIO}" + ("" if PORTFOLIO == BUILT else "   (the published one: run_magat.ipynb builds this machine's own)"))
+if PUBLISHED_LEVELS.is_file():
+    print(f"published: {PUBLISHED_LEVELS}")
+    print((PUBLISHED_LEVELS.parent / "levels.md").read_text(encoding="utf-8"))
+if not REMEASURE:
+    print("REMEASURE is False: nothing measured. The published levels stand.")
+elif (MEASURED / "levels.json").exists():
+    print(f"[skip] {MEASURED / 'levels.json'} exists: rename that folder to measure again")
+else:
+    magat("calibrate-time", "--game", GAME, "--portfolio", PORTFOLIO, "--times", LEVEL_TIMES,
+          "--positions", LEVEL_POSITIONS, "--remeasure")
+'''
+
+COMPARE_LEVELS_CELL = r'''
+# The measured levels beside the published ones, and the bundle to publish from.
+if (MEASURED / "levels.json").exists():
+    new = json.loads((MEASURED / "levels.json").read_text(encoding="utf-8"))
+    print((MEASURED / "SUMMARY.md").read_text(encoding="utf-8"))
+    if PUBLISHED_LEVELS.is_file():
+        old = {lv["time_ms"]: lv["units"] for lv in json.loads(PUBLISHED_LEVELS.read_text(encoding="utf-8"))["levels"]}
+        for lv in new["levels"]:
+            was = old.get(lv["time_ms"])
+            print(f"  {lv['time_ms']:>5,} ms: {lv['units']:>9,} units" + (f"   (published {was:,}, {100 * (lv['units'] / was - 1):+.1f}%)" if was else ""))
+    bundle("levels", [MEASURED, LOGS / "calibrate-time.log"])
+else:
+    print(f"nothing measured in {MEASURED}")
+'''
+
+LEVELS_CELLS = [
+    md("""
+# MAGAT maintainers: measure the budget levels
+
+**Run this only on the reference machine (the R7615 for Tribes), and only deliberately.** Every other
+machine, and every ordinary run, uses the published levels: `run_magat.ipynb` reads them and never
+measures them.
+
+A budget level is a number of compute units that is a round amount of thinking time on the reference
+machine: 500, 1000 and 5000 ms of a whole turn, single-threaded, averaged over positions spread across
+the portfolio ([units as time](../../docs/CURRENCY.md#units-as-time)). The levels are published in
+`games/<game>/levels.json`, with `levels.md` and the record in `levels-record/`.
+
+Every currency, check and experiment is measured at the published levels. New levels change what a unit
+means, so **every currency must then be measured again, under a new name**. Measure again only after a
+change to what a turn costs, such as a new engine commit or a new reference machine. The measurement writes
+to the data root and never touches the repository; publishing new levels is a pull request.
+"""),
+    md("""
+## Parameters and helpers
+"""),
+    code(SETUP, tags=("setup",)),
+    code('magat("build")\nmagat("machine")', tags=("build",)),
+    md("""
+## Measure
+
+Set `REMEASURE = True` to measure; left `False`, the cell only shows the published levels. The machine
+must be idle: nothing else of yours may run while it measures.
+"""),
+    code(MEASURE_LEVELS_CELL, tags=("levels",)),
+    code(COMPARE_LEVELS_CELL, tags=("levels",)),
+    md("""
+## Publish
+
+Bundle `levels` holds the measurement. To publish it, in a pull request:
+1. `levels.json` becomes `games/<game>/levels.json`, `SUMMARY.md` becomes `games/<game>/levels.md`, and
+   `probe.json` and `iter-*/` replace `games/<game>/levels-record/` (update its README).
+2. Set the levels of every spec that runs at the published levels (`experiments/<game>/reference-ladder.json`),
+   and the expected units in `PublishedLevelsTest`.
+3. Every currency is then measured again, under a new name (`CURRENCY_NAME` in `run_magat.ipynb`).
+"""),
+]
+
+
+def notebook(cells) -> dict:
     return {
-        "cells": CELLS,
+        "cells": cells,
         "metadata": {
             "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
             "language_info": {"name": "python"},
@@ -519,20 +611,29 @@ def build() -> dict:
     }
 
 
+def build() -> dict:
+    return notebook(CELLS)
+
+
+NOTEBOOKS = [(OUT, CELLS), (OUT_LEVELS, LEVELS_CELLS)]
+
+
 def main(argv) -> int:
-    nb = build()
-    text = json.dumps(nb, indent=1, ensure_ascii=False) + "\n"
-    if "--check" in argv:
-        current = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
-        if current != text:
-            print(f"{OUT} is stale: regenerate with `python tools/make_notebook.py`")
-            return 1
-        print(f"{OUT} is up to date")
-        return 0
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(text, encoding="utf-8")
-    print(f"wrote {OUT} ({len(CELLS)} cells)")
-    return 0
+    stale = 0
+    for out, cells in NOTEBOOKS:
+        text = json.dumps(notebook(cells), indent=1, ensure_ascii=False) + "\n"
+        if "--check" in argv:
+            current = out.read_text(encoding="utf-8") if out.exists() else ""
+            if current != text:
+                print(f"{out} is stale: regenerate with `python tools/make_notebook.py`")
+                stale = 1
+            else:
+                print(f"{out} is up to date")
+            continue
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8")
+        print(f"wrote {out} ({len(cells)} cells)")
+    return stale
 
 
 if __name__ == "__main__":
