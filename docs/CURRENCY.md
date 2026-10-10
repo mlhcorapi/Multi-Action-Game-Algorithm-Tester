@@ -21,7 +21,7 @@ The AB-EMCTS line worked because its unit was an **operation count, priced**.
 > **One compute unit is one `advance` by the reference arm at the reference budget on the game's
 > reference portfolio, on the machine the weights were calibrated on.**
 
-For Tribes the reference cell is `emcts@40000`. Every price is a ratio to that operation's
+For Tribes the reference cell has been `emcts@40000`; a new currency's is the reference arm at its smallest level. Every price is a ratio to that operation's
 nanoseconds:
 - `advance`, `copy` and `evaluate`, the forward model's three operations;
 - under currency version 2, every operation an algorithm declares of its own.
@@ -30,8 +30,40 @@ Prices are set **per (arm, budget)**: the same operation name costs different am
 arms, which reach different states, and at different budgets, where a ten-times larger tree stops
 fitting in cache. One global weight set mis-allocated up to 73% at 400k in the thesis.
 
-Budget levels are fixed unit counts (40,000 / 80,000 / 400,000 for Tribes) and are never re-derived
-per machine. That is what keeps a search deterministic given its counts, and `check replay` exact.
+Budget levels are fixed unit counts and are never re-derived per machine. That is what keeps a search
+deterministic given its counts, and `check replay` exact.
+
+## Units as time
+
+A level is chosen so that it is a round amount of **thinking time on the reference machine**: 500, 1000
+and 5000 ms of a whole turn, single-threaded on the R7615, for Tribes. Because every arm is priced per
+(arm, budget), a level's units buy the same time for every arm, so a result at a level reads: *each arm
+thought for this long, single-threaded, on the R7615*. That holds on any machine that spends the same
+currency, whatever its own speed, because a budget is a count of work.
+
+`magat calibrate-time` finds the levels, on the reference machine. It times the reference arm's whole
+turns under its own prices at guessed levels, rescales until each level's mean is within 5% of its
+time, and rounds to the nearest 1,000 units. The result is published as `games/<game>/levels.json`
+(units per level, the measured mean, median, quartiles and range, and the machine and engine), and the
+launcher then uses those levels wherever no `--levels` is named. `magat check time` reports any arm's
+time at any level under any currency.
+
+**The time is a mean over positions.** Units make arms comparable, not positions: a turn's time per
+unit depends on its position several-fold (12 to 68 µs over 40 Tribes positions on the laptop, half
+of them between 24 and 44), mostly through the number of units on the board, whose moves the engine
+recomputes after every advance. So a level is its time on average over positions spread across the
+portfolio, and a single turn may take a third of it or twice it. A real time budget would make every
+turn take the same time, and arms would then do different amounts of work on the same position; units
+keep the work fair and the time true on average.
+
+**The initialization is paid from the budget.** A turn's spend is everything it does: EMCTS's greedy
+initial plan (a copy, an advance and an evaluation for each legal action at each step, 600 to 3,200 units
+at a 20,000-unit level on Tribes) and then the search, which gets what the initialization left. The
+thesis paid the initial plan outside the budget, so its turns ran 3-18% over their level and an
+algorithm with a costly initialization got that work free. That rule remains for comparisons with the
+thesis (the oracle gate, the support probe, replays of thesis turns) and for any spec that does not
+declare `"initialization": "in-budget"`, so the worked result's specs mean what they meant. Its levels,
+40,000 / 80,000 / 400,000, stay with it.
 
 **Each game has its own currency.** One advance costs wildly different things in different engines,
 so raw units are never compared across games. Budget multipliers are dimensionless, and those are.

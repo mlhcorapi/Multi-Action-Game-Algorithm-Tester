@@ -11,6 +11,17 @@ ratio to one reference advance measured in the same session. A good currency nee
 - **Conditions written down.** A later `calibrate --check` on the same machine has to reproduce them, or
   it reports drift that is really a change of settings.
 
+**The order of work.** First the levels, then the currencies. `magat calibrate-time` runs once, on the
+reference machine (the R7615 for Tribes), and finds the levels that are 500, 1000 and 5000 ms of a whole
+turn there ([units as time](CURRENCY.md#units-as-time)); its `levels.json` is published as
+`games/<game>/levels.json`. Every currency is then measured at those levels, under a new `--name` (a
+currency keeps the levels and the initialization policy it was first measured with). The notebook does
+this in order on the R7615; on the laptop, `calibrate-controlled` takes the published levels by itself.
+
+```bash
+python magat.py calibrate-time --game tribes
+```
+
 The calibrator enforces what it can see. A cell's two fastest repetitions must agree within 10% (the
 gap gate), and every session measures its reference cell again at the end (the bracket). A session
 that fails either writes nothing. What it cannot see is the machine itself: the power source, the
@@ -331,6 +342,9 @@ holds:
   `monitor.csv` summarises;
 - an `ORIGIN.md`, which says the machine and the date, the clock policy (and, on a laptop, the maker's
   performance mode), the sections and their verdicts, both checks, and the commit.
+
+The reference machine's levels are published as `games/<game>/levels.json`, with its `SUMMARY.md` as
+`games/<game>/levels.md`, and its `ORIGIN.md` names them.
 
 Results computed under it quote its name.
 

@@ -9,7 +9,9 @@ MAGAT replaces "play N games, multithreaded, on whatever hardware" with:
 1. **A pinned portfolio of captured positions** per game, stratified and split into a development
    half and a holdout half that is read once.
 2. **A calibrated compute-unit currency**, so a budget means the same work on any machine, with
-   wall-clock reported beside it as an honesty check.
+   wall-clock reported beside it as an honesty check. A level is a round amount of thinking time on
+   the reference machine (for Tribes, 500, 1000 and 5000 ms of a whole turn on the R7615, single-threaded):
+   results read as though every algorithm had thought that long there.
 3. **A paired, scenario-clustered statistical design.** Every algorithm replans the same positions with
    the same seeds, so effects are paired differences with honest confidence intervals. Effect sizes are
    reported as **budget multipliers**, which compare across games and papers.
@@ -126,6 +128,7 @@ python magat.py calibrate --game tribes --portfolio $HOME/magat_runs/portfolio/t
   "game": "tribes",
   "split": "dev",
   "baseline": "emcts-comma",
+  "initialization": "in-budget",
   "levels": [ { "budget": 2000, "visits": 1 }, { "budget": 4000, "visits": 1 } ],
   "arms": [ { "id": "emcts-comma" }, { "id": "first" } ],
   "contrasts": [ { "a": "first", "b": "emcts-comma", "label": "random restarts against the baseline" } ]
