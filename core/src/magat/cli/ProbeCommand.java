@@ -211,7 +211,13 @@ final class ProbeCommand {
         Meter.install(w);
         Portfolio<S> p = Portfolio.load(module.game(), Paths.get(args.require("portfolio")));
         AgentFactory<S, A> arm = module.agents().get(args.require("arm"));
-        long[] levels = args.getLongs("levels", new long[]{40_000L, 80_000L, 400_000L});
+        // The currency's own levels, and its turns' initialization policy (a file without one is the thesis's).
+        String fileLevels = w.header().get("levels");
+        long[] levels = args.getLongs("levels", fileLevels != null ? Arrays.stream(fileLevels.split(",")).mapToLong(x -> Long.parseLong(x.trim())).toArray()
+                : new long[]{40_000L, 80_000L, 400_000L});
+        String init = w.header().get("initialization");
+        TurnBudget.setInitialization(init == null ? TurnBudget.Initialization.OUTSIDE_BUDGET : TurnBudget.Initialization.of(init));
+        System.out.println("# initialization " + TurnBudget.initialization() + ", as " + w.source().getFileName() + " was measured");
         int n = Math.min(args.getInt("scenarios", 20), p.size());
         double criterion = Double.parseDouble(args.get("criterion", String.valueOf(SupportProbe.CRITERION)));
         Path csv = args.has("out") ? Paths.get(args.get("out")).resolve("support_probe_" + arm.id() + ".csv") : null;

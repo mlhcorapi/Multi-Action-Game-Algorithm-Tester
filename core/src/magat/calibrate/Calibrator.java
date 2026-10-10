@@ -54,12 +54,15 @@ import java.util.TreeSet;
 public final class Calibrator {
 
     /**
-     * Per level, for a new currency. The position pool is the largest entry (sixteen positions), and levels
-     * that run fewer turns take a spread subset of the same pool. A file keeps the turns it was measured with:
-     * every {@code 8,4,2} file (the thesis's and MAGAT's before 2026-10-10) has a pool of eight, as before.
-     * Sixteen, because a turn's time depends on its position several-fold, far more than on the arm.
+     * Per level, for a new currency: the same sixteen positions at every level. A turn's time depends on its
+     * position several-fold, far more than on the arm or the level, so levels priced on different subsets of
+     * positions price a unit differently: on the laptop, 8,4,2-style subsets made a unit 34 µs at the bottom
+     * level and 24 µs at the next. On the same positions a unit is the same time at every level. The pool is
+     * the largest entry; a level that runs fewer turns takes a spread subset of it. A file keeps the turns it
+     * was measured with: every {@code 8,4,2} file (the thesis's and MAGAT's before 2026-10-10) has a pool of
+     * eight, as before.
      */
-    public static final String DEFAULT_TURNS = "16,8,4";
+    public static final String DEFAULT_TURNS = "16,16,16";
     public static final int DEFAULT_REPS = 3;
     public static final int DEFAULT_WARMUP = 6;
     public static final long MIN_OPS = 20_000;

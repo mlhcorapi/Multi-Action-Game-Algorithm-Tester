@@ -1142,9 +1142,20 @@ Published as `games/<game>/levels.json`, the levels are what the launcher passes
 to `calibrate`, `threads` and `check time` when no `--levels` is named; the calibrator ranks them below
 the levels of a file it extends or checks. On the laptop (engine `828b130`) a probe under the fixed
 weights put a turn at about 34 µs per unit (1000 ms near 29,000 units) and the median initialization at
-about 1,500 units, 50-60 ms; the R7615's own measurement sets the published levels. New currencies measure `16,8,4`
-turns per repetition over a pool of 16 positions (a turn's time depends on its position several-fold);
-every `8,4,2` file keeps its pool of 8, so its checks and merges measure the positions it was measured on.
+about 1,500 units, 50-60 ms; the R7615's own measurement sets the published levels.
+
+New currencies measure the same 16 positions at every level (`16,16,16` turns per repetition). A turn's
+time depends on its position several-fold, far more than on the arm or the level, so levels priced on
+different subsets price a unit differently. The laptop's first time calibration, with `16,8,4`, found a
+unit 33.7 µs at the 500 ms level (16 positions), 24.0 µs at 1000 ms (8) and 26.1 µs at 5000 ms (4): the
+levels still came out within 5% of their times (15,000 / 41,000 / 199,000 units), but 1000 ms took 2.7
+times the units of 500 ms. On the same positions a unit is the same time at every level: run again with
+`16,16,16`, the laptop found 31.7-32.4 µs per unit at all three levels, the reference arm's advance priced
+1.00 / 1.00 / 0.97 across them, every level within 2% at the first guess, and levels of 16,000 / 31,000 /
+155,000 units (+5.1% / -1.5% / +1.0% at the rounded values; rounding 15,508 to 16,000 moved the first by
+3%). The laptop's are an illustration; the R7615's are the published ones. The cost is about the old
+calibration's: 16 x (0.5 + 1 + 5) s per repetition, against 8 x 2.5 + 4 x 5 + 2 x 25.
+Every `8,4,2` file keeps its pool of 8, so its checks and merges measure the positions it was measured on.
 
 ## 9. The runner and the experiment spec
 
