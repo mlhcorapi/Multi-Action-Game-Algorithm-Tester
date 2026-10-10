@@ -1,0 +1,122 @@
+{
+  "format": 1,
+  "game": "tribes",
+  "reference_arm": "emcts",
+  "basis": "the reference arm's whole turn (its initialization paid from the budget), single-threaded, under its own calibrated prices at each level; the mean over positions spread across the portfolio",
+  "initialization": "in-budget",
+  "machine": "AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62",
+  "engine": "828b13051d02fc55c6e95a3997d3757337883660",
+  "magat": "dd4ae73105b4e5d85896e032ed5996945be09066-dirty",
+  "measured": "2026-10-10T15:07:27",
+  "positions": 64,
+  "tolerance": 0.05,
+  "rounding": 500,
+  "converged": true,
+  "levels": [
+    {
+      "time_ms": 500,
+      "units": 9500,
+      "found_units": 9619,
+      "measured": {
+        "mean_ms": 505.58,
+        "median_ms": 388.57,
+        "q1_ms": 275.5,
+        "q3_ms": 568.68,
+        "min_ms": 105.2,
+        "max_ms": 1923.57,
+        "mean_init_ms": 159.55,
+        "mean_units": 9936.22,
+        "mean_init_units": 2017.26
+      },
+      "ratio": 1.0112
+    },
+    {
+      "time_ms": 1000,
+      "units": 20000,
+      "found_units": 20015,
+      "measured": {
+        "mean_ms": 1005.88,
+        "median_ms": 796.07,
+        "q1_ms": 583.07,
+        "q3_ms": 1190.06,
+        "min_ms": 226.87,
+        "max_ms": 2842.29,
+        "mean_init_ms": 158.16,
+        "mean_units": 20199.6,
+        "mean_init_units": 1924.68
+      },
+      "ratio": 1.0059
+    },
+    {
+      "time_ms": 5000,
+      "units": 101500,
+      "found_units": 101499,
+      "measured": {
+        "mean_ms": 5077.68,
+        "median_ms": 4162.79,
+        "q1_ms": 3059.39,
+        "q3_ms": 6076.86,
+        "min_ms": 1169.21,
+        "max_ms": 13399.56,
+        "mean_init_ms": 158.72,
+        "mean_units": 101685.34,
+        "mean_init_units": 1856.12
+      },
+      "ratio": 1.0155
+    }
+  ],
+  "iterations": [
+    {
+      "iteration": 1,
+      "units": [
+        12830,
+        25660,
+        128299
+      ],
+      "ratios": [
+        1.2541,
+        1.2252,
+        1.24
+      ]
+    },
+    {
+      "iteration": 2,
+      "units": [
+        10231,
+        20944,
+        103463
+      ],
+      "ratios": [
+        1.0637,
+        1.0464,
+        1.0193
+      ]
+    },
+    {
+      "iteration": 3,
+      "units": [
+        9619,
+        20015,
+        101499
+      ],
+      "ratios": [
+        1.0222,
+        1.0096,
+        1.0273
+      ]
+    },
+    {
+      "iteration": 4,
+      "units": [
+        9500,
+        20000,
+        101500
+      ],
+      "ratios": [
+        1.0112,
+        1.0059,
+        1.0155
+      ]
+    }
+  ]
+}

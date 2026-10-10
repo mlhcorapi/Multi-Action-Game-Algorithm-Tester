@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Self-test of notebooks/run_magat.ipynb: execute its setup cells from three launch directories
-(the repository root, the notebook's folder, and the repository's parent, as JupyterHub launches
-it) and assert every launch resolves the same repository and a data root outside it.
+"""Self-test of the notebooks (notebooks/run_magat.ipynb and notebooks/maintainers/measure_levels.ipynb):
+execute each one's setup cells from three launch directories (the repository root, the notebook's
+folder, and the repository's parent, as JupyterHub launches it) and assert every launch resolves the
+same repository and a data root outside it.
 
-Runs in well under a second and is part of the pre-commit hook. Also checks that the notebook is
-the one tools/make_notebook.py generates.
+Runs in well under a second and is part of the pre-commit hook. Also checks that the notebooks are
+the ones tools/make_notebook.py generates.
 """
 import json
 import os
@@ -14,7 +15,7 @@ import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-NB = ROOT / "notebooks" / "run_magat.ipynb"
+NOTEBOOKS = [ROOT / "notebooks" / "run_magat.ipynb", ROOT / "notebooks" / "maintainers" / "measure_levels.ipynb"]
 
 
 def setup_cells(nb: dict):
@@ -24,16 +25,26 @@ def setup_cells(nb: dict):
 
 
 def main() -> int:
-    if not NB.is_file():
-        print(f"missing {NB}: run `python tools/make_notebook.py`")
-        return 1
+    for nb in NOTEBOOKS:
+        if not nb.is_file():
+            print(f"missing {nb}: run `python tools/make_notebook.py`")
+            return 1
     stale = subprocess.call([sys.executable, str(ROOT / "tools" / "make_notebook.py"), "--check"])
     if stale != 0:
         return 1
+    failures = 0
+    for nb in NOTEBOOKS:
+        print(f"{nb.relative_to(ROOT).as_posix()}:")
+        failures += selftest(nb)
+    print(f"notebook selftest: {failures} failure(s)")
+    return failures
+
+
+def selftest(NB: pathlib.Path) -> int:
     nb = json.loads(NB.read_text(encoding="utf-8"))
     cells = list(setup_cells(nb))
     if not cells:
-        print("no cells tagged 'setup'")
+        print("  [FAIL] no cells tagged 'setup'")
         return 1
     data_root = tempfile.mkdtemp(prefix="magat-selftest-")
     launch_dirs = [ROOT, NB.parent, ROOT.parent]
@@ -62,7 +73,6 @@ def main() -> int:
     if len(roots) != 1 or next(iter(roots)) != ROOT:
         print(f"  [FAIL] launches resolved different repositories: {roots}")
         failures += 1
-    print(f"notebook selftest: {failures} failure(s)")
     return failures
 
 

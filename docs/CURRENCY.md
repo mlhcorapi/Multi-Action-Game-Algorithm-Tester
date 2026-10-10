@@ -48,6 +48,18 @@ time, and rounds to the nearest 500 units. The result is published as `games/<ga
 launcher then uses those levels wherever no `--levels` is named. `magat check time` reports any arm's
 time at any level under any currency.
 
+For Tribes, measured on the R7615 on 2026-10-10 over 64 positions:
+
+| Time | Units | Measured mean | Median | Quartiles | Initialization |
+|---|---|---|---|---|---|
+| 500 ms | 9,500 | 506 ms | 389 ms | 276-569 ms | 160 ms |
+| 1000 ms | 20,000 | 1,006 ms | 796 ms | 583-1,190 ms | 158 ms |
+| 5000 ms | 101,500 | 5,078 ms | 4,163 ms | 3,059-6,077 ms | 159 ms |
+
+A unit is about 50 µs of an `emcts` turn there. At 500 ms, EMCTS's initial plan takes about 2,000 of the
+9,500 units and a third of the time. Measuring the levels again is a maintainer's decision, because every
+currency must then be measured again (`notebooks/maintainers/measure_levels.ipynb`).
+
 **The time is a mean over positions.** Units make arms comparable, not positions: a turn's time per
 unit depends on its position several-fold (12 to 68 µs over 40 Tribes positions on the laptop, half
 of them between 24 and 44), mostly through the number of units on the board, whose moves the engine
