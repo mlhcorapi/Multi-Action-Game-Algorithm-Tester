@@ -443,7 +443,7 @@ A budget level is a number of compute units, chosen so that it is a round amount
 the reference machine: 500, 1000 and 5000 ms of a whole turn, single-threaded, averaged over positions
 spread across the portfolio. `calibrate-time` finds them on the R7615 (about half an hour): it guesses,
 calibrates the reference arm at the guesses, times its turns, rescales until every level is within 5%,
-and rounds to the nearest 1,000 units. Bundle `levels` holds the result, to publish as
+and rounds to the nearest 500 units. Bundle `levels` holds the result, to publish as
 `games/<game>/levels.json`; on any other machine this cell reads the published file and measures nothing.
 """),
     code(TIME_LEVELS_CELL, tags=("levels",)),

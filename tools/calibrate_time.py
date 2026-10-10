@@ -16,7 +16,7 @@ though they had run there. DESIGN 8.8 and docs/CURRENCY.md say why the mean over
    portfolio (`magat check time`). A level's prices make its units buy the same work for every arm, so
    the reference arm's time is the level's time. Any level whose mean is more than the tolerance from its
    target is rescaled by target / measured, and the iteration repeats (at most --max-iterations).
-3. The found levels are rounded to the nearest --round units (1000), measured once more at the rounded
+3. The found levels are rounded to the nearest --round units (500), measured once more at the rounded
    values, and written to levels.json with every measurement. Publish it as games/<game>/levels.json;
    from then on the launcher uses those levels wherever none are named.
 
@@ -63,7 +63,7 @@ def main(argv) -> int:
     ap.add_argument("--game", default="tribes")
     ap.add_argument("--times", default="500,1000,5000", help="milliseconds of thinking time, one level each")
     ap.add_argument("--tolerance", type=float, default=0.05, help="a level is found when its mean is this close to its time")
-    ap.add_argument("--round", type=int, default=1000, help="round the found units to a multiple of this")
+    ap.add_argument("--round", type=int, default=500, help="round the found units to a multiple of this")
     ap.add_argument("--positions", type=int, default=64, help="positions spread over the portfolio, one turn each, per level")
     ap.add_argument("--arm", help="the reference arm (default: the game's)")
     ap.add_argument("--probe", type=int, default=20000, help="units of the first, fixed-weight probe")

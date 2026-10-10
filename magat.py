@@ -23,7 +23,7 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py calibrate --check --game tribes --arms a,b [--weights FILE] [--portfolio DIR]   gates each cell's turn price
     python magat.py calibrate-controlled --name NAME [--preflight | --plan] [--section all|next|checks|N [--redo]] ...
                               this machine's own currency in sections, with reliability checks (docs/CALIBRATING_A_MACHINE.md)
-    python magat.py calibrate-time --game tribes [--times 500,1000,5000] [--positions 64] [--tolerance 0.05] [--round 1000]
+    python magat.py calibrate-time --game tribes [--times 500,1000,5000] [--positions 64] [--tolerance 0.05] [--round 500]
                               the levels that are those milliseconds of thinking time here (run on the reference machine)
     python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...]
     python magat.py run --experiment SPEC [--split dev|holdout|all] [--out DIR] [--portfolio DIR] [--weights FILE]

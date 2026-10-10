@@ -513,7 +513,7 @@ operations does not, and the drift report states it.*
 fixed unit counts, but they are chosen so that each is T milliseconds of a whole turn, its
 initialization included, single-threaded on the R7615, averaged over positions spread across the
 portfolio: 500, 1000 and 5000 ms, each found within 5% by `magat calibrate-time` (§8.8), rounded to the
-nearest 1,000 units, and published in `games/<game>/levels.json`. A level's prices make its units buy the
+nearest 500 units, and published in `games/<game>/levels.json`. A level's prices make its units buy the
 same time for every arm, so the reference arm's time is the level's time, and a result at a level reads
 "as though each arm had thought for T ms, single-threaded, on the R7615". The mean is the anchor because
 units equalise arms, not positions: on the laptop a turn's time per unit ranged from 12 to 68 µs over 40
@@ -1134,7 +1134,7 @@ from a target. `magat calibrate-time` (`tools/calibrate_time.py`) uses it on the
    its own, so each level has its own prices) and times it under that currency. A level whose mean is
    more than 5% from its time is rescaled by target over measured, and the iteration repeats (four at
    most).
-3. The found levels are rounded to the nearest 1,000 units and timed once more there; `levels.json`
+3. The found levels are rounded to the nearest 500 units and timed once more there; `levels.json`
    records the levels, what was found before rounding, every iteration, and the measured mean, median,
    quartiles and range of each.
 

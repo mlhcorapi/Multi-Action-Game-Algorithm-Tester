@@ -43,7 +43,7 @@ currency, whatever its own speed, because a budget is a count of work.
 
 `magat calibrate-time` finds the levels, on the reference machine. It times the reference arm's whole
 turns under its own prices at guessed levels, rescales until each level's mean is within 5% of its
-time, and rounds to the nearest 1,000 units. The result is published as `games/<game>/levels.json`
+time, and rounds to the nearest 500 units. The result is published as `games/<game>/levels.json`
 (units per level, the measured mean, median, quartiles and range, and the machine and engine), and the
 launcher then uses those levels wherever no `--levels` is named. `magat check time` reports any arm's
 time at any level under any currency.
