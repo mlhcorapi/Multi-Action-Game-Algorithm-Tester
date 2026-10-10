@@ -5,6 +5,7 @@
   "portfolio": "tribes/v1",
   "split": "dev",
   "baseline": "emcts",
+  "initialization": "in-budget",
   "levels": [
     { "budget": 80000, "visits": 8 },
     { "budget": 40000, "visits": 8 },

@@ -23,6 +23,8 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py calibrate --check --game tribes --arms a,b [--weights FILE] [--portfolio DIR]   gates each cell's turn price
     python magat.py calibrate-controlled --name NAME [--preflight | --plan] [--section all|next|checks|N [--redo]] ...
                               this machine's own currency in sections, with reliability checks (docs/CALIBRATING_A_MACHINE.md)
+    python magat.py calibrate-time --game tribes [--times 500,1000,5000] [--positions 64] [--tolerance 0.05] [--round 1000]
+                              the levels that are those milliseconds of thinking time here (run on the reference machine)
     python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...]
     python magat.py run --experiment SPEC [--split dev|holdout|all] [--out DIR] [--portfolio DIR] [--weights FILE]
                         [--threads N] [--threads-at 400000=31] [--frozen FILE] [--retire-leaf arm@budget] [--toy]
@@ -31,6 +33,8 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py check structure --game tribes --spec experiments/tribes/structure.json
     python magat.py check replay    --game tribes --leaf DIR [--portfolio DIR] [--weights FILE] [--turns 20]
     python magat.py check overhead  --game tribes [--arm emcts] [--budget 40000]
+    python magat.py check time      --game tribes (--weights FILE | --fixed-weights) [--levels ...] [--arms a,b] [--targets ms,...]
+                                    single-threaded whole turns over spread positions: each level's thinking time here
     python magat.py check overhead --audit --game tribes [--arms a,b|@set] [--budget 40000] [--warn 0.10] [--fail 0.25]
     python magat.py probe support   --game tribes --arm ARM [--levels ...] [--scenarios 20] [--out DIR]
     python magat.py analyze --run DIR [--holdout DIR] [--experiment SPEC] [--baseline ARM] [--reprice WEIGHTS] --out DIR
@@ -136,8 +140,19 @@ PUBLISHED = {
     "tribes": {
         "portfolio": GAMES / "tribes" / "portfolio" / "v1",
         "weights": GAMES / "tribes" / "calibration" / "r7615" / "compute_weights.properties",
+        "levels": GAMES / "tribes" / "levels.json",
     }
 }
+
+
+def published_levels(game: str) -> list:
+    """The game's budget levels in units, from its published levels.json (written by calibrate-time on the
+    reference machine); empty until it exists."""
+    f = PUBLISHED.get(game, {}).get("levels")
+    if not f or not f.is_file():
+        return []
+    import json
+    return [int(lv["units"]) for lv in json.loads(f.read_text(encoding="utf-8"))["levels"]]
 
 
 def data_root() -> pathlib.Path:
@@ -440,6 +455,11 @@ def with_published_defaults(args: list) -> list:
             args += ["--weights", str(pub["weights"])]
         if args[:2] == ["portfolio", "verify"] and "--portfolio" not in args and "portfolio" in pub:
             args += ["--portfolio", str(pub["portfolio"])]
+        # The published levels, where no level is named: a fallback the Java side ranks below a file's own levels.
+        wants_levels = args[0] in ("calibrate", "threads") or args[:2] == ["check", "time"]
+        levels = published_levels(game) if wants_levels and "--levels" not in args else []
+        if levels:
+            args += ["--default-levels", ",".join(map(str, levels))]
     return args
 
 
@@ -491,6 +511,8 @@ def main(argv: list) -> None:
         run([sys.executable, ROOT / "tools" / "shakedown.py", *rest], log="shakedown")
     elif cmd == "calibrate-controlled":
         run([sys.executable, ROOT / "tools" / "calibrate_controlled.py", *rest], log="calibrate-controlled")
+    elif cmd == "calibrate-time":
+        run([sys.executable, ROOT / "tools" / "calibrate_time.py", *rest], log="calibrate-time")
     else:
         sys.exit(f"unknown command '{cmd}'\n{__doc__}")
 

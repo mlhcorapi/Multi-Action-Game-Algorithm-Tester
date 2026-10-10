@@ -142,6 +142,26 @@ MACHINE_CELL = r'''
 magat("machine")
 '''
 
+TIME_LEVELS_CELL = r'''
+# The budget levels as thinking time: the units that are LEVEL_TIMES milliseconds of a whole turn (its
+# initialization included), single-threaded, averaged over positions spread across the portfolio
+# (docs/CURRENCY.md, "Units as time"). They are measured once, on the reference machine (the R7615 for
+# Tribes), and published as games/<game>/levels.json; every other machine uses the published ones.
+import json
+LEVEL_TIMES = "500,1000,5000"
+PUBLISHED_LEVELS = ROOT / "games" / GAME / "levels.json"
+MEASURED_LEVELS = DATA / "calibration" / f"{GAME}-levels" / "levels.json"
+MEASURE_LEVELS = not PUBLISHED_LEVELS.exists()     # True here on the reference machine until its levels are published
+if MEASURE_LEVELS and not MEASURED_LEVELS.exists():
+    magat("calibrate-time", "--game", GAME, "--portfolio", PORTFOLIO, "--times", LEVEL_TIMES)
+LEVELS_FILE = MEASURED_LEVELS if MEASURE_LEVELS else PUBLISHED_LEVELS
+LEVELS = ",".join(str(lv["units"]) for lv in json.loads(LEVELS_FILE.read_text(encoding="utf-8"))["levels"])
+print(f"levels from {LEVELS_FILE}: {LEVELS}")
+if MEASURE_LEVELS:
+    print((MEASURED_LEVELS.parent / "SUMMARY.md").read_text(encoding="utf-8"))
+    bundle("levels", [MEASURED_LEVELS, MEASURED_LEVELS.parent / "SUMMARY.md", LOGS / "calibrate-time.log"])
+'''
+
 THREADS_CELL = r'''
 # threads.json goes beside this machine's currency: that is where a run looks for it.
 CALIBRATION = DATA / "calibration" / f"{GAME}-{CURRENCY_NAME}"
@@ -155,7 +175,7 @@ if REDO_THREADS:
 if (CALIBRATION / "threads.json").exists():
     print(f"[skip] {CALIBRATION / 'threads.json'} exists")
 else:
-    magat("threads", "--game", GAME, "--portfolio", PORTFOLIO, "--out", CALIBRATION)
+    magat("threads", "--game", GAME, "--portfolio", PORTFOLIO, "--out", CALIBRATION, "--levels", LEVELS)
 print((CALIBRATION / "threads.json").read_text(encoding="utf-8"))
 bundle("threads", [CALIBRATION / "threads.json", CALIBRATION / "thread_sweep.csv", LOGS / "threads.log"])
 '''
@@ -167,7 +187,7 @@ CALIBRATE_CELL = r'''
 # Version 2 (CURRENCY_VERSION = 2) prices every operation an arm declares, its own work included; version
 # 1 prices the forward model only, as the published R7615 currency does.
 CURRENCY_VERSION = 2
-CAL_BATCH = 8           # arms per section, fixed when the first section runs (8: about 1.5 h each on the R7615)
+CAL_BATCH = 8           # arms per section, fixed when the first section runs
 CAL_OTHER_CPUS = 4.0    # other work on the machine, in logical CPUs, that makes a section SUSPECT
 CAL_WAIT_QUIET = 30     # minutes a section waits for the machine to drop below that before refusing to start
 CAL_SOAK_MINUTES = 0    # a server needs no warming up: the stability check is two estimates that agree within 3%
@@ -178,7 +198,7 @@ def calibrate_section(section, redo=False):
     # passed or is suspect; a suspect one is measured again with redo=True when the machine is quiet.
     args = ["calibrate-controlled", "--name", CURRENCY_NAME, "--game", GAME, "--portfolio", PORTFOLIO,
             "--format", CURRENCY_VERSION, "--batch", CAL_BATCH, "--other-cpus", CAL_OTHER_CPUS,
-            "--wait-quiet", CAL_WAIT_QUIET, "--soak-minutes", CAL_SOAK_MINUTES]
+            "--wait-quiet", CAL_WAIT_QUIET, "--soak-minutes", CAL_SOAK_MINUTES, "--levels", LEVELS]
     args += ["--section", "all", "--no-checks"] if section == "rest" else ["--section", section]
     if redo:
         args.append("--redo")
@@ -327,6 +347,7 @@ PORTFOLIO = globals().get("PORTFOLIO", DATA / "portfolio" / GAME)
 CALIBRATION = globals().get("CALIBRATION", DATA / "calibration" / f"{GAME}-{CURRENCY_NAME}")
 BUNDLED = [
     ("portfolio", "this machine's portfolio: manifest, split files, identity, the verify log"),
+    ("levels", "the budget levels as thinking time (on the reference machine, until they are published)"),
     ("threads", "the thread sweep and threads.json"),
     ("calibration", f"the currency {CURRENCY_NAME}: weights, every section's record and verdict, the checks, the overhead"),
     ("gates", "contract, equivalence, structure, audit, replay, support probe"),
@@ -338,6 +359,7 @@ FILES = [
     (CALIBRATION / "compute_weights.properties", "this machine's currency"),
     (CALIBRATION / "record" / "SUMMARY.md", "every calibration section's verdict"),
     (CALIBRATION / "threads.json", "the thread choices runs read"),
+    (DATA / "calibration" / f"{GAME}-levels" / "levels.json", "the levels measured here (the reference machine only)"),
 @REPORTS@]
 total, missing = 0, []
 print(f"Bundles in {BUNDLES}: download these; together they hold everything the analysis needs.")
@@ -414,12 +436,23 @@ picks the knee of sustained throughput per budget level (results do not depend o
 does). Each skips itself once its output exists.
 """),
     code(MACHINE_CELL, tags=("machine",)),
+    md("""
+### Levels as thinking time
+
+A budget level is a number of compute units, chosen so that it is a round amount of thinking time on
+the reference machine: 500, 1000 and 5000 ms of a whole turn, single-threaded, averaged over positions
+spread across the portfolio. `calibrate-time` finds them on the R7615 (about half an hour): it guesses,
+calibrates the reference arm at the guesses, times its turns, rescales until every level is within 5%,
+and rounds to the nearest 1,000 units. Bundle `levels` holds the result, to publish as
+`games/<game>/levels.json`; on any other machine this cell reads the published file and measures nothing.
+"""),
+    code(TIME_LEVELS_CELL, tags=("levels",)),
     code(THREADS_CELL, tags=("threads",)),
     md("""
 ### This machine's currency, in sections
 
-`calibrate-controlled` prices every arm in sections of eight. Each section is one calibration session,
-about 1.5 hours on the R7615, that writes all or nothing and merges into the currency by ratio, so a
+`calibrate-controlled` prices every arm at the levels above, in sections of eight. Each section is one
+calibration session, under an hour on the R7615, that writes all or nothing and merges into the currency by ratio, so a
 culled server or a busy afternoon costs one section, never the whole currency. Before each section it
 waits (up to `CAL_WAIT_QUIET` minutes) for the machine to be quiet and checks that two estimates agree.
 After each it gives a verdict:

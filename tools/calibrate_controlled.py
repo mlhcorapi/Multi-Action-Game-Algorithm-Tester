@@ -1902,7 +1902,8 @@ def main(argv) -> int:
                 print(f"\n=== CHECK AGAINST {'THE PUBLISHED CURRENCY' if which == 'published' else 'THE NEW CURRENCY'} "
                       f"(writes nothing) ===")
                 args = ["calibrate", "--check", "--game", a.game, "--arms", ",".join(check_arms)]
-                for flag in ("levels", "reps", "warmup"):
+                # No --levels: a check measures the levels of the file it checks (the published one's may differ).
+                for flag in ("reps", "warmup"):
                     if getattr(a, flag):
                         args += [f"--{flag}", getattr(a, flag)]
                 if a.portfolio:

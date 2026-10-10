@@ -116,6 +116,16 @@ public final class Calibrator {
      */
     public static <S, A> Result run(Game<S, A> game, AgentRegistry<S, A> registry, String referenceArm,
                                     Portfolio<S> portfolio, Path out, Path checkFile, Options o) throws IOException {
+        TurnBudget.Initialization was = TurnBudget.initialization();
+        try {
+            return session(game, registry, referenceArm, portfolio, out, checkFile, o);
+        } finally {
+            TurnBudget.setInitialization(was);           // a check may have played the file's policy
+        }
+    }
+
+    private static <S, A> Result session(Game<S, A> game, AgentRegistry<S, A> registry, String referenceArm,
+                                         Portfolio<S> portfolio, Path out, Path checkFile, Options o) throws IOException {
         Path idle = out == null ? null : out.resolve(Currency.WEIGHTS_FILE);
         Path existingPath = o.check ? checkFile : (idle != null && Files.isRegularFile(idle) ? idle : null);
         if (o.underLoad > 1) existingPath = null;         // a loaded run writes its own file beside the idle one
@@ -144,9 +154,13 @@ public final class Calibrator {
                 throw new IllegalStateException(existingPath + " was measured with the initialization " + fileInit + " the budget; this "
                         + "session plays turns with it " + initialization + ". A merge would price unlike turns: calibrate a new currency, "
                         + "or pass --initialization " + fileInit.id + " to extend this one as it was measured.");
-            if (fileInit != initialization)
-                System.out.println("# note: " + existingPath + " was measured with the initialization " + fileInit + " the budget; this "
-                        + "check plays turns with it " + initialization + " (pass --initialization " + fileInit.id + " to match)");
+            if (fileInit != initialization) {
+                // A check compares like with like: it plays the turns the way the file it checks was measured.
+                System.out.println("# " + existingPath + " was measured with the initialization " + fileInit + " the budget: "
+                        + "this check plays its turns so too");
+                initialization = fileInit;
+                TurnBudget.setInitialization(fileInit);
+            }
         }
         String reference = existing != null && existing.reference() != null ? existing.reference()
                 : Profile.key(referenceArm, Arrays.stream(levels).min().orElse(40_000L));
