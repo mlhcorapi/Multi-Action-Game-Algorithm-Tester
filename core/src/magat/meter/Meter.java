@@ -307,7 +307,7 @@ public final class Meter {
     /**
      * Installs an explicit forward-model weight triple on the calling thread under a label; every
      * algorithm operation weighs 0 under it. For probes that must price both sides of a comparison
-     * identically at a budget no file prices (the oracle gate, the structure check); a run never uses it.
+     * identically at a budget no file prices (the oracle gate); a run never uses it.
      */
     public static void useWeights(double[] w, String label) {
         State s = STATE.get();

@@ -45,7 +45,6 @@ import java.util.TreeSet;
  *
  * <p>Single-threaded on an idle machine, because this is a timing measurement: other load inflates
  * copies and evaluations (memory-bound) more than advances, which is precisely the ratio measured.
- * {@code --under-load W} measures the other regime on purpose and writes beside, never over.
  *
  * <p>Writing into an existing file merges (see {@link Currency}); {@code --check} measures and
  * reports drift against a file and writes nothing.
