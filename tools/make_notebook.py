@@ -247,17 +247,6 @@ assert_in_log("check-audit", "AUDIT: PASS")
 bundle("gates", [LOGS / f"{n}.log" for n in ("check-contract", "check-equivalence", "check-audit", "test")])
 '''
 
-WORKED_CELL = r'''
-# The published worked result (the thesis's AB-EMCTS line, imported), re-analysed here in seconds. It must
-# reproduce games/tribes/results/ab-emcts/report; docs/results/tribes-ab-emcts.md sets it beside the
-# thesis retrospective, number by number.
-WORKED = DATA / GAME / "results" / "ab-emcts-published"
-magat("analyze", "--run", ROOT / "games" / GAME / "results" / "ab-emcts", "--out", WORKED)
-assert_in_log("analyze", "ANALYZE: OK")
-summary(WORKED, until="## Headline (dev)")
-bundle("worked-result", [WORKED / "SUMMARY.md", WORKED / "tables", LOGS / "analyze.log"])
-'''
-
 
 def experiment_cells(game: str) -> list:
     """One markdown and one code cell per experiment in experiments/<game>/, so the notebook cannot drift
@@ -303,7 +292,6 @@ BUNDLED = [
     ("threads", "the thread sweep and threads.json"),
     ("calibration", f"the currency {CURRENCY_NAME}: weights, every section's record and verdict, the checks"),
     ("gates", "contract, equivalence, audit"),
-    ("worked-result", "the published worked result, re-analysed here"),
 @RUNS@    ("shakedown", "the shakedown's log"),
 ]
 FILES = [
@@ -431,13 +419,6 @@ the engine agent it was ported from, field for field; and the audit, where each 
 operations and forward model must account for its turn. Nothing downstream runs otherwise.
 """),
     code(GATES_CELL, tags=("gates",)),
-    md("""
-## The worked result, re-analysed
-
-The thesis's AB-EMCTS line, imported into MAGAT's run layout: every measure of the brief, in seconds,
-from the published rows. A newcomer's first look at what a MAGAT report says.
-"""),
-    code(WORKED_CELL, tags=("worked-result",)),
     *experiment_cells("tribes"),
     md("""
 ## Shakedown

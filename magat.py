@@ -34,9 +34,7 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py check time      --game tribes (--weights FILE | --fixed-weights) [--levels ...] [--arms a,b] [--targets ms,...]
                                     single-threaded whole turns over spread positions: each level's thinking time here
     python magat.py check audit     --game tribes [--arms a,b|@set] [--budget 40000] [--warn 0.10] [--fail 0.25]
-    python magat.py analyze --run DIR [--holdout DIR] [--experiment SPEC] [--baseline ARM] [--reprice WEIGHTS] --out DIR
-    python magat.py import-legacy --stage1-tree DIR --out RUN [--map tools/legacy-arms.json] [--portfolio DIR]
-                                  [--split NAME] [--experiment SPEC] [--weights FILE] [--no-curve] [--label TEXT]
+    python magat.py analyze --run DIR [--experiment SPEC] [--baseline ARM] [--reprice WEIGHTS] --out DIR
     python magat.py java <args...>          raw magat.cli.Main invocation
     python magat.py layering
     python magat.py notebook build|selftest
@@ -483,7 +481,7 @@ def main(argv: list) -> None:
             os.environ["PYTHONPATH"] = os.pathsep.join(p for p in (str(ANALYSIS), os.environ.get("PYTHONPATH")) if p)
             run([sys.executable, "-m", "unittest", "discover", "-s", str(ANALYSIS / "tests"), "-t", str(ANALYSIS), "-v"],
                 log="test")
-    elif cmd in ("analyze", "import-legacy"):
+    elif cmd == "analyze":
         python_analysis([cmd, *rest], log=cmd)
     elif cmd in ("run", "experiment"):
         args = with_published_defaults(with_spec_game([cmd, *rest]))

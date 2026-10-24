@@ -1,4 +1,0 @@
-# Frozen choices for the worked result's holdout read, fixed on development before the holdout was read.
-# The thesis tree's frozen_choices.txt (stage F bundle, 2026-09-02) reads "Comma_Z0" and "Coarse": the
-# zero-evaluation repair family on comma selection, at coarse repair keys.
-champion = comma-z0-coarse

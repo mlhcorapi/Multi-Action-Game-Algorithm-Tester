@@ -1,17 +1,14 @@
-"""Scenario-clustered statistics, moved from the thesis's analyze_stage1.py.
+"""Scenario-clustered statistics.
 
 Aggregation rule everywhere: a statistic per pair (or per turn), then its mean with a bootstrap CI
 that resamples SCENARIOS, the natural cluster: the visits of one scenario share a position, so they
 are not independent observations. No scipy.
 
-Two changes from the thesis code, neither of which changes an estimate:
-
 - The resampled mean is computed from per-scenario sums and counts (a resample's concatenated mean is
   its total over its count), so 4,000 resamples cost one matrix product rather than 4,000 concatenations.
 - Every row draws from its own generator, seeded from the row's identity (table, split, budget, arms,
-  stratum). The thesis drew every row from one global stream, so a row's interval depended on which
-  rows were computed before it; here re-running the analysis, or adding an arm, leaves every other
-  row's interval exactly where it was.
+  stratum), so re-running the analysis, or adding an arm, leaves every other row's interval exactly
+  where it was.
 """
 import hashlib
 
@@ -19,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 N_BOOT = 4000
-BASE_SEED = 20260823          # the thesis analysis's seed, kept as the base of every row's stream
+BASE_SEED = 20260823          # the base of every row's stream
 
 
 def rng_for(*key) -> np.random.Generator:
@@ -76,7 +73,7 @@ def cohens_d(diff: pd.Series) -> float:
 
 
 # --------------------------------------------------------------------------- variance design
-# How much precision does a scenario buy, and how much does a visit? (The thesis's Gate B question 2.)
+# How much precision does a scenario buy, and how much does a visit?
 #
 # Visits of one scenario share a state, so they are not independent observations. Under the
 # scenario-clustered bootstrap the standard error of a paired mean is

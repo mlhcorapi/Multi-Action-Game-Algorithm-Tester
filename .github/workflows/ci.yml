@@ -29,7 +29,7 @@ jobs:
         run: python magat.py build --tests
       - name: Layering
         run: python magat.py layering
-      - name: Unit tests (JUnit, then the analysis package with the worked result's acceptance test)
+      - name: Unit tests (JUnit, then the analysis package)
         run: python magat.py test
       - name: Contract laws (Tribes, 4 published positions)
         run: python magat.py check contract --game tribes --scenarios 4
@@ -74,17 +74,11 @@ jobs:
           $RUN --split holdout
           test "$(wc -l < "$RUNNER_TEMP/run/dev/_completed.txt")" -eq 4
           head -1 "$RUNNER_TEMP/run/dev/emcts/2000cu/turns.csv" | grep -q "op_emcts.generation"
-      - name: Analyze the toy run side by side, re-priced in its own currency
+      - name: Analyze the toy run, re-priced in its own currency
         run: |
-          python magat.py analyze --run "$RUNNER_TEMP/run/dev" --holdout "$RUNNER_TEMP/run/holdout" --reprice "$RUNNER_TEMP/calib/compute_weights.properties" --out "$RUNNER_TEMP/analysis"
-          for t in replication headline budget_multiplier w7_wallclock gain_multiple contrasts oracle anytime efficiency variance repriced; do
+          python magat.py analyze --run "$RUNNER_TEMP/run" --reprice "$RUNNER_TEMP/calib/compute_weights.properties" --out "$RUNNER_TEMP/analysis"
+          for t in headline budget_multiplier wallclock contrasts variance repriced; do
             test -s "$RUNNER_TEMP/analysis/tables/$t.csv"
           done
-      - name: Import the thesis replay fixture
-        run: |
-          python magat.py import-legacy --stage1-tree games/tribes/results/replay --split holdout --out "$RUNNER_TEMP/legacy"
-          test "$(wc -l < "$RUNNER_TEMP/legacy/holdout/emcts-comma/80000cu/turns.csv")" -eq 21
-      - name: The worked result re-analyses from its published rows
-        run: python magat.py analyze --run games/tribes/results/ab-emcts --out "$RUNNER_TEMP/ab-emcts"
       - name: Notebook self-test
         run: python magat.py notebook selftest

@@ -1,12 +1,11 @@
-"""A run tree -> one turns frame and one curve frame, with the provenance and the identical-output check.
+"""A run tree -> one turns frame, with the provenance and the identical-output check.
 
-A split directory is `<run>/<split>/` as the runner writes it (design section 10): one leaf per
-`<arm>/<budget>cu/` holding `turns.csv` (one row per scenario and visit), `curve.csv` (one row per
-anytime checkpoint) and `_leaf.json`, plus `_run.json` for the tree. Either table may be gzipped
-(`turns.csv.gz`), as a published tree may ship it.
+A split directory is `<run>/<split>/` as the runner writes it: one leaf per `<arm>/<budget>cu/` holding
+`turns.csv` (one row per scenario and visit) and `_leaf.json`, plus `_run.json` for the tree. The table
+may be gzipped (`turns.csv.gz`), as a published tree may ship it.
 
-Rows imported from the thesis tree (`magat import-legacy`) leave `terminal` blank; a blank flag falls
-back to the thesis's magnitude cutoff, |final| >= 1e9 (a detected terminal is worth about +/-2e9).
+A blank `terminal` flag falls back to a magnitude cutoff, |final| >= 1e9 (a detected terminal is worth
+about +/-2e9).
 """
 import hashlib
 import json
@@ -20,7 +19,6 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]          # the repository: an
 TERMINAL_VALUE_CUTOFF = 1e9
 SIGNATURE = ["initial", "final", "advances", "copies", "evals", "nodes", "unique"]
 TURN_TABLES = ("turns.csv", "turns.csv.gz")
-CURVE_TABLES = ("curve.csv", "curve.csv.gz")
 
 
 @dataclass
@@ -30,7 +28,6 @@ class Split:
     run: dict                                   # _run.json, or {} when the tree has none
     leaves: list                                # each leaf's _leaf.json, plus "dir"
     turns: pd.DataFrame
-    curve: pd.DataFrame
     notes: list = field(default_factory=list)
 
     @property
@@ -106,7 +103,7 @@ def load_split(path) -> Split:
     run = read_json(d / "_run.json")
     name = (d / "_split.txt").read_text(encoding="utf-8").strip() if (d / "_split.txt").is_file() else ""
     name = name or run.get("split") or d.name
-    turns, curves, leaves, notes = [], [], [], []
+    turns, leaves, notes = [], [], []
     for leaf in sorted(p for p in d.glob("*/*cu") if p.is_dir()):
         meta = read_json(leaf / "_leaf.json")
         meta["dir"] = str(leaf)
@@ -121,15 +118,11 @@ def load_split(path) -> Split:
         meta["turns"] = len(t)
         leaves.append(meta)
         turns.append(t)
-        cfile = first_existing(leaf, CURVE_TABLES)
-        if cfile is not None:
-            curves.append(pd.read_csv(cfile, dtype={"arm": str}))
     if not turns:
         raise FileNotFoundError(f"{d}: no leaf holds any turns")
     t = pd.concat(turns, ignore_index=True)
     t = prepare(t)
-    c = pd.concat(curves, ignore_index=True) if curves else pd.DataFrame()
-    return Split(d, name, run, leaves, t, c, notes)
+    return Split(d, name, run, leaves, t, notes)
 
 
 def prepare(t: pd.DataFrame) -> pd.DataFrame:
@@ -148,9 +141,8 @@ def prepare(t: pd.DataFrame) -> pd.DataFrame:
 def identical_arms(t: pd.DataFrame) -> list:
     """Pairs of arms whose rows agree on every signature column, turn by turn, at some budget.
 
-    Two arms producing identical output is a bug, not thin data (brief principle 12): the runner
-    stops on it and the analyzer refuses to analyse it. Columns blank on either side (an imported
-    leaf carries no copy or evaluation counts) are not compared."""
+    Two arms producing identical output is a bug, not thin data: the runner stops on it and the
+    analyzer refuses to analyse it. Columns blank on either side are not compared."""
     found = []
     for budget, d in t.groupby("budget"):
         arms = sorted(d.arm.unique())
@@ -189,8 +181,7 @@ def spec_of(split: Split):
 
 
 def comparisons(*specs) -> list:
-    """The contrasts the specs declare, then every arm's attribution control (arm minus control).
-    Duplicates (the same a and b) are kept once, the first label winning."""
+    """The contrasts the specs declare. Duplicates (the same a and b) are kept once, the first label winning."""
     out, seen = [], set()
     for x in specs:
         if not x:
@@ -199,30 +190,18 @@ def comparisons(*specs) -> list:
             key = (c["a"], c["b"])
             if key not in seen:
                 seen.add(key)
-                out.append(dict(kind="contrast", a=c["a"], b=c["b"], label=c.get("label", f"{c['a']} - {c['b']}")))
-    for x in specs:
-        if not x:
-            continue
-        for a in x.get("arms", []):
-            ctl = a.get("attribution")
-            if ctl and (a["id"], ctl) not in seen:
-                seen.add((a["id"], ctl))
-                out.append(dict(kind="attribution", a=a["id"], b=ctl, label=f"{a['id']}: mechanism over its control"))
+                out.append(dict(a=c["a"], b=c["b"], label=c.get("label", f"{c['a']} - {c['b']}")))
     return out
 
 
 # --------------------------------------------------------------------------- weights files
 FORWARD_MODEL = ("advance", "copy", "eval")
-_V1_KEYS = {"wAdvance": "advance", "wCopy": "copy", "wEval": "eval"}
 
 
 def read_weights(path) -> dict:
-    """A MAGAT weights file, version 1 or 2: the header, and every profile's prices as {op: weight}.
-
-    Version 1 prices the forward model (profile.<p>.wAdvance, wCopy, wEval); version 2 every operation an
-    arm declares (profile.<p>.w.<op>). Either way a profile's prices are keyed advance, copy, eval and the
-    operation names, so re-pricing reads one shape. Arm ids hold no dots and budgets are digits, so a
-    profile's name ends at the first dot after its '@'."""
+    """A MAGAT weights file (version 2): the header, and every profile's prices as {op: weight}, keyed
+    advance, copy, eval and the names of the operations the arm declares (profile.<p>.w.<op>). Arm ids
+    hold no dots and budgets are digits, so a profile's name ends at the first dot after its '@'."""
     header, prof, glob_ops = {}, {}, {}
     for line in pathlib.Path(path).read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -236,22 +215,19 @@ def read_weights(path) -> dict:
             if dot <= 0:
                 continue
             name, field = rest[:dot], rest[dot + 1:]
-            if field in _V1_KEYS:
-                prof.setdefault(name, {})[_V1_KEYS[field]] = float(v)
-            elif field.startswith("w."):
+            if field.startswith("w."):
                 prof.setdefault(name, {})[field[2:]] = float(v)
         elif k.startswith("global.w."):
             glob_ops[k[len("global.w."):]] = float(v)
         else:
             header[k] = v
+    version = str(header.get("magat.weights.version", "")).strip()
+    if version != "2":
+        raise ValueError(f"{path} is not a version-2 MAGAT weights file (magat.weights.version = {version or 'missing'})")
     profiles = {n: w for n, w in prof.items() if all(o in w for o in FORWARD_MODEL)}
-    glob = {"advance": float(header.get("global.wAdvance", glob_ops.get("advance", 1.0))),
-            "copy": float(header.get("global.wCopy", glob_ops.get("copy", 0.0))),
-            "eval": float(header.get("global.wEval", glob_ops.get("eval", 0.0)))}
-    version = int(header.get("magat.weights.version", "1") or 1)
-    if version >= 2:
-        glob.update({o: w for o, w in glob_ops.items() if o not in FORWARD_MODEL})
-    return dict(path=str(path), name=pathlib.Path(path).name, header=header, version=version, profiles=profiles,
+    glob = {"advance": glob_ops.get("advance", 1.0), "copy": glob_ops.get("copy", 0.0), "eval": glob_ops.get("eval", 0.0)}
+    glob.update({o: w for o, w in glob_ops.items() if o not in FORWARD_MODEL})
+    return dict(path=str(path), name=pathlib.Path(path).name, header=header, version=2, profiles=profiles,
                 globals=glob, sha256=hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest())
 
 
@@ -262,7 +238,6 @@ def provenance(split: Split, spec) -> dict:
     cfg = game.get("configuration") or {}
     w = r.get("weights") or {}
     p = r.get("portfolio") or {}
-    fz = r.get("frozen") or {}
     out = dict(
         split=split.name,
         path=shown(split.path),
@@ -273,11 +248,8 @@ def provenance(split: Split, spec) -> dict:
         currency_reference=w.get("reference", "unknown"),
         experiment=(spec or {}).get("name") or (r.get("experiment") or {}).get("name", "none"),
         experiment_sha256=(spec or {}).get("_sha256") or (r.get("experiment") or {}).get("sha256", ""),
-        frozen_sha256=fz.get("sha256", ""),
-        preregistration=(spec or {}).get("preregistration", ""),
         magat_commit=(r.get("magat") or {}).get("commit") or (r.get("magat") or {}).get("version") or "unknown",
         toy=bool(r.get("toy", False)),
-        imported=r.get("imported"),
         leaves=len(split.leaves),
         turns=int(len(split.turns)),
     )
