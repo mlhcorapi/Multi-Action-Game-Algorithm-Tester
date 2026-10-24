@@ -7,10 +7,6 @@ import magat.agent.TurnBudget;
 import magat.agent.TurnRecord;
 import magat.agents.emcts.Emcts;
 import magat.agents.emcts.EmctsFactory;
-import magat.agents.emcts.QdeltaArms;
-import magat.agents.emcts.QdeltaEmcts;
-import magat.agents.emcts.QdeltaParams;
-import magat.game.Granularity;
 import magat.game.Scenario;
 import magat.meter.Meter;
 import magat.meter.Weights;
@@ -26,7 +22,7 @@ import java.util.List;
 
 import static org.junit.Assert.*;
 
-/** The EMCTS family declares its own operations, records exactly those, and is priced by them under a version-2 currency only. */
+/** EMCTS declares its own operations, records exactly those, and is priced by them under a version-2 currency only. */
 public class OperationsToyTest {
 
     private final ToyGame game = new ToyGame();
@@ -45,61 +41,22 @@ public class OperationsToyTest {
         Meter.useProfile(null);
     }
 
-    private static QdeltaParams params(double eps, QdeltaParams.RepairMode mode, int k) {
-        QdeltaParams p = new QdeltaParams();
-        p.epsilon = eps;
-        p.repairMode = mode;
-        p.shortlistK = k;
-        p.repairKeys = Granularity.COARSE;
-        return p;
-    }
-
-    private static EmctsFactory<ToyGame.State, ToyGame.Move> arm(String id, QdeltaParams p) {
-        return new EmctsFactory<>(id, "", p::copy);
-    }
-
     @Test
-    public void everyArmDeclaresTheOperationsItsParametersMakeItPerform() {
-        assertEquals(Emcts.OPERATIONS, EmctsFactory.<ToyGame.State, ToyGame.Move>plain().operations());
-        assertEquals(Arrays.asList("emcts.generation", "emcts.legal", "emcts.check", "emcts.seqkey", "emcts.burn",
-                "qd.classify", "qd.update", "qd.lookup", "qd.zeropick"),
-                QdeltaEmcts.operations(params(1.0, QdeltaParams.RepairMode.ZERO_EVAL, 0)));
-        assertEquals("a random shortlist reads no estimate", Arrays.asList("emcts.generation", "emcts.legal", "emcts.check",
-                "emcts.seqkey", "emcts.burn", "qd.classify", "qd.update", "qd.shortlist"),
-                QdeltaEmcts.operations(params(1.0, QdeltaParams.RepairMode.SHORTLIST_RANDOM, 2)));
-        assertTrue(QdeltaEmcts.operations(params(0.25, QdeltaParams.RepairMode.FULL, 0)).contains("qd.lookup"));
-        for (QdeltaArms.Arm a : QdeltaArms.all()) {
-            List<String> ops = a.<ToyGame.State, ToyGame.Move>factory().operations();
-            for (String op : ops) assertTrue(a.id + ": " + op, Meter.OP_NAME.matcher(op).matches());
-            assertEquals(a.id, Emcts.OPERATIONS, ops.subList(0, Emcts.OPERATIONS.size()));
-        }
+    public void emctsDeclaresItsOperations() {
+        List<String> ops = EmctsFactory.<ToyGame.State, ToyGame.Move>plain().operations();
+        assertEquals(Emcts.OPERATIONS, ops);
+        for (String op : ops) assertTrue(op, Meter.OP_NAME.matcher(op).matches());
     }
 
     @Test
     public void aTurnRecordsExactlyItsDeclaredOperations() {
-        for (AgentFactory<ToyGame.State, ToyGame.Move> f : Arrays.asList(EmctsFactory.<ToyGame.State, ToyGame.Move>plain(),
-                arm("z", params(1.0, QdeltaParams.RepairMode.ZERO_EVAL, 0)),
-                arm("s", params(0.25, QdeltaParams.RepairMode.SHORTLIST_K, 2)))) {
-            TurnRecord r = Episode.run(game, positions.get(0), 0, f, 1_500, Weights.DEFAULT, "toy");
-            assertEquals(f.id(), f.operations(), new ArrayList<>(r.operations.keySet()));
-            assertTrue(f.id(), r.operations.get("emcts.generation") > 0);
-            assertTrue(f.id(), r.operations.get("emcts.legal") > 0);
-            assertTrue(f.id(), r.operations.get("emcts.seqkey") > 0);
-            assertTrue(f.id() + ": the greedy initial plan queries legal actions outside the budget",
-                    r.initOperations.get("emcts.legal") > 0);
-        }
-        // Every zero-evaluation pick is one qd.zeropick; a call that found no legal candidate is an operation but no pick.
-        TurnRecord z = Episode.run(game, positions.get(0), 0, arm("z", params(1.0, QdeltaParams.RepairMode.ZERO_EVAL, 0)), 1_500,
-                Weights.DEFAULT, "toy");
-        // (On the toy game a repair rarely replaces anything, so there may be none; on Tribes there are thousands.)
-        long picks = z.telemetry.get("zeroEvalPicks").longValue();
-        assertEquals("every replacement is one zero-evaluation pick", z.telemetry.get("mutRepairReplaced").longValue(), picks);
-        assertTrue(z.operations.get("qd.zeropick") >= picks);
-        // Each ranked pick reads one estimate per candidate, so lookups outnumber picks.
-        assertTrue(z.operations.get("qd.lookup") >= picks);
-        // Credit: one update per child (the insertion), plus one more for the removed action where there is one.
-        long children = z.telemetry.get("mutEvents").longValue();
-        assertTrue(z.operations.get("qd.update") >= children && z.operations.get("qd.update") <= 2 * children);
+        AgentFactory<ToyGame.State, ToyGame.Move> f = EmctsFactory.plain();
+        TurnRecord r = Episode.run(game, positions.get(0), 0, f, 1_500, Weights.DEFAULT, "toy");
+        assertEquals(f.operations(), new ArrayList<>(r.operations.keySet()));
+        assertTrue(r.operations.get("emcts.generation") > 0);
+        assertTrue(r.operations.get("emcts.legal") > 0);
+        assertTrue(r.operations.get("emcts.seqkey") > 0);
+        assertTrue("the greedy initial plan queries legal actions in its initialization", r.initOperations.get("emcts.legal") > 0);
     }
 
     @Test

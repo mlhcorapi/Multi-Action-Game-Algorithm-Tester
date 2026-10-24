@@ -251,7 +251,7 @@ UNDER_LOAD_CELL = r'''
 RUN_UNDER_LOAD = False
 if RUN_UNDER_LOAD:
     magat("calibrate", "--game", GAME, "--portfolio", PORTFOLIO, "--out", CALIBRATION,
-          "--arms", "emcts,emcts-comma", "--under-load", WORKERS)
+          "--arms", "emcts", "--under-load", WORKERS)
 '''
 
 GATES_CELL = r'''
@@ -259,18 +259,10 @@ magat("check", "contract", "--game", GAME, "--scenarios", 8)
 assert_in_log("check-contract", "CONTRACT: PASS")
 magat("check", "equivalence", "--game", GAME, "--scenarios", 8, "--visits", 2, "--budgets", "8000,40000")
 assert_in_log("check-equivalence", "EQUIVALENCE: PASS")
-magat("check", "structure", "--game", GAME, "--spec", ROOT / "experiments" / GAME / "structure.json")
-assert_in_log("check-structure", "STRUCTURE: PASS")
 # The audit: each arm's declared operations and forward model account for its turn (fails above 25% unaccounted).
 magat("check", "overhead", "--audit", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "@reference", "--budget", MID_LEVEL)
 assert_in_log("check-overhead", "OVERHEAD AUDIT: PASS")
-magat("check", "replay", "--game", GAME, "--leaf", ROOT / "games" / GAME / "results" / "replay" / "Comma_Off" / "80000cu",
-      "--portfolio", PORTFOLIO, "--weights", PUBLISHED_WEIGHTS, "--turns", 20)
-assert_in_log("check-replay", "REPLAY: PASS")
-magat("probe", "support", "--game", GAME, "--arm", "comma-bias-e25", "--scenarios", 20, "--weights", WEIGHTS,
-      "--out", CALIBRATION, check=False)      # a failing level is a reporting level, not an error
-bundle("gates", [LOGS / f"{n}.log" for n in ("check-contract", "check-equivalence", "check-structure", "check-replay",
-                                             "check-overhead", "probe-support", "test")] + [CALIBRATION / "support_probe_comma-bias-e25.csv"])
+bundle("gates", [LOGS / f"{n}.log" for n in ("check-contract", "check-equivalence", "check-overhead", "test")])
 '''
 
 WORKED_CELL = r'''
@@ -295,7 +287,7 @@ def experiment_cells(game: str) -> list:
     specs = {p.name: p for p in sorted((ROOT / "experiments" / game).glob("*.json"))}
     for spec in specs.values():
         x = json.loads(spec.read_text(encoding="utf-8"))
-        if x.get("name") == "shakedown" or "levels" not in x:      # the shakedown's own spec; structure.json
+        if x.get("name") == "shakedown" or "levels" not in x:      # the shakedown's own spec
             continue
         name, split = x["name"], x.get("split", "all")
         levels = ", ".join(f"{l['budget']:,} x {l['visits']}" for l in x.get("levels", []))
@@ -357,7 +349,7 @@ BUNDLED = [
     ("portfolio", "this machine's portfolio: manifest, split files, identity, the verify log"),
     ("threads", "the thread sweep and threads.json"),
     ("calibration", f"the currency {CURRENCY_NAME}: weights, every section's record and verdict, the checks, the overhead"),
-    ("gates", "contract, equivalence, structure, audit, replay, support probe"),
+    ("gates", "contract, equivalence, audit"),
     ("worked-result", "the published worked result, re-analysed here"),
 @RUNS@    ("shakedown", "the shakedown's log"),
 ]
@@ -483,9 +475,8 @@ folder has every section's verdict, and the last cell bundles it all.
 ## Gates and probes
 
 The contract laws on published positions; the equivalence gate, where every ported arm must reproduce
-its thesis-tree oracle field for field, mechanism counters included (all of them: about ten minutes);
-the structure check; the replay of published R7615 holdout turns on this machine's own portfolio; the
-support probe for the biased arms. Nothing downstream runs otherwise.
+the engine agent it was ported from, field for field; and the audit, where each arm's declared
+operations and forward model must account for its turn. Nothing downstream runs otherwise.
 """),
     code(GATES_CELL, tags=("gates",)),
     md("""

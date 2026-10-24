@@ -15,6 +15,7 @@ import magat.portfolio.HoldoutLedger;
 import magat.portfolio.Portfolio;
 import magat.portfolio.PortfolioBuilder;
 import magat.portfolio.Split;
+import magat.testgame.ToyArms;
 import magat.testgame.ToyGame;
 import org.junit.After;
 import org.junit.Before;
@@ -40,15 +41,15 @@ public class GridRunnerTest {
 
     static final String SPEC = "{ \"name\": \"toy\", \"game\": \"toy\", \"split\": \"dev\", \"baseline\": \"emcts\","
             + " \"levels\": [ {\"budget\": 600, \"visits\": 2}, {\"budget\": 300, \"visits\": 1} ],"
-            + " \"arms\": [ {\"id\": \"emcts\"}, {\"id\": \"emcts-comma\"}, {\"id\": \"random\"} ],"
-            + " \"sweeps\": [ {\"parameter\": \"selection\", \"arms\": [\"emcts-comma\"], \"null\": \"emcts\"} ] }";
+            + " \"arms\": [ {\"id\": \"emcts\"}, {\"id\": \"emcts-alt\"}, {\"id\": \"random\"} ],"
+            + " \"sweeps\": [ {\"parameter\": \"selection\", \"arms\": [\"emcts-alt\"], \"null\": \"emcts\"} ] }";
 
     /** A module over the toy game with the given extra arms registered. */
     public static GameModule<ToyGame.State, ToyGame.Move> module(ToyGame game, List<AgentFactory<ToyGame.State, ToyGame.Move>> extra) {
         AgentRegistry<ToyGame.State, ToyGame.Move> r = new AgentRegistry<>();
         r.register(RandomAgent.factory());
         r.register(EmctsFactory.plain());
-        r.register(EmctsFactory.comma(3));
+        r.register(ToyArms.emctsAlt());
         for (AgentFactory<ToyGame.State, ToyGame.Move> f : extra) r.register(f);
         return new GameModule<ToyGame.State, ToyGame.Move>() {
             @Override public Game<ToyGame.State, ToyGame.Move> game() { return game; }
@@ -67,13 +68,13 @@ public class GridRunnerTest {
         };
     }
 
-    /** A weights file pricing the given arms at 300 and 600; {@code bump} raises emcts-comma@300's copy weight. */
+    /** A weights file pricing the given arms at 300 and 600; {@code bump} raises emcts-alt@300's copy weight. */
     static Path weights(Path dir, String name, double bump, String... arms) throws Exception {
         StringBuilder sb = new StringBuilder("magat.weights.version = 1\ngame = toy\nreference = emcts@300\nreferenceAdvanceNanos = 1000\n"
                 + "turnsPerRep = 2\nglobal.wAdvance = 1\nglobal.wCopy = 0.16\nglobal.wEval = 0.077\n");
         for (String a : arms)
             for (int b : new int[]{300, 600}) {
-                double copy = a.equals("emcts-comma") && b == 300 ? 0.16 + bump : 0.16;
+                double copy = a.equals("emcts-alt") && b == 300 ? 0.16 + bump : 0.16;
                 sb.append("profile.").append(a).append('@').append(b).append(".wAdvance = 1\n");
                 sb.append("profile.").append(a).append('@').append(b).append(".wCopy = ").append(copy).append('\n');
                 sb.append("profile.").append(a).append('@').append(b).append(".wEval = 0.077\n");
@@ -100,7 +101,7 @@ public class GridRunnerTest {
 
     @Test
     public void aVersionTwoRunWritesTheOperationsAndRecordsTheirPricesAndTheAudit() throws Exception {
-        Weights w = Weights.load(weightsV2(work, "w2.properties", 0.5, "emcts", "emcts-comma"));
+        Weights w = Weights.load(weightsV2(work, "w2.properties", 0.5, "emcts", "emcts-alt"));
         assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), portfolio, w, options(Split.Half.DEV)));
         Path leaf = Leaf.dir(out.resolve("dev"), "emcts", 600);
         List<String> lines = Files.readAllLines(leaf.resolve(Leaf.TURNS), StandardCharsets.UTF_8);
@@ -135,12 +136,12 @@ public class GridRunnerTest {
         GridRunner.Options o = options(Split.Half.DEV);
         Experiment x = Experiment.load(spec(SPEC));
         assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio,
-                Weights.load(weights(work, "w1.properties", 0, "emcts", "emcts-comma")), o));
+                Weights.load(weights(work, "w1.properties", 0, "emcts", "emcts-alt")), o));
         // Same forward-model prices, but the arms' own operations are now priced: every priced leaf changes price.
-        Weights v2 = Weights.load(weightsV2(work, "w2.properties", 0.5, "emcts", "emcts-comma"));
+        Weights v2 = Weights.load(weightsV2(work, "w2.properties", 0.5, "emcts", "emcts-alt"));
         assertEquals(GridRunner.MISMATCH, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, v2, o));
         // Retiring them re-runs them in the new currency.
-        o.retire = new java.util.LinkedHashSet<>(Arrays.asList("emcts@600", "emcts@300", "emcts-comma@600", "emcts-comma@300"));
+        o.retire = new java.util.LinkedHashSet<>(Arrays.asList("emcts@600", "emcts@300", "emcts-alt@600", "emcts-alt@300"));
         assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, v2, o));
         assertTrue(read(Leaf.dir(out.resolve("dev"), "emcts", 300).resolve(Leaf.TURNS)).contains("op_emcts.legal"));
     }
@@ -180,7 +181,7 @@ public class GridRunnerTest {
 
     @Test
     public void runsTheGridAndAResumeSkipsEveryFinishedLeaf() throws Exception {
-        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-comma"));
+        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-alt"));
         Experiment x = Experiment.load(spec(SPEC));
         assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, options(Split.Half.DEV)));
         Path root = out.resolve("dev");
@@ -197,15 +198,15 @@ public class GridRunnerTest {
         assertTrue(header.startsWith("scenario,source,phase,visit,arm,budget,initial,final"));
         assertTrue(header.contains(",advances,copies,evals,units,"));
 
-        String before = read(Leaf.dir(root, "emcts-comma", 600).resolve(Leaf.TURNS));
+        String before = read(Leaf.dir(root, "emcts-alt", 600).resolve(Leaf.TURNS));
         assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, options(Split.Half.DEV)));
-        assertEquals("a finished leaf is skipped, not re-run", before, read(Leaf.dir(root, "emcts-comma", 600).resolve(Leaf.TURNS)));
+        assertEquals("a finished leaf is skipped, not re-run", before, read(Leaf.dir(root, "emcts-alt", 600).resolve(Leaf.TURNS)));
         assertEquals(6, Files.readAllLines(root.resolve(GridRunner.CHECKPOINT)).size());
     }
 
     @Test
     public void aPartialLeafContinuesPerScenarioAndVisit() throws Exception {
-        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-comma"));
+        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-alt"));
         Experiment x = Experiment.load(spec(SPEC));
         GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, options(Split.Half.DEV));
         Path root = out.resolve("dev"), leaf = Leaf.dir(root, "emcts", 600), turns = leaf.resolve(Leaf.TURNS);
@@ -241,12 +242,12 @@ public class GridRunnerTest {
 
     @Test
     public void theHoldoutNeedsFrozenChoicesAndIsLedgeredOnce() throws Exception {
-        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-comma"));
+        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-alt"));
         Experiment x = Experiment.load(spec(SPEC));
         assertEquals(GridRunner.INVALID, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, options(Split.Half.HOLDOUT)));
         assertFalse(Files.exists(out.resolve("holdout")));
         GridRunner.Options o = options(Split.Half.HOLDOUT);
-        o.frozen = Files.write(work.resolve("frozen.txt"), "champion = emcts-comma\n".getBytes(StandardCharsets.UTF_8));
+        o.frozen = Files.write(work.resolve("frozen.txt"), "champion = emcts-alt\n".getBytes(StandardCharsets.UTF_8));
         assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, o));
         assertEquals(1, HoldoutLedger.load(portfolioDir).entries().size());
         assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, o));
@@ -262,21 +263,21 @@ public class GridRunnerTest {
     public void theCurrencyLockRefusesARepricedLeafUnlessItIsRetired() throws Exception {
         Experiment x = Experiment.load(spec(SPEC));
         GridRunner.run(module(game, new ArrayList<>()), x, portfolio,
-                Weights.load(weights(work, "w1.properties", 0, "emcts", "emcts-comma")), options(Split.Half.DEV));
-        Weights repriced = Weights.load(weights(work, "w2.properties", 0.05, "emcts", "emcts-comma"));
+                Weights.load(weights(work, "w1.properties", 0, "emcts", "emcts-alt")), options(Split.Half.DEV));
+        Weights repriced = Weights.load(weights(work, "w2.properties", 0.05, "emcts", "emcts-alt"));
         assertEquals(GridRunner.MISMATCH, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, repriced, options(Split.Half.DEV)));
 
         Path root = out.resolve("dev");
         String untouched = read(Leaf.dir(root, "emcts", 600).resolve(Leaf.TURNS));
         GridRunner.Options o = options(Split.Half.DEV);
-        o.retire.add("emcts-comma@300");
+        o.retire.add("emcts-alt@300");
         assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, repriced, o));
         assertTrue(read(root.resolve(Provenance.FILE)).contains("\"retired\""));
-        assertTrue(read(Leaf.dir(root, "emcts-comma", 300).resolve(Leaf.META)).contains("0.21"));
+        assertTrue(read(Leaf.dir(root, "emcts-alt", 300).resolve(Leaf.META)).contains("0.21"));
         assertEquals("leaves whose price did not change are kept", untouched, read(Leaf.dir(root, "emcts", 600).resolve(Leaf.TURNS)));
 
         // A file that only adds profiles changes no leaf's price: no retirement needed.
-        Weights extended = Weights.load(weights(work, "w3.properties", 0.05, "emcts", "emcts-comma", "emcts-other"));
+        Weights extended = Weights.load(weights(work, "w3.properties", 0.05, "emcts", "emcts-alt", "emcts-other"));
         assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, extended, options(Split.Half.DEV)));
     }
 
@@ -291,7 +292,7 @@ public class GridRunnerTest {
 
     @Test
     public void aTreeFromAnotherPortfolioIsRefused() throws Exception {
-        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-comma"));
+        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-alt"));
         Experiment x = Experiment.load(spec(SPEC));
         GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, options(Split.Half.DEV));
         Path other = Files.createTempDirectory("magat-run-portfolio2");
@@ -302,7 +303,7 @@ public class GridRunnerTest {
 
     @Test
     public void anInvalidSpecRunsNothing() throws Exception {
-        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts"));     // emcts-comma unpriced
+        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts"));     // emcts-alt unpriced
         assertEquals(GridRunner.INVALID, GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), portfolio, w,
                 options(Split.Half.DEV)));
         assertFalse(Files.exists(out.resolve("dev")));

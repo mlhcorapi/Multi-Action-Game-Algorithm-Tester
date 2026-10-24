@@ -13,14 +13,9 @@
   ],
   "arms": [
     { "id": "emcts" },
-    { "id": "emcts-comma" },
     { "id": "random" }
   ],
-  "sweeps": [
-    { "parameter": "selection", "arms": ["emcts-comma"], "null": "emcts" }
-  ],
   "contrasts": [
-    { "a": "emcts-comma", "b": "emcts", "label": "comma selection over plus" },
     { "a": "emcts", "b": "random", "label": "search over the floor" }
   ]
 }

@@ -16,8 +16,9 @@ import java.util.ArrayList;
 import java.util.Random;
 
 /**
- * The thesis tree's {@code ExperimentalEMCTSAgent}, driven through the engine exactly as
- * {@code Stage1Runner.runOneTurn} drove it, as the oracle for the ported {@code Emcts}.
+ * The engine fork's {@code ExperimentalEMCTSAgent} with (1+1) incumbent selection, driven through the
+ * engine one turn at a time, as the oracle for the ported {@code Emcts}: the gate asserts that the port
+ * makes every forward-model call and every random draw the engine's agent makes, in the same order.
  *
  * <p>The oracle prices its budget with the engine's own meter, whose global weights are set to the
  * profile's three numbers before each turn (its {@code computeProfile} stays null, so
@@ -28,19 +29,11 @@ import java.util.Random;
  * reads, and the copy handed to the root's evaluation, which the root's own stored state makes
  * unnecessary); the port does not make them, and {@link #deadInitCopies} says so.
  */
-public final class ThesisEmctsOracle implements Oracle<TribesState> {
-
-    private final ExperimentalEMCTSParams.SelectionMode selection;
-    private final int childrenPerGeneration;
-
-    public ThesisEmctsOracle(ExperimentalEMCTSParams.SelectionMode selection, int childrenPerGeneration) {
-        this.selection = selection;
-        this.childrenPerGeneration = childrenPerGeneration;
-    }
+public final class EngineEmctsOracle implements Oracle<TribesState> {
 
     @Override
     public String describe() {
-        return "thesis ExperimentalEMCTSAgent(" + selection + ", k=" + childrenPerGeneration + ")";
+        return "engine ExperimentalEMCTSAgent(PLUS, k=1)";
     }
 
     @Override
@@ -62,8 +55,8 @@ public final class ThesisEmctsOracle implements Oracle<TribesState> {
         p.heuristic_method = p.SIMPLE_HEURISTIC;
         p.depth = 21;
         p.computeProfile = null;
-        p.selectionMode = selection;
-        p.childrenPerGeneration = childrenPerGeneration;
+        p.selectionMode = ExperimentalEMCTSParams.SelectionMode.PLUS;
+        p.childrenPerGeneration = 1;
         ExperimentalEMCTSAgent agent = new ExperimentalEMCTSAgent(seed, p);
 
         GameState gs = scenario.state.raw().copy();

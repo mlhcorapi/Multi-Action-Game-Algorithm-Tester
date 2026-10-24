@@ -74,27 +74,15 @@ def main(argv) -> int:
     step("3. Contract laws on published positions")
     check("L1-L10 pass", [PY, ROOT / "magat.py", "check", "contract", "--game", game, "--scenarios", "4"], "CONTRACT: PASS")
 
-    step("4. Gates and probes: equivalence, structure, replay, support, overhead")
-    check("emcts reproduces the thesis agent at 8k on 2 positions",
+    step("4. Gates and probes: equivalence, overhead, audit")
+    check("emcts reproduces the engine's agent at 8k on 2 positions",
           [PY, ROOT / "magat.py", "check", "equivalence", "--game", game, "--arms", "emcts",
            "--scenarios", "2", "--visits", "1", "--budgets", "8000"], "EQUIVALENCE: PASS")
-    check("the headline arm, its control and a biased arm reproduce theirs, counters included",
-          [PY, ROOT / "magat.py", "check", "equivalence", "--game", game, "--arms", "comma-z0-coarse,comma-rand15,comma-bias-e25",
-           "--scenarios", "2", "--visits", "1", "--budgets", "8000"], "EQUIVALENCE: PASS")
-    check("structure: the selection equivalences, the baseline contract, every mechanism differs from its control",
-          [PY, ROOT / "magat.py", "check", "structure", "--game", game, "--spec", ROOT / "experiments" / game / "structure.json"],
-          "STRUCTURE: PASS")
-    check("replay: published R7615 holdout turns reproduce field for field",
-          [PY, ROOT / "magat.py", "check", "replay", "--game", game, "--leaf",
-           ROOT / "games" / game / "results" / "replay" / "Comma_Off" / "80000cu", "--turns", "3"], "REPLAY: PASS")
-    check("support: the bias engages (toy size)",
-          [PY, ROOT / "magat.py", "probe", "support", "--game", game, "--arm", "comma-bias-e25", "--levels", "40000",
-           "--scenarios", "2"], "SUPPORT: ", codes=(0, 1))
     check("overhead: decorator and dormant counters are measured (toy size)",
           [PY, ROOT / "magat.py", "check", "overhead", "--game", game, "--turns", "2", "--reps", "2", "--warmup", "1"],
           "OVERHEAD: MEASURED")
     check("audit: each arm's declared operations and forward model account for its turn (toy size)",
-          [PY, ROOT / "magat.py", "check", "overhead", "--audit", "--game", game, "--arms", "emcts,comma-z0-coarse",
+          [PY, ROOT / "magat.py", "check", "overhead", "--audit", "--game", game, "--arms", "emcts",
            "--budget", "4000", "--turns", "2", "--reps", "1", "--warmup", "1"], "OVERHEAD AUDIT: PASS")
 
     step("5. Portfolio: toy build, freeze, verify against the published portfolio")
@@ -132,27 +120,23 @@ def main(argv) -> int:
           "=== AUDIT", then=lambda: weights.is_file() and "magat.weights.version = 2" in weights.read_text(encoding="utf-8")
           and "profile.emcts@2000.w.emcts.generation" in weights.read_text(encoding="utf-8"))
     snapshot = {}
-    check("a second arm merges into it, re-denominated",
-          [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts-comma",
-           "--levels", "2000,4000", *toy],
-          "[merge] kept the currency",
-          then=lambda: "profile.emcts-comma@4000.w.advance" in snapshot.setdefault("w", weights.read_text(encoding="utf-8")))
     check("pricing it again without --replace is refused",
-          [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts-comma", "--levels", "4000", "--toy"],
-          "--replace", codes=(2,), then=lambda: weights.read_text(encoding="utf-8") == snapshot["w"])
+          [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts", "--levels", "2000,4000", "--toy"],
+          "--replace", codes=(2,),
+          then=lambda: weights.read_text(encoding="utf-8") == snapshot.setdefault("w", weights.read_text(encoding="utf-8")))
     check("--check gates each cell's turn-price drift and writes nothing",
-          [PY, ROOT / "magat.py", "calibrate", "--check", "--game", game, "--weights", weights, "--arms", "emcts-comma",
+          [PY, ROOT / "magat.py", "calibrate", "--check", "--game", game, "--weights", weights, "--arms", "emcts",
            "--levels", "4000", *toy],
           "largest drift in a turn's price", codes=(0, 1), then=lambda: weights.read_text(encoding="utf-8") == snapshot["w"])
     check("--under-load writes beside the idle file, never over it",
-          [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts-comma",
+          [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts",
            "--under-load", "3", "--levels", "4000", "--turns", "2", *toy],
           "IDLE vs 3 THREADS",
           then=lambda: (calib / "compute_weights_load3.properties").is_file() and weights.read_text(encoding="utf-8") == snapshot["w"])
-    check("the published currency prices every worked-result arm",
-          [PY, ROOT / "magat.py", "weights", "--game", game, "--arms", "@worked-result"], "WEIGHTS: COVERED")
+    check("the published currency prices the reference arms",
+          [PY, ROOT / "magat.py", "weights", "--game", game, "--arms", "@reference"], "WEIGHTS: COVERED")
     check("check time: whole turns under the toy currency, single-threaded, against a target",
-          [PY, ROOT / "magat.py", "check", "time", "--game", game, "--weights", weights, "--arms", "emcts,emcts-comma",
+          [PY, ROOT / "magat.py", "check", "time", "--game", game, "--weights", weights, "--arms", "emcts",
            "--levels", "2000,4000", "--targets", "100,200", "--positions", "3", "--warmup", "1",
            "--out", calib / "time.json"], "TIME: ", codes=(0, 1), then=lambda: (calib / "time.json").is_file())
     timed = data / "shakedown" / f"levels-{game}"
@@ -165,17 +149,13 @@ def main(argv) -> int:
     shutil.rmtree(controlled, ignore_errors=True)
     priced = controlled / "compute_weights.properties"
     sections = [PY, ROOT / "magat.py", "calibrate-controlled", "--name", "shakedown", "--game", game, "--out", controlled, "--toy",
-                "--arms", "emcts,emcts-comma,comma-z0-coarse", "--batch", "1", "--levels", "2000,4000", "--turns", "2",
+                "--arms", "emcts", "--batch", "1", "--levels", "2000,4000", "--turns", "2",
                 "--reps", "2", "--warmup", "1", "--soak-minutes", "0", "--interval", "2"]
-    check("calibrate-controlled --plan: two sections, nothing measured", [*sections, "--plan"], "SECTIONS: 2",
+    check("calibrate-controlled --plan: one section, nothing measured", [*sections, "--plan"], "SECTIONS: 1",
           then=lambda: not priced.is_file())
-    check("section 2 first: preflight, controls, stability check, one session and its verdict (toy)",
-          [*sections, "--section", "2"], "SECTION 2: ",
-          then=lambda: "profile.comma-z0-coarse@4000.w.advance" in priced.read_text(encoding="utf-8"))
-    check("then the rest, merged by ratio, and the self-check, with a summary of every section (toy)",
+    check("one session: preflight, controls, stability check, the session, its verdict and the self-check (toy)",
           sections, "CONTROLLED CALIBRATION: COMPLETE",
-          then=lambda: "profile.emcts-comma@4000.w.advance" in priced.read_text(encoding="utf-8")
-          and "| 2 | comma-z0-coarse | yes |" in (controlled / "record" / "SUMMARY.md").read_text(encoding="utf-8"))
+          then=lambda: "profile.emcts@4000.w.advance" in priced.read_text(encoding="utf-8"))
     check("a priced section is not measured again without --redo", [*sections, "--section", "1"], "already priced")
 
     step("7. Runner: the shakedown spec on the toy portfolio and the toy currency")
@@ -186,25 +166,21 @@ def main(argv) -> int:
            "--out", run_root, "--threads", "2", "--toy"]
     check("dev: every leaf runs and is checkpointed, its rows counting the arm's own operations",
           [*run, "--split", "dev"], "RUN: COMPLETE",
-          then=lambda: len((run_root / "dev" / "_completed.txt").read_text(encoding="utf-8").split()) == 6
+          then=lambda: len((run_root / "dev" / "_completed.txt").read_text(encoding="utf-8").split()) == 4
           and "op_emcts.generation" in (run_root / "dev" / "emcts" / "2000cu" / "turns.csv").read_text(encoding="utf-8").splitlines()[0])
     check("re-running the same command skips every finished leaf", [*run, "--split", "dev"], "RUN: COMPLETE",
-          then=lambda: len(list((run_root / "dev").glob("*/*cu/turns.csv"))) == 6)
+          then=lambda: len(list((run_root / "dev").glob("*/*cu/turns.csv"))) == 4)
     check("holdout: runs into its own tree and is entered in the holdout ledger", [*run, "--split", "holdout"], "this read is entry 1",
           then=lambda: (run_root / "holdout" / "_run.json").is_file())
-    check("a retired leaf is discarded and re-run", [*run, "--split", "dev", "--retire-leaf", "emcts-comma@4000"], "RETIRED emcts-comma@4000")
+    check("a retired leaf is discarded and re-run", [*run, "--split", "dev", "--retire-leaf", "emcts@4000"], "RETIRED emcts@4000")
     repriced = calib / "compute_weights_repriced.properties"
-    repriced.write_text(weights.read_text(encoding="utf-8").replace("profile.emcts-comma@2000.w.copy = ", "profile.emcts-comma@2000.w.copy = 9"),
+    repriced.write_text(weights.read_text(encoding="utf-8").replace("profile.emcts@2000.w.copy = ", "profile.emcts@2000.w.copy = 9"),
                         encoding="utf-8")
     check("the currency lock refuses a leaf whose price changed",
           [PY, ROOT / "magat.py", "run", "--experiment", spec, "--portfolio", toy_dir, "--weights", repriced,
            "--out", run_root, "--threads", "2", "--toy", "--split", "dev"], "currency lock", codes=(4,))
-    for shipped in ("ab-emcts-dev", "ab-emcts-holdout"):
-        check(f"the shipped spec {shipped} validates against the published currency",
-              [PY, ROOT / "magat.py", "experiment", "validate", "--experiment", ROOT / "experiments" / game / f"{shipped}.json"],
-              "VALIDATION: PASS")
-    # The reference ladder runs at the published levels (games/<game>/levels.json), which the thesis's published
-    # currency does not price; its structure is checked until a currency at those levels is published.
+    # The reference ladder runs at the published levels (games/<game>/levels.json), which no published currency
+    # prices yet; its structure is checked until one does.
     check("the shipped spec reference-ladder validates (structure; no currency at the published levels yet)",
           [PY, ROOT / "magat.py", "experiment", "validate", "--no-weights", "--experiment",
            ROOT / "experiments" / game / "reference-ladder.json"], "VALIDATION: PASS")

@@ -9,6 +9,7 @@ import magat.meter.Weights;
 import magat.portfolio.Portfolio;
 import magat.portfolio.PortfolioBuilder;
 import magat.testgame.BusyAgent;
+import magat.testgame.ToyArms;
 import magat.testgame.ToyGame;
 import org.junit.After;
 import org.junit.Test;
@@ -38,7 +39,7 @@ public class CalibratorToyTest {
         AgentRegistry<ToyGame.State, ToyGame.Move> r = new AgentRegistry<>();
         r.register(RandomAgent.factory());
         r.register(EmctsFactory.plain());
-        r.register(EmctsFactory.comma(3));
+        r.register(ToyArms.emctsAlt());
         return r;
     }
 
@@ -100,35 +101,35 @@ public class CalibratorToyTest {
         assertLineFeedsOnly(out);
 
         // A second arm merges into the same currency; turns come from the file.
-        Calibrator.Result r2 = Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-comma"));
+        Calibrator.Result r2 = Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-alt"));
         assertTrue(r2.pass);
         assertFalse("a session of more than one cell brackets its reference", Double.isNaN(r2.bracketMove));
         assertTrue(read(out.resolve(Currency.PROFILES_CSV)).contains(",bracket,"));
         Weights w2 = Weights.load(file);
-        assertTrue(w2.has("emcts-comma@300") && w2.has("emcts-comma@600"));
+        assertTrue(w2.has("emcts-alt@300") && w2.has("emcts-alt@600"));
         assertEquals(w1.referenceAdvanceNanos(), w2.referenceAdvanceNanos(), 0);
         assertArrayEquals("profiles already priced are untouched", w1.profile("emcts@600"), w2.profile("emcts@600"), 0);
         assertEquals(w1.prices("emcts@600"), w2.prices("emcts@600"));
         assertTrue(read(file).contains("# merged "));
-        assertTrue("the merged arm's operations are priced too", w2.prices("emcts-comma@300").containsKey("emcts.seqkey"));
+        assertTrue("the merged arm's operations are priced too", w2.prices("emcts-alt@300").containsKey("emcts.seqkey"));
         assertLineFeedsOnly(out);
 
         // Pricing it again without --replace is refused before anything is measured.
         String before = read(file);
         try {
-            Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-comma"));
+            Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-alt"));
             fail("re-pricing a priced arm must be refused");
         } catch (IllegalStateException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("--replace"));
         }
         assertEquals(before, read(file));
-        Calibrator.Options replace = toy("emcts-comma");
-        replace.replace = new LinkedHashSet<>(Collections.singletonList("emcts-comma"));
+        Calibrator.Options replace = toy("emcts-alt");
+        replace.replace = new LinkedHashSet<>(Collections.singletonList("emcts-alt"));
         assertTrue(Calibrator.run(game, registry(), "emcts", p, out, null, replace).pass);
-        assertEquals(1, read(file).split("profile\\.emcts-comma@300\\.w\\.advance =", -1).length - 1);
+        assertEquals(1, read(file).split("profile\\.emcts-alt@300\\.w\\.advance =", -1).length - 1);
 
         // Turns that differ from the file's are refused: they would measure other positions.
-        Calibrator.Options wrongTurns = toy("emcts-comma");
+        Calibrator.Options wrongTurns = toy("emcts-alt");
         wrongTurns.turns = "4,4";
         wrongTurns.replace = replace.replace;
         try {
@@ -140,7 +141,7 @@ public class CalibratorToyTest {
 
         // A check measures and compares, and writes nothing.
         String beforeCheck = read(file);
-        Calibrator.Options check = toy("emcts-comma");
+        Calibrator.Options check = toy("emcts-alt");
         check.check = true;
         Calibrator.Result c = Calibrator.run(game, registry(), "emcts", p, null, file, check);
         assertNotNull(c.drift);
@@ -159,7 +160,7 @@ public class CalibratorToyTest {
         Calibrator.Options first = toy("emcts");
         first.turns = "2,2";
         Calibrator.Result fresh = Calibrator.run(game, registry(), "emcts", p, out, null, first);
-        Calibrator.Result merge = Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-comma"));
+        Calibrator.Result merge = Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-alt"));
         Calibrator.Options check = toy("emcts");
         check.check = true;
         Calibrator.Result checked = Calibrator.run(game, registry(), "emcts", p, null, out.resolve(Currency.WEIGHTS_FILE), check);
@@ -187,19 +188,19 @@ public class CalibratorToyTest {
         assertTrue(Calibrator.run(game, registry(), "emcts", p, out, null, first).pass);
         Path file = out.resolve(Currency.WEIGHTS_FILE);
         assertEquals(1, Weights.load(file).version());
-        Calibrator.Result r = Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-comma"));
+        Calibrator.Result r = Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-alt"));
         assertTrue(r.pass);
         Weights w = Weights.load(file);
         assertEquals(1, w.version());
-        assertTrue(w.has("emcts-comma@300"));
-        assertTrue("a version-1 currency prices the forward model only", w.operations("emcts-comma@300").isEmpty());
+        assertTrue(w.has("emcts-alt@300"));
+        assertTrue("a version-1 currency prices the forward model only", w.operations("emcts-alt@300").isEmpty());
         assertFalse(read(file).contains(".w."));
         // The arm's operations were still measured, for the audit: version 1 leaves them unpriced.
-        Cell comma = null;
-        for (Cell c : r.cells) if (c.profile.equals("emcts-comma@300")) comma = c;
-        assertNotNull(comma);
-        assertFalse(comma.ops.isEmpty());
-        assertTrue(comma.unpriced >= comma.unaccounted);
+        Cell alt = null;
+        for (Cell c : r.cells) if (c.profile.equals("emcts-alt@300")) alt = c;
+        assertNotNull(alt);
+        assertFalse(alt.ops.isEmpty());
+        assertTrue(alt.unpriced >= alt.unaccounted);
     }
 
     @Test
@@ -238,7 +239,7 @@ public class CalibratorToyTest {
     @Test
     public void anEstimateTimesAFewTurnsAndWritesNothing() throws Exception {
         Path out = Files.createTempDirectory("magat-calib-estimate");
-        Calibrator.Options o = toy("emcts", "emcts-comma");
+        Calibrator.Options o = toy("emcts", "emcts-alt");
         o.turns = "2,2";
         o.estimate = true;
         Calibrator.Result r = Calibrator.run(game, registry(), "emcts", portfolio(), out, null, o);
@@ -257,7 +258,7 @@ public class CalibratorToyTest {
         Path otherDir = Files.createTempDirectory("magat-calib-portfolio2");
         PortfolioBuilder.build(game, Collections.singletonMap("toy", 6), otherDir, 1);
         try {
-            Calibrator.run(game, registry(), "emcts", Portfolio.load(game, otherDir), out, null, toy("emcts-comma"));
+            Calibrator.run(game, registry(), "emcts", Portfolio.load(game, otherDir), out, null, toy("emcts-alt"));
             fail();
         } catch (IllegalStateException e) {
             assertTrue(e.getMessage().contains("portfolio"));

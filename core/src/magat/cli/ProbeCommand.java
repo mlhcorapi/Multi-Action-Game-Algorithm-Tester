@@ -13,8 +13,6 @@ import magat.meter.Weights;
 import magat.portfolio.Portfolio;
 import magat.probe.OverheadCheck;
 import magat.probe.ReplayCheck;
-import magat.probe.StructureCheck;
-import magat.probe.SupportProbe;
 import magat.probe.TimeCheck;
 import magat.run.RunGuard;
 
@@ -29,37 +27,21 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** {@code magat check structure | replay | overhead} and {@code magat probe support}. */
+/** {@code magat check replay | overhead | time}. */
 final class ProbeCommand {
 
     private ProbeCommand() {}
 
     static void usage() {
-        System.out.println("  check structure   --game <name> --spec experiments/<game>/structure.json [--portfolio <dir>] [--threads N]");
         System.out.println("  check replay      --game <name> --leaf <published leaf dir> --portfolio <dir> --weights <file> [--turns 20]");
         System.out.println("                    [--arm id] [--budget units] [--map tools/legacy-arms.json] [--threads N]");
         System.out.println("  check overhead    --game <name> --portfolio <dir> --weights <file> [--arm emcts] [--budget 40000] [--reps 3] [--turns 8]");
         System.out.println("  check overhead --audit --game <name> --portfolio <dir> [--arms a,b|@set] [--budget 40000] [--turns 4] [--reps 2]");
         System.out.println("                    [--warn 0.10] [--fail 0.25]: how much of each arm's turn its declared operations account for");
-        System.out.println("  probe support     --game <name> --arm <id> --portfolio <dir> --weights <file> [--levels ...] [--scenarios 20]");
-        System.out.println("                    [--criterion 0.80] [--out <calib dir>] [--threads N]");
     }
 
     private static int threads(Args args) {
         return args.getInt("threads", Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
-    }
-
-    static <S, A> int structure(Args args) throws Exception {
-        Main.banner("check structure");
-        GameModule<S, A> module = Games.load(args.require("game"));
-        Portfolio<S> p = Portfolio.load(module.game(), Paths.get(args.require("portfolio")));
-        Path spec = Paths.get(args.require("spec"));
-        System.out.println("# spec " + spec + ", portfolio " + p.identity().substring(0, 12) + "...; every turn priced with the fixed capture weights");
-        StructureCheck.Result r = StructureCheck.run(module.game(), module.agents(), p.scenarios(), spec, threads(args));
-        for (String s : r.passes) System.out.println("  [ok]   " + s);
-        for (String s : r.failures) System.out.println("  [FAIL] " + s);
-        System.out.println(r.ok() ? "STRUCTURE: PASS" : "STRUCTURE: FAIL (" + r.failures.size() + ")");
-        return r.ok() ? 0 : 1;
     }
 
     static <S, A> int replay(Args args) throws Exception {
@@ -202,33 +184,5 @@ final class ProbeCommand {
         System.out.println(ok ? String.format(Locale.ROOT, "TIME: PASS (every cell's mean within %.0f%% of its target)", 100 * tolerance)
                 : String.format(Locale.ROOT, "TIME: OUTSIDE (a cell's mean is more than %.0f%% from its target)", 100 * tolerance));
         return ok ? 0 : 1;
-    }
-
-    static <S, A> int support(Args args) throws Exception {
-        Main.banner("probe support");
-        GameModule<S, A> module = Games.load(args.require("game"));
-        Weights w = Weights.load(Paths.get(args.require("weights")));
-        Meter.install(w);
-        Portfolio<S> p = Portfolio.load(module.game(), Paths.get(args.require("portfolio")));
-        AgentFactory<S, A> arm = module.agents().get(args.require("arm"));
-        // The currency's own levels, and its turns' initialization policy (a file without one is the thesis's).
-        String fileLevels = w.header().get("levels");
-        long[] levels = args.getLongs("levels", fileLevels != null ? Arrays.stream(fileLevels.split(",")).mapToLong(x -> Long.parseLong(x.trim())).toArray()
-                : new long[]{40_000L, 80_000L, 400_000L});
-        String init = w.header().get("initialization");
-        TurnBudget.setInitialization(init == null ? TurnBudget.Initialization.OUTSIDE_BUDGET : TurnBudget.Initialization.of(init));
-        System.out.println("# initialization " + TurnBudget.initialization() + ", as " + w.source().getFileName() + " was measured");
-        int n = Math.min(args.getInt("scenarios", 20), p.size());
-        double criterion = Double.parseDouble(args.get("criterion", String.valueOf(SupportProbe.CRITERION)));
-        Path csv = args.has("out") ? Paths.get(args.get("out")).resolve("support_probe_" + arm.id() + ".csv") : null;
-        System.out.println(String.format(Locale.ROOT, "# %s, the first %d scenarios, visit 0; criterion: >= %.0f%% of biased insertions after %d warm-up burns "
-                + "chose a class with >= %d observations", arm.id(), n, 100 * criterion, magat.agents.emcts.QdeltaEmcts.WARMUP_BURNS,
-                magat.agents.emcts.QdeltaEmcts.MIN_SUPPORT));
-        SupportProbe.printHeader();
-        List<SupportProbe.Level> r = SupportProbe.run(module.game(), arm, p.scenarios().subList(0, n), levels, threads(args), criterion, csv);
-        boolean all = SupportProbe.report(r, criterion);
-        if (csv != null) System.out.println("# -> " + csv);
-        System.out.println(all ? "SUPPORT: PASS (every level is a contrast level)" : "SUPPORT: FAIL (some levels are reporting levels only)");
-        return all ? 0 : 1;
     }
 }

@@ -84,14 +84,6 @@ public class EmctsToyTest {
     }
 
     @Test
-    public void plusAndCommaDiffer() {
-        // Two arms producing identical output is a bug, not thin data.
-        Signature plus = Signature.of(Episode.run(game, positions.get(2), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 3_000));
-        Signature comma = Signature.of(Episode.run(game, positions.get(2), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>comma(5), 3_000));
-        assertFalse(plus.differences(comma, 0).isEmpty());
-    }
-
-    @Test
     public void everySelectionModeRuns() {
         for (Selection s : Selection.values()) {
             EmctsFactory<ToyGame.State, ToyGame.Move> f = new EmctsFactory<>("x-" + s.name().toLowerCase().replace('_', '-'), "", () -> {

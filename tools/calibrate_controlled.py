@@ -78,7 +78,7 @@ RETRIES = 1
 INTERVAL = 10.0
 OTHER_CPUS = 1.0
 SPEED_TOLERANCE = 0.05
-CHECK_ARMS = ("emcts", "emcts-comma")
+CHECK_ARMS = ("emcts",)
 
 # Programs worth closing before a timing measurement, and why.
 NOTABLE = {

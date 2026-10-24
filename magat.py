@@ -31,13 +31,11 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
                         [--threads N] [--threads-at 400000=31] [--frozen FILE] [--retire-leaf arm@budget] [--toy]
     python magat.py experiment validate --experiment SPEC [--weights FILE | --no-weights] [--split ...]
     python magat.py bundle --name NAME --paths P [P ...] [--exclude seqlog_,mutlog_]
-    python magat.py check structure --game tribes --spec experiments/tribes/structure.json
     python magat.py check replay    --game tribes --leaf DIR [--portfolio DIR] [--weights FILE] [--turns 20]
     python magat.py check overhead  --game tribes [--arm emcts] [--budget 40000]
     python magat.py check time      --game tribes (--weights FILE | --fixed-weights) [--levels ...] [--arms a,b] [--targets ms,...]
                                     single-threaded whole turns over spread positions: each level's thinking time here
     python magat.py check overhead --audit --game tribes [--arms a,b|@set] [--budget 40000] [--warn 0.10] [--fail 0.25]
-    python magat.py probe support   --game tribes --arm ARM [--levels ...] [--scenarios 20] [--out DIR]
     python magat.py analyze --run DIR [--holdout DIR] [--experiment SPEC] [--baseline ARM] [--reprice WEIGHTS] --out DIR
     python magat.py import-legacy --stage1-tree DIR --out RUN [--map tools/legacy-arms.json] [--portfolio DIR]
                                   [--split NAME] [--experiment SPEC] [--weights FILE] [--no-curve] [--label TEXT]
@@ -451,10 +449,10 @@ def with_published_defaults(args: list) -> list:
     if "--game" in args:
         game = args[args.index("--game") + 1]
         pub = PUBLISHED.get(game, {})
-        wants_portfolio = args[0] in ("check", "calibrate", "threads", "run", "probe")
+        wants_portfolio = args[0] in ("check", "calibrate", "threads", "run")
         if wants_portfolio and "--portfolio" not in args and "portfolio" in pub and pub["portfolio"].is_dir():
             args += ["--portfolio", str(pub["portfolio"])]
-        wants_weights = ("equivalence" in args or "replay" in args or "overhead" in args or args[0] in ("weights", "run", "probe")
+        wants_weights = ("equivalence" in args or "replay" in args or "overhead" in args or args[0] in ("weights", "run")
                          or (args[0] == "calibrate" and "--check" in args) or args[:2] == ["experiment", "validate"])
         if wants_weights and not no_weights and "--weights" not in args and "weights" in pub and pub["weights"].is_file():
             args += ["--weights", str(pub["weights"])]
@@ -498,7 +496,7 @@ def main(argv: list) -> None:
         java(args, heap="big" if cmd == "run" else None, log=log)
     elif cmd == "bundle":
         bundle(rest)
-    elif cmd in ("check", "arms", "portfolio", "calibrate", "threads", "machine", "weights", "probe"):
+    elif cmd in ("check", "arms", "portfolio", "calibrate", "threads", "machine", "weights"):
         big = (cmd == "portfolio" and rest[:1] == ["build"]) or cmd == "threads" or "--under-load" in rest
         log = cmd + ("-" + rest[0] if rest and not rest[0].startswith("--") else "")
         if cmd == "calibrate" and "--check" in rest:
