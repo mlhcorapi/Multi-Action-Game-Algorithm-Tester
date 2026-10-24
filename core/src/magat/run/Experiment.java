@@ -39,8 +39,7 @@ import java.util.Set;
 public final class Experiment {
 
     private static final Set<String> KNOWN = new LinkedHashSet<>(Arrays.asList("name", "game", "portfolio", "split",
-            "baseline", "levels", "arms", "contrasts", "scenarios",
-            "wallclock_anchor", "description"));
+            "baseline", "levels", "arms", "contrasts", "scenarios", "description"));
 
     public static final class Level {
         public final long budget;

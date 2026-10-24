@@ -97,8 +97,8 @@ HEAP_BASE_MB, HEAP_PER_WORKER_MB, HEAP_MIN_MB = 1024, 256, 2048
 
 
 def big_heap() -> tuple:
-    """The heap for work that runs a search per worker: a portfolio build, a thread sweep, a run, a loaded
-    calibration. Sized to the workers, not to the machine. A Tribes worker holds 5-35 MB (DESIGN 8.6); the
+    """The heap for work that runs a search per worker: a portfolio build, a thread sweep, a run. Sized to
+    the workers, not to the machine. A Tribes worker holds 5-35 MB; the
     rest of its heap is the engine's short-lived garbage, about 2-3 GB a second, which G1 lets fill whatever
     heap it is given before it collects. 256 MB of room per worker keeps collecting near 4% of the time at
     every thread count. Workers: MAGAT_MAX_THREADS, else half the logical CPUs (one per physical core).

@@ -177,7 +177,7 @@ public class MeterTest {
     public void namesFollowTheRuleAndRegistrationIsIdempotent() {
         assertSame(WORK, Meter.register("metertest.work"));
         assertSame(WORK, Meter.operation("metertest.work"));
-        for (String bad : new String[]{"nodot", "Qd.update", "qd.", "qd..x", "advance", "qd.up-date", "1qd.x"}) {
+        for (String bad : new String[]{"nodot", "Emcts.legal", "emcts.", "emcts..x", "advance", "emcts.le-gal", "1emcts.x"}) {
             try {
                 Meter.register(bad);
                 fail(bad);

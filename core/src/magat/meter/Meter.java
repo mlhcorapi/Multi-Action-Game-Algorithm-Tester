@@ -161,7 +161,7 @@ public final class Meter {
             if (o != null) return o;
             if (name == null || !OP_NAME.matcher(name).matches())
                 throw new IllegalArgumentException("operation name '" + name + "': lowercase dot-separated segments, the first "
-                        + "naming the algorithm family (qd.update, emcts.legal); the forward-model operations are metered by MeteredGame");
+                        + "naming the algorithm family (first.sample, emcts.legal); the forward-model operations are metered by MeteredGame");
             int idx = opCount;
             if (idx >= CAPACITY) throw new IllegalStateException("more than " + (CAPACITY - FORWARD_MODEL) + " algorithm operations registered");
             NAMES[idx] = name;
