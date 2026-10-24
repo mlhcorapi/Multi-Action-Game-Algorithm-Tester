@@ -23,14 +23,15 @@ Every path below is a path on the tag.
 | Results | the AB-EMCTS line re-analysed (`games/tribes/results/ab-emcts`, `docs/results/tribes-ab-emcts.md`, `experiments/tribes/ab-emcts-*.json`) and its replay fixture (`games/tribes/results/replay`) | |
 | Analysis | `import-legacy` (`legacy.py`); the gain multiple, oracle regret, anytime curves, diversity and replication measures, with their tests | `analysis/magat_analysis/` |
 | Tools | `import_r7615.py`, `legacy-arms.json`, `package_worked_result.py`, `make_engine_branch.py` | `tools/` |
-| Documents | `ALGORITHMS.md` (the 33 arms), `MAGAT/BRIEF.md`, `MAGAT/STARTING_PROMPT.md`, and the full design history `MAGAT/DESIGN.md` | |
+| Documents | the earlier `ALGORITHMS.md` (the 33 arms; v0.1 has its own), `MAGAT/BRIEF.md`, `MAGAT/STARTING_PROMPT.md`, and the full design history `MAGAT/DESIGN.md` | |
 
 ## A finding kept for the paper
 
 `emcts-comma` overspends at small levels: about 2.2× its budget at 9,500 units and 1.3× at 20,000,
 because its five-plan greedy initialization cannot stop when the budget runs out. Plain `emcts` spends
 1.05×, 1.01× and 1.00× at 9,500 / 20,000 / 101,500. `ARCHIVE_NOTES.md` on the branch has the table.
-In v0.1 every algorithm's initialization stops when the budget runs out.
+In v0.1 every algorithm's initialization is paid from the budget, and `mcts`, `oep` and `tbets` stop
+theirs when the budget runs out (`emcts`'s greedy plan, a fifth of the smallest level, is never cut short).
 
 ## Re-adding an algorithm family
 

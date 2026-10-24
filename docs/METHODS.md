@@ -68,7 +68,8 @@ The runner checks every level for it and stops, and the analyzer checks again on
 | 5 | The design: scenarios against visits | `variance.csv` | how precise the run is, and what more visits would buy |
 | 6 | Terminal plans | `terminals.csv` | how often a plan ends the game, which the headline reports apart |
 | 7 | Re-pricing in another currency | `repriced.csv`, `repriced_spend.csv` | the same work, priced on another machine |
-| 8 | Full-game win rate | not in v0.1 | an optional external yardstick, never the primary |
+| 8 | Across machines | `across.csv` | the same experiment on two machines, side by side |
+| 9 | Full-game win rate | not in v0.1 | an optional external yardstick, never the primary |
 
 How they are computed:
 
@@ -78,12 +79,14 @@ How they are computed:
    because a terminal plan carries a sentinel value. Win/loss/tie counts and per-source means go beside
    it. The raw difference is a heuristic delta, never a result on its own: it is always read beside the
    budget multiplier.
-2. **The budget multiplier.** The search gain (`final − initial`) of the baseline at every level it
-   ran, interpolated log-linearly in budget. For each arm and level the analyzer solves for the
-   baseline budget that reaches the arm's gain. The multiplier is that budget divided by the arm's,
-   with a bootstrap interval. It is flagged `inside`, `extrapolated` (past the top of the ladder),
-   `outside` (below it) or `non-monotone` (a baseline curve that does not rise cannot be inverted).
-   Its wall-clock twin solves the same crossing on the baseline's plan time.
+2. **The budget multiplier.** The baseline's mean `final` at every level it ran, interpolated
+   log-linearly in budget. For each arm and level the analyzer solves for the baseline budget that
+   reaches the arm's mean `final` on the same cells. The multiplier is that budget divided by the
+   arm's, with a bootstrap interval. It is flagged `inside`, `extrapolated` (past the top of the
+   ladder), `outside` (below it) or `non-monotone` (a baseline curve that does not rise cannot be
+   inverted). Its wall-clock twin solves the same crossing on the baseline's plan time. It compares
+   values, not search gains (`final − initial`): an arm's `initial` is its own starting plan (the
+   position, a greedy plan, the best of a random population), so a gain does not compare across arms.
 3. **The wall-clock re-score.** The arm is re-scored on the baseline's value-versus-`plan_ms` curve at
    its own wall-clock. The verdict is one of *wins both*, *units only* (unresolved: a units-only win
    may be a pricing artefact), *wall-clock only* or *none*. Wall-clock is co-primary: every headline is
@@ -92,6 +95,11 @@ How they are computed:
 5. **The design.** The share of the paired difference's variance that sits between scenarios (the
    ICC), the standard error the scenario count allows with unlimited visits, and how far the run sits
    above it. For a fixed number of turns, more scenarios beat more visits.
+6. **Across machines** (`--compare`). Two runs of one experiment, each on its own machine and in its
+   own currency. On the cells both ran, neither turn terminal: each machine's mean with its interval,
+   and the paired difference, which is what the two currencies did to where the searches stopped (the
+   chance events are the same). The budget multipliers are dimensionless and should agree; the seconds
+   per turn are each machine's own; and one run's turns are re-priced in the other's currency.
 
 The bootstrap draws each row from a generator seeded by the row's own identity, so re-running, or
 adding an arm, leaves every other interval where it was. A re-analysis with the same numpy is

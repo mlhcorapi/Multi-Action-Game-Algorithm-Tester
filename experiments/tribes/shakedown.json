@@ -9,10 +9,22 @@
     { "budget": 2000, "visits": 1 }
   ],
   "arms": [
+    { "id": "random" },
+    { "id": "mcts" },
     { "id": "emcts" },
-    { "id": "random" }
+    { "id": "oep" },
+    { "id": "tbets" }
   ],
   "contrasts": [
-    { "a": "emcts", "b": "random", "label": "search over the floor" }
+    { "a": "mcts", "b": "random", "label": "MCTS over the floor" },
+    { "a": "emcts", "b": "random", "label": "EMCTS over the floor" },
+    { "a": "oep", "b": "random", "label": "OEP over the floor" },
+    { "a": "tbets", "b": "random", "label": "TBETS over the floor" },
+    { "a": "emcts", "b": "mcts", "label": "EMCTS against MCTS" },
+    { "a": "oep", "b": "mcts", "label": "OEP against MCTS" },
+    { "a": "tbets", "b": "mcts", "label": "TBETS against MCTS" },
+    { "a": "oep", "b": "emcts", "label": "OEP against EMCTS" },
+    { "a": "tbets", "b": "emcts", "label": "TBETS against EMCTS" },
+    { "a": "tbets", "b": "oep", "label": "TBETS against OEP" }
   ]
 }

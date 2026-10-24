@@ -33,10 +33,10 @@ jobs:
         run: python magat.py test
       - name: Contract laws (Tribes, 4 published positions)
         run: python magat.py check contract --game tribes --scenarios 4
-      - name: Equivalence gate (emcts vs the engine's agent, 2 positions, 8k units)
-        run: python magat.py check equivalence --game tribes --arms emcts --scenarios 2 --visits 1 --budgets 8000
+      - name: Equivalence gate (emcts and tbets vs the engine's agents, 2 positions, 8k units)
+        run: python magat.py check equivalence --game tribes --arms emcts,tbets --scenarios 2 --visits 1 --budgets 8000
       - name: Audit (each arm's declared operations and forward model account for its turn)
-        run: python magat.py check audit --game tribes --arms emcts --budget 4000 --turns 2 --reps 1 --warmup 1
+        run: python magat.py check audit --game tribes --arms @reference --budget 4000 --turns 2 --reps 1 --warmup 1
       - name: Published portfolio verifies (bins, identity, split rule)
         run: python magat.py portfolio verify --game tribes
       - name: Toy portfolio build, freeze, and verify against the published rows
@@ -48,9 +48,10 @@ jobs:
         run: |
           python magat.py machine
           python magat.py calibrate --estimate --game tribes --arms emcts --levels 2000,4000 --reps 2 --turns 2 --warmup 1 --toy | grep -q "ESTIMATE: "
-          python magat.py calibrate --game tribes --out "$RUNNER_TEMP/calib" --arms emcts --levels 2000,4000 --reps 2 --turns 2 --warmup 1 --toy
+          python magat.py calibrate --game tribes --out "$RUNNER_TEMP/calib" --arms @reference --levels 2000,4000 --reps 2 --turns 2 --warmup 1 --toy
           grep -q "magat.weights.version = 2" "$RUNNER_TEMP/calib/compute_weights.properties"
           grep -q "profile.emcts@4000.w.emcts.generation" "$RUNNER_TEMP/calib/compute_weights.properties"
+          grep -q "profile.tbets@4000.w.tbets.turn" "$RUNNER_TEMP/calib/compute_weights.properties"
           # a toy drift verdict may land either side of the gate (exit 0 or 1); anything else is a failure
           rc=0; python magat.py calibrate --check --game tribes --weights "$RUNNER_TEMP/calib/compute_weights.properties" --arms emcts --levels 4000 --reps 2 --warmup 1 --toy || rc=$?
           test "$rc" -le 1
@@ -65,21 +66,25 @@ jobs:
           python magat.py calibrate-controlled $CC | grep -q "nothing to measure"
       - name: The shipped experiment spec validates
         run: |
-          # The reference ladder runs at the published levels, which no published currency prices yet.
-          python magat.py experiment validate --no-weights --experiment experiments/tribes/reference-ladder.json
+          # The reference experiment runs at the published levels, which no published currency prices yet.
+          python magat.py experiment validate --no-weights --experiment experiments/tribes/reference.json
       - name: Toy run on dev and holdout, and a resume that skips every leaf
         run: |
           RUN="python magat.py run --experiment experiments/tribes/shakedown.json --portfolio $RUNNER_TEMP/toy --weights $RUNNER_TEMP/calib/compute_weights.properties --out $RUNNER_TEMP/run --threads 2 --toy"
           $RUN --split dev
           $RUN --split dev | grep -q "SKIP (done)"
           $RUN --split holdout
-          test "$(wc -l < "$RUNNER_TEMP/run/dev/_completed.txt")" -eq 4
+          test "$(wc -l < "$RUNNER_TEMP/run/dev/_completed.txt")" -eq 10
           head -1 "$RUNNER_TEMP/run/dev/emcts/2000cu/turns.csv" | grep -q "op_emcts.generation"
-      - name: Analyze the toy run, re-priced in its own currency
+          head -1 "$RUNNER_TEMP/run/dev/tbets/2000cu/turns.csv" | grep -q "op_tbets.turn"
+      - name: Analyze the toy run, re-priced in its own currency, and beside itself as another machine's
         run: |
           python magat.py analyze --run "$RUNNER_TEMP/run" --reprice "$RUNNER_TEMP/calib/compute_weights.properties" --out "$RUNNER_TEMP/analysis"
           for t in headline budget_multiplier wallclock contrasts variance repriced; do
             test -s "$RUNNER_TEMP/analysis/tables/$t.csv"
           done
+          python magat.py analyze --run "$RUNNER_TEMP/run" --compare "$RUNNER_TEMP/run" --out "$RUNNER_TEMP/compare"
+          test -s "$RUNNER_TEMP/compare/tables/across.csv"
+          grep -q "## Across machines (dev)" "$RUNNER_TEMP/compare/SUMMARY.md"
       - name: Notebook self-test
         run: python magat.py notebook selftest

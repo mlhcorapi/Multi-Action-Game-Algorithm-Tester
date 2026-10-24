@@ -77,18 +77,26 @@ def write_leaf(split_dir: pathlib.Path, arm, budget, rows, telemetry=True, profi
                                                   status="complete")), encoding="utf-8")
 
 
-def build(root: pathlib.Path, split="dev", spec_path=None) -> pathlib.Path:
+def build(root: pathlib.Path, split="dev", spec_path=None, shift=None, ms_scale=1.0, identity="synthetic") -> pathlib.Path:
+    """The tree. `shift` adds a constant to an arm's every final value and `ms_scale` multiplies every plan time:
+    the same experiment on another machine, for the comparison across machines."""
     d = root / split
     d.mkdir(parents=True, exist_ok=True)
-    write_leaf(d, "base", 1000, leaf_rows("base", 1000, 1000, 100))
-    write_leaf(d, "base", 4000, leaf_rows("base", 4000, 4000, 400))
-    write_leaf(d, "good", 1000, leaf_rows("good", 1000, 2000, 250))
-    write_leaf(d, "great", 1000, leaf_rows("great", 1000, 8000, 500))
-    write_leaf(d, "weak", 4000, leaf_rows("weak", 4000, 2000, 300))
-    write_leaf(d, "poor", 1000, leaf_rows("poor", 1000, 500, 90, telemetry=False), telemetry=False)
-    write_leaf(d, "noisy", 1000, leaf_rows("noisy", 1000, 1000, 100,
-                                           special=lambda s, v: 10 if (s * V + v) % 2 == 0 else -2))
-    run = dict(format=1, split=split, game=dict(id="toy"), portfolio=dict(identity="synthetic"),
+    shift = shift or {}
+
+    def rows(arm, budget, equiv, ms, special=None, telemetry=True):
+        extra = shift.get(arm, 0.0)
+        add = (lambda s, v: special(s, v) + extra) if special else ((lambda s, v: extra) if extra else None)
+        return leaf_rows(arm, budget, equiv, ms if ms_scale == 1.0 else ms * ms_scale, special=add, telemetry=telemetry)
+
+    write_leaf(d, "base", 1000, rows("base", 1000, 1000, 100))
+    write_leaf(d, "base", 4000, rows("base", 4000, 4000, 400))
+    write_leaf(d, "good", 1000, rows("good", 1000, 2000, 250))
+    write_leaf(d, "great", 1000, rows("great", 1000, 8000, 500))
+    write_leaf(d, "weak", 4000, rows("weak", 4000, 2000, 300))
+    write_leaf(d, "poor", 1000, rows("poor", 1000, 500, 90, telemetry=False), telemetry=False)
+    write_leaf(d, "noisy", 1000, rows("noisy", 1000, 1000, 100, special=lambda s, v: 10 if (s * V + v) % 2 == 0 else -2))
+    run = dict(format=1, split=split, game=dict(id="toy"), portfolio=dict(identity=identity),
                weights=dict(path="synthetic.properties", sha256="0" * 64, reference="base@1000"))
     if spec_path:
         run["experiment"] = dict(name="synthetic", path=str(spec_path), sha256="")

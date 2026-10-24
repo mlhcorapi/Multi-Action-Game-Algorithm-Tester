@@ -93,6 +93,17 @@ class SyntheticTree(unittest.TestCase):
         self.assertAlmostEqual(g.TimeMultiplier, 200.0 / 250.0, places=9)
         self.assertAlmostEqual(g.ArmTimeRatio, 250.0 / 100.0, places=9)
 
+    def test_the_budget_multiplier_compares_values_not_search_gains(self):
+        # An arm that starts from a plan of its own, 300 below the baseline's, and ends where the baseline ends at
+        # 2,000 units: worth twice its budget, though its search gain is 300 above the baseline's there.
+        t = self.t.copy()
+        good = t.arm == "good"
+        t.loc[good, "initial"] = t.loc[good, "initial"] - 300
+        t["gain"] = t["final"] - t["initial"]
+        r = self.row(measures.budget_multiplier(t, "base", n=50), Arm="good", Budget=1000)
+        self.assertAlmostEqual(r.Multiplier, 2.0, places=9)
+        self.assertEqual(r.Flag, "inside")
+
     def test_no_multiplier_without_two_baseline_levels(self):
         one = self.t[~((self.t.arm == "base") & (self.t.budget == 4000))]
         self.assertTrue(measures.budget_multiplier(one, "base", n=50).empty)
@@ -239,6 +250,77 @@ class SyntheticTree(unittest.TestCase):
         (bare / "_run.json").write_text("{}", encoding="utf-8")
         self.assertEqual(report.analyze(bare, self.tmp / "o", n=10, figures=False, echo=lambda *_: None),
                          report.EXIT_INPUT)
+
+
+
+class AcrossMachines(unittest.TestCase):
+    """The synthetic experiment on a second machine, B: `good` is 7 better on every cell there, every turn takes
+    twice the seconds, and B's currency prices every operation at twice A's prices."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = pathlib.Path(tempfile.mkdtemp(prefix="magat-across-"))
+        spec = syn.write_spec(cls.tmp / "spec.json")
+        syn.build(cls.tmp / "a", "dev", spec)
+        syn.build(cls.tmp / "b", "dev", spec, shift={"good": 7.0}, ms_scale=2.0)
+        cls.wb = syn.write_weights(cls.tmp / "b.properties", scale=2.0)
+        cls.a = load.load_split(cls.tmp / "a" / "dev")
+        cls.b = load.load_split(cls.tmp / "b" / "dev")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def row(self, df, **kw):
+        for k, v in kw.items():
+            df = df[df[k] == v]
+        self.assertEqual(len(df), 1, f"expected one row for {kw}, got {len(df)}")
+        return df.iloc[0]
+
+    def test_each_machines_mean_their_difference_both_multipliers_the_seconds_and_a_in_bs_currency(self):
+        x, notes = measures.across(self.a.turns, self.b.turns, "base", "dev", n=200, leaves_a=self.a.leaves,
+                                   weights_b=load.read_weights(self.wb))
+        self.assertEqual(notes, [])
+        good = self.row(x, Arm="good", Budget=1000)
+        self.assertEqual(good.Pairs, syn.S * syn.V - 1, "the terminal cell is left out")
+        self.assertAlmostEqual(good.MeanB - good.MeanA, 7.0, places=9)
+        for v in (good.Diff, good.DiffLo, good.DiffHi):
+            self.assertAlmostEqual(v, -7.0, places=9, msg="the paired difference A - B, the same on every cell")
+        self.assertAlmostEqual(good.MultA, 2.0, places=9)
+        self.assertAlmostEqual(good.MultB, 2.0 * math.exp(7.0 / 50.0), places=9,
+                               msg="7 more on B's log-linear baseline curve, 50 per e-fold of budget")
+        self.assertAlmostEqual(good.SecondsA, 0.25, places=9)
+        self.assertAlmostEqual(good.SecondsB, 0.5, places=9)
+        self.assertAlmostEqual(good.RepricedRatio, 2.0, places=9, msg="A's work at B's doubled prices")
+        base = self.row(x, Arm="base", Budget=4000)
+        self.assertAlmostEqual(base.Diff, 0.0, places=9)
+        self.assertTrue(math.isnan(base.MultA), "the baseline has no multiplier against itself")
+        self.assertEqual(set(x.Arm), {"base", "good", "great", "weak", "poor", "noisy"})
+
+    def test_the_report_finds_bs_currency_or_says_it_did_not(self):
+        out = self.tmp / "out"
+        rc = report.analyze(self.tmp / "a", out, baseline="base", compare=self.tmp / "b", compare_weights=self.wb,
+                            n=100, figures=False, echo=lambda *_: None)
+        self.assertEqual(rc, report.EXIT_OK)
+        x = pd.read_csv(out / "tables" / "across.csv")
+        self.assertEqual(list(x.columns), report.EMPTY["across"].split())
+        self.assertAlmostEqual(float(x[(x.Arm == "good")].RepricedRatio.iloc[0]), 2.0, places=4)
+        summary = (out / "SUMMARY.md").read_text(encoding="utf-8")
+        self.assertIn("## Across machines (dev)", summary)
+        self.assertIn("A at B's prices", summary)
+
+        # B's recorded currency is a path that does not exist here, and no published currency has its hash.
+        rc = report.analyze(self.tmp / "a", self.tmp / "out2", baseline="base", compare=self.tmp / "b", n=50,
+                            figures=False, echo=lambda *_: None)
+        self.assertEqual(rc, report.EXIT_OK)
+        self.assertIn("are not re-priced", (self.tmp / "out2" / "SUMMARY.md").read_text(encoding="utf-8"))
+        self.assertTrue(pd.read_csv(self.tmp / "out2" / "tables" / "across.csv").RepricedRatio.isna().all())
+
+    def test_runs_on_different_portfolios_do_not_pair(self):
+        syn.build(self.tmp / "c", "dev", None, identity="another portfolio")
+        rc = report.analyze(self.tmp / "a", self.tmp / "out3", baseline="base", compare=self.tmp / "c", n=10,
+                            figures=False, echo=lambda *_: None)
+        self.assertEqual(rc, report.EXIT_INPUT)
 
 
 if __name__ == "__main__":

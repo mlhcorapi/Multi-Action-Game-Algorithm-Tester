@@ -32,12 +32,14 @@ adds.
 ## The command
 
 ```bash
-python magat.py calibrate-controlled --name laptop-i9-14900hx-time --preflight
+python magat.py calibrate-controlled --name <machine> --preflight
 ```
 
 ```bash
-python magat.py calibrate-controlled --name laptop-i9-14900hx-time
+python magat.py calibrate-controlled --name <machine>
 ```
+
+`--name` names the currency, for example `laptop-i9-14900hx-time`.
 
 1. `--preflight` reads the machine, changes nothing, measures nothing, and says READY or NOT READY and
    what the run would measure.
@@ -51,7 +53,7 @@ python magat.py calibrate-controlled --name laptop-i9-14900hx-time
    6 GB, and files it cannot read, such as online-only OneDrive files once the network is off.
    Everything it reads goes into `preflight.json`; the screen shows its warnings.
 2. **Controls.** These apply to the measuring JVMs only; nothing on the machine is changed.
-   - On a hybrid CPU (this laptop), the JVMs run on the performance cores, so the measured thread never
+   - On a hybrid CPU (Intel's 12th generation on), the JVMs run on the performance cores, so the measured thread never
      lands on an efficient core at half the speed.
    - On a server with several L3 caches (the R7615's EPYC has eight), they run on the cache domain that
      was quietest when the invocation started, so the measured thread never migrates between caches.
@@ -114,6 +116,10 @@ and `compute_operations.csv`, any `threads.json`, and `record/`.
 
 ## On the laptop
 
+These are the steps on the development laptop, an HP OMEN 16 with an Intel Core i9-14900HX (8
+performance cores with SMT, 16 efficient cores) under Windows 11. On another laptop, follow them as far
+as they apply.
+
 ### Before the run
 
 Do these while still online, in order.
@@ -155,9 +161,9 @@ Do these while still online, in order.
 
 ### Clock policy
 
-This is the setting that matters most on a laptop: its clock follows its temperature. In toy runs on
-this laptop (2026-10-07, boost on, other programs open), the busiest performance core ran between 3.7
-and 5.7 GHz within single sessions, with thermal zones up to 94 °C. Pick one policy, and keep it for
+This is the setting that matters most on a laptop: its clock follows its temperature. On the
+development laptop, with boost on, the busiest performance core ran between 3.7 and 5.7 GHz within a
+single toy session, with thermal zones up to 94 °C. Pick one policy, and keep it for
 this currency and for every later `calibrate --check` on this laptop. The script reads the policy,
 records it, and locks it to the currency.
 
@@ -213,8 +219,8 @@ Keep the "MAGAT calibration" plan, and switch back to it before any later check 
 **Is the cap honoured?** The stability check prints the busiest core's clock, and the summary prints it
 for the session and each check. On Windows that clock is approximate: it is derived from the processor's performance
 counter and the nominal frequency in the registry. On this laptop, capped at 4,000 MHz, it reads about
-4,225. Read the spread, not the level. Under policy A the clock is flat (this laptop's first calibration:
-4,180-4,250 MHz within every section, against 3,700-5,700 with boost on), and the stability check settles
+4,225. Read the spread, not the level. Under policy A the clock is flat (on this laptop, 4,180-4,250 MHz
+throughout a calibration, against 3,700-5,700 with boost on), and the stability check settles
 within a few estimates. A clock that wanders by hundreds of MHz, or reaches boost speeds, means the cap
 is not honoured: use B. If the stability check will not settle even with a flat clock, lower the cap,
 for example to 3500. The thermal zones are the firmware's ACPI zones, not the CPU's own
@@ -325,32 +331,3 @@ The reference machine's levels are published as `games/<game>/levels.json`, with
 `ORIGIN.md` names the levels it was measured at.
 
 Results computed under it quote its name.
-
-## The development laptop
-
-**Machine.** HP OMEN 16 (16-am0xxx), Intel Core i9-14900HX, Windows 11, JDK 26:
-- 8 performance cores with SMT, logical CPUs 0-15;
-- 16 efficient cores, logical CPUs 16-31;
-- Modern Standby.
-
-**As found on 2026-10-07.**
-- The Balanced plan, with *Best performance* when plugged in.
-- Boost aggressive, and no frequency cap.
-- Up for 22 days.
-- Windows Update's pause had expired.
-- OneDrive, Claude, two browsers and Steam were running.
-
-**Its first calibration** (2026-10-07 to 2026-10-09, at the earlier levels 40,000 / 80,000 / 400,000,
-under policy A):
-- The busiest core held about 4,120-4,250 MHz at no more than 43 °C.
-- 33 arms in four sections took 3.9 h; every section and both checks passed.
-- Checked against the R7615's currency of the time, its turn prices drifted by at most 3.6%.
-- Its reference advance measured at 0.66-0.76 of the R7615's.
-- On battery the same calibration was estimated at 11.4 hours, against 3.7 plugged in.
-
-That currency is archived ([`ARCHIVE.md`](ARCHIVE.md)). The laptop's currency at the published levels,
-on the current engine, is measured under a new name:
-
-```bash
-python magat.py calibrate-controlled --name laptop-i9-14900hx-time --preflight
-```

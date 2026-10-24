@@ -12,6 +12,7 @@ reached a terminal state, worth about +/-2e9).
     contrasts          the spec's own paired comparisons
     variance           what a scenario and a visit each buy (the design)
     reprice            each turn's work priced in another machine's currency, re-scored
+    across             the same experiment on two machines: each one's means, multipliers and seconds
 """
 import numpy as np
 import pandas as pd
@@ -104,7 +105,7 @@ def contrasts(t, pairs, split="", n=N_BOOT) -> pd.DataFrame:
 
 # --------------------------------------------------------------------------- budget multiplier
 def locate(M: np.ndarray, A: np.ndarray):
-    """Where each arm gain A sits on its baseline curve M (rows: resamples, columns: budget levels).
+    """Where each arm value A sits on its baseline curve M (rows: resamples, columns: budget levels).
 
     Returns the segment index i (the adjacent pair of levels interpolated between; the end segments
     extrapolate past either end of the ladder), the fraction along it, and whether the curve rises at
@@ -127,12 +128,14 @@ def along(X: np.ndarray, i: np.ndarray, frac: np.ndarray) -> np.ndarray:
 def budget_multiplier(t, baseline, split="", n=N_BOOT) -> pd.DataFrame:
     """The equivalent budget multiplier: how much budget the baseline would need to match the arm.
 
-    Search gain (final - initial) on the (scenario, visit) cells where the baseline ran at every one
-    of its levels and the arm ran, none of them terminal. The baseline's mean gain per level is
-    interpolated log-linearly in budget between adjacent levels; the arm's mean gain is solved for the
-    baseline budget that reaches it; the multiplier is that budget over the arm's own. The interval
-    resamples scenarios. A crossing past the top of the ladder is `extrapolated` (a lower bound under
-    diminishing returns), one below the bottom `outside`.
+    The plan's value (`final`) on the (scenario, visit) cells where the baseline ran at every one of its
+    levels and the arm ran, none of them terminal. The baseline's mean value per level is interpolated
+    log-linearly in budget between adjacent levels; the arm's mean value is solved for the baseline
+    budget that reaches it; the multiplier is that budget over the arm's own. Values and not search gains
+    (final - initial): an arm's `initial` is its own starting plan, so a gain does not compare across
+    arms, while a value on the same cells does, and gives the gain's answer for an arm that starts as the
+    baseline does. The interval resamples scenarios. A crossing past the top of the ladder is
+    `extrapolated` (a lower bound under diminishing returns), one below the bottom `outside`.
 
     Its wall-clock twin solves the same crossing on the baseline's mean plan time per level, log-linear
     in milliseconds, and divides by the arm's own mean plan time: how much more of the baseline's time
@@ -145,14 +148,14 @@ def budget_multiplier(t, baseline, split="", n=N_BOOT) -> pd.DataFrame:
     rows = []
     for budget in sorted(t.budget.unique()):
         for arm in arms_at(t, budget, baseline):
-            j = t[(t.arm == arm) & (t.budget == budget) & ~t.term][KEYS + ["gain", "plan_ms"]]
-            j = j.rename(columns={"gain": "ga", "plan_ms": "ta"})
+            j = t[(t.arm == arm) & (t.budget == budget) & ~t.term][KEYS + ["final", "plan_ms"]]
+            j = j.rename(columns={"final": "va", "plan_ms": "ta"})
             for k, b in enumerate(levels):
-                x = t[(t.arm == baseline) & (t.budget == b) & ~t.term][KEYS + ["gain", "plan_ms"]]
-                j = j.merge(x.rename(columns={"gain": f"g{k}", "plan_ms": f"t{k}"}), on=KEYS)
+                x = t[(t.arm == baseline) & (t.budget == b) & ~t.term][KEYS + ["final", "plan_ms"]]
+                j = j.merge(x.rename(columns={"final": f"v{k}", "plan_ms": f"t{k}"}), on=KEYS)
             if j.empty:
                 continue
-            cols = [f"g{k}" for k in range(L)] + ["ga"] + [f"t{k}" for k in range(L)] + ["ta"]
+            cols = [f"v{k}" for k in range(L)] + ["va"] + [f"t{k}" for k in range(L)] + ["ta"]
             sums, counts, _ = cluster_table(j, cols)
             point = (sums.sum(axis=0) / counts.sum())[None, :]
             boot = resampled_means(sums, counts, n, rng_for("multiplier", split, budget, arm, baseline))
@@ -175,8 +178,8 @@ def budget_multiplier(t, baseline, split="", n=N_BOOT) -> pd.DataFrame:
             same = levels.index(budget) if budget in levels else None
             rows.append(dict(
                 Budget=int(budget), Arm=arm, Baseline=baseline, Cells=int(counts.sum()), Scenarios=len(counts),
-                ArmGain=float(A[0]),
-                BaseGains=";".join(f"{lv}:{g:.4f}" for lv, g in zip(levels, M[0])),
+                ArmFinal=float(A[0]),
+                BaseFinals=";".join(f"{lv}:{g:.4f}" for lv, g in zip(levels, M[0])),
                 Multiplier=float(mult[0]), Lo=lo, Hi=hi, EquivBudget=float(mult[0] * budget), Flag=flag,
                 BootUndefined=float(np.mean(~np.isfinite(out["boot"][0]))),
                 ArmMs=float(ta[0]),
@@ -292,6 +295,53 @@ def reprice(t, leaves, weights, baseline, split="", n=N_BOOT):
     if not table.empty:
         table = table.rename(columns={"Diff": "RepricedDiff", "MeanSpend": "MeanRepricedUnits"})
     return table, frame(spend, ["Budget", "Arm"]), notes
+
+
+# --------------------------------------------------------------------------- across machines
+def across(ta, tb, baseline, split="", n=N_BOOT, leaves_a=None, weights_b=None):
+    """The same experiment on two machines, A and B, each priced in its own currency, per budget and arm.
+
+    On the (scenario, visit) cells both machines ran, neither turn terminal: each machine's mean final value
+    with a scenario-clustered interval, and the paired difference A - B. The chance events are the same on
+    both, so the difference is what the two currencies' prices did to where each search stopped. Beside
+    them: each machine's budget multiplier, which is dimensionless, so the two should agree; each one's
+    seconds per turn; and, given B's currency, A's turns re-priced in it (`RepricedRatio`: the units A's
+    work costs at B's prices over the units it cost at A's). Returns (table, notes)."""
+    def by_key(df):
+        return {} if df.empty else {(int(r.Budget), r.Arm): r for r in df.itertuples(index=False)}
+
+    ma, mb = by_key(budget_multiplier(ta, baseline, split, n)), by_key(budget_multiplier(tb, baseline, split, n))
+    spend, notes = {}, []
+    if weights_b is not None and leaves_a is not None:
+        _, sp, notes = reprice(ta, leaves_a, weights_b, baseline, split, n)
+        spend = by_key(sp)
+    rows = []
+    for budget in sorted(set(ta.budget.unique()) & set(tb.budget.unique())):
+        for arm in sorted(set(ta[ta.budget == budget].arm) & set(tb[tb.budget == budget].arm)):
+            x = ta[(ta.arm == arm) & (ta.budget == budget)]
+            y = tb[(tb.arm == arm) & (tb.budget == budget)]
+            j = x.merge(y, on=KEYS, suffixes=("", "_b"))
+            j = j[~(j["term"] | j["term_b"])].copy()
+            if j.empty:
+                continue
+            j["diff"] = j["final"] - j["final_b"]
+            key = ("across", split, budget, arm)
+            m_a, lo_a, hi_a, k = cluster_boot_ci(j, "final", n=n, key=key)
+            m_b, lo_b, hi_b, _ = cluster_boot_ci(j, "final_b", n=n, key=key)
+            d, d_lo, d_hi, _ = cluster_boot_ci(j, "diff", n=n, key=key)
+            row = dict(Budget=int(budget), Arm=arm, Pairs=len(j), Scenarios=k, MeanA=m_a, LoA=lo_a, HiA=hi_a,
+                       MeanB=m_b, LoB=lo_b, HiB=hi_b, Diff=d, DiffLo=d_lo, DiffHi=d_hi)
+            for side, m in (("A", ma), ("B", mb)):
+                r = m.get((int(budget), arm))
+                row[f"Mult{side}"] = r.Multiplier if r is not None else np.nan
+                row[f"Mult{side}Lo"] = r.Lo if r is not None else np.nan
+                row[f"Mult{side}Hi"] = r.Hi if r is not None else np.nan
+            row["SecondsA"] = float(j["plan_ms"].mean() / 1000.0)
+            row["SecondsB"] = float(j["plan_ms_b"].mean() / 1000.0)
+            r = spend.get((int(budget), arm))
+            row["RepricedRatio"] = r.Ratio if r is not None else np.nan
+            rows.append(row)
+    return frame(rows, ["Budget", "Arm"]), notes
 
 
 # --------------------------------------------------------------------------- design: variance

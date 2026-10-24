@@ -21,7 +21,7 @@ EXIT_OK, EXIT_INPUT, EXIT_IDENTICAL = 0, 2, 5
 EMPTY = {
     "headline": "Split Budget Arm Baseline Stratum Pairs Scenarios MeanDiff Lo Hi D RelDiff RelLo RelHi Wins Losses Ties "
                 "WinRate currency",
-    "budget_multiplier": "Split Budget Arm Baseline Cells Scenarios ArmGain BaseGains Multiplier Lo Hi EquivBudget Flag "
+    "budget_multiplier": "Split Budget Arm Baseline Cells Scenarios ArmFinal BaseFinals Multiplier Lo Hi EquivBudget Flag "
                          "BootUndefined ArmMs BaseMs ArmTimeRatio TimeMultiplier TimeLo TimeHi currency",
     "wallclock": "Split Budget Arm Baseline Pairs UnitsDiff Scenarios WallDiff WallLo WallHi ClampedShare MeanArmMillis "
                  "Verdict currency",
@@ -31,6 +31,8 @@ EMPTY = {
     "terminals": "Split Budget Arm Turns TerminalShare currency",
     "repriced": "Split Budget Arm Baseline Pairs Scenarios RepricedDiff Lo Hi ClampedShare MeanRepricedUnits currency",
     "repriced_spend": "Split Budget Arm Turns MeanUnits MeanRepricedUnits Ratio currency",
+    "across": "Split Budget Arm Pairs Scenarios MeanA LoA HiA MeanB LoB HiB Diff DiffLo DiffHi MultA MultALo MultAHi "
+              "MultB MultBLo MultBHi SecondsA SecondsB RepricedRatio currency",
 }
 
 
@@ -43,6 +45,11 @@ def ci(m, lo, hi, spec="+.1f") -> str:
     sig = np.isfinite(lo) and np.isfinite(hi) and (lo > 0 or hi < 0)
     s = f"{f(m, spec)} [{f(lo, spec)}, {f(hi, spec)}]"
     return f"**{s}**" if sig else s
+
+
+def interval(m, lo, hi, spec=".1f") -> str:
+    """A value and its interval, unmarked (a mean is not tested against zero)."""
+    return f"{f(m, spec)} [{f(lo, spec)}, {f(hi, spec)}]"
 
 
 def mult(m, lo, hi) -> str:
@@ -85,12 +92,19 @@ def stamp(df: pd.DataFrame, split: str, currency: str) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------- entry point
-def analyze(run, out, experiment=None, baseline=None, reprice=None, n=N_BOOT, figures=True, echo=print) -> int:
+def analyze(run, out, experiment=None, baseline=None, reprice=None, compare=None, compare_weights=None, n=N_BOOT,
+            figures=True, echo=print) -> int:
     try:
         splits = [load.load_split(p) for p in load.find_splits(run)]
+        others = {s.name: s for s in (load.load_split(p) for p in load.find_splits(compare))} if compare else {}
     except FileNotFoundError as e:
         echo(f"ANALYZE: {e}")
         return EXIT_INPUT
+    for s in splits:
+        o = others.get(s.name)
+        if o is not None and o.run.get("portfolio", {}).get("identity") != s.run.get("portfolio", {}).get("identity"):
+            echo(f"ANALYZE: {s.name}: the run and --compare were played on different portfolios, so their turns do not pair")
+            return EXIT_INPUT
     spec_given = load.load_spec(experiment) if experiment else None
     specs = {s.name: spec_given or load.spec_of(s) for s in splits}
     baseline = baseline or next((x.get("baseline") for x in specs.values() if x and x.get("baseline")), None)
@@ -98,6 +112,14 @@ def analyze(run, out, experiment=None, baseline=None, reprice=None, n=N_BOOT, fi
         echo("ANALYZE: no baseline: pass --baseline, or --experiment with a spec that names one")
         return EXIT_INPUT
     weights = load.read_weights(reprice) if reprice else None
+    other_weights, compare_notes = None, []
+    if others:
+        found = compare_weights or currency_file(next(iter(others.values())))
+        if found:
+            other_weights = load.read_weights(found)
+        else:
+            compare_notes.append("the --compare run's currency was not found by its recorded path or among the published "
+                                 "currencies, so its turns are not re-priced: name it with --compare-weights")
 
     for s in splits:
         echo(f"[analyze] {s.name}: {len(s.turns):,} turns in {len(s.leaves)} leaves from {s.path} | "
@@ -119,10 +141,16 @@ def analyze(run, out, experiment=None, baseline=None, reprice=None, n=N_BOOT, fi
         if not (s.turns.arm == baseline).any():
             s.notes.append(f"{s.name}: the baseline {baseline} has no rows, so nothing can be paired")
         results[s.name] = analyse_split(s, baseline, pairs, n, weights)
+        o = others.get(s.name)
+        if others and o is None:
+            s.notes.append(f"{s.name}: the --compare run has no {s.name} split, so it is not compared")
+        elif o is not None:
+            results[s.name]["across"], notes = measures.across(s.turns, o.turns, baseline, s.name, n, s.leaves, other_weights)
+            s.notes.extend(notes)
 
     out = pathlib.Path(out)
     (out / "tables").mkdir(parents=True, exist_ok=True)
-    names = list(TABLES) + (["repriced", "repriced_spend"] if weights else [])
+    names = list(TABLES) + (["repriced", "repriced_spend"] if weights else []) + (["across"] if others else [])
     combined = {}
     for name in names:
         cur = (weights["name"] + f" ({weights['sha256'][:8]})") if name.startswith("repriced") else None
@@ -136,11 +164,16 @@ def analyze(run, out, experiment=None, baseline=None, reprice=None, n=N_BOOT, fi
     if figures:
         draw(out, splits, results)
     prov = {s.name: load.provenance(s, specs[s.name]) for s in splits}
-    summary = render(splits, specs, baseline, results, prov, weights, n)
+    prov_b = {k: load.provenance(o, load.spec_of(o)) for k, o in others.items()}
+    for s in splits:
+        s.notes.extend(compare_notes)
+    summary = render(splits, specs, baseline, results, prov, weights, n, prov_b, other_weights)
     load.write_text(out / "SUMMARY.md", summary)
     write_json(out / "report.json", dict(
         magat_analysis=__version__, baseline=baseline, bootstrap_resamples=n,
         reprice=None if not weights else dict(path=weights["path"], sha256=weights["sha256"]),
+        compare=None if not others else dict(provenance=prov_b, currency=None if not other_weights else
+                                             dict(path=other_weights["path"], sha256=other_weights["sha256"])),
         provenance=prov, notes={s.name: s.notes for s in splits},
         tables={k: records(v) for k, v in combined.items()}))
     for s in splits:
@@ -149,6 +182,20 @@ def analyze(run, out, experiment=None, baseline=None, reprice=None, n=N_BOOT, fi
     echo(f"ANALYZE: OK - {len(combined)} tables ({sum(not v.empty for v in combined.values())} with rows), "
          f"SUMMARY.md and report.json in {out}")
     return EXIT_OK
+
+
+def currency_file(split: load.Split):
+    """The currency a run tree was priced in: its recorded path if the file is there and is the one recorded,
+    else a published currency with the recorded hash; None if neither."""
+    w = split.run.get("weights") or {}
+    sha = str(w.get("sha256", ""))
+    p = load.resolve(w["path"]) if w.get("path") else None
+    if p is not None and p.is_file() and (not sha or load.sha256(p) == sha):
+        return p
+    for q in sorted(load.ROOT.glob("games/*/calibration/*/compute_weights.properties")):
+        if sha and load.sha256(q) == sha:
+            return q
+    return None
 
 
 def records(df: pd.DataFrame) -> list:
@@ -162,7 +209,7 @@ def write_json(p: pathlib.Path, obj) -> None:
 
 
 # --------------------------------------------------------------------------- SUMMARY.md
-def render(splits, specs, baseline, results, prov, weights, n) -> str:
+def render(splits, specs, baseline, results, prov, weights, n, prov_b=None, other_weights=None) -> str:
     names = [s.name for s in splits]
     spec_names = list(dict.fromkeys(x["name"] for x in specs.values() if x and x.get("name")))
     title = " + ".join(spec_names) or splits[0].path.name
@@ -197,6 +244,9 @@ def render(splits, specs, baseline, results, prov, weights, n) -> str:
     if weights is not None:
         for s in splits:
             L += reprice_section(s.name, results[s.name], weights)
+    for s in splits:
+        if "across" in results[s.name]:
+            L += across_section(s.name, results[s.name], prov[s.name], (prov_b or {}).get(s.name), other_weights)
     L += scope_section(splits, results, weights)
     L += ["Full tables in `tables/` (every row names its split and its currency), the same numbers in "
           "`report.json`, figures in `figures/` when matplotlib is installed.", ""]
@@ -253,24 +303,24 @@ def multiplier_section(split, R, baseline) -> list:
         return [f"## Budget multiplier ({split})", "",
                 f"Not computable: `{baseline}` ran at fewer than two budgets here, so it has no curve to read against.", ""]
     L = [f"## Budget multiplier ({split})", "",
-         f"How much budget `{baseline}` would need to match each arm: the baseline's mean search gain per level,",
-         "interpolated log-linearly in budget, solved for the arm's gain, over the cells where every baseline level",
-         "and the arm ran and none ended terminal. `extrapolated` means the crossing lies past the top of the ladder:",
-         "a lower bound, since gain is concave in budget. The wall-clock column solves the same crossing in the",
-         "baseline's own seconds and divides by the arm's; `arm/baseline time` is the arm's plan time over the",
-         "baseline's at the same budget.", ""]
+         f"How much budget `{baseline}` would need to match each arm: the baseline's mean plan value per level,",
+         "interpolated log-linearly in budget, solved for the arm's mean value, over the cells where every baseline",
+         "level and the arm ran and none ended terminal (values, not search gains: each arm's `initial` is its own",
+         "starting plan). `extrapolated` means the crossing lies past the top of the ladder: a lower bound, since",
+         "value is concave in budget. The wall-clock column solves the same crossing in the baseline's own seconds",
+         "and divides by the arm's; `arm/baseline time` is the arm's plan time over the baseline's at the same budget.", ""]
     base = b.iloc[0]
-    lv = [p.split(":") for p in base.BaseGains.split(";")]
+    lv = [p.split(":") for p in base.BaseFinals.split(";")]
     ms = [p.split(":") for p in base.BaseMs.split(";")]
     if len(lv) >= 2:
         step = float(lv[-1][0]) / float(lv[-2][0])
         tstep = float(ms[-1][1]) / float(ms[-2][1]) if float(ms[-2][1]) > 0 else np.nan
-        L += [f"The baseline's ladder (on the first arm's cells): " + ", ".join(f"{int(a):,}: gain {float(g):.1f}"
+        L += [f"The baseline's ladder (on the first arm's cells): " + ", ".join(f"{int(a):,}: value {float(g):.1f}"
               for a, g in lv) + f". Its top step is {step:.1f}x the units and {f(tstep, '.1f')}x the seconds.", ""]
-    rows = [[x.Budget, x.Arm, x.Cells, f(x.ArmGain, ".1f"), mult(x.Multiplier, x.Lo, x.Hi), x.Flag,
+    rows = [[x.Budget, x.Arm, x.Cells, f(x.ArmFinal, ".1f"), mult(x.Multiplier, x.Lo, x.Hi), x.Flag,
              mult(x.TimeMultiplier, x.TimeLo, x.TimeHi), f(x.ArmTimeRatio, ".2f")]
             for x in b.itertuples(index=False)]
-    return L + table(["Budget", "Arm", "Cells", "Arm gain", "Multiplier [CI]", "Where", "Wall-clock multiplier [CI]",
+    return L + table(["Budget", "Arm", "Cells", "Arm value", "Multiplier [CI]", "Where", "Wall-clock multiplier [CI]",
                       "Arm/baseline time"], rows)
 
 
@@ -320,6 +370,28 @@ def reprice_section(split, R, weights) -> list:
     rows = [[x.Budget, x.Arm, x.Pairs, ci(x.RepricedDiff, x.Lo, x.Hi), f"{x.ClampedShare:.0%}"]
             for x in r.itertuples(index=False)]
     return L + table(["Budget", "Arm", "Pairs", "Re-scored diff [CI]", "Clamped"], rows)
+
+
+def across_section(split, R, prov_a, prov_b, other_weights) -> list:
+    x = R["across"]
+    L = [f"## Across machines ({split})", ""]
+    if x.empty:
+        return L + ["Nothing to compare: the two runs share no arm at any budget on cells where neither turn was terminal.", ""]
+    b = prov_b or {}
+    L += [f"A is this run, priced in {prov_a.get('currency')} and written by MAGAT {prov_a.get('magat_commit')}; B is "
+          f"`{b.get('path', '?')}`, priced in {b.get('currency', '?')} and written by MAGAT {b.get('magat_commit', '?')}.",
+          "The same experiment, positions and seeds, so the same chance events: each machine's search stopped under its",
+          "own currency. On the cells both ran, neither turn terminal: each machine's mean value and the paired",
+          "difference A - B, which is what the two currencies' prices did to where the searches stopped. The budget",
+          "multipliers are dimensionless, so the two should agree. The seconds per turn are each machine's own.",
+          ("`A at B's prices` is the units A's turns cost in B's currency over the units they cost in A's."
+           if other_weights is not None else "B's currency was not found, so A's turns are not re-priced in it."), ""]
+    rows = [[x_.Budget, x_.Arm, x_.Pairs, interval(x_.MeanA, x_.LoA, x_.HiA), interval(x_.MeanB, x_.LoB, x_.HiB),
+             ci(x_.Diff, x_.DiffLo, x_.DiffHi), mult(x_.MultA, x_.MultALo, x_.MultAHi), mult(x_.MultB, x_.MultBLo, x_.MultBHi),
+             f(x_.SecondsA, ".2f"), f(x_.SecondsB, ".2f"), f(x_.RepricedRatio, ".3f")]
+            for x_ in x.itertuples(index=False)]
+    return L + table(["Budget", "Arm", "Pairs", "A mean [CI]", "B mean [CI]", "A - B [CI]", "A multiplier [CI]",
+                      "B multiplier [CI]", "A s/turn", "B s/turn", "A at B's prices"], rows)
 
 
 def scope_section(splits, results, weights) -> list:

@@ -6,6 +6,7 @@ import core.game.ComputeMeter;
 import core.game.GameState;
 import magat.agent.Oracle;
 import magat.agent.Signature;
+import magat.agent.TurnBudget;
 import magat.game.Scenario;
 import magat.games.tribes.TribesState;
 import players.ExperimentalEMCTS.ExperimentalEMCTSAgent;
@@ -25,9 +26,11 @@ import java.util.Random;
  * {@code useProfile(null)} installs those globals). Both sides therefore stop under the same
  * currency.
  *
- * <p>Two of its initialization copies are dead (the {@code old_gs} copy the SIMPLE heuristic never
- * reads, and the copy handed to the root's evaluation, which the root's own stored state makes
- * unnecessary); the port does not make them, and {@link #deadInitCopies} says so.
+ * <p>Two of its initialization copies are never read (the {@code old_gs} copy the SIMPLE heuristic
+ * ignores, and the copy handed to the root's evaluation, which the root's own stored state makes
+ * unnecessary). The port makes them all the same, because each draws from the state's random generator:
+ * without them, every later copy would be seeded otherwise, and on 64 positions 12 of 128 turns met
+ * another chance event.
  */
 public final class EngineEmctsOracle implements Oracle<TribesState> {
 
@@ -36,9 +39,10 @@ public final class EngineEmctsOracle implements Oracle<TribesState> {
         return "engine ExperimentalEMCTSAgent(PLUS, k=1)";
     }
 
+    /** The engine's EMCTS bounds its search alone: its greedy initialization is paid outside the budget. */
     @Override
-    public int deadInitCopies() {
-        return 2;
+    public TurnBudget.Initialization initialization() {
+        return TurnBudget.Initialization.OUTSIDE_BUDGET;
     }
 
     @Override

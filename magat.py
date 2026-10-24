@@ -36,6 +36,7 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
                                     single-threaded whole turns over spread positions: each level's thinking time here
     python magat.py check audit     --game tribes [--arms a,b|@set] [--budget 40000] [--warn 0.10] [--fail 0.25]
     python magat.py analyze --run DIR [--experiment SPEC] [--baseline ARM] [--reprice WEIGHTS] --out DIR
+                            [--compare DIR [--compare-weights WEIGHTS]]
     python magat.py java <args...>          raw magat.cli.Main invocation
     python magat.py layering
     python magat.py notebook build|selftest

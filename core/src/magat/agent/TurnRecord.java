@@ -46,7 +46,7 @@ public final class TurnRecord {
     public final Map<String, Double> telemetry;
     /** The arm's declared algorithm operations, counted over the search, in declaration order. */
     public final Map<String, Long> operations;
-    /** The same operations, counted over the initialization (outside the budget, inside {@code initUnits}). */
+    /** The same operations, counted over the initialization (inside {@code initUnits}). */
     public final Map<String, Long> initOperations;
 
     private TurnRecord(Builder b) {

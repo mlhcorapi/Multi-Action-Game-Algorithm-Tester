@@ -1,6 +1,13 @@
 package magat.probe;
 
+import magat.agent.AgentFactory;
+import magat.agent.Episode;
+import magat.agent.Oracle;
+import magat.agent.Seeds;
+import magat.agent.Signature;
+import magat.agent.TurnBudget;
 import magat.agents.emcts.EmctsFactory;
+import magat.game.Scenario;
 import magat.meter.Meter;
 import magat.meter.Weights;
 import magat.portfolio.Portfolio;
@@ -20,10 +27,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.*;
 
-/** Replay of a MAGAT leaf, the time check and the audit, on the toy game. */
+/** Replay of a MAGAT leaf, the time check, the audit and the equivalence gate, on the toy game. */
 public class ProbeToyTest {
 
     private final ToyGame game = new ToyGame();
@@ -177,5 +187,32 @@ public class ProbeToyTest {
         Stdout.Captured<Boolean> failed = Stdout.capture(() -> AuditCheck.report(a, AuditCheck.AUDIT_WARN, AuditCheck.AUDIT_FAIL));
         assertFalse(failed.value);
         assertTrue(failed.out, failed.out.contains("busy-undeclared") && failed.out.contains("<-- FAIL"));
+    }
+
+    @Test
+    public void theGatePlaysThePortByItsOriginalsRuleForTheInitialization() throws Exception {
+        List<Scenario<ToyGame.State>> positions = game.positions(2);
+        AgentFactory<ToyGame.State, ToyGame.Move> emcts = EmctsFactory.plain();
+        Map<TurnBudget.Initialization, EquivalenceCheck.Result> gated = new EnumMap<>(TurnBudget.Initialization.class);
+        for (TurnBudget.Initialization rule : TurnBudget.Initialization.values()) {
+            // An original that is the port itself, declaring the rule it pays its initialization by.
+            Oracle<ToyGame.State> itself = new Oracle<ToyGame.State>() {
+                @Override public String describe() { return "the port itself, " + rule; }
+                @Override public TurnBudget.Initialization initialization() { return rule; }
+                @Override public Signature plan(Scenario<ToyGame.State> sc, long seed, long budget, double[] w) {
+                    assertEquals("the rule the gate plays by", rule, TurnBudget.initialization());
+                    return Signature.of(Episode.run(game, sc, (int) (seed - Seeds.visit(sc.id, 0)), emcts, budget, w, "itself"));
+                }
+            };
+            EquivalenceCheck.Result r = EquivalenceCheck.run(game, emcts, itself, positions, 2, new long[]{1_500}, null, 2);
+            assertTrue(rule + ": " + r.failures() + " cell(s) failed", r.passed());
+            assertEquals("and the gate restores the JVM's", TurnBudget.Initialization.IN_BUDGET, TurnBudget.initialization());
+            gated.put(rule, r);
+        }
+        List<EquivalenceCheck.Cell> in = gated.get(TurnBudget.Initialization.IN_BUDGET).cells;
+        List<EquivalenceCheck.Cell> out = gated.get(TurnBudget.Initialization.OUTSIDE_BUDGET).cells;
+        for (int i = 0; i < in.size(); i++)
+            assertTrue("paid from the budget, the initialization leaves the search less",
+                    in.get(i).candidate.units < out.get(i).candidate.units);
     }
 }

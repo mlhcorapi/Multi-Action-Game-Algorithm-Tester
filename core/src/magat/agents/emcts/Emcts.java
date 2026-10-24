@@ -25,9 +25,10 @@ import java.util.Random;
  *
  * <p>This is a line-for-line port of the engine fork's {@code ExperimentalEMCTSAgent} with (1+1)
  * selection: every forward-model call and every random draw happens in the same order, which the
- * equivalence gate asserts against that class. Two initialization copies that class makes and never
- * reads (its {@code old_gs} copy and the copy handed to the root's evaluation) are not made here; the
- * oracle declares them.
+ * equivalence gate asserts against that class. That class makes two initialization copies it never
+ * reads (its {@code old_gs} copy and the copy handed to the root's evaluation), and the port makes them
+ * too: each draws from the state's random generator, and without them every later copy would be seeded
+ * otherwise and could meet another chance event.
  *
  * <p><b>Its own operations</b>, recorded through the meter beside the forward model's:
  * {@code emcts.generation}, one child's own work (building and repairing its plan, selection), timed
@@ -86,9 +87,12 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
         mutBestGainSum = 0.0;
         TurnRecord.Builder record = TurnRecord.builder();
 
-        // Greedy 1-ply initialization, on its own copy; the search gets what it leaves of the budget.
+        // Greedy 1-ply initialization, on its own copy; the search gets what it leaves of the budget. The
+        // engine's agent copies the state once before it (its old_gs) and once for the root's evaluation, which
+        // re-scores the root from the root's own state; the port makes both, for the draws they take.
+        game.copy(state);
         root = initialPlan(game.copy(state));
-        eval(null, root);
+        eval(game.copy(state), root);
         double initialValue = root.value();
         long initMillis = System.currentTimeMillis() - turnStart;
         budget.beginSearch();
