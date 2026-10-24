@@ -224,8 +224,10 @@ the authors have given permission for MAGAT's use of their code. The fork is use
 attribution, and none of it is copied into this repository.
 
 The reference algorithms come from Kocsis and Szepesvári (2006) and Browne et al. (2012) for MCTS,
-Baier and Cowling (2018) for EMCTS, Justesen et al. (2017) for OEP, and the TBETS implementation
-written for TUBSTAP ([`docs/ALGORITHMS.md`](docs/ALGORITHMS.md#references)).
+Baier and Cowling (2018) for EMCTS, Justesen et al. (2017) for OEP, and Taylor Neller for TBETS
+([the paper](https://doi.org/10.1007/978-3-032-23657-9_12),
+[the code](https://github.com/TaylorNeller/TUBSTAP_Taylor)). Their references are in
+[`docs/ALGORITHMS.md`](docs/ALGORITHMS.md#references).
 
 ## License
 

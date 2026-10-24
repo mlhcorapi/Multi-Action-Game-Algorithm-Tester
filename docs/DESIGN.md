@@ -151,7 +151,7 @@ v0.1 ships four reference algorithms, `@reference`, and a floor:
 | `mcts` | UCT over the turn's actions, without rollouts (Kocsis and Szepesvári 2006; Browne et al. 2012) |
 | `emcts` | Evolutionary MCTS (Baier and Cowling 2018), the engine's variant with (1+1) selection; the reference arm, whose `advance` defines the unit |
 | `oep` | Online Evolutionary Planning (Justesen et al. 2017) |
-| `tbets` | Turn-Based Evolutionary Tree Search, ported from the Tribes engine's agent |
+| `tbets` | Turn-Based Evolutionary Tree Search (Taylor Neller), ported from the Tribes engine's agent |
 
 **Ports are gated.** `emcts` and `tbets` are ports of agents in the Tribes engine. An `Oracle` drives the
 original on the same position, seed and budget, and `check equivalence` requires the port to reproduce it
