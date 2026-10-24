@@ -218,7 +218,7 @@ port against the original rather than trusting it:
    currency of your own, from `calibrate-controlled`, add the arm:
 
    ```bash
-   python magat.py calibrate --game tribes --out ~/magat_runs/calibration/tribes-<machine> --arms first
+   python magat.py calibrate --game tribes --out $HOME/magat_runs/calibration/tribes-<machine> --arms first
    ```
 
    This merges into the currency by ratio, and prices its operations as well.
@@ -241,8 +241,8 @@ port against the original rather than trusting it:
 
    ```bash
    python magat.py experiment validate --experiment experiments/tribes/first.json --weights <your weights>
-   python magat.py run --experiment experiments/tribes/first.json --split dev --weights <your weights> --out ~/magat_runs/tribes/runs/first
-   python magat.py analyze --run ~/magat_runs/tribes/runs/first --out ~/magat_runs/tribes/results/first
+   python magat.py run --experiment experiments/tribes/first.json --split dev --weights <your weights> --out $HOME/magat_runs/tribes/runs/first
+   python magat.py analyze --run $HOME/magat_runs/tribes/runs/first --out $HOME/magat_runs/tribes/results/first
    ```
 
    `SUMMARY.md` gives the paired difference against the baseline in units and in seconds, and the

@@ -115,9 +115,9 @@ published artefacts, add them to `PUBLISHED`, so that commands default to them.
 python magat.py build --tests
 python magat.py layering
 python magat.py arms --game <game>
-python magat.py portfolio build --game <game> --out ~/magat_runs/portfolio/<game>-toy --targets <source>=2 --threads 2
-python magat.py portfolio freeze --portfolio ~/magat_runs/portfolio/<game>-toy
-python magat.py check contract --game <game> --portfolio ~/magat_runs/portfolio/<game>-toy --scenarios 4
+python magat.py portfolio build --game <game> --out $HOME/magat_runs/portfolio/<game>-toy --targets <source>=2 --threads 2
+python magat.py portfolio freeze --portfolio $HOME/magat_runs/portfolio/<game>-toy
+python magat.py check contract --game <game> --portfolio $HOME/magat_runs/portfolio/<game>-toy --scenarios 4
 ```
 
 The contract laws come first. A game that fails L2 (determinism) or L9 (metering is complete) cannot
