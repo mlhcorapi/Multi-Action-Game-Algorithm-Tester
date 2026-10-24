@@ -19,7 +19,7 @@ import java.util.regex.Pattern;
  * lookups, ranking, tree bookkeeping) is declared by its {@link magat.agent.AgentFactory} as named
  * operations and recorded by the algorithm through an {@link Op} handle:
  * <pre>
- *   static final Meter.Op UPDATE = Meter.register("qd.update");
+ *   static final Meter.Op UPDATE = Meter.register("x.update");
  *   UPDATE.count();                                          // one occurrence, untimed
  *   try (Meter.Span s = RANK.span()) { ... }                 // one occurrence, timed while profiling
  *   try (Meter.Span s = LOOKUP.span(n)) { ...n lookups... }  // n occurrences timed as one batch
@@ -31,12 +31,8 @@ import java.util.regex.Pattern;
  *
  * <p><b>Pricing.</b> A unit is {@code sum over operations of count * weight}, priced by the profile
  * installed on the calling thread with {@link #useProfile}. Profiles come from a {@link Weights} file
- * installed once per JVM with {@link #install}; there is deliberately no default file path. A version-1
- * file prices the three forward-model operations only, so an algorithm's own operations weigh exactly
- * 0.0 under it and every unit is the double it always was; a version-2 file prices every operation.
- *
- * <p>Extracted from the thesis tree's {@code core/game/ComputeMeter.java}; the forward-model counting
- * and pricing semantics are unchanged.
+ * installed once per JVM with {@link #install}; there is deliberately no default file path. A file
+ * prices every operation: the forward model's three and each one an arm declares.
  */
 public final class Meter {
 

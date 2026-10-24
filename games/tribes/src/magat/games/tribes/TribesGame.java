@@ -34,11 +34,10 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 /**
- * Tribes behind the contract. Every method is the thesis tree's behaviour, moved: the "good
- * actions" filter of {@code Agent.allGoodActions}, the feasibility test of
- * {@code EMCTSAgent.checkActionFeasibility}, the SIMPLE heuristic, the deterministic-cascade copy,
- * the reseeding of {@code Stage1Runner.runOneTurn}, the serialization of {@code FastGameStateIO},
- * and the manifest facts of {@code BuildV5Portfolio.persistAndManifest}.
+ * Tribes behind the contract, with the engine's own behaviour: the "good actions" filter of
+ * {@code Agent.allGoodActions}, the feasibility test of {@code EMCTSAgent.checkActionFeasibility}, the
+ * SIMPLE heuristic, a deterministic copy, reseeding per turn, a compact serialization, and the manifest
+ * facts of a captured position.
  *
  * <p>Engine globals ({@code core.Constants}) are set once, here, and are what {@link #configuration}
  * reports. No runner touches them.
@@ -164,7 +163,7 @@ public final class TribesGame implements Game<TribesState, Action>, EngineCounte
         return action.getActionType() == Types.ACTION.END_TURN;
     }
 
-    /** The first END_TURN among the legal actions, as every thesis-tree agent found it. */
+    /** The first END_TURN among the legal actions, as the engine's agents find it. */
     @Override
     public Action endTurnAction(TribesState state) {
         for (Action a : legalActions(state))

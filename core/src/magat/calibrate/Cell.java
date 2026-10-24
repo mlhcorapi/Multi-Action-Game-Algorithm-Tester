@@ -193,8 +193,8 @@ public final class Cell {
     }
 
     /**
-     * The forward model's weights within (0, 100) of the reference advance, the thesis calibrator's check
-     * for a broken or mis-attributed timer. An algorithm operation has no such bound (one occurrence may
+     * The forward model's weights within (0, 100) of the reference advance: the check for a broken or
+     * mis-attributed timer. An algorithm operation has no such bound (one occurrence may
      * cost many advances: a generation's bookkeeping, a legal-action query, a toy game's whole turn), only
      * a finite, non-negative price.
      */

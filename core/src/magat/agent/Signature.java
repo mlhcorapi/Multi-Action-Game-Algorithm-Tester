@@ -10,10 +10,9 @@ import java.util.Map;
 /**
  * Everything an equivalence gate compares between a ported arm and its oracle: the two values, the
  * search and initialization spend as raw counts, the node and unique-sequence counts, and the priced
- * units. Values and units are compared to four decimals, as the thesis tree's gate compared them;
- * counts exactly. An oracle may also carry mechanism telemetry (how often a bias fired, how many
- * candidates a shortlist skipped); every key it carries that the candidate also reports is compared,
- * to four decimals.
+ * units. Values and units are compared to four decimals, as every turns file writes them; counts
+ * exactly. An oracle may also carry telemetry; every key it carries that the candidate also reports is
+ * compared, to four decimals.
  */
 public final class Signature {
 
@@ -82,8 +81,8 @@ public final class Signature {
         if (a != b) out.add(what + ": candidate " + a + " vs oracle " + b);
     }
 
-    /** The thesis tree's verify-gate line. */
-    public String thesisLine() {
+    /** One line for the gate's report. */
+    public String line() {
         return String.format(Locale.ROOT, "init=%s final=%s fm=%d nodes=%d unique=%d units=%s",
                 TurnRecord.round4(initial), TurnRecord.round4(finalValue), initAdvances + advances,
                 nodes, unique, TurnRecord.round4(units));
@@ -91,7 +90,7 @@ public final class Signature {
 
     @Override
     public String toString() {
-        return thesisLine() + String.format(Locale.ROOT, " [search a/c/e=%d/%d/%d init a/c/e=%d/%d/%d]",
+        return line() + String.format(Locale.ROOT, " [search a/c/e=%d/%d/%d init a/c/e=%d/%d/%d]",
                 advances, copies, evals, initAdvances, initCopies, initEvals);
     }
 }

@@ -11,8 +11,7 @@ import java.util.Map;
  * {@link Meter#PROFILE} is on, timed) on the calling thread. {@code advance}, {@code copy} and
  * {@code evaluate} are the three operations a unit is made of; everything else delegates.
  *
- * <p>Counting happens before the operation, so an operation that throws is still counted, exactly
- * as the thesis tree's engine hooks behaved.
+ * <p>Counting happens before the operation, so an operation that throws is still counted.
  */
 public final class MeteredGame<S, A> implements Game<S, A> {
 

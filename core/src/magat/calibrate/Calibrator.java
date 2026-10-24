@@ -31,11 +31,11 @@ import java.util.TreeSet;
  *
  * <p><b>Why per cell.</b> Operations with the same names cost different amounts for different arms
  * (they reach different states) and at different budgets (a ten-times larger tree stops fitting in
- * cache: the thesis measured the top level at 26.7x the wall-clock of the bottom one instead of 10x).
+ * cache: on the R7615 a ten-times larger level once took 26.7x the wall-clock of the bottom one).
  * Under one global weight set a nominal budget buys a different amount of compute for each arm, which
  * is the confound the budget exists to remove; per-cell pricing mis-allocated up to 73% less.
  *
- * <p><b>Method</b> (the thesis calibrator's, unchanged): every cell is measured on the same portfolio
+ * <p><b>Method</b>: every cell is measured on the same portfolio
  * positions with the same seeds; warm-up once per budget level and a collection between levels; one
  * discarded profiled turn per cell; per repetition, the same turns again, nanoseconds reset per turn
  * and counts taken from the turn's own record (initialization plus search, the span the nanoseconds
@@ -58,8 +58,7 @@ public final class Calibrator {
      * positions price a unit differently: on the laptop, 8,4,2-style subsets made a unit 34 µs at the bottom
      * level and 24 µs at the next. On the same positions a unit is the same time at every level. The pool is
      * the largest entry; a level that runs fewer turns takes a spread subset of it. A file keeps the turns it
-     * was measured with: every {@code 8,4,2} file (the thesis's and MAGAT's before 2026-10-10) has a pool of
-     * eight, as before.
+     * was measured with: a {@code 8,4,2} file has a pool of eight.
      */
     public static final String DEFAULT_TURNS = "16,16,16";
     public static final int DEFAULT_REPS = 3;
@@ -448,10 +447,9 @@ public final class Calibrator {
      * {@code --estimate}: times one repetition of the reference cell at every level of the session (the
      * level's own positions, after one discarded turn, on the profiled code path), and prints what the
      * session's turns would take: every warm-up, every cell's discarded turn and repetitions, and the
-     * bracket. Every arm is taken at the reference arm's time per turn: under a version-2 currency an
-     * arm's own operations are priced, so a unit buys about the same wall-clock of any arm; under version
-     * 1 the worked result's zero-evaluation arms took up to 1.22x the baseline's time per unit, which the
-     * upper end of the printed range allows for. Writes nothing.
+     * bracket. Every arm is taken at the reference arm's time per turn: an arm's own operations are
+     * priced, so a unit buys about the same wall-clock of any arm; the upper end of the printed range
+     * allows an arm 1.22x the reference's time per unit. Writes nothing.
      */
     static <S, A> double estimate(Game<S, A> game, AgentFactory<S, A> ref, List<Cell> cells, long refBudget, List<Scenario<S>> scenarios,
                                   Options o, long[] turnLevels, int[] turns, int pool, Weights existing) {

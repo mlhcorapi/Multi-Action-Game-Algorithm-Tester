@@ -43,7 +43,7 @@ public class ManifestTest {
     }
 
     @Test
-    public void theIdentityIsTheThesisFormula() {
+    public void theIdentityIsTheFixedFormula() {
         // sha256("1,single,11\n2,single,12\n3,dual,13\n4,dual,14\n")
         assertEquals(Identity.sha256("1,single,11\n2,single,12\n3,dual,13\n4,dual,14\n"), Identity.of(rows()));
     }

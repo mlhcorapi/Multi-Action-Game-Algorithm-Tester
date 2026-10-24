@@ -32,7 +32,6 @@ import java.util.Set;
  * <p>Physical cores are read from {@code /proc/cpuinfo} on Linux. Elsewhere half the logical CPUs are
  * assumed physical, which errs toward fewer threads; the banner says when the count was assumed.
  *
- * <p>Extracted from the thesis tree's {@code ServerProfile}, policy unchanged.
  */
 public final class MachineProfile {
 

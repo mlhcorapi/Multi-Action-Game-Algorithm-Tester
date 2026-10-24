@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""The one engine change MAGAT needs on top of the thesis tree: resolve the engine's data files
+"""An engine change MAGAT needs: resolve the engine's data files
 (`terrainProbs.json`, level files) against `-Dtribes.home=<engine dir>` when they are not found in
 the working directory, so the engine can be driven from any directory. Applied to
 `src/utils/file/IO.java` in a Tribes tree; idempotent.
 
-    python tools/patch_engine_paths.py <tribes engine tree>
+    python tools/engine/patch_engine_paths.py <tribes engine tree>
 """
 import pathlib
 import sys

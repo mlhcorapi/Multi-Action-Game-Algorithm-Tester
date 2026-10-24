@@ -22,9 +22,8 @@ import java.util.concurrent.Future;
 
 /**
  * The equivalence gate: a ported arm must reproduce its oracle's signature on every (scenario,
- * visit) at every budget, both sides priced by the same weights. This is the thesis tree's
- * {@code Stage1Runner verify}, widened from one turn to a grid, and it is what says the seam is in
- * the right place.
+ * visit) at every budget, both sides priced by the same weights. It is what says a port plays the turns
+ * its original plays.
  */
 public final class EquivalenceCheck {
 
@@ -145,7 +144,7 @@ public final class EquivalenceCheck {
             String tag = c.passed() ? "ok  " : "FAIL";
             if (verbose || !c.passed())
                 System.out.println(String.format(Locale.ROOT, "  [%s] scenario %3d visit %d @%d  %s",
-                        tag, c.scenarioId, c.visit, c.budget, c.candidate.thesisLine()));
+                        tag, c.scenarioId, c.visit, c.budget, c.candidate.line()));
             for (String d : c.differences) System.out.println("         " + d);
         }
         System.out.println(String.format(Locale.ROOT, "  %d cells, %d failed", r.cells.size(), r.failures()));

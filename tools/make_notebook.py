@@ -67,12 +67,12 @@ GAME = "tribes"
 PY = sys.executable
 PUBLISHED_PORTFOLIO = ROOT / "games" / GAME / "portfolio" / "v1"
 # Workers for parallel stages. Half the logical CPUs (SMT siblings add heat, not throughput) less two
-# for the machine; MAGAT_WORKERS overrides. The machine profile (milestone 3) replaces this guess.
+# for the machine; MAGAT_WORKERS overrides. `magat machine` reports the measured ceiling.
 WORKERS = int(os.environ.get("MAGAT_WORKERS") or max(1, (os.cpu_count() or 2) // 2 - 2))
 # This machine's own currency: <data>/calibration/<game>-<name>. The published R7615 currency stays in
 # the repository; a new calibration of the R7615 is published beside it under this name, never over it.
-# A currency keeps the levels it was first measured at: "r7615-time" is the first at the published levels
-# (games/<game>/levels.json); "r7615-v2" was the name for one at the thesis's 40,000 / 80,000 / 400,000.
+# A currency keeps the levels it was first measured at, so a currency at the published levels
+# (games/<game>/levels.json) has a name of its own.
 CURRENCY_NAME = os.environ.get("MAGAT_CURRENCY") or "r7615-time"
 
 def magat(*args, check=True):

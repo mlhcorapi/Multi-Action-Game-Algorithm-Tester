@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The engine's legal-action generation, made faster without changing a single output. After every
 advance the engine recomputes the active tribe's legal actions; that is 85% of a search's CPU time and
-nearly all of its allocation (DESIGN 8.6). Four changes, each returning exactly what the code it
+nearly all of its allocation. Four changes, each returning exactly what the code it
 replaces returned, in the same order:
 
 1. `StepMove.getNeighbours`: the zone-of-control test (is an enemy unit next to this tile?) is computed
@@ -20,7 +20,7 @@ Applied to a Tribes tree; idempotent. The engine commit that carries it also add
 `test/MoveGenerationEquivalenceTest.java`, which plays seeded games forward and compares every unit's
 destinations and paths, every city's build actions and every tile's unit against the original code.
 
-    python tools/patch_engine_perf.py <tribes engine tree>
+    python tools/engine/patch_engine_perf.py <tribes engine tree>
 """
 import pathlib
 import sys

@@ -48,11 +48,10 @@ import java.util.concurrent.TimeUnit;
  * <p>Writes {@code thread_sweep.csv} (appended per level) and {@code threads.json}
  * ({@code {"levels": {"<budget>": {"threads": n, "estimate": false}}}}), which runs read by default.
  *
- * <p>Extracted from the thesis tree's {@code ThreadCalibrationV6}: pilot-sized points, two segments,
- * the knee rule, the memory gate after two points and the truncated-sweep fallback are unchanged. Changed
- * 2026-10-09: the gate's footprint is the heap held after collections, not the peak heap in use. The peak
- * also counts garbage not yet collected, which grows with the heap rather than with the workers, so it
- * projected the R7615's mid and upper thread counts past the heap and skipped them.
+ * <p>Pilot-sized points, two segments, the knee rule, the memory gate after two points and the
+ * truncated-sweep fallback. The gate's footprint is the heap held after collections, not the peak heap in
+ * use: the peak also counts garbage not yet collected, which grows with the heap rather than with the
+ * workers, so it projected the R7615's mid and upper thread counts past the heap and skipped them.
  */
 public final class ThreadSweep {
 

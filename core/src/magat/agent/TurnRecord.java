@@ -88,19 +88,19 @@ public final class TurnRecord {
         return finalValue - initial;
     }
 
-    /** Total forward-model advances, initialization included (the thesis tree's {@code FmCalls}). */
+    /** Total forward-model advances, initialization included. */
     public long fmCalls() {
         return initAdvances + advances;
     }
 
-    /** Rounded to four decimals, as every thesis-tree CSV was written. */
+    /** Rounded to four decimals, as every turns file is written. */
     public static double round4(double v) {
         if (Double.isNaN(v) || Double.isInfinite(v)) return v;
         return Math.round(v * 10000.0) / 10000.0;
     }
 
-    /** The thesis tree's verify-gate line, for eyeballing against archived logs. */
-    public String thesisSignature() {
+    /** One line of the turn's signature, for eyeballing. */
+    public String signatureLine() {
         return String.format(Locale.ROOT, "init=%s final=%s fm=%d nodes=%d unique=%d units=%s",
                 round4(initial), round4(finalValue), fmCalls(), nodes, unique, round4(units));
     }

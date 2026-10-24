@@ -118,7 +118,7 @@ final class CalibrateCommand {
             module = Games.load(args.get("game"));
             arms = module.expandArms(arms);
         }
-        // The file's own levels unless --levels names others (a file without them is the thesis's ladder).
+        // The file's own levels unless --levels names others.
         String fileLevels = w.header().get("levels");
         long[] levels = args.getLongs("levels", fileLevels != null ? Arrays.stream(fileLevels.split(",")).mapToLong(x -> Long.parseLong(x.trim())).toArray()
                 : new long[]{40_000L, 80_000L, 400_000L});

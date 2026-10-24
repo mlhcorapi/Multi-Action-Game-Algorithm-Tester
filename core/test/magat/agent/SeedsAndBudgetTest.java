@@ -16,7 +16,7 @@ public class SeedsAndBudgetTest {
     }
 
     @Test
-    public void visitSeedIsTheThesisConvention() {
+    public void visitSeedIsTheFixedConvention() {
         assertEquals(1_000_000L, Seeds.visit(1, 0));
         assertEquals(1_000_005L, Seeds.visit(1, 5));
         assertEquals(400_000_007L, Seeds.visit(400, 7));

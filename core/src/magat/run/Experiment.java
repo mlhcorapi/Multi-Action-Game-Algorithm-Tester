@@ -19,8 +19,7 @@ import java.util.Set;
 
 /**
  * An experiment spec: a JSON file, validated before anything runs ({@link Validator}), hashed into
- * provenance, and read by both the runner and the analyzer. Replaces the thesis tree's stage schedules,
- * which were Java constants.
+ * provenance, and read by both the runner and the analyzer.
  *
  * <pre>
  * {

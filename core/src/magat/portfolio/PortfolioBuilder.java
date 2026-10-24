@@ -48,8 +48,7 @@ import java.util.regex.Pattern;
  * exception escaping a source is never read as "this attempt yielded nothing": the build stops with
  * the journal intact.
  *
- * <p>Extracted from the thesis builders: the scheduling, journal and marker logic unchanged, the
- * game-specific generation behind {@link ScenarioSource}.
+ * <p>The game-specific generation is behind {@link ScenarioSource}.
  */
 public final class PortfolioBuilder {
 
@@ -200,7 +199,7 @@ public final class PortfolioBuilder {
             for (ScenarioSource<S> s : sources) {
                 for (Capture<S> c : captured.get(s.name())) {
                     id++;
-                    // Serialize before describing, as the thesis builder did: the bin is the state as captured.
+                    // Serialize before describing: the bin is the state as captured.
                     RunGuard.atomicWrite(Portfolio.binPath(outDir, id), game.serialize(c.state));
                     rows.add(new Manifest.Row(id, s.name(), c.attempt, c.seed, c.phase,
                             game.branchingFactor(c.state), game.describe(c.state)));

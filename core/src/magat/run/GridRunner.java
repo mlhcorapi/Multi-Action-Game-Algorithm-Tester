@@ -42,13 +42,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * the order the spec lists them (a priority order: leaves are checkpointed independently, so a stopped
  * run keeps whatever came first).
  *
- * <p>From the thesis tree's {@code Stage1Runner}, unchanged in substance: per-leaf checkpoint key
+ * <p>A per-leaf checkpoint key
  * {@code arm=<id>;budget=<units>;split=<split>}; resume by re-running the same command (finished leaves
  * are skipped, a partial leaf continues per scenario and visit after {@link Leaf#compact}); per-level
  * thread counts; the {@link LoadGovernor}; one lock per output tree; a leaf marked complete only when
  * every turn produced a row.
  *
- * <p>Three guards are new, each a trap of the brief made structural:
+ * <p>Three guards:
  * <ul>
  *   <li><b>Currency lock.</b> {@code _run.json} records the weights file's hash and every leaf records
  *       the weights it ran under. A resume under another file is allowed only if every leaf's own price
@@ -56,7 +56,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *       checkpoint lines and directories are removed, and the retirement is logged). A leaf can never
  *       hold turns priced in two currencies.</li>
  *   <li><b>Identical-output assertion.</b> After every level, two arms whose turns agree on value, counts,
- *       nodes and unique sequences on every turn are reported as a bug and the run stops (principle 12).</li>
+ *       nodes and unique sequences on every turn are reported as a bug and the run stops.</li>
  *   <li><b>Portfolio and configuration lock</b> ({@link Provenance}).</li>
  * </ul>
  */
@@ -359,9 +359,7 @@ public final class GridRunner {
 
     /**
      * Whether a leaf's recorded prices are what {@code weights} prices it at now: the forward model's three,
-     * and every operation either side prices. A leaf from before version 2 recorded the three only, so a
-     * version-2 file that prices its arm's own operations is a price change: published version-1 results
-     * are never continued in a version-2 currency.
+     * and every operation either side prices.
      */
     static boolean samePrices(JsonObject meta, String profile, Weights weights) {
         double[] now = profile != null ? weights.profile(profile) : weights.global();

@@ -22,7 +22,7 @@ import java.util.Set;
  * runs on it, and, given the published portfolio, whether this one is the same.
  *
  * <ol>
- *   <li>The manifest parses and names this game (a thesis manifest names none and is accepted).</li>
+ *   <li>The manifest parses and names this game (the original format names none and is accepted).</li>
  *   <li>Every scenario file loads, and the branching factor and {@code describe()} facts recomputed
  *       from it equal the manifest's: the bins and the manifest describe the same positions.</li>
  *   <li>{@code identity.txt}, if present, equals the manifest's identity.</li>
@@ -74,7 +74,7 @@ public final class PortfolioVerify {
         Report r = new Report();
         Manifest m = Manifest.read(dir);
         String identity = m.identity();
-        if (m.legacy()) r.pass("manifest parses (thesis format, " + m.size() + " rows)");
+        if (m.legacy()) r.pass("manifest parses (original format, " + m.size() + " rows)");
         else if (game.id().equals(m.game())) r.pass("manifest parses (version 1, game " + m.game() + ", " + m.size() + " rows)");
         else r.fail("manifest names game '" + m.game() + "', not '" + game.id() + "'");
         if (!m.legacy()) {
