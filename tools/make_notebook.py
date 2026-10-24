@@ -17,9 +17,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "notebooks" / "run_magat.ipynb"
 OUT_LEVELS = ROOT / "notebooks" / "maintainers" / "measure_levels.ipynb"
-# Section cells for the calibration: Tribes registers 32 priced arms besides the reference arm, eight to a
-# section. A different count only means the 'rest' cell measures what the numbered cells do not.
-CAL_SECTIONS = 4
 
 
 def md(text: str) -> dict:
@@ -186,7 +183,7 @@ bundle("threads", [CALIBRATION / "threads.json", CALIBRATION / "thread_sweep.csv
 CALIBRATE_CELL = r'''
 # This machine's own currency, on this machine's own portfolio, in sections (calibrate-controlled; read
 # docs/CALIBRATING_A_MACHINE.md, "On a shared server"). Idle and single-threaded: nothing else of yours
-# may run while a section measures. Every section cell below skips itself once its arms are priced.
+# may run while a section measures. The measuring cell below skips itself once every arm is priced.
 # The currency prices every operation an arm declares, its own work included.
 CAL_BATCH = 8           # arms per section, fixed when the first section runs
 CAL_OTHER_CPUS = 4.0    # other work on the machine, in logical CPUs, that makes a section SUSPECT
@@ -204,7 +201,10 @@ def calibrate_section(section, redo=False):
     if redo:
         args.append("--redo")
     rc = magat(*args, check=False)
-    if rc == 5:
+    if rc == 5 and section == "rest":
+        print("\n*** SUSPECT: see the reasons above. When the machine is quiet, measure each suspect section k again "
+              "with calibrate_section(k, redo=True); record/SUMMARY.md names them.")
+    elif rc == 5:
         print(f"\n*** SUSPECT: see the reasons above. When the machine is quiet, run calibrate_section({section!r}, redo=True).")
     elif rc == 4:
         raise RuntimeError("the machine stayed busy and nothing was started: run this cell again later")
@@ -217,12 +217,8 @@ magat("calibrate-controlled", "--name", CURRENCY_NAME, "--game", GAME, "--portfo
       "--other-cpus", CAL_OTHER_CPUS, "--batch", CAL_BATCH, "--preflight")
 '''
 
-SECTION_CELL = r'''
-calibrate_section({k})
-'''
-
-REST_CELL = r'''
-# Any section still missing: one that failed twice, or sections added since (a new arm, another batch).
+MEASURE_CELL = r'''
+# Every section still missing, one after another: a re-run measures only what the currency does not price.
 calibrate_section("rest")
 '''
 
@@ -391,25 +387,25 @@ levels mean every currency must be measured again.
     md("""
 ### This machine's currency, in sections
 
-`calibrate-controlled` prices every arm at the levels above, in sections of eight. Each section is one
-calibration session, under an hour on the R7615, that writes all or nothing and merges into the currency by ratio, so a
-culled server or a busy afternoon costs one section, never the whole currency. Before each section it
+`calibrate-controlled` prices every arm at the levels above, in sections of up to eight arms. Each
+section is one calibration session that writes all or nothing and merges into the currency by ratio, so
+a culled server or a busy afternoon costs one section, never the whole currency. Before each section it
 waits (up to `CAL_WAIT_QUIET` minutes) for the machine to be quiet and checks that two estimates agree.
 After each it gives a verdict:
 - **PASS**: the calibrator's gates passed and nothing was seen disturbing it.
 - **SUSPECT**: the gates passed, but the machine was busy with other work (`CAL_OTHER_CPUS`), the
-  container was CPU-throttled, or the session ran at a different speed from the first. Run the cell
-  again with `redo=True` when the machine is quiet.
+  container was CPU-throttled, or the session ran at a different speed from the first. Measure that
+  section again with `calibrate_section(k, redo=True)` when the machine is quiet.
 - **FAIL**: nothing was written; it is retried once, and running the cell again measures what is
   missing.
 
-Run the cells one at a time; every one skips itself once its section is priced. Keep this tab open
-while a section runs, and start nothing else in this server. `record/SUMMARY.md` in the currency's
-folder has every section's verdict, and the last cell bundles it all.
+The measuring cell skips itself once every arm is priced, and running it again after an interruption
+measures only what is missing. Keep this tab open while it runs, and start nothing else in this server.
+`record/SUMMARY.md` in the currency's folder has every section's verdict, and the last cell bundles it
+all.
 """),
     code(CALIBRATE_CELL, tags=("calibrate",)),
-    *[code(SECTION_CELL.replace("{k}", str(k)), tags=("calibrate", f"section-{k}")) for k in range(1, CAL_SECTIONS + 1)],
-    code(REST_CELL, tags=("calibrate",)),
+    code(MEASURE_CELL, tags=("calibrate", "measure")),
     code(CHECKS_CELL, tags=("calibrate", "checks")),
     md("""
 ## Gates and probes
