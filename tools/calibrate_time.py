@@ -17,9 +17,11 @@ arms as though they had run there. docs/CURRENCY.md says why the mean over posit
    time per unit, so a first guess of the units for each time.
 2. Each iteration: the reference arm is calibrated at the guessed levels (`magat calibrate`, a working
    currency of its own), and its turns are timed under that currency over positions spread across the
-   portfolio (`magat check time`). A level's prices make its units buy the same work for every arm, so
-   the reference arm's time is the level's time. Any level whose mean is more than the tolerance from its
-   target is rescaled by target / measured, and the iteration repeats (at most --max-iterations).
+   portfolio (`magat check time`, a measurement: the targets are this tool's, not a gate). A level's
+   prices make its units buy the same work for every arm, so the reference arm's time is the level's
+   time. While any level's mean is more than the tolerance from its target, every level is rescaled by
+   target / measured and the iteration repeats (at most --max-iterations): "iteration 1: ... +25.0%,
+   rescaling" is progress, not a failure.
 3. The found levels are rounded to the nearest --round units (500), measured once more at the rounded
    values, and written to levels.json with every measurement. Publish it as games/<game>/levels.json;
    from then on the launcher uses those levels wherever none are named.
@@ -139,12 +141,15 @@ def main(argv) -> int:
         if not weights.exists():
             raise RuntimeError(f"iteration {k}: no currency written at {levels}")
         timing = d / "time.json"
-        magat(["check", "time", *common, *arm, "--weights", weights, "--levels", levels, "--targets", ",".join(map(str, times)),
-               "--positions", a.positions, "--tolerance", a.tolerance, *toy_time, "--out", timing])
-        if not timing.exists():
+        if magat(["check", "time", *common, *arm, "--weights", weights, "--levels", levels, "--positions", a.positions,
+                  *toy_time, "--out", timing]) != 0 or not timing.exists():
             raise RuntimeError(f"iteration {k}: the timing at {levels} did not run")
         cells = read_cells(timing)
         return {"iteration": k, "units": units, "cells": [cells[u] for u in units], "dir": str(d)}
+
+    def off_target(units, cells, ratios) -> str:
+        return "; ".join(f"{t} ms at {u:,} units -> {c['mean_ms']:.0f} ms ({100 * (r - 1):+.1f}%)"
+                         for t, u, c, r in zip(times, units, cells, ratios))
 
     # ---- 2. iterate until every level's mean is within the tolerance of its time
     iterations = []
@@ -158,10 +163,11 @@ def main(argv) -> int:
             ratios = [c["mean_ms"] / t for c, t in zip(it["cells"], times)]
             it["ratios"] = ratios
             iterations.append(it)
-            print(f"# iteration {k}: " + "; ".join(f"{t} ms at {u:,} units -> {c['mean_ms']:.0f} ms ({100 * (r - 1):+.1f}%)"
-                                                   for t, u, c, r in zip(times, units, it["cells"], ratios)))
-            if all(abs(r - 1) <= a.tolerance for r in ratios):
-                converged = True
+            converged = all(abs(r - 1) <= a.tolerance for r in ratios)
+            print(f"# iteration {k}: {off_target(units, it['cells'], ratios)}; "
+                  + (f"every level within {100 * a.tolerance:.0f}%" if converged
+                     else "rescaling" if k < a.max_iterations else "the last iteration"), flush=True)
+            if converged:
                 break
             found = [u / r for u, r in zip(units, ratios)]
 
@@ -172,6 +178,7 @@ def main(argv) -> int:
         final["ratios"] = [c["mean_ms"] / t for c, t in zip(final["cells"], times)]
         if final is not last:
             iterations.append(final)
+            print(f"# rounded to {a.round:,} units: {off_target(rounded, final['cells'], final['ratios'])}", flush=True)
     except RuntimeError as e:
         print(f"CALIBRATE-TIME: FAIL - {e}")
         return 1
