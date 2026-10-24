@@ -543,15 +543,16 @@ def main(argv) -> int:
     for out, cells in NOTEBOOKS:
         text = json.dumps(notebook(cells), indent=1, ensure_ascii=False) + "\n"
         if "--check" in argv:
-            current = out.read_text(encoding="utf-8") if out.exists() else ""
-            if current != text:
+            # Bytes, not text: a notebook written with other line endings is stale too.
+            current = out.read_bytes() if out.exists() else b""
+            if current != text.encode("utf-8"):
                 print(f"{out} is stale: regenerate with `python tools/make_notebook.py`")
                 stale = 1
             else:
                 print(f"{out} is up to date")
             continue
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(text, encoding="utf-8")
+        out.write_text(text, encoding="utf-8", newline="\n")      # LF on every platform, as git keeps it
         print(f"wrote {out} ({len(cells)} cells)")
     return stale
 
