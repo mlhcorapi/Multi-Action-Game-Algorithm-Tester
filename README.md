@@ -26,8 +26,9 @@ its raw operation counts, so anyone can re-price it with their own machine's cal
   - a published portfolio of 400 positions;
   - published levels: 9,500 / 20,000 / 101,500 units, 500 / 1000 / 5000 ms of a whole turn on a Dell
     PowerEdge R7615 ([`games/tribes/levels.md`](games/tribes/levels.md));
-  - four reference algorithms, `mcts`, `emcts`, `oep` and `tbets`, the two ported from the engine gated
-    field for field against the engine's own agents, and `random`, the floor.
+  - four reference algorithms, `mcts`, `emcts`, `oep` and `tbets` ([`docs/ALGORITHMS.md`](docs/ALGORITHMS.md)),
+    the two ported from the engine gated field for field against the engine's own agents, and `random`,
+    the floor.
 - **A published currency** for the R7615 comes with the reference results. Until then, calibrate your
   own machine (below).
 - **The archive.** MAGAT grew out of an earlier study; what v0.1 set aside, and where it lives, is in
@@ -161,6 +162,7 @@ At toy size the numbers mean nothing; the path is the point.
 | [`docs/METHODS.md`](docs/METHODS.md) | the method: portfolio, split, paired design, the measures |
 | [`docs/CURRENCY.md`](docs/CURRENCY.md) | what a compute unit is, how a machine prices one, what transfers between machines |
 | [`docs/CONTRACT.md`](docs/CONTRACT.md) | the `Game` interface and its laws, and the agent protocol |
+| [`docs/ALGORITHMS.md`](docs/ALGORITHMS.md) | the four reference algorithms and the floor: what each does, its parameters, its references |
 | [`docs/ADDING_AN_ALGORITHM.md`](docs/ADDING_AN_ALGORITHM.md) | writing, registering, pricing and gating an algorithm; declaring its operations |
 | [`docs/ADDING_A_GAME.md`](docs/ADDING_A_GAME.md) | writing a game adapter, capturing a portfolio, publishing a currency |
 | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | the launcher, where output goes, the notebook, runs and their guards, the gates |

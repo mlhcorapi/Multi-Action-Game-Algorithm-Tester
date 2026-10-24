@@ -35,6 +35,7 @@ this page says what it was holding back.
 | Two arms producing identical output | read as thin data, when it was a bug | the runner stops on it; the analyzer refuses it |
 | An alternate-draw split | 33/27 positions and a 22-point branching imbalance between the halves | matched pairs, stratified by source and phase |
 | The crossing outside the budget ladder | an extrapolated multiplier is only a lower bound | the multiplier is flagged `extrapolated`; choose the ladder with the crossing inside |
+| A search gain compared across arms | each arm's `initial` is its own starting plan, so the budget multiplier credited `random` and `mcts` with the whole turn and `emcts` only with what its search added to its greedy plan (found 2026-10-24) | the multiplier compares final values on the same cells |
 
 ## Running
 
