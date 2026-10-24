@@ -68,8 +68,8 @@ def main(argv) -> int:
                      "sys.exit(0 if '```java' + chr(10) + src + chr(10) + '```' in doc else 1)", ROOT])
 
     step("2. Unit tests")
-    check("junit, then the analysis package",
-          [PY, ROOT / "magat.py", "test"], "OK (")
+    check("junit, then the analysis package: one line, everything else in the log",
+          [PY, ROOT / "magat.py", "test"], "TESTS: PASS")
 
     step("3. Contract laws on published positions")
     check("L1-L9 pass", [PY, ROOT / "magat.py", "check", "contract", "--game", game, "--scenarios", "4"], "CONTRACT: PASS")

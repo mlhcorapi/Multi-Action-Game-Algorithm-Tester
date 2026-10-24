@@ -19,7 +19,7 @@ wrap it). It:
 | Command | What it does |
 |---|---|
 | `build [--clean] [--tests]` | compile the core, the game adapters and the engines |
-| `test [--java \| --python]` | JUnit, then the analysis package's unit tests |
+| `test [--java \| --python]` | JUnit, then the analysis package's unit tests: one line, and each failure when there is one. Everything the tests print is in `<data>/logs/test.log` |
 | `layering` | the core imports no game and no engine |
 | `shakedown` | every moving part at toy size, about ten minutes; exits non-zero on any failure. Run it before every pull request |
 | `arms --game G [--arms a,b\|@set]` | the registered arms, their oracles, which arm is the reference and which are not priced |

@@ -9,6 +9,7 @@ import magat.meter.Weights;
 import magat.portfolio.Portfolio;
 import magat.portfolio.PortfolioBuilder;
 import magat.testgame.BusyAgent;
+import magat.testgame.Stdout;
 import magat.testgame.ToyArms;
 import magat.testgame.ToyGame;
 import org.junit.After;
@@ -143,7 +144,10 @@ public class CalibratorToyTest {
         String beforeCheck = read(file);
         Calibrator.Options check = toy("emcts-alt");
         check.check = true;
-        Calibrator.Result c = Calibrator.run(game, registry(), "emcts", p, null, file, check);
+        // A toy drift may land either side of the gate, and the check says which: keep what it prints.
+        Stdout.Captured<Calibrator.Result> checked = Stdout.capture(() -> Calibrator.run(game, registry(), "emcts", p, null, file, check));
+        Calibrator.Result c = checked.value;
+        assertTrue(checked.out, checked.out.contains("VERDICT: " + (c.pass ? "PASS" : "FAIL")));
         assertNotNull(c.drift);
         assertFalse(c.drift.rows.isEmpty());
         assertEquals(beforeCheck, read(file));
@@ -163,7 +167,8 @@ public class CalibratorToyTest {
         Calibrator.Result merge = Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-alt"));
         Calibrator.Options check = toy("emcts");
         check.check = true;
-        Calibrator.Result checked = Calibrator.run(game, registry(), "emcts", p, null, out.resolve(Currency.WEIGHTS_FILE), check);
+        Calibrator.Result checked = Stdout.capture(() ->
+                Calibrator.run(game, registry(), "emcts", p, null, out.resolve(Currency.WEIGHTS_FILE), check)).value;
         for (String profile : Arrays.asList("emcts@300", "emcts@600")) {
             Cell a = measured(fresh, profile), b = measured(merge, profile), c = measured(checked, profile);
             List<Long> turns = Arrays.asList(a.advances, a.copies, a.evals);
@@ -188,16 +193,9 @@ public class CalibratorToyTest {
         Calibrator.Options o = toy("emcts", "busy-declared", "busy-undeclared");
         o.levels = new long[]{300};
         o.turns = "2";
-        java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
-        java.io.PrintStream was = System.out;
-        System.setOut(new java.io.PrintStream(captured, true, "UTF-8"));
-        Calibrator.Result r;
-        try {
-            r = Calibrator.run(game, reg, "emcts", p, out, null, o);
-        } finally {
-            System.setOut(was);
-        }
-        String log = captured.toString("UTF-8");
+        Stdout.Captured<Calibrator.Result> calibrated = Stdout.capture(() -> Calibrator.run(game, reg, "emcts", p, out, null, o));
+        Calibrator.Result r = calibrated.value;
+        String log = calibrated.out;
         Cell declared = null, undeclared = null;
         for (Cell c : r.cells) {
             if (c.arm.equals("busy-declared")) declared = c;

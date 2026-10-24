@@ -9,6 +9,7 @@ import magat.portfolio.Split;
 import magat.run.Experiment;
 import magat.run.GridRunner;
 import magat.testgame.BusyAgent;
+import magat.testgame.Stdout;
 import magat.testgame.ToyArms;
 import magat.testgame.ToyGame;
 import org.junit.After;
@@ -149,7 +150,7 @@ public class ProbeToyTest {
     }
 
     @Test
-    public void theAuditFailsAnArmWhoseWorkIsUndeclared() {
+    public void theAuditFailsAnArmWhoseWorkIsUndeclared() throws Exception {
         java.util.List<magat.game.Scenario<ToyGame.State>> positions = game.positions(2);
         java.util.List<AuditCheck.Audit> a = AuditCheck.audit(game, java.util.Arrays.asList(
                 BusyAgent.<ToyGame.State, ToyGame.Move>factory("busy-declared", true),
@@ -157,7 +158,9 @@ public class ProbeToyTest {
         assertTrue("declared: " + a.get(0).unaccounted, a.get(0).unaccounted < AuditCheck.AUDIT_WARN);
         assertTrue(a.get(0).shares.get(BusyAgent.WORK) > 0.5);
         assertTrue("undeclared: " + a.get(1).unaccounted, a.get(1).unaccounted > AuditCheck.AUDIT_FAIL);
-        assertTrue(AuditCheck.report(a.subList(0, 1), AuditCheck.AUDIT_WARN, AuditCheck.AUDIT_FAIL));
-        assertFalse(AuditCheck.report(a, AuditCheck.AUDIT_WARN, AuditCheck.AUDIT_FAIL));
+        assertTrue(Stdout.capture(() -> AuditCheck.report(a.subList(0, 1), AuditCheck.AUDIT_WARN, AuditCheck.AUDIT_FAIL)).value);
+        Stdout.Captured<Boolean> failed = Stdout.capture(() -> AuditCheck.report(a, AuditCheck.AUDIT_WARN, AuditCheck.AUDIT_FAIL));
+        assertFalse(failed.value);
+        assertTrue(failed.out, failed.out.contains("busy-undeclared") && failed.out.contains("<-- FAIL"));
     }
 }
