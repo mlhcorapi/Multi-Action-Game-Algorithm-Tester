@@ -33,8 +33,9 @@ is comparable between turns of one arm, not between arms. The paired difference 
 ## `random`: the floor
 
 A uniformly random legal action, the end of turn among them, until the turn ends or the plan is 20
-actions long. It does no search: its two evaluations, of the position and of where the plan leaves it,
-are all it spends, so it is not priced. Code: `core/src/magat/agents/random/RandomAgent.java`.
+actions long. It does no search: the plan's advances and two evaluations, of the position and of where
+the plan leaves it, are all it spends at any budget, so it is not priced. Code:
+`core/src/magat/agents/random/RandomAgent.java`.
 
 ## `mcts`: UCT over the turn's actions
 
