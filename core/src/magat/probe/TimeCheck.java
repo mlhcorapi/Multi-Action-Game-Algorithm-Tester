@@ -181,12 +181,13 @@ public final class TimeCheck {
             if (c.targetMs > 0) o.add("target_ms", c.targetMs).add("ratio", c.ratio());
             arr.add(o);
         }
-        return new JsonObject().add("format", 1).add("game", game).add("weights", weights)
+        JsonObject o = new JsonObject().add("format", 1).add("game", game).add("weights", weights)
                 .add("positions", positions)
                 .add("machine", MachineProfile.get().summary())
                 .add("engine", System.getProperty("magat.engine.commit", "unknown"))
-                .add("magat", System.getProperty("magat.git.commit", "unknown"))
-                .add("measured", new java.util.Date().toString()).add("cells", arr);
+                .add("magat", System.getProperty("magat.git.commit", "unknown"));
+        if (System.getProperty("magat.git.notebook") != null) o.add("notebook", System.getProperty("magat.git.notebook"));
+        return o.add("measured", new java.util.Date().toString()).add("cells", arr);
     }
 
     public static void write(Path file, JsonObject o) throws IOException {

@@ -1025,10 +1025,14 @@ def jupyter_kernels(plat) -> int:
     return n
 
 
-def git_state() -> str:
-    rev = run_text(["git", "-C", str(ROOT), "rev-parse", "HEAD"]).strip()
-    dirty = run_text(["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=no"]).strip()
-    return (rev or "unknown") + ("-dirty" if dirty else "")
+def launcher():
+    """The launcher, magat.py: what it publishes and what state the checkout is in are its to say."""
+    sys.path.insert(0, str(ROOT))
+    try:
+        import magat
+    finally:
+        sys.path.pop(0)
+    return magat
 
 
 def _ranges(cpus) -> str:
@@ -1075,8 +1079,10 @@ def choose_cpus(a, plat):
 
 def preflight(a, plat, out, data, portfolio) -> tuple:
     """(facts, [(level, text)]) with level ok | info | warn | refuse. Reads; changes nothing."""
+    commit, notebook = launcher().git_state()
     facts, items = {"time": now(), "argv": sys.argv[1:], "platform": plat.name, "cpu": cpu_name(),
-                    "machine": machine_model(), "python": sys.version.split()[0], "commit": git_state()}, []
+                    "machine": machine_model(), "python": sys.version.split()[0], "commit": commit,
+                    "notebook": "modified" if notebook else None}, []
 
     def item(level, text):
         items.append((level, text))
@@ -1235,6 +1241,9 @@ def preflight(a, plat, out, data, portfolio) -> tuple:
         item("refuse", f"no portfolio at {portfolio}")
     if facts["commit"].endswith("-dirty"):
         item("warn", "the checkout has uncommitted changes: the currency records the commit as -dirty")
+    elif facts["notebook"]:
+        item("info", "a notebook differs from the commit (saved with its outputs, most likely): the commit is recorded "
+                     "clean, with \"notebook modified\" beside it")
     return facts, items
 
 
@@ -1477,12 +1486,7 @@ def reliability(row, a, clock) -> list:
 
 def launcher_published_weights(game: str):
     """The game's published currency as the launcher knows it, or None while there is none."""
-    sys.path.insert(0, str(ROOT))
-    try:
-        import magat as launcher
-    finally:
-        sys.path.pop(0)
-    f = launcher.PUBLISHED.get(game, {}).get("weights")
+    f = launcher().PUBLISHED.get(game, {}).get("weights")
     return f if f is not None and f.is_file() else None
 
 
@@ -1973,7 +1977,8 @@ def write_summary(a, record, facts, soak, sessions, checks, counters, mstats, we
          f"- Currency: `{weights}`" + (" (written)" if weights.is_file() else " (not written)"),
          "- This invocation: " + ("the checks" if a.checks else "the session" + ("" if a.no_checks else " and the checks"))
          + f"; record `{record}`, {seconds / 3600:.2f} h, finished {now()}, exit {code}",
-         f"- Commit {facts.get('commit')}; {facts.get('cpu')}; {facts.get('machine')}; "
+         f"- Commit {facts.get('commit')}" + (", notebook modified" if facts.get("notebook") else "")
+         + f"; {facts.get('cpu')}; {facts.get('machine')}; "
          f"{(facts.get('java') or ['java ?'])[0]}", "",
          "## Conditions", "", "| | |", "|---|---|"]
     if p.get("battery") is not None:

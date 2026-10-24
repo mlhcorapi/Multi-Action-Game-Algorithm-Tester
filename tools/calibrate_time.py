@@ -194,6 +194,7 @@ def main(argv) -> int:
         "machine": timing.get("machine"),
         "engine": timing.get("engine"),
         "magat": timing.get("magat"),
+        **({"notebook": timing["notebook"]} if timing.get("notebook") else {}),
         "measured": datetime.datetime.now().isoformat(timespec="seconds"),
         "positions": timing.get("positions"),
         "tolerance": a.tolerance,
@@ -226,6 +227,7 @@ def main(argv) -> int:
 def write_summary(path: pathlib.Path, doc: dict, started) -> None:
     L = [f"# Time levels: {doc['game']}", "",
          f"Measured {doc['measured']} on {doc['machine']}, engine `{str(doc['engine'])[:10]}`, MAGAT `{str(doc['magat'])[:10]}`"
+         + (f" (notebook {doc['notebook']})" if doc.get("notebook") else "")
          + ("  (TOY)" if doc.get("toy") else "") + ".",
          f"Reference arm `{doc['reference_arm']}`, {doc['positions']} positions spread over the portfolio, one turn each, "
          f"single-threaded; initialization {doc['initialization']}.", "",

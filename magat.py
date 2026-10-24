@@ -450,7 +450,10 @@ def java(args, heap: str = None, props=(), log: str = None, check: bool = True) 
     game = None
     if "--game" in args:
         game = args[args.index("--game") + 1]
-    sysprops = [f"-Dmagat.data={data_root()}", f"-Dmagat.git.commit={git_commit()}"]
+    commit, notebook = git_state()
+    sysprops = [f"-Dmagat.data={data_root()}", f"-Dmagat.git.commit={commit}"]
+    if notebook:
+        sysprops.append("-Dmagat.git.notebook=modified")
     if game:
         sysprops.append(f"-Dmagat.engine.commit={engine_commit(game)}")
         sysprops += ENGINE_PROPS.get(game, lambda d: [])(engine_dir(game))
@@ -462,15 +465,19 @@ def java(args, heap: str = None, props=(), log: str = None, check: bool = True) 
     return run(cmd, log=log or (args[0] if args else "java"), check=check)
 
 
-def git_commit() -> str:
-    """This checkout's commit, with -dirty when the tree has uncommitted changes, for provenance."""
+def git_state() -> tuple:
+    """(this checkout's commit, whether a notebook differs from it), for provenance. The commit carries -dirty when
+    a tracked file other than a notebook has uncommitted changes. A notebook run in Jupyter saves its outputs
+    into the file, which says nothing about the code a result came from, so it is reported apart."""
     try:
         rev = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, timeout=10).stdout.strip()
-        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT, capture_output=True,
-                               text=True, timeout=10).stdout.strip()
-        return (rev or "unknown") + ("-dirty" if dirty else "")
+        changed = subprocess.run(["git", "diff", "--name-only", "-z", "HEAD"], cwd=ROOT, capture_output=True,
+                                 text=True, timeout=10).stdout.split("\0")
     except Exception:
-        return "unknown"
+        return "unknown", False
+    changed = [f for f in changed if f]
+    notebooks = [f for f in changed if f.endswith(".ipynb")]
+    return (rev or "unknown") + ("-dirty" if len(notebooks) < len(changed) else ""), bool(notebooks)
 
 
 def with_spec_game(args: list) -> list:

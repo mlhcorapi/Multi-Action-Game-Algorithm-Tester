@@ -38,7 +38,11 @@ public final class Main {
         int code;
         try {
             if (cmd == null || cmd.equals("help")) { usage(); code = 0; }
-            else if (cmd.equals("version")) { System.out.println("magat " + VERSION); code = 0; }
+            else if (cmd.equals("version")) {
+                System.out.println("magat " + VERSION + ", commit " + System.getProperty("magat.git.commit", "unknown")
+                        + (System.getProperty("magat.git.notebook") != null ? ", notebook " + System.getProperty("magat.git.notebook") : ""));
+                code = 0;
+            }
             else if (cmd.equals("check")) code = check(args);
             else if (cmd.equals("arms")) code = arms(args);
             else if (cmd.equals("portfolio")) code = PortfolioCommand.run(args);

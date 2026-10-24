@@ -62,7 +62,9 @@ results.
 ### A run tree: `<run>/<split>/`
 
 - `_run.json` records:
-  - the MAGAT commit;
+  - the MAGAT commit, marked `-dirty` when a tracked file other than a notebook has uncommitted changes.
+    A notebook run in Jupyter saves its outputs into the file, so that is recorded apart, as
+    `"notebook": "modified"`;
   - the game, the engine commit and the configuration;
   - the portfolio identity;
   - the weights file and its hash;
