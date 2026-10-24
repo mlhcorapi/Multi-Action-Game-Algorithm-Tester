@@ -141,15 +141,19 @@ def main(argv) -> int:
     controlled = data / "shakedown" / f"controlled-{game}"
     shutil.rmtree(controlled, ignore_errors=True)
     priced = controlled / "compute_weights.properties"
-    sections = [PY, ROOT / "magat.py", "calibrate-controlled", "--name", "shakedown", "--game", game, "--out", controlled, "--toy",
-                "--arms", "emcts", "--batch", "1", "--levels", "2000,4000", "--turns", "2",
-                "--reps", "2", "--warmup", "1", "--soak-minutes", "0", "--interval", "2"]
-    check("calibrate-controlled --plan: one section, nothing measured", [*sections, "--plan"], "SECTIONS: 1",
-          then=lambda: not priced.is_file())
-    check("one session: preflight, controls, stability check, the session, its verdict and the self-check (toy)",
-          sections, "CONTROLLED CALIBRATION: COMPLETE",
-          then=lambda: "profile.emcts@4000.w.advance" in priced.read_text(encoding="utf-8"))
-    check("a priced section is not measured again without --redo", [*sections, "--section", "1"], "already priced")
+    cc = [PY, ROOT / "magat.py", "calibrate-controlled", "--name", "shakedown", "--game", game, "--out", controlled, "--toy",
+          "--arms", "emcts", "--levels", "2000,4000", "--turns", "2", "--reps", "2", "--warmup", "1", "--soak-minutes", "0",
+          "--interval", "2"]
+    check("calibrate-controlled --preflight: the checklist and what it would measure; nothing measured", [*cc, "--preflight"],
+          "PREFLIGHT: READY", then=lambda: not priced.is_file())
+    check("one session: controls, stability check, the session, its verdict and the self-check (toy)", cc,
+          "CONTROLLED CALIBRATION: COMPLETE",
+          then=lambda: "profile.emcts@4000.w.advance" in priced.read_text(encoding="utf-8")
+          and "- Verdict: COMPLETE" in (controlled / "record" / "SUMMARY.md").read_text(encoding="utf-8"))
+    check("a currency that prices every arm is not measured again", cc, "nothing to measure")
+    kept = {}
+    check("--checks checks it again and writes nothing", [*cc, "--checks"], "check    self:",
+          then=lambda: priced.read_text(encoding="utf-8") == kept.setdefault("w", priced.read_text(encoding="utf-8")))
 
     step("7. Runner: the shakedown spec on the toy portfolio and the toy currency")
     spec = ROOT / "experiments" / game / "shakedown.json"

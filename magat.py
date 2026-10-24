@@ -21,8 +21,8 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
                               [--audit-warn 0.10]
     python magat.py calibrate --estimate --game tribes [the same arguments]     what the session would take; writes nothing
     python magat.py calibrate --check --game tribes --arms a,b [--weights FILE] [--portfolio DIR]   gates each cell's turn price
-    python magat.py calibrate-controlled --name NAME [--preflight | --plan] [--section all|next|checks|N [--redo]] ...
-                              this machine's own currency in sections, with reliability checks (docs/CALIBRATING_A_MACHINE.md)
+    python magat.py calibrate-controlled --name NAME [--preflight | --checks | --no-checks] ...
+                              this machine's own currency in one session, with reliability checks (docs/CALIBRATING_A_MACHINE.md)
     python magat.py calibrate-time --game tribes --remeasure [--times 500,1000,5000] [--positions 64] [--tolerance 0.05] [--round 500]
                               the levels that are those milliseconds of thinking time here (a maintainer's tool, run on the
                               reference machine; refused without --remeasure once games/<game>/levels.json is published)
@@ -267,6 +267,15 @@ def newest_mtime(paths) -> float:
     return max((os.path.getmtime(p) for p in paths), default=0.0)
 
 
+def say(text: str = "", end: str = "\n") -> None:
+    """Print, unless whoever reads this output has gone (`magat ... | grep -q` stops at its match): from then
+    on the screen gets nothing, and the command still runs to its end, logged, with its own exit code."""
+    try:
+        print(text, end=end, flush=True)
+    except BrokenPipeError:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+
+
 def run(cmd, log: str = None, check: bool = True, cwd=None, echo: bool = True, lines: list = None) -> int:
     """Run a command, stream it (unless echo is off), tee it to <data>/logs/<log>.log (append, timestamped);
     `lines` collects its output."""
@@ -274,21 +283,21 @@ def run(cmd, log: str = None, check: bool = True, cwd=None, echo: bool = True, l
     started = datetime.datetime.now()
     shown = " ".join(str(c) for c in cmd)
     if echo:
-        print(f"$ {shown}\n  -> {logfile}", flush=True)
+        say(f"$ {shown}\n  -> {logfile}")
     with open(logfile, "a", encoding="utf-8") as fh:
         fh.write(f"\n>>>>> {started:%Y-%m-%d %H:%M:%S} $ {shown}\n")
         p = subprocess.Popen([str(c) for c in cmd], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                              text=True, encoding="utf-8", errors="replace", bufsize=1, cwd=cwd or str(ROOT))
         for line in p.stdout:
             if echo:
-                print(line, end="", flush=True)
+                say(line, end="")
             fh.write(line)
             if lines is not None:
                 lines.append(line.rstrip("\n"))
         rc = p.wait()
         fh.write(f"===== exit {rc} after {datetime.datetime.now() - started}\n")
     if echo:
-        print(f"[exit {rc}] after {datetime.datetime.now() - started}", flush=True)
+        say(f"[exit {rc}] after {datetime.datetime.now() - started}")
     if check and rc != 0:
         sys.exit(rc)
     return rc
@@ -493,26 +502,28 @@ def bundle(argv: list) -> None:
             break
         paths.append(a)
     data = data_root()
-    files = set()
+    files = {}                                       # file -> the folder its name in the zip is relative to
     for item in paths:
         pth = pathlib.Path(item)
         if not pth.is_absolute():
             pth = data / pth
         if pth.is_dir():
-            files.update(q for q in pth.rglob("*") if q.is_file())
+            files.update((q, pth.resolve().parent) for q in pth.rglob("*") if q.is_file())
         elif pth.exists():
-            files.add(pth)
+            files[pth] = pth.resolve().parent
         else:
-            files.update(pathlib.Path(h) for h in glob.glob(str(pth)) if pathlib.Path(h).is_file())
-    files = sorted(f for f in files if not any(x in f.name for x in exclude))
+            files.update((pathlib.Path(h), pathlib.Path(h).resolve().parent) for h in glob.glob(str(pth))
+                         if pathlib.Path(h).is_file())
+    files = {f: base for f, base in sorted(files.items()) if not any(x in f.name for x in exclude)}
     out = data / "bundles" / f"{name}.zip"
     out.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-        for f in files:
+        for f, base in files.items():
+            # Inside the data root, the path under it; outside, the path under the folder that was named.
             try:
                 arc = f.resolve().relative_to(data)
             except ValueError:
-                arc = pathlib.Path(f.name)
+                arc = f.resolve().relative_to(base)
             z.write(f, str(arc))
     print(f"BUNDLE: {len(files)} files -> {out}")
 
@@ -598,4 +609,10 @@ def main(argv: list) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    try:
+        main(sys.argv[1:])
+        sys.stdout.flush()
+    except BrokenPipeError:
+        # Output the launcher prints itself, after its reader has gone: Python's own recipe for that.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        sys.exit(1)

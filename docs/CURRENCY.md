@@ -148,8 +148,8 @@ priced operations account for, and warns above 10%.
 
 `magat calibrate --estimate` times one repetition of the reference cell per level and prints what
 the session would take; it writes nothing. For a calibration you can trust,
-`magat calibrate-controlled` runs the same calibrator in sections, with a stability check, a monitor
-and a reliability verdict per section: see [`CALIBRATING_A_MACHINE.md`](CALIBRATING_A_MACHINE.md).
+`magat calibrate-controlled` runs the same calibrator in one session, with a preflight, a stability check,
+a monitor and a reliability verdict: see [`CALIBRATING_A_MACHINE.md`](CALIBRATING_A_MACHINE.md).
 
 ### Merging: re-denomination by ratio
 

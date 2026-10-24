@@ -27,7 +27,7 @@ wrap it). It:
 | `portfolio build \| freeze \| verify` | [the portfolio](METHODS.md#1-the-portfolio) |
 | `threads` | the thread sweep: the knee of sustained throughput per budget level, into `threads.json` |
 | `calibrate`, `calibrate --estimate`, `calibrate --check` | [the currency](CURRENCY.md#calibrating) |
-| `calibrate-controlled` | a calibration in sections, with reliability checks ([guide](CALIBRATING_A_MACHINE.md)) |
+| `calibrate-controlled` | a calibration in one session, with reliability checks ([guide](CALIBRATING_A_MACHINE.md)) |
 | `calibrate-time --remeasure [--times 500,1000,5000]` | the levels that are those milliseconds of thinking time on this machine: a maintainer's tool for the reference machine, refused without `--remeasure` once the game's levels are published ([units as time](CURRENCY.md#units-as-time)) |
 | `weights --weights F [--game G --arms ...] [--progress]` | what a weights file prices; exit 1 if anything asked for is missing. With `--progress`, a probe of a calibration under way: what is still to price, and exit 0 |
 | `check contract \| equivalence \| replay \| audit` | the gates (below) |
@@ -90,8 +90,8 @@ else, so it cannot drift from the CLI. Its stages:
 2. **Build, tests and layering.**
 3. **Portfolio.** It builds this machine's own, freezes it, and verifies it against the published one.
 4. **Machine, threads and calibration.** It reads the published levels, sweeps the thread counts, and
-   measures this machine's currency: a preflight, one cell that measures every section still missing,
-   and a checks cell ([guide](CALIBRATING_A_MACHINE.md#on-a-shared-server-the-r7615-through-jupyterhub)).
+   measures this machine's currency: a preflight, one cell that measures the currency in one session and
+   checks it, and one that bundles it ([guide](CALIBRATING_A_MACHINE.md#on-a-shared-server-the-r7615-through-jupyterhub)).
 5. **Gates.** The contract, equivalence on every ported arm, and the audit.
 6. **One cell per experiment** in `experiments/<game>/`: run, analyse, summarise, bundle.
 7. **The shakedown.**
