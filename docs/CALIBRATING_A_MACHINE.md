@@ -14,9 +14,8 @@ ratio to one reference advance measured in the same session. A good currency nee
 **The levels come first, and they are published.** A currency is measured at the game's published
 levels, `games/<game>/levels.json`: for Tribes 9,500 / 20,000 / 101,500 units, which are 500, 1000 and
 5000 ms of a whole turn on the R7615 ([units as time](CURRENCY.md#units-as-time)). `calibrate-controlled`
-and the notebook take them by themselves. A currency keeps the levels and the initialization policy it
-was first measured with, so a currency begun at other levels continues under its own name and a new one
-needs a new `--name`.
+and the notebook take them by themselves. A currency keeps the levels it was first measured at, so a
+currency begun at other levels continues under its own name and a new one needs a new `--name`.
 
 The levels are measured on the reference machine alone, with `magat calibrate-time`. That is a
 maintainer's job, done from `notebooks/maintainers/measure_levels.ipynb` and only after a change to what a
@@ -33,23 +32,23 @@ adds.
 ## The command
 
 ```bash
-python magat.py calibrate-controlled --name laptop-i9-14900hx --preflight
+python magat.py calibrate-controlled --name laptop-i9-14900hx-time --preflight
 ```
 
 ```bash
-python magat.py calibrate-controlled --name laptop-i9-14900hx --plan
+python magat.py calibrate-controlled --name laptop-i9-14900hx-time --plan
 ```
 
 ```bash
-python magat.py calibrate-controlled --name laptop-i9-14900hx
+python magat.py calibrate-controlled --name laptop-i9-14900hx-time
 ```
 
 1. `--preflight` reads the machine, changes nothing, measures nothing, and says READY or NOT READY.
 2. `--plan` lists the sections and what is already priced.
-3. With neither, it measures every section that is not yet priced, then runs the two checks.
+3. With neither, it measures every section that is not yet priced, then runs the checks.
 
-`--section N` measures one section; that is how the server notebook runs it, one cell per section.
-`--section N --redo` measures a section again, and `--section checks` runs only the checks.
+`--section N` measures one section, `--section N --redo` measures a section again, and
+`--section checks` runs only the checks.
 
 **What it does:**
 
@@ -82,9 +81,9 @@ python magat.py calibrate-controlled --name laptop-i9-14900hx
      Measure a suspect section again with `--redo` when the machine is quiet.
    - **FAIL:** the gates failed and nothing was written. A failed section is retried once.
 6. **Checks**, which write nothing:
-   - this machine against the published R7615 currency;
-   - this machine against its own new currency, at the end. After hours of work it should still agree
-     with itself.
+   - this machine against the game's published currency, once there is one;
+   - this machine against its own new currency, at the end. After the whole calibration it should
+     still agree with itself.
 7. **A monitor**, every 10 seconds, throughout:
    - the power source; a machine that leaves mains power has its section stopped;
    - the CPU used by anything other than the calibration, naming the programs when it stays high;
@@ -96,11 +95,11 @@ python magat.py calibrate-controlled --name laptop-i9-14900hx
    `SUMMARY.md`, `events.log`, `monitor.csv`, the logs and each section's CSVs. A zip of everything goes
    to `<data>/bundles/calibration-<game>-<name>.zip`.
 
-**Why sections.** A session writes all or nothing. Run as one session, a full calibration is 3.7 hours
-on this laptop and about 5 on the R7615. That long, one noisy cell, a machine that has slowed by the
-end, or a Jupyter server culled mid-run discards all of it. A section of 8 arms is about an hour on the
-laptop and about 1.5 hours on the R7615. Each section is bracketed on its own and costs about 12 more
-minutes of warm-ups and reference cells.
+**Why sections.** A session writes all or nothing. With many arms a calibration runs for hours (33 arms
+took 3.7 hours as one session on the development laptop), and then one noisy cell, a machine that has
+slowed by the end, or a Jupyter server culled mid-run discards all of it. A section of up to 8 arms
+bounds what one failure costs. Each section is bracketed on its own and costs about 12 more minutes of
+warm-ups and reference cells.
 
 **Resuming.** Run the same command again: it measures only what the currency does not price, and skips
 checks already recorded (`--redo-checks` repeats them). The currency's clock policy is locked by its
@@ -173,11 +172,11 @@ and 5.7 GHz within single sessions, with thermal zones up to 94 °C. Pick one po
 this currency and for every later `calibrate --check` on this laptop. The script reads the policy,
 records it, and locks it to the currency.
 
-| Policy | The clock | A full calibration on this laptop | Use it when |
+| Policy | The clock | How long a calibration takes | Use it when |
 |---|---|---|---|
-| **A. Performance cores capped below what the cooling sustains (recommended)** | flat at the cap | roughly 5-6 h (an estimate; the stability check prints the real figure) | you want the most controlled conditions without doubling the time |
-| B. Boost disabled | flat at the base clock | roughly 10 h | the cap is not honoured, or the stability check will not settle under A |
-| C. As shipped: boost on, no cap | follows the temperature | about 5 h (measured pace, 2026-10-06) | you accept some drift; the checks and the brackets measure how much |
+| **A. Performance cores capped below what the cooling sustains (recommended)** | flat at the cap | about 1.1-1.2 times as long as under C (the stability check prints the real figure) | you want the most controlled conditions without doubling the time |
+| B. Boost disabled | flat at the base clock | about twice as long as under C | the cap is not honoured, or the stability check will not settle under A |
+| C. As shipped: boost on, no cap | follows the temperature | the shortest | you accept some drift; the checks and the brackets measure how much |
 
 With a cap well below the sustained single-core clock, temperature no longer moves the clock. A cell
 measured at the end of a section then costs what it would have cost at the start.
@@ -235,10 +234,10 @@ sensor; read them as a trend.
 ## On a shared server (the R7615, through JupyterHub)
 
 The notebook's calibration stage is the server's path. It has one cell with the parameters, the
-preflight and the plan, then one cell per section, a cell for anything still missing, and a checks
-cell. Each section cell skips itself once its section is priced. Run them one at a time: a section is
-about 1.5 hours on the R7615, and the whole currency, with the checks, about 7 to 8 hours spread over
-as many sittings as you like. The plan cell prints the real figures after its first estimate.
+preflight and the plan, then one cell that measures every section still missing, and a checks cell.
+The measuring cell skips itself once every arm is priced, and run again after an interruption it
+measures only what is missing, so the currency can be spread over as many sittings as you like. The
+plan prints the expected time after its first estimate.
 
 ### What you cannot change
 
@@ -259,10 +258,10 @@ The script reads what it can of these and records it. From inside the container,
 ### What you can do
 
 1. **Run sections when the machine is quiet:** nights and weekends. The preflight prints the work on
-   the machine right now. Each section cell waits up to `CAL_WAIT_QUIET` minutes (30) for other work to
-   drop below `CAL_OTHER_CPUS` logical CPUs (4). If it does not, the cell refuses to start, and you run
-   it again later. A section that saw other work anyway is SUSPECT; measure it again with
-   `calibrate_section(k, redo=True)`.
+   the machine right now. Before each section the cell waits up to `CAL_WAIT_QUIET` minutes (30) for
+   other work to drop below `CAL_OTHER_CPUS` logical CPUs (4). If it does not, the cell refuses to
+   start, and you run it again later. A section that saw other work anyway is SUSPECT; measure it again
+   with `calibrate_section(k, redo=True)`.
 2. **Read the preflight's line about other users.** Many JupyterHub containers see the host's `/proc`,
    so the monitor sees other users' work and names it "not visible from here". Then a quiet machine is
    something the script can verify. If the preflight says all the work is this container's, the machine
@@ -284,7 +283,8 @@ The script reads what it can of these and records it. From inside the container,
    - Could it be reserved for you for a night?
    - Does your server have a CPU limit (CFS quota), and could it get exclusive cores? On Kubernetes that
      is the static CPU manager with a Guaranteed pod.
-   - What are the idle-culling timeout and the maximum server age? Is a 1.5-hour cell safe?
+   - What are the idle-culling timeout and the maximum server age? Is a cell that runs for an hour or
+     two safe?
    - Which frequency governor does the machine run, and is boost on?
 7. **Keep everything else equal.**
    - Use the same JDK as your runs.
@@ -293,18 +293,9 @@ The script reads what it can of these and records it. From inside the container,
      workers, within the container's memory limit.
    - Use the portfolio the notebook builds and verifies against the published one.
 
-**What to expect from the check against the published currency.** The R7615 currency was measured on
-2026-08-28 by the thesis code, and the new one is measured on the same machine by MAGAT. The
-differences are known in advance:
-- The thesis ran a 100 GB heap with `AlwaysPreTouch`; MAGAT runs 4 GB.
-- The thesis timed through the engine's hooks; MAGAT times through its decorator. On the laptop that
-  shifted evaluations by about 3% (`games/tribes/calibration/r7615/ORIGIN.md`).
-- Version 2 prices each arm's own operations.
-- The JDK may differ.
-
-The check gates each cell's turn price within 10%. Read a FAIL here as a finding about the old
-currency, not a fault of the new one. The checks cell also records this machine's metering overhead
-(`check overhead`), which `ORIGIN.md` lists as not yet measured on the R7615.
+**The check against the published currency** runs once the game's reference machine has published
+one. It gates each cell's turn price within 10%, and says how far this machine's prices are from the
+reference machine's.
 
 ## Reading the result
 
@@ -325,10 +316,6 @@ What to do about what it finds:
   `--section 2,3,4 --redo` (the summary prints the command). If a section is suspect again for the same
   reason, the cause has not gone. Decide whether that reason matters for this section. If it was a short
   burst of other work, the gates that passed say probably not.
-- **Every section after the first suspect for its speed, by a similar amount**, on a machine that was
-  steady and quiet: that was a calibrator bug, found by the laptop's first calibration and fixed on
-  2026-10-08. A merge used to measure its reference cell under the new file's own prices, a different
-  search. Measure those sections again with the fixed calibrator.
 - **FAIL.** Run the same command again.
 - **The self-check failed.** The machine changed speed during the run. Look at the clocks and the
   speeds across sections. Usually this calls for a tighter clock policy (laptop) or quieter hours
@@ -336,9 +323,8 @@ What to do about what it finds:
 
 ## Publishing it
 
-The R7615 file stays the published currency. A new currency is published beside it, never over it,
-in `games/tribes/calibration/<name>/` (for example `r7615-time/` or `laptop-i9-14900hx/`). That folder
-holds:
+A currency is published in `games/<game>/calibration/<name>/`, beside the others and never over one.
+That folder holds:
 - its `compute_weights.properties`;
 - `record/SUMMARY.md`, and usually the rest of `record/` except the raw `counters.csv` files, which
   `monitor.csv` summarises;
@@ -365,41 +351,17 @@ Results computed under it quote its name.
 - Windows Update's pause had expired.
 - OneDrive, Claude, two browsers and Steam were running.
 
-**Measured pace** (2026-10-06, plugged in, Balanced, boost on).
-
-| Budget level | Seconds per turn of the reference arm |
-|---|---|
-| 40k | 2.49 |
-| 80k | 7.49 |
-| 400k | 33.36 |
-
-At that pace:
-
-| Run | Time |
-|---|---|
-| Everything in one session | 3.7 h |
-| Four sections of 8 arms | 4.3 h |
-| The two checks | 0.6 h |
-| **Total under policy C, with the stability checks** | **about 5 h** |
-
-On battery the same estimate was 11.4 hours.
-
-**The R7615**, for comparison: on 2026-08-28 the thesis's calibration of 54 cells took 1 h 59 min, and
-the laptop's reference advance has measured at 0.66-0.76 of the R7615's.
-
-**Its calibration** (2026-10-07 to 2026-10-09), under policy A:
+**Its first calibration** (2026-10-07 to 2026-10-09, at the earlier levels 40,000 / 80,000 / 400,000,
+under policy A):
 - The busiest core held about 4,120-4,250 MHz at no more than 43 °C.
-- The four sections took 3.9 h; every section and both checks passed.
-- Checked against the R7615 currency, its turn prices drifted by at most 3.6%.
-- The first attempt's sections 2-4 were SUSPECT because of the calibrator bug described under "Reading
-  the result". They were measured again with the fix.
+- 33 arms in four sections took 3.9 h; every section and both checks passed.
+- Checked against the R7615's currency of the time, its turn prices drifted by at most 3.6%.
+- Its reference advance measured at 0.66-0.76 of the R7615's.
+- On battery the same calibration was estimated at 11.4 hours, against 3.7 plugged in.
 
-It is published in `games/tribes/calibration/laptop-i9-14900hx/`, and `ORIGIN.md` there has the record.
-It was measured on the engine before `828b130`, which made legal-action generation faster (design §15.3):
-on the new engine an advance is about 19% faster at 40k and 80k, which moved the turn prices of `emcts`
-and `emcts-comma` there by -4.1% to +3.0%, inside the drift gate; 400k has not been measured cleanly yet.
-Before pricing anything new in it, run the self-check on mains:
+That currency is archived ([`ARCHIVE.md`](ARCHIVE.md)). The laptop's currency at the published levels,
+on the current engine, is measured under a new name:
+
 ```bash
-python magat.py calibrate --check --game tribes --arms emcts,emcts-comma --weights games/tribes/calibration/laptop-i9-14900hx/compute_weights.properties
+python magat.py calibrate-controlled --name laptop-i9-14900hx-time --preflight
 ```
-If a cell is past the gate, measure a fresh currency under a new name.

@@ -22,11 +22,10 @@ deterministic in its seeds and fixed weights, whatever the machine or the thread
 portfolio verify` checks a rebuild against the published one row by row, and plans from both sets of
 scenario files to show they are the same positions.
 
-**The split** is development and holdout, frozen before any arm runs. Positions are stratified by
+**The split** is development and holdout, fixed before any arm runs. Positions are stratified by
 `(source, phase)` and ordered by branching factor, then dealt in matched pairs, one to each half. The
-split files are authoritative and are never recomputed by readers. Alternate draws gave the first
-thesis split 33/27 positions and a 22-point branching imbalance; matched pairs give halves balanced
-by construction, and `split_report.txt` shows it.
+split files are authoritative and are never recomputed by readers. Matched pairs give halves balanced
+by construction, where an alternate draw can leave them unbalanced; `split_report.txt` shows it.
 
 ## 2. The paired design
 
@@ -42,95 +41,71 @@ multiplier (below) interpolates the baseline's curve between levels; past the to
 can only extrapolate, and an extrapolated multiplier is a lower bound at best. Choose the ladder so
 the effect you expect crosses inside it.
 
-## 3. The holdout is read once
+## 3. Two halves: explore on one, confirm on the other
 
-The development half is for exploring: sweeps, ablations, choosing a champion. The holdout half is
-for confirming, once, with choices frozen first:
-- `magat run --split holdout` refuses to start without `--frozen <file>`, the frozen choices, whose
-  hash goes into the provenance;
-- the run appends to `_holdout_ledger.json` and prints the ledger first;
-- a second experiment on the same holdout gets a warning it cannot miss.
+The development half is for exploring: trying parameters, comparing variants, choosing what to
+report. The holdout half is for confirming a choice made on the development half, with nothing changed
+after looking at it. `magat run --split dev|holdout|all` runs either half or both, and `magat analyze`
+reports each half it is given, every table naming its split. MAGAT does not police how often the
+holdout is read, so a report should say how it was used. A development effect that shrinks on the
+holdout is the winner's curse, and the holdout is doing its job.
 
-Every headline appears twice, development and holdout side by side, or not at all. A development
-effect that shrinks on the holdout is the winner's curse, and the holdout is doing its job.
+## 4. Two arms producing identical output is a bug
 
-## 4. Gates are written before the data exists
+Identical rows from two arms are a renamed duplicate or a parameter that is not wired, not thin data.
+The runner checks every level for it and stops, and the analyzer checks again on load.
 
-Each stage has gates: a decision rule and the response to each outcome, recorded in the spec's
-`preregistration` file before the run. Four of six gates in the thesis fired against expectation and
-were accepted *because* the response was pre-registered. A gate written after the data is a story.
+## 5. What is measured
 
-## 5. Grids carry their nulls and their controls
-
-- **Every parameter sweep includes the parameter's null.** The AB-EMCTS champion sat at ε = 1.00,
-  outside the swept grid, and was found only because one arm happened to be defined with the bias off.
-  The spec validator refuses a sweep without its null.
-- **A mechanism is credited only against its attribution control:** the same arm with the mechanism
-  replaced by noise, consuming the same random draws. `comma-z0-coarse` (a learned table picks repair
-  actions) is credited by its contrast with `comma-z0-random` (a uniform draw in the table's place),
-  not by its contrast with the baseline. An arm that declares a control
-  (`AgentFactory.attributionControl()`) must have it in the grid: an error on the holdout, a warning in
-  development.
-- **Two arms producing identical output is a bug, not thin data.** The runner checks every level for it
-  and stops, and the analyzer checks again on load.
-- **Conceptually distinct parameters are decoupled.** Insertion granularity and repair granularity were
-  tied by a helper in the thesis, and untying them cost a follow-up stage.
-
-## 6. What is measured
-
-`magat analyze` produces every measure from one run tree. They are listed in order of reliability.
+`magat analyze` produces every measure from one run tree.
 
 | # | Measure | Table | What it answers |
 |---|---|---|---|
-| 1 | Paired per-(scenario, visit) difference, scenario-clustered bootstrap CI | `headline.csv` | is A better than B, and by how much |
+| 1 | Paired per-(scenario, visit) difference, scenario-clustered bootstrap CI, Cohen's *d* | `headline.csv` | is A better than B, and by how much |
 | 2 | Equivalent budget multiplier | `budget_multiplier.csv` | how much better, in a unit anyone can read |
-| 3 | W7: the wall-clock re-score | `w7_wallclock.csv` | does the result survive in seconds |
-| 4 | Development and holdout side by side | `replication.csv` | is it real, or the winner's curse |
-| 5 | Attribution contrast | `contrasts.csv` | is the mechanism doing it |
-| 6 | Search-gain multiple | `gain_multiple.csv` | how much more the search extracts |
-| 7 | Oracle regret and best-of-field share | `oracle.csv` | who finds the best plan |
-| 8 | Cohen's *d* on the paired difference | in `headline.csv` | comparability across studies |
-| 9 | Anytime curves | `anytime.csv` | when the effect appears |
-| 10 | Diversity (unique plans, duplicate share) | `efficiency.csv` | mechanism diagnostics, within one run only |
-| 11 | The raw heuristic difference | `MeanDiff` | nothing on its own: always beside #2 or #6 |
-| 12 | Full-game win rate | not in v0.1 | an optional external yardstick, never the primary |
+| 3 | The wall-clock re-score | `wallclock.csv` | does the result survive in seconds |
+| 4 | The spec's contrasts | `contrasts.csv` | the paired comparisons the experiment names |
+| 5 | The design: scenarios against visits | `variance.csv` | how precise the run is, and what more visits would buy |
+| 6 | Terminal plans | `terminals.csv` | how often a plan ends the game, which the headline reports apart |
+| 7 | Re-pricing in another currency | `repriced.csv`, `repriced_spend.csv` | the same work, priced on another machine |
+| 8 | Full-game win rate | not in v0.1 | an optional external yardstick, never the primary |
 
-How the main ones are computed:
+How they are computed:
 
 1. **The paired difference.** `final` of A minus `final` of B on each `(scenario, visit)`. The bootstrap
    resamples scenarios (all of a scenario's visits together), so the interval is honest about the
    clustering. Each row is reported in two strata, all turns and turns where neither plan is terminal,
-   because a terminal plan carries a sentinel value. Win/loss/tie counts and per-source intervals go
-   beside it.
+   because a terminal plan carries a sentinel value. Win/loss/tie counts and per-source means go beside
+   it. The raw difference is a heuristic delta, never a result on its own: it is always read beside the
+   budget multiplier.
 2. **The budget multiplier.** The search gain (`final − initial`) of the baseline at every level it
    ran, interpolated log-linearly in budget. For each arm and level the analyzer solves for the
    baseline budget that reaches the arm's gain. The multiplier is that budget divided by the arm's,
    with a bootstrap interval. It is flagged `inside`, `extrapolated` (past the top of the ladder),
    `outside` (below it) or `non-monotone` (a baseline curve that does not rise cannot be inverted).
    Its wall-clock twin solves the same crossing on the baseline's plan time.
-3. **W7.** The arm is re-scored on the baseline's value-versus-`plan_ms` curve at its own wall-clock.
-   The verdict is one of *wins both*, *units only* (unresolved: a units-only win may be a pricing
-   artefact), *wall-clock only* or *none*. Wall-clock is co-primary: every headline is given in units
-   and in seconds.
-4. **Replication.** Each development row carries its holdout twin. The state is `yes` when the holdout
-   point is inside the development interval and the holdout interval excludes the null; `no`
-   otherwise; and `ns both` when neither interval excludes the null, which is a null that replicated.
-5. **Contrasts** come from the spec (`contrasts`, and every arm's `attribution`), not from a list in
-   the code.
+3. **The wall-clock re-score.** The arm is re-scored on the baseline's value-versus-`plan_ms` curve at
+   its own wall-clock. The verdict is one of *wins both*, *units only* (unresolved: a units-only win
+   may be a pricing artefact), *wall-clock only* or *none*. Wall-clock is co-primary: every headline is
+   given in units and in seconds.
+4. **Contrasts** come from the spec (`contrasts`), not from a list in the code.
+5. **The design.** The share of the paired difference's variance that sits between scenarios (the
+   ICC), the standard error the scenario count allows with unlimited visits, and how far the run sits
+   above it. For a fixed number of turns, more scenarios beat more visits.
 
 The bootstrap draws each row from a generator seeded by the row's own identity, so re-running, or
 adding an arm, leaves every other interval where it was. A re-analysis with the same numpy is
 byte-identical.
 
-## 7. Turns, not games: the scope
+## 6. Turns, not games: the scope
 
 A replanned turn measures what a search does with a position. It does not measure what a stronger
-turn is worth over a whole game: that is the job of measure #12, the optional yardstick. MAGAT's claim
-is narrower and firmer. Under the same budget, on the same positions, with the same chance events,
-this algorithm finds plans of this much more value, and here is the interval, in units and in
-seconds.
+turn is worth over a whole game: that is the job of a full-game yardstick, which v0.1 does not
+include. MAGAT's claim is narrower and firmer. Under the same budget, on the same positions, with the
+same chance events, this algorithm finds plans of this much more value, and here is the interval, in
+units and in seconds.
 
-## 8. Everything is recorded
+## 7. Everything is recorded
 
 Every row carries the raw operation counts, the wall-clock and the arm's telemetry. Every leaf
 records its prices, and every run records:
@@ -138,12 +113,10 @@ records its prices, and every run records:
 - the engine commit;
 - the game configuration;
 - the portfolio identity;
-- the spec's and the frozen choices' hashes;
+- the spec's hash;
 - the machine;
 - the JDK.
 
 A published result can be re-analysed, re-priced in another currency, and partly replayed
-(`check replay`) on another machine. [`OPERATIONS.md`](OPERATIONS.md) says how.
-
-The worked example of all of this is the thesis's AB-EMCTS line, re-analysed by MAGAT:
-[`results/tribes-ab-emcts.md`](results/tribes-ab-emcts.md).
+(`check replay`) on another machine. [`CURRENCY.md`](CURRENCY.md) says what transfers between
+machines, and [`OPERATIONS.md`](OPERATIONS.md) says how.

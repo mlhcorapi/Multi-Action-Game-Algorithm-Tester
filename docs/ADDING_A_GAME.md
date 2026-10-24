@@ -51,9 +51,8 @@ that need care:
 | `advance` | in place. It must cope with a stale action from a plan being repaired, or `isLegal` must be checked first: decide which, and keep `isLegal` cheap |
 | `legalActions` | the actions a search should consider. Filtering out suicidal or pointless actions is the adapter's policy, applied identically for every arm; document it in `configuration()` |
 | `isLegal` | never throws, false for stale referents (L4). Engines often throw on a stale id; catch it here |
-| `evaluate` | deterministic and finite (L9). Cache heuristic objects per player; never let the evaluation touch the meter or the state |
+| `evaluate` | deterministic and finite (L8). Cache heuristic objects per player; never let the evaluation touch the meter or the state |
 | `actionKey` | injective over one state's legal actions (L7): plans are de-duplicated on it |
-| `actionClass` | three granularities, each a partition of the next finer (L8). It is what a learned table keys on, so choose classes a human would recognise: an action type, then a qualifier, then the full identity |
 | `reseed` | pins every random event the state will produce (L2). Without it, a paired comparison is not paired |
 | `serialize` | stable for the life of the portfolio: the bins are what every result is measured on. Record the engine commit in `configuration()` |
 | `configuration` | every setting that changes what a position or a call means: engine commit, game mode, rule flags. Set engine globals exactly once, in the adapter's constructor, and report them here |
@@ -97,8 +96,6 @@ them:
 AgentRegistry<S, A> r = new AgentRegistry<>();
 r.register(RandomAgent.factory());     // the floor
 r.register(EmctsFactory.plain());      // emcts: the reference arm, whose advance defines the unit
-r.register(EmctsFactory.comma(5));     // emcts-comma
-for (QdeltaArms.Arm a : QdeltaArms.all()) r.register(a.factory());   // the worked result's family, if wanted
 ```
 
 **Oracles** are only for arms ported from an existing implementation (see
@@ -118,7 +115,7 @@ python magat.py portfolio freeze --portfolio ~/magat_runs/portfolio/<game>-toy
 python magat.py check contract --game <game> --portfolio ~/magat_runs/portfolio/<game>-toy --scenarios 4
 ```
 
-The contract laws come first. A game that fails L2 (determinism) or L10 (metering is complete) cannot
+The contract laws come first. A game that fails L2 (determinism) or L9 (metering is complete) cannot
 be measured, however good its engine.
 
 ## 4. The published artefacts
@@ -136,11 +133,11 @@ be measured, however good its engine.
    This prices every registered arm at the ladder, in sections. Choose the ladder first, with the
    crossing you expect inside it ([methods](METHODS.md#2-the-paired-design)). Commit the result as
    `games/<game>/calibration/<machine>/` with an `ORIGIN.md`.
-3. **The gates.** `check structure` with a `structure.json` for the game's equivalences; `check
-   overhead --audit` on the reference arms; and `check replay` once a result is published.
+3. **The gates.** `check audit` on the reference arms, `check equivalence` for every ported arm, and
+   `check replay` once a result is published.
 4. **The experiments.** A reference ladder spec in `experiments/<game>/`. The notebook generator
-   (`tools/make_notebook.py`) makes one cell per spec in `experiments/tribes/`. Add the new game's
-   experiments to `CELLS` the same way.
+   (`tools/make_notebook.py`) makes one cell per spec in `experiments/tribes/` with
+   `experiment_cells("tribes")`; add `experiment_cells("<game>")` to its `CELLS` the same way.
 
 Each game has its own currency: raw units are never compared across games, and budget multipliers
 are.
