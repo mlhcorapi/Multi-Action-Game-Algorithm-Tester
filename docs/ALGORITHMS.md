@@ -13,7 +13,7 @@ model's ([`ADDING_AN_ALGORITHM.md`](ADDING_AN_ALGORITHM.md)).
 | `mcts` | UCT over the turn's actions, without rollouts | the position's evaluation | the position | Kocsis and Szepesvári 2006; Browne et al. 2012 |
 | `emcts` | Evolutionary MCTS, (1+1), 21 phases | the greedy initial plan | the greedy plan | Baier and Cowling 2018 |
 | `oep` | Online Evolutionary Planning | the random initial population | its best turn | Justesen et al. 2017 |
-| `tbets` | Turn-Based Evolutionary Tree Search | the 20 seeded turns | the best seeded turn | the TUBSTAP implementation (below) |
+| `tbets` | Turn-Based Evolutionary Tree Search | the 20 seeded turns | the best seeded turn | Taylor Neller |
 
 `@reference` names the four algorithms wherever a list of arms is accepted. `experiments/tribes/reference.json`
 runs them and the floor at the published levels, on the whole portfolio, against `emcts`.
@@ -121,9 +121,10 @@ and `oep.generation` (a generation's selection). Code: `core/src/magat/agents/oe
 
 ## `tbets`: Turn-Based Evolutionary Tree Search
 
-A tree search whose unit of search is a whole turn and whose expansion operators are evolutionary: a
-port of the engine fork's `players.tbets.TBETSAgent`, which was ported from the C# implementation
-written for TUBSTAP (`AI/TBETS/AI_TBETS.cs` in the TUBSTAP_Taylor repository).
+Taylor Neller's tree search whose unit of search is a whole turn and whose expansion operators are
+evolutionary ([the paper](https://doi.org/10.1007/978-3-032-23657-9_12)). `tbets` is a port of the
+engine fork's `players.tbets.TBETSAgent`, which was ported from Neller's C# implementation for TUBSTAP
+([TaylorNeller/TUBSTAP_Taylor](https://github.com/TaylorNeller/TUBSTAP_Taylor), `AI/TBETS/AI_TBETS.cs`).
 
 - **A node** is a complete turn and the state it leads to; its children are candidate turns for
   whoever plays next, so the tree deepens across turns, not within one.
@@ -176,9 +177,12 @@ generator, and without them the seeded turns would meet other chance events.
 - N. Justesen, T. Mahlmann, S. Risi and J. Togelius. *Playing Multi-Action Adversarial Games: Online
   Evolutionary Planning versus Tree Search.* IEEE Transactions on Computational Intelligence and AI in
   Games, 2017.
-- TBETS: the C# implementation written for TUBSTAP, the Turn-Based Strategy Academic Package
-  (`AI/TBETS/AI_TBETS.cs` in the TUBSTAP_Taylor repository), from which the Tribes engine's
-  `TBETSAgent` was ported.
+- TBETS, by Taylor Neller: *Towards Better Turn-Based Strategy Planning Agents: Turn-Based
+  Evolutionary Tree Search.* Springer,
+  [doi:10.1007/978-3-032-23657-9_12](https://doi.org/10.1007/978-3-032-23657-9_12). Its code, written
+  for TUBSTAP, the Turn-Based Strategy Academic Package, is
+  [TaylorNeller/TUBSTAP_Taylor](https://github.com/TaylorNeller/TUBSTAP_Taylor); the Tribes engine's
+  `TBETSAgent` was ported from it.
 
 The engine's agents, which `emcts` and `tbets` reproduce and the defaults of `oep` come from, are in
 the Tribes engine fork (`games/tribes/engine`, a fork of

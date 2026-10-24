@@ -28,15 +28,17 @@ import java.util.Random;
  * is the root's fittest child. At the default of one ply every child is a turn of the agent's, and the search is
  * an evolution of whole turns under tournament selection.
  *
- * <p>This is a port of the Tribes engine's {@code players.tbets.TBETSAgent} at its defaults, which was ported
- * from the C# implementation written for TUBSTAP ({@code AI/TBETS/AI_TBETS.cs} in the TUBSTAP_Taylor
- * repository). Every forward-model call and every random draw happens in the order the engine's agent makes
- * them, which the equivalence gate asserts against that class, so the port makes its two copies of the state
- * before the seeding as well. Not ported: the rollouts and the action-bias policies, which the defaults leave
- * off (the policies read Tribes' action types, which the contract does not show). Departing from the original,
- * the seeding stops when the budget runs out, which it never does at the gate's budgets or at a published
- * level. The tournament is the engine's: a plain tournament of {@code (tournamentSize + 1) / tournamentTopFraction - 1}
- * draws, which has the selection pressure of TUBSTAP's "sort, then draw from the top fraction" without the sort.
+ * <p>TBETS is Taylor Neller's (<i>Towards Better Turn-Based Strategy Planning Agents: Turn-Based Evolutionary
+ * Tree Search</i>, doi:10.1007/978-3-032-23657-9_12). This is a port of the Tribes engine's
+ * {@code players.tbets.TBETSAgent} at its defaults, which was ported from Neller's C# implementation for TUBSTAP
+ * ({@code AI/TBETS/AI_TBETS.cs} in github.com/TaylorNeller/TUBSTAP_Taylor). Every forward-model call and every
+ * random draw happens in the order the engine's agent makes them, which the equivalence gate asserts against that
+ * class, so the port makes its two copies of the state before the seeding as well. Not ported: the rollouts and
+ * the action-bias policies, which the defaults leave off (the policies read Tribes' action types, which the
+ * contract does not show). Departing from the original, the seeding stops when the budget runs out, which it
+ * never does at the gate's budgets or at a published level. The tournament is the engine's: a plain tournament of
+ * {@code (tournamentSize + 1) / tournamentTopFraction - 1} draws, which has the selection pressure of TUBSTAP's
+ * "sort, then draw from the top fraction" without the sort.
  *
  * <p>The seeding is the initialization, paid from the budget, as the engine's default charges it.
  *
