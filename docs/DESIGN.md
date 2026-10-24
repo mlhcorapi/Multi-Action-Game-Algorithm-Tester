@@ -212,7 +212,8 @@ So a researcher with a different machine:
    them;
 3. **compares** with the published results:
    - `check replay` shows the machine plays the published turns exactly;
-   - re-pricing shows how the published turns cost in the new currency;
+   - `analyze --compare` sets the two runs side by side: each machine's means and their difference, both
+     budget multipliers, the seconds per turn, and the new turns re-priced in the published currency;
    - the drift check says how far the two machines' prices are apart.
 
 Raw units are never compared across games: each game has its own currency. Budget multipliers are.

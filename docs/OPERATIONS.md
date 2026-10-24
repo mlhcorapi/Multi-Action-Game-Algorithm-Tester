@@ -34,7 +34,7 @@ wrap it). It:
 | `check time (--weights F \| --fixed-weights) [--levels ...] [--arms ...] [--targets ms,...]` | single-threaded whole turns over positions spread across the portfolio: each level's thinking time on this machine, and each cell's mean spend against its level, flagged above 1.10× |
 | `experiment validate --experiment SPEC [--weights F \| --no-weights]` | the spec validator alone |
 | `run --experiment SPEC --split dev\|holdout\|all` | run an experiment (below) |
-| `analyze --run DIR [--experiment SPEC] [--baseline ARM] [--reprice W] --out DIR` | every measure, as tables and `SUMMARY.md` |
+| `analyze --run DIR [--experiment SPEC] [--baseline ARM] [--reprice W] [--compare DIR] --out DIR` | every measure, as tables and `SUMMARY.md`; with `--compare`, beside another machine's run of the same experiment |
 | `bundle --name N --paths P...` | zip files into `<data>/bundles/N.zip` |
 | `notebook build \| selftest` | regenerate the notebook; self-test its setup cells from three directories |
 
@@ -151,7 +151,12 @@ python magat.py analyze --run ~/magat_runs/tribes/runs/<experiment> --out ~/maga
 
 `--run` takes a split directory or a run directory; each split a run directory holds (`dev/`,
 `holdout/`) is analysed and reported. `--reprice <weights>` re-prices every leaf in another currency
-([currency](CURRENCY.md#what-transfers-between-machines)). The output is:
+([currency](CURRENCY.md#what-transfers-between-machines)). `--compare <run>` takes the same experiment's
+run on another machine and adds, split by split, per arm and level: each machine's mean value with its
+interval, the paired difference, both budget multipliers, the seconds per turn, and this run's turns
+re-priced in the other machine's currency. That currency is found from the other run's provenance (its
+recorded path, or a published currency with its hash), or named with `--compare-weights`. Runs on
+different portfolios are refused. The output is:
 - `tables/<measure>.csv`, each with a `Split` column first and a `currency` column last;
 - `SUMMARY.md`: the provenance, then the headline in units and seconds, the budget multiplier, the
   spec's contrasts, the design, any re-pricing, and the scope notes;

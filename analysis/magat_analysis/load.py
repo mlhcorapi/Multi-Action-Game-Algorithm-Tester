@@ -58,6 +58,10 @@ def write_text(p, text: str) -> None:
         fh.write(text)
 
 
+def sha256(p) -> str:
+    return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
+
+
 def resolve(p) -> pathlib.Path:
     """A path as written in a spec or a provenance file: absolute, else relative to the repository."""
     p = pathlib.Path(str(p))

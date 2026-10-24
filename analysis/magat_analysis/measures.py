@@ -12,6 +12,7 @@ reached a terminal state, worth about +/-2e9).
     contrasts          the spec's own paired comparisons
     variance           what a scenario and a visit each buy (the design)
     reprice            each turn's work priced in another machine's currency, re-scored
+    across             the same experiment on two machines: each one's means, multipliers and seconds
 """
 import numpy as np
 import pandas as pd
@@ -294,6 +295,53 @@ def reprice(t, leaves, weights, baseline, split="", n=N_BOOT):
     if not table.empty:
         table = table.rename(columns={"Diff": "RepricedDiff", "MeanSpend": "MeanRepricedUnits"})
     return table, frame(spend, ["Budget", "Arm"]), notes
+
+
+# --------------------------------------------------------------------------- across machines
+def across(ta, tb, baseline, split="", n=N_BOOT, leaves_a=None, weights_b=None):
+    """The same experiment on two machines, A and B, each priced in its own currency, per budget and arm.
+
+    On the (scenario, visit) cells both machines ran, neither turn terminal: each machine's mean final value
+    with a scenario-clustered interval, and the paired difference A - B. The chance events are the same on
+    both, so the difference is what the two currencies' prices did to where each search stopped. Beside
+    them: each machine's budget multiplier, which is dimensionless, so the two should agree; each one's
+    seconds per turn; and, given B's currency, A's turns re-priced in it (`RepricedRatio`: the units A's
+    work costs at B's prices over the units it cost at A's). Returns (table, notes)."""
+    def by_key(df):
+        return {} if df.empty else {(int(r.Budget), r.Arm): r for r in df.itertuples(index=False)}
+
+    ma, mb = by_key(budget_multiplier(ta, baseline, split, n)), by_key(budget_multiplier(tb, baseline, split, n))
+    spend, notes = {}, []
+    if weights_b is not None and leaves_a is not None:
+        _, sp, notes = reprice(ta, leaves_a, weights_b, baseline, split, n)
+        spend = by_key(sp)
+    rows = []
+    for budget in sorted(set(ta.budget.unique()) & set(tb.budget.unique())):
+        for arm in sorted(set(ta[ta.budget == budget].arm) & set(tb[tb.budget == budget].arm)):
+            x = ta[(ta.arm == arm) & (ta.budget == budget)]
+            y = tb[(tb.arm == arm) & (tb.budget == budget)]
+            j = x.merge(y, on=KEYS, suffixes=("", "_b"))
+            j = j[~(j["term"] | j["term_b"])].copy()
+            if j.empty:
+                continue
+            j["diff"] = j["final"] - j["final_b"]
+            key = ("across", split, budget, arm)
+            m_a, lo_a, hi_a, k = cluster_boot_ci(j, "final", n=n, key=key)
+            m_b, lo_b, hi_b, _ = cluster_boot_ci(j, "final_b", n=n, key=key)
+            d, d_lo, d_hi, _ = cluster_boot_ci(j, "diff", n=n, key=key)
+            row = dict(Budget=int(budget), Arm=arm, Pairs=len(j), Scenarios=k, MeanA=m_a, LoA=lo_a, HiA=hi_a,
+                       MeanB=m_b, LoB=lo_b, HiB=hi_b, Diff=d, DiffLo=d_lo, DiffHi=d_hi)
+            for side, m in (("A", ma), ("B", mb)):
+                r = m.get((int(budget), arm))
+                row[f"Mult{side}"] = r.Multiplier if r is not None else np.nan
+                row[f"Mult{side}Lo"] = r.Lo if r is not None else np.nan
+                row[f"Mult{side}Hi"] = r.Hi if r is not None else np.nan
+            row["SecondsA"] = float(j["plan_ms"].mean() / 1000.0)
+            row["SecondsB"] = float(j["plan_ms_b"].mean() / 1000.0)
+            r = spend.get((int(budget), arm))
+            row["RepricedRatio"] = r.Ratio if r is not None else np.nan
+            rows.append(row)
+    return frame(rows, ["Budget", "Arm"]), notes
 
 
 # --------------------------------------------------------------------------- design: variance

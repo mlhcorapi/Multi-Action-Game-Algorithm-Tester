@@ -62,6 +62,8 @@ Your currency is `$HOME/magat_runs/calibration/tribes-<your-machine>/compute_wei
 **3. Compare with published results.** Every published row carries its raw operation counts, so:
 - **replay**: `check replay` re-plans the published turns on your machine and compares them field for
   field;
+- **side by side**: `analyze --run <your run> --compare <the published run>` gives, per arm and level,
+  each machine's mean and their difference, both budget multipliers and the seconds per turn;
 - **re-pricing**: `analyze --reprice <currency>` prices every turn of a run in another machine's currency
   and re-scores every arm there;
 - **the drift check**: `calibrate-controlled` checks your machine against the published currency, cell

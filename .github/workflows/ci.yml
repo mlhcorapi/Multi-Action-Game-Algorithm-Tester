@@ -77,11 +77,14 @@ jobs:
           test "$(wc -l < "$RUNNER_TEMP/run/dev/_completed.txt")" -eq 10
           head -1 "$RUNNER_TEMP/run/dev/emcts/2000cu/turns.csv" | grep -q "op_emcts.generation"
           head -1 "$RUNNER_TEMP/run/dev/tbets/2000cu/turns.csv" | grep -q "op_tbets.turn"
-      - name: Analyze the toy run, re-priced in its own currency
+      - name: Analyze the toy run, re-priced in its own currency, and beside itself as another machine's
         run: |
           python magat.py analyze --run "$RUNNER_TEMP/run" --reprice "$RUNNER_TEMP/calib/compute_weights.properties" --out "$RUNNER_TEMP/analysis"
           for t in headline budget_multiplier wallclock contrasts variance repriced; do
             test -s "$RUNNER_TEMP/analysis/tables/$t.csv"
           done
+          python magat.py analyze --run "$RUNNER_TEMP/run" --compare "$RUNNER_TEMP/run" --out "$RUNNER_TEMP/compare"
+          test -s "$RUNNER_TEMP/compare/tables/across.csv"
+          grep -q "## Across machines (dev)" "$RUNNER_TEMP/compare/SUMMARY.md"
       - name: Notebook self-test
         run: python magat.py notebook selftest

@@ -207,6 +207,19 @@ def main(argv) -> int:
           [PY, ROOT / "magat.py", "analyze", "--run", run_root, "--reprice", weights, "--out", toy_out], "ANALYZE: OK",
           then=lambda: every_table(toy_out, "repriced", "repriced_spend") and same_units(toy_out))
 
+    def no_difference(out):
+        """A run compared with itself: no difference anywhere, and its turns cost the same in the other's currency."""
+        rows = (out / "tables" / "across.csv").read_text(encoding="utf-8").splitlines()
+        h = rows[0].split(",")
+        cells = [r.split(",") for r in rows[1:]]
+        return len(cells) > 0 and all(float(c[h.index("Diff")]) == 0 for c in cells) \
+            and all(abs(float(c[h.index("RepricedRatio")]) - 1) < 1e-4 for c in cells if c[h.index("RepricedRatio")])
+
+    cmp_out = results / "compare"
+    check("analyze --compare: the toy run beside itself, as another machine's run of the same experiment",
+          [PY, ROOT / "magat.py", "analyze", "--run", run_root, "--compare", run_root, "--out", cmp_out], "ANALYZE: OK",
+          then=lambda: no_difference(cmp_out) and "## Across machines (dev)" in (cmp_out / "SUMMARY.md").read_text(encoding="utf-8"))
+
     step("9. Notebook")
     check("generated notebook is current and its setup cells run from three directories",
           [PY, ROOT / "magat.py", "notebook", "selftest"], "0 failure(s)")

@@ -188,6 +188,10 @@ the baseline in that currency. What re-pricing cannot do is re-run the stop rule
 under the weights it ran with, and the report says so. A leaf is re-priced only by a file that prices
 exactly the operations it counted.
 
+`magat analyze --run A --compare B` sets two machines' runs of one experiment side by side: each machine's
+mean values and their paired difference, both budget multipliers, each machine's seconds per turn, and A's
+turns re-priced in B's currency.
+
 ## Published currencies
 
 Tribes' currency, measured on the R7615 at the published levels, will be published in
