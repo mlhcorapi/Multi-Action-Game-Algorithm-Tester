@@ -3,7 +3,6 @@ package magat.cli;
 import magat.agent.AgentFactory;
 import magat.game.Game;
 import magat.game.GameModule;
-import magat.portfolio.HoldoutLedger;
 import magat.portfolio.Identity;
 import magat.portfolio.Manifest;
 import magat.portfolio.PortfolioBuilder;
@@ -15,7 +14,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 
-/** {@code magat portfolio build | freeze | verify | ledger}. */
+/** {@code magat portfolio build | freeze | verify}. */
 final class PortfolioCommand {
 
     private PortfolioCommand() {}
@@ -24,7 +23,6 @@ final class PortfolioCommand {
         System.out.println("  portfolio build   --game <name> --out <dir> [--threads N] [--targets single=200,dual=200]");
         System.out.println("  portfolio freeze  --portfolio <dir>");
         System.out.println("  portfolio verify  --game <name> --portfolio <dir> [--published <dir>] [--subset] [--plan N] [--arm emcts] [--budget 8000]");
-        System.out.println("  portfolio ledger  --portfolio <dir>");
     }
 
     static int run(Args args) throws Exception {
@@ -32,8 +30,7 @@ final class PortfolioCommand {
         if ("build".equals(what)) return build(args);
         if ("freeze".equals(what)) return freeze(args);
         if ("verify".equals(what)) return verify(args);
-        if ("ledger".equals(what)) return ledger(args);
-        throw new IllegalArgumentException("portfolio what? build | freeze | verify | ledger");
+        throw new IllegalArgumentException("portfolio what? build | freeze | verify");
     }
 
     private static <S, A> int build(Args args) throws Exception {
@@ -88,13 +85,5 @@ final class PortfolioCommand {
         r.print();
         System.out.println(r.ok() ? "VERIFY: PASS" : "VERIFY: FAIL (" + r.failures.size() + " check(s))");
         return r.ok() ? 0 : 1;
-    }
-
-    private static int ledger(Args args) throws Exception {
-        Path dir = Paths.get(args.require("portfolio")).toAbsolutePath();
-        HoldoutLedger l = HoldoutLedger.load(dir);
-        System.out.println("# portfolio: " + dir + "  identity " + Identity.shortForm(Manifest.read(dir).identity()));
-        System.out.println(l.describe());
-        return 0;
     }
 }

@@ -16,7 +16,7 @@ public class SeedsAndBudgetTest {
     }
 
     @Test
-    public void visitSeedIsTheThesisConvention() {
+    public void visitSeedIsTheFixedConvention() {
         assertEquals(1_000_000L, Seeds.visit(1, 0));
         assertEquals(1_000_005L, Seeds.visit(1, 5));
         assertEquals(400_000_007L, Seeds.visit(400, 7));
@@ -93,18 +93,6 @@ public class SeedsAndBudgetTest {
         assertEquals(0, b.searchUnits());
         assertTrue(b.exhausted());
         assertEquals("a phase still has a ceiling to reach", 1.0, b.ceiling(0, 3), 0.0);
-    }
-
-    @Test
-    public void theInitializationIsNamedAndParsed() {
-        assertEquals(TurnBudget.Initialization.IN_BUDGET, TurnBudget.Initialization.of("in-budget"));
-        assertEquals(TurnBudget.Initialization.OUTSIDE_BUDGET, TurnBudget.Initialization.of(" Outside-Budget "));
-        try {
-            TurnBudget.Initialization.of("inside");
-            fail();
-        } catch (IllegalArgumentException expected) {
-            assertTrue(expected.getMessage().contains("in-budget or outside-budget"));
-        }
     }
 
     @Test(expected = IllegalStateException.class)

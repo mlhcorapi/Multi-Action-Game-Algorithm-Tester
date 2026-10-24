@@ -3,8 +3,8 @@ package magat.agent;
 import magat.game.Scenario;
 
 /**
- * A reference implementation a ported arm is gated against: typically the thesis-tree agent the
- * port was made from, driven through the engine directly. Runs on the calling thread.
+ * A reference implementation a ported arm is gated against: typically the engine agent the port was
+ * made from, driven through the engine directly. Runs on the calling thread.
  */
 public interface Oracle<S> {
 

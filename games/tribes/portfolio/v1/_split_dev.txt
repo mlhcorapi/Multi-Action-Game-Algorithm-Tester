@@ -1,4 +1,4 @@
-# AB-EMCTS portfolio split — DEV
+# MAGAT portfolio split - DEV
 # frozen: 2026-08-28T13:57:02.425267Z
 # identity-sha256: ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7
 # rule: stratified by (Source, CapturedTick); within a stratum ordered by (BranchingFactor, ScenarioId) and dealt alternately, with the deal parity carried across strata so leftovers alternate

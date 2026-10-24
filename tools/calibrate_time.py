@@ -11,7 +11,7 @@ measured again: the tool refuses to run without --remeasure (the toy run of the 
 
 A level's units mean "this many milliseconds of thinking, initialization included, on the reference
 machine, averaged over the portfolio's positions", and every machine that spends the same currency compares
-arms as though they had run there. DESIGN 8.8 and docs/CURRENCY.md say why the mean over positions is the anchor.
+arms as though they had run there. docs/CURRENCY.md says why the mean over positions is the anchor.
 
 1. A probe: the reference arm's whole turns at one budget under the fixed measurement weights give a first
    time per unit, so a first guess of the units for each time.

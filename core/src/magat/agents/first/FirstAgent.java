@@ -17,7 +17,7 @@ import java.util.Set;
  * The worked example of {@code docs/ADDING_AN_ALGORITHM.md}: random restarts, the smallest search that
  * spends a budget. Until the budget is exhausted it samples a random plan for the turn from a copy of
  * the position, evaluates where the plan leaves the game, and keeps the best. It declares one operation
- * of its own, a sampled plan's work outside the forward model, so a version-2 currency prices it.
+ * of its own, a sampled plan's work outside the forward model, so the currency prices it.
  *
  * <p>No game registers it; the guide shows the one line that does.
  */
@@ -39,7 +39,7 @@ public final class FirstAgent<S, A> implements SearchAgent<S, A> {
     public TurnRecord plan(Game<S, A> game, S state, int player, TurnBudget budget) {
         long t0 = System.currentTimeMillis();
         double initial = game.evaluate(state, player);
-        budget.beginSearch();                         // the initial evaluation is the initialization (in the budget, by default)
+        budget.beginSearch();                         // the initial evaluation is the initialization, paid from the budget
         double best = initial, sum = 0;
         boolean bestTerminal = false;
         int bestLength = 0;

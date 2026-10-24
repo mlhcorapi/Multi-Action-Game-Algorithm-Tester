@@ -6,7 +6,6 @@ import com.eclipsesource.json.JsonObject;
 import com.eclipsesource.json.JsonValue;
 import magat.agent.AgentFactory;
 import magat.agent.Episode;
-import magat.agent.TurnBudget;
 import magat.agent.TurnRecord;
 import magat.calibrate.ThreadSweep;
 import magat.game.Game;
@@ -16,7 +15,6 @@ import magat.machine.MachineProfile;
 import magat.meter.Meter;
 import magat.meter.Profile;
 import magat.meter.Weights;
-import magat.portfolio.HoldoutLedger;
 import magat.portfolio.Identity;
 import magat.portfolio.Portfolio;
 import magat.portfolio.Split;
@@ -44,13 +42,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * the order the spec lists them (a priority order: leaves are checkpointed independently, so a stopped
  * run keeps whatever came first).
  *
- * <p>From the thesis tree's {@code Stage1Runner}, unchanged in substance: per-leaf checkpoint key
+ * <p>A per-leaf checkpoint key
  * {@code arm=<id>;budget=<units>;split=<split>}; resume by re-running the same command (finished leaves
  * are skipped, a partial leaf continues per scenario and visit after {@link Leaf#compact}); per-level
  * thread counts; the {@link LoadGovernor}; one lock per output tree; a leaf marked complete only when
  * every turn produced a row.
  *
- * <p>Three guards are new, each a trap of the brief made structural:
+ * <p>Three guards:
  * <ul>
  *   <li><b>Currency lock.</b> {@code _run.json} records the weights file's hash and every leaf records
  *       the weights it ran under. A resume under another file is allowed only if every leaf's own price
@@ -58,7 +56,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *       checkpoint lines and directories are removed, and the retirement is logged). A leaf can never
  *       hold turns priced in two currencies.</li>
  *   <li><b>Identical-output assertion.</b> After every level, two arms whose turns agree on value, counts,
- *       nodes and unique sequences on every turn are reported as a bug and the run stops (principle 12).</li>
+ *       nodes and unique sequences on every turn are reported as a bug and the run stops.</li>
  *   <li><b>Portfolio and configuration lock</b> ({@link Provenance}).</li>
  * </ul>
  */
@@ -79,7 +77,6 @@ public final class GridRunner {
         public Map<Long, Integer> threadsAt = new LinkedHashMap<>();
         public Path threadsFile;
         public double machineFactor = 1.0;
-        public Path frozen;
         public Set<String> retire = new LinkedHashSet<>();
         public boolean toy;
         public List<String> args = new ArrayList<>();
@@ -91,40 +88,24 @@ public final class GridRunner {
             throws IOException, InterruptedException {
         Game<S, A> game = module.game();
         Split.Half half = o.split != null ? o.split : Split.Half.parse(x.split == null ? "all" : x.split);
-        Path frozen = o.frozen != null ? o.frozen
-                : x.frozen == null ? null : (x.source == null ? Path.of(x.frozen) : x.source.toAbsolutePath().getParent().resolve(x.frozen));
 
         // ---- the spec, before anything is touched
         System.out.println("# experiment " + x.name + " (" + (x.source == null ? "inline" : x.source) + ", sha256 " + Identity.shortForm(x.sha256) + ")");
-        Validator.Report v = Validator.check(x, game.id(), module.agents(), half, weights, frozen == null ? null : frozen.toString(), o.toy);
+        Validator.Report v = Validator.check(x, game.id(), module.agents(), half, weights, o.toy);
         v.print();
         if (!v.ok()) {
             System.out.println("VALIDATION: FAIL (" + v.errors.size() + " error(s)); nothing was run");
-            return INVALID;
-        }
-        if (half == Split.Half.HOLDOUT && (frozen == null || !Files.isRegularFile(frozen))) {
-            System.out.println("VALIDATION: FAIL - the frozen-choices file " + frozen + " does not exist; nothing was run");
             return INVALID;
         }
         if (weights.portfolioIdentity() != null && !weights.portfolioIdentity().equals(portfolio.identity()))
             System.out.println("  [warn]  the weights were measured on portfolio " + Identity.shortForm(weights.portfolioIdentity())
                     + "; this run reads " + Identity.shortForm(portfolio.identity()));
 
-        // Every turn of this run pays its initialization from its budget, or not, as the spec says.
-        TurnBudget.Initialization wasInit = TurnBudget.initialization();
-        TurnBudget.setInitialization(x.initialization);
-        System.out.println("# initialization: " + x.initialization + (x.initialization == TurnBudget.Initialization.IN_BUDGET
-                ? " (each turn's budget pays for its initial plan: a level is the whole turn)"
-                : " (each turn's initial plan is outside its budget, as the thesis ran)"));
-        try {
-            return runTree(module, x, portfolio, weights, o, game, half, frozen);
-        } finally {
-            TurnBudget.setInitialization(wasInit);
-        }
+        return runTree(module, x, portfolio, weights, o, game, half);
     }
 
     private static <S, A> int runTree(GameModule<S, A> module, Experiment x, Portfolio<S> portfolio, Weights weights, Options o,
-                                      Game<S, A> game, Split.Half half, Path frozen) throws IOException, InterruptedException {
+                                      Game<S, A> game, Split.Half half) throws IOException, InterruptedException {
         // ---- the tree
         Path root = o.out.resolve(half.key()).toAbsolutePath();
         Files.createDirectories(root);
@@ -157,23 +138,8 @@ public final class GridRunner {
             }
             for (String leaf : o.retire) retire(root, checkpoint, leaf, half, prov, weightsSha);
 
-            recordProvenance(prov, x, game, portfolio, weights, weightsSha, half, frozen, o);
+            recordProvenance(prov, x, game, portfolio, weights, weightsSha, half, o);
             prov.save();
-
-            // ---- the holdout is read once, and the ledger says so
-            if (half == Split.Half.HOLDOUT) {
-                HoldoutLedger ledger = HoldoutLedger.load(portfolio.dir());
-                boolean resuming = false;
-                for (HoldoutLedger.Entry e : ledger.entries())
-                    if (e.run.equals(root.toString()) && e.specHash.equals(x.sha256)) resuming = true;
-                if (!resuming && ledger.warning() != null) System.out.println(ledger.warning());
-                else System.out.println("# " + ledger.describe().replace("\n", "\n# "));
-                if (!resuming) {
-                    ledger.append(new HoldoutLedger.Entry(Instant.now().toString(), x.name, x.sha256, x.armIds(),
-                            frozen.toString(), Identity.sha256(frozen), root.toString()));
-                    System.out.println("# holdout ledger: this read is entry " + ledger.entries().size());
-                }
-            }
 
             // ---- the scenarios
             List<Scenario<S>> scenarios = Split.apply(portfolio.scenarios(), portfolio.dir(), half);
@@ -393,9 +359,7 @@ public final class GridRunner {
 
     /**
      * Whether a leaf's recorded prices are what {@code weights} prices it at now: the forward model's three,
-     * and every operation either side prices. A leaf from before version 2 recorded the three only, so a
-     * version-2 file that prices its arm's own operations is a price change: published version-1 results
-     * are never continued in a version-2 currency.
+     * and every operation either side prices.
      */
     static boolean samePrices(JsonObject meta, String profile, Weights weights) {
         double[] now = profile != null ? weights.profile(profile) : weights.global();
@@ -439,7 +403,7 @@ public final class GridRunner {
     // ------------------------------------------------------------------ provenance, threads, banner
 
     private static <S, A> void recordProvenance(Provenance prov, Experiment x, Game<S, A> game, Portfolio<S> portfolio, Weights weights,
-                                                String weightsSha, Split.Half half, Path frozen, Options o) throws IOException {
+                                                String weightsSha, Split.Half half, Options o) throws IOException {
         JsonObject cfg = new JsonObject();
         for (Map.Entry<String, String> e : game.configuration().entrySet()) cfg.add(e.getKey(), e.getValue());
         prov.set("magat", new JsonObject().add("version", System.getProperty("magat.version", "unknown"))
@@ -455,9 +419,6 @@ public final class GridRunner {
                 .add("reference", String.valueOf(weights.reference())).add("header", header));
         prov.set("experiment", new JsonObject().add("name", x.name).add("path", x.source == null ? "" : x.source.toAbsolutePath().toString())
                 .add("sha256", x.sha256));
-        prov.set("initialization", Json.value(x.initialization.id));
-        if (frozen != null && Files.isRegularFile(frozen))
-            prov.set("frozen", new JsonObject().add("path", frozen.toAbsolutePath().toString()).add("sha256", Identity.sha256(frozen)));
         if (o.toy) prov.set("toy", Json.value(true));
         JsonObject threads = new JsonObject();
         Map<Long, Integer> sweep = o.threadsFile != null && Files.isRegularFile(o.threadsFile) ? ThreadSweep.read(o.threadsFile) : null;

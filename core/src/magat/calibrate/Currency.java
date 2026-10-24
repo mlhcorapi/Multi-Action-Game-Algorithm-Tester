@@ -1,6 +1,5 @@
 package magat.calibrate;
 
-import magat.agent.TurnBudget;
 import magat.meter.Weights;
 
 import java.util.ArrayList;
@@ -18,17 +17,12 @@ import java.util.Set;
  *
  * <p><b>Re-denomination.</b> A calibration session measures every cell relative to its own reference
  * advance. Merged into an existing file, a cell is expressed in the file's unit by one factor: the
- * file's stored weight for its reference profile's advance (1.0 for a file this calibrator wrote;
- * 1.000659 for the imported R7615 file, whose unit is the engine EMCTS advance). That is ratio
- * transfer: it assumes what an operation costs RELATIVE to the reference advance carries from the
- * session to the file's machine, so a uniformly faster or slower machine, or a slow afternoon on the
+ * file's stored weight for its reference profile's advance (1.0 for a file this calibrator wrote). That
+ * is ratio transfer: it assumes what an operation costs RELATIVE to the reference advance carries from
+ * the session to the file's machine, so a uniformly faster or slower machine, or a slow afternoon on the
  * same machine, cancels exactly. What does not cancel is a change in those ratios, and that is what
- * {@link #drift} reports.
- *
- * <p>The thesis calibrator instead divided each new cell's absolute nanoseconds by the file's stored
- * reference nanoseconds, so a session on a machine 58% slower priced its new arms 58% too high (the
- * 2026-08-31 merge, re-denominated x1.5820, re-measured the same day). The brief's rule is that
- * re-denomination makes cross-session drift cancel; ratio transfer is the arithmetic that does.
+ * {@link #drift} reports. (Dividing a new cell's absolute nanoseconds by the file's stored reference
+ * nanoseconds instead would price a slower machine's new arms too high by its slowness.)
  */
 public final class Currency {
 
@@ -51,34 +45,25 @@ public final class Currency {
         public String portfolioIdentity;
         public int reps;
         public boolean toy;
-        /** 2 prices every operation an arm declares; 1 the forward model only. */
-        public int version = 2;
     }
 
     // ------------------------------------------------------------------ a fresh file
 
-    /** A new file whose unit is one advance of {@code ref}: version 2 (every operation priced) unless the session says 1. */
+    /** A new file whose unit is one advance of {@code ref}. */
     public static String fresh(Session s, List<Cell> cells, Cell ref) {
         StringBuilder sb = new StringBuilder();
-        if (s.version >= 2) {
-            sb.append("# MAGAT weights, version 2: the ").append(s.game).append(" currency, measured by magat calibrate.\n");
-            sb.append(String.format(Locale.ROOT, "# One unit = one advance of %s = %.3f ns on this machine. Every weight below is the\n",
-                    ref.profile, ref.tAdvance));
-            sb.append("# price of one occurrence of an operation as a ratio to it: the forward model's (advance, copy, eval) and\n");
-            sb.append("# each operation the arm declares (DESIGN 6.6), per arm and budget level, so a unit budget buys the same\n");
-            sb.append("# wall-clock of all the work an arm does.\n");
-        } else {
-            sb.append("# MAGAT weights, version 1: the ").append(s.game).append(" currency, measured by magat calibrate.\n");
-            sb.append(String.format(Locale.ROOT, "# One unit = one advance of %s = %.3f ns on this machine. Every weight below is a\n",
-                    ref.profile, ref.tAdvance));
-            sb.append("# ratio to it, so equal unit budgets are equal wall-clock across arms and proportional across levels.\n");
-        }
+        sb.append("# MAGAT weights, version 2: the ").append(s.game).append(" currency, measured by magat calibrate.\n");
+        sb.append(String.format(Locale.ROOT, "# One unit = one advance of %s = %.3f ns on this machine. Every weight below is the\n",
+                ref.profile, ref.tAdvance));
+        sb.append("# price of one occurrence of an operation as a ratio to it: the forward model's (advance, copy, eval) and\n");
+        sb.append("# each operation the arm declares, per arm and budget level, so a unit budget buys the same wall-clock\n");
+        sb.append("# of all the work an arm does.\n");
         if (s.toy)
             sb.append("# TOY CALIBRATION: sample-size and stability gates were reported, not enforced. Not a currency.\n");
         sb.append(String.format(Locale.ROOT, "# Every cell was measured under the fixed measurement weights (advance %s, copy %s, eval %s, the arms'\n"
                 + "# own operations free), whatever a file being extended prices, so every session plays the same turns.\n",
                 Weights.DEFAULT[0], Weights.DEFAULT[1], Weights.DEFAULT[2]));
-        sb.append("magat.weights.version = ").append(s.version >= 2 ? 2 : 1).append('\n');
+        sb.append("magat.weights.version = 2\n");
         sb.append("game = ").append(s.game).append('\n');
         sb.append("machine = ").append(s.machine).append('\n');
         sb.append("java = ").append(s.java).append('\n');
@@ -89,23 +74,14 @@ public final class Currency {
         sb.append("turnsPerRep = ").append(s.turnsPerRep).append('\n');
         sb.append("portfolio.identity = ").append(s.portfolioIdentity).append('\n');
         sb.append("reps = ").append(s.reps).append('\n');
-        // The turns the prices were measured on paid their initialization from their budget, or not (a merge checks it).
-        sb.append("initialization = ").append(TurnBudget.initialization().id).append('\n');
         if (s.toy) sb.append("toy = true\n");
-        if (s.version >= 2) {
-            sb.append("operations = ").append(String.join(",", operations(cells, null))).append('\n');
-            for (Map.Entry<String, Double> e : ref.prices().entrySet())
-                sb.append(String.format(Locale.ROOT, "global.w.%s = %s\n", e.getKey(), weight(e.getKey(), e.getValue())));
-            sb.append("\n# profile.<arm>@<budget>.w.<op> is the price of one occurrence of <op> as a ratio to the reference advance;\n");
-            sb.append("# ns.<op> its measured nanoseconds on this machine; unpriced, the calibration audit's share of the cell's turn\n");
-            sb.append("# time that no priced operation accounts for.\n");
-        } else {
-            sb.append(String.format(Locale.ROOT, "global.wAdvance = %.6f\nglobal.wCopy = %.6f\nglobal.wEval = %.6f\n",
-                    ref.wAdvance, ref.wCopy, ref.wEval));
-            sb.append("\n# profile.<arm>@<budget>.{wAdvance,wCopy,wEval} are ratios to the reference advance;\n");
-            sb.append("# *Nanos are the measured per-operation costs on this machine.\n");
-        }
-        for (Cell c : cells) appendProfile(sb, c, 1.0, s.version);
+        sb.append("operations = ").append(String.join(",", operations(cells, null))).append('\n');
+        for (Map.Entry<String, Double> e : ref.prices().entrySet())
+            sb.append(String.format(Locale.ROOT, "global.w.%s = %s\n", e.getKey(), weight(e.getKey(), e.getValue())));
+        sb.append("\n# profile.<arm>@<budget>.w.<op> is the price of one occurrence of <op> as a ratio to the reference advance;\n");
+        sb.append("# ns.<op> its measured nanoseconds on this machine; unpriced, the calibration audit's share of the cell's turn\n");
+        sb.append("# time that no priced operation accounts for.\n");
+        for (Cell c : cells) appendProfile(sb, c, 1.0);
         return sb.toString();
     }
 
@@ -122,22 +98,13 @@ public final class Currency {
         return String.format(Locale.ROOT, magat.meter.Meter.FORWARD_MODEL_OPS.contains(op) ? "%.6f" : "%.9f", w);
     }
 
-    private static void appendProfile(StringBuilder sb, Cell c, double factor, int version) {
+    private static void appendProfile(StringBuilder sb, Cell c, double factor) {
         String p = "profile." + c.profile + ".";
-        if (version >= 2) {
-            for (Map.Entry<String, Double> e : c.prices().entrySet())
-                sb.append(p).append("w.").append(e.getKey()).append(" = ").append(weight(e.getKey(), e.getValue() * factor)).append('\n');
-            for (Map.Entry<String, Double> e : c.nanos().entrySet())
-                sb.append(String.format(Locale.ROOT, "%sns.%s = %.3f\n", p, e.getKey(), e.getValue()));
-            if (!Double.isNaN(c.unpriced)) sb.append(String.format(Locale.ROOT, "%sunpriced = %.4f\n", p, c.unpriced));
-            return;
-        }
-        sb.append(String.format(Locale.ROOT, "%swAdvance = %.6f\n", p, c.wAdvance * factor));
-        sb.append(String.format(Locale.ROOT, "%swCopy = %.6f\n", p, c.wCopy * factor));
-        sb.append(String.format(Locale.ROOT, "%swEval = %.6f\n", p, c.wEval * factor));
-        sb.append(String.format(Locale.ROOT, "%sadvanceNanos = %.3f\n", p, c.tAdvance));
-        sb.append(String.format(Locale.ROOT, "%scopyNanos = %.3f\n", p, c.tCopy));
-        sb.append(String.format(Locale.ROOT, "%sevalNanos = %.3f\n", p, c.tEval));
+        for (Map.Entry<String, Double> e : c.prices().entrySet())
+            sb.append(p).append("w.").append(e.getKey()).append(" = ").append(weight(e.getKey(), e.getValue() * factor)).append('\n');
+        for (Map.Entry<String, Double> e : c.nanos().entrySet())
+            sb.append(String.format(Locale.ROOT, "%sns.%s = %.3f\n", p, e.getKey(), e.getValue()));
+        if (!Double.isNaN(c.unpriced)) sb.append(String.format(Locale.ROOT, "%sunpriced = %.4f\n", p, c.unpriced));
     }
 
     // ------------------------------------------------------------------ merging
@@ -153,24 +120,16 @@ public final class Currency {
     }
 
     /**
-     * Merges {@code write} into an existing file of version 1 or 2: every existing line is kept except
-     * those of a profile being written, header and globals untouched, the new cells re-denominated by
-     * {@link #factor} and appended under one {@code # merged} line, in the file's own version. A merge
-     * into a version-1 file writes the forward model's prices only, so the file stays one currency (the
-     * arms' own operations are measured and reported, and stay free in it); a merge into a version-2 file
-     * writes every operation and extends its {@code operations} line.
+     * Merges {@code write} into an existing file: every existing line is kept except those of a profile
+     * being written, header and globals untouched, the new cells re-denominated by {@link #factor} and
+     * appended under one {@code # merged} line, and the {@code operations} line extended.
      *
      * @param ref the session's measurement of the file's reference profile
      */
     public static String merge(List<String> lines, Weights file, Session s, List<Cell> write, Cell ref) {
-        String v = file.header().get("magat.weights.version");
-        if (!"1".equals(v) && !"2".equals(v))
-            throw new IllegalStateException(file.source() + " is not a MAGAT weights file (version 1 or 2); merging into it would mix "
-                    + "formats. Convert it first (tools/import_r7615.py shows how).");
         if (!ref.profile.equals(file.reference()))
             throw new IllegalStateException("the session's reference cell is " + ref.profile + " but the file's reference is "
                     + file.reference());
-        int version = file.version();
         double f = factor(file);
         Set<String> replacing = new LinkedHashSet<>();
         for (Cell c : write) replacing.add("profile." + c.profile + ".");
@@ -180,7 +139,7 @@ public final class Currency {
             boolean drop = false;
             for (String p : replacing) if (t.startsWith(p)) { drop = true; break; }
             if (drop) continue;
-            if (version >= 2 && t.startsWith("operations") && t.replace(" ", "").startsWith("operations=")) {
+            if (t.startsWith("operations") && t.replace(" ", "").startsWith("operations=")) {
                 List<String> had = new ArrayList<>();
                 for (String op : t.substring(t.indexOf('=') + 1).split(",")) if (!op.trim().isEmpty()) had.add(op.trim());
                 sb.append("operations = ").append(String.join(",", operations(write, had))).append('\n');
@@ -191,10 +150,9 @@ public final class Currency {
         double machine = machineFactor(file, ref);
         sb.append('\n').append(String.format(Locale.ROOT,
                 "# merged %s: %d profile(s) measured against this session's %s advance (%.3f ns, x%.4f the file's), "
-                        + "re-denominated x%.6f (the file's reference weight) into this file's unit; turnsPerRep %s%s%s\n",
-                s.measured, write.size(), ref.profile, ref.tAdvance, machine, f, s.turnsPerRep,
-                version < 2 ? "; version 1: the forward model priced, the arms' own operations free" : "", s.toy ? "; TOY" : ""));
-        for (Cell c : write) appendProfile(sb, c, f, version);
+                        + "re-denominated x%.6f (the file's reference weight) into this file's unit; turnsPerRep %s%s\n",
+                s.measured, write.size(), ref.profile, ref.tAdvance, machine, f, s.turnsPerRep, s.toy ? "; TOY" : ""));
+        for (Cell c : write) appendProfile(sb, c, f);
         return sb.toString();
     }
 
@@ -301,12 +259,12 @@ public final class Currency {
             double priceNow = (c.advances * now[0] + c.copies * now[1] + c.evals * now[2]) * f;
             double priceStored = c.advances * stored[0] + c.copies * stored[1] + c.evals * stored[2];
             for (int op = c.profile.equals(ref.profile) ? 1 : 0; op < 3; op++) {
-                DriftRow r = new DriftRow(c.profile + "." + Weights.OPS[op], stored[op], now[op] * f);
+                DriftRow r = new DriftRow(c.profile + ".w." + magat.meter.Meter.FORWARD_MODEL_OPS.get(op), stored[op], now[op] * f);
                 rows.add(r);
                 if (worst == null || Math.abs(r.drift) > Math.abs(worst.drift)) worst = r;
             }
-            // The arm's own operations, where the file prices them too (a version-2 file): in the turn price,
-            // and per operation where the stored price is not zero.
+            // The arm's own operations, where the file prices them too: in the turn price, and per operation
+            // where the stored price is not zero.
             Map<String, Double> storedAll = file.prices(c.profile);
             for (Map.Entry<String, Cell.OpStat> e : c.ops.entrySet()) {
                 Double s = storedAll.get(e.getKey());

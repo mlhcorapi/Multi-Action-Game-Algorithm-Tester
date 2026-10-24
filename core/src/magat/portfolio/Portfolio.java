@@ -19,8 +19,8 @@ import java.util.Set;
  * serialized state per scenario ({@code scenarios/scenario_NNN.bin}).
  *
  * <p>A version-1 manifest names its game, and loading it with a different game is refused. The
- * thesis manifest does not name one and is accepted as it is, so the published Tribes portfolio
- * needs no conversion.
+ * original format does not name one and is accepted as it is, so the published Tribes portfolio needs no
+ * conversion.
  */
 public final class Portfolio<S> {
 

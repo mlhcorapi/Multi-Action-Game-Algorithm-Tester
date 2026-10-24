@@ -3,10 +3,7 @@ package magat.games.tribes;
 import core.Constants;
 import core.Types;
 import core.actions.Action;
-import core.actions.cityactions.Build;
 import core.actions.cityactions.CityAction;
-import core.actions.cityactions.Spawn;
-import core.actions.tribeactions.ResearchTech;
 import core.actions.unitactions.UnitAction;
 import core.actors.Actor;
 import core.actors.City;
@@ -16,7 +13,6 @@ import core.game.ComputeMeter;
 import core.game.GameState;
 import magat.game.EngineCounters;
 import magat.game.Game;
-import magat.game.Granularity;
 import magat.game.ScenarioSource;
 import players.heuristics.TribesSimpleHeuristic;
 
@@ -38,11 +34,10 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 /**
- * Tribes behind the contract. Every method is the thesis tree's behaviour, moved: the "good
- * actions" filter of {@code Agent.allGoodActions}, the feasibility test of
- * {@code EMCTSAgent.checkActionFeasibility}, the SIMPLE heuristic, the deterministic-cascade copy,
- * the reseeding of {@code Stage1Runner.runOneTurn}, the serialization of {@code FastGameStateIO},
- * and the manifest facts of {@code BuildV5Portfolio.persistAndManifest}.
+ * Tribes behind the contract, with the engine's own behaviour: the "good actions" filter of
+ * {@code Agent.allGoodActions}, the feasibility test of {@code EMCTSAgent.checkActionFeasibility}, the
+ * SIMPLE heuristic, a deterministic copy, reseeding per turn, a compact serialization, and the manifest
+ * facts of a captured position.
  *
  * <p>Engine globals ({@code core.Constants}) are set once, here, and are what {@link #configuration}
  * reports. No runner touches them.
@@ -168,7 +163,7 @@ public final class TribesGame implements Game<TribesState, Action>, EngineCounte
         return action.getActionType() == Types.ACTION.END_TURN;
     }
 
-    /** The first END_TURN among the legal actions, as every thesis-tree agent found it. */
+    /** The first END_TURN among the legal actions, as the engine's agents find it. */
     @Override
     public Action endTurnAction(TribesState state) {
         for (Action a : legalActions(state))
@@ -181,40 +176,6 @@ public final class TribesGame implements Game<TribesState, Action>, EngineCounte
     @Override
     public String actionKey(Action action) {
         return action.toString();
-    }
-
-    @Override
-    public String actionClass(TribesState state, Action a, Granularity level) {
-        switch (level) {
-            case COARSE:
-                return a.getActionType().name();
-            case MID: {
-                String q = qualifier(state.raw(), a);
-                return q == null ? a.getActionType().name() : a.getActionType().name() + ":" + q;
-            }
-            case FINE:
-            default:
-                return a.toString();
-        }
-    }
-
-    /** The MID qualifier of {@code Stage1BiasedAgent.qualifierOf}: unit type, building, spawned unit, or tech. */
-    private static String qualifier(GameState gs, Action a) {
-        try {
-            if (a instanceof UnitAction) {
-                Actor act = gs.getActor(((UnitAction) a).getUnitId());
-                return (act instanceof Unit) ? ((Unit) act).getType().name() : null;
-            } else if (a instanceof Build) {
-                return ((Build) a).getBuildingType().name();
-            } else if (a instanceof Spawn) {
-                return ((Spawn) a).getUnitType().name();
-            } else if (a instanceof ResearchTech) {
-                return ((ResearchTech) a).getTech().name();
-            }
-            return null;
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     /** The engine's own unfiltered action count, as the published manifest defines it. */
@@ -302,36 +263,6 @@ public final class TribesGame implements Game<TribesState, Action>, EngineCounte
     @Override
     public void resetEngineCounts() {
         ComputeMeter.reset();
-    }
-
-    @Override
-    public boolean engineTiming(boolean on) {
-        ComputeMeter.PROFILE = on;
-        return true;
-    }
-
-    @Override
-    public long[] engineNanos() {
-        return new long[]{ComputeMeter.advanceNanos(), ComputeMeter.copyNanos(), ComputeMeter.evalNanos()};
-    }
-
-    @Override
-    public void resetEngineNanos() {
-        ComputeMeter.resetNanos();
-    }
-
-    /** The engine's hook is a thread-local array increment; time it alone, then put the counts back. */
-    @Override
-    public long dormantCounterNanos(long calls) {
-        long[] before = engineCounts();
-        long t0 = System.nanoTime();
-        for (long i = 0; i < calls; i++) ComputeMeter.onAdvance();
-        long ns = System.nanoTime() - t0;
-        ComputeMeter.reset();
-        for (long i = 0; i < before[0]; i++) ComputeMeter.onAdvance();
-        for (long i = 0; i < before[1]; i++) ComputeMeter.onCopy();
-        for (long i = 0; i < before[2]; i++) ComputeMeter.onEval();
-        return ns;
     }
 
     /** Wraps an engine state; for the scenario sources and the oracle. */

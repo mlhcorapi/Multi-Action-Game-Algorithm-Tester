@@ -5,7 +5,6 @@
   "portfolio": "tribes/v1",
   "split": "dev",
   "baseline": "emcts",
-  "initialization": "in-budget",
   "levels": [
     { "budget": 20000, "visits": 8 },
     { "budget": 9500, "visits": 8 },
@@ -13,14 +12,9 @@
   ],
   "arms": [
     { "id": "emcts" },
-    { "id": "emcts-comma" },
     { "id": "random" }
   ],
-  "sweeps": [
-    { "parameter": "selection", "arms": ["emcts-comma"], "null": "emcts" }
-  ],
   "contrasts": [
-    { "a": "emcts-comma", "b": "emcts", "label": "comma selection over plus" },
     { "a": "emcts", "b": "random", "label": "search over the floor" }
   ]
 }

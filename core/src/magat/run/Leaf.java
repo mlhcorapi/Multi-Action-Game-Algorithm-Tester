@@ -201,7 +201,7 @@ public final class Leaf {
         return keys;
     }
 
-    /** Four decimals, as every thesis-tree CSV was written, never in exponent notation. */
+    /** Four decimals, never in exponent notation. */
     static String num(double v) {
         if (Double.isNaN(v) || Double.isInfinite(v)) return String.valueOf(v);
         return BigDecimal.valueOf(TurnRecord.round4(v)).stripTrailingZeros().toPlainString();

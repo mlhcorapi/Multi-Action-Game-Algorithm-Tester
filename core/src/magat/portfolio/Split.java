@@ -39,7 +39,6 @@ import java.util.Set;
  * partition: recomputing is what would let the split silently follow a rebuilt portfolio.
  * {@link #apply} checks both directions (the portfolio lost scenarios / the portfolio grew).
  *
- * <p>Extracted from the thesis tree's split, rule and guards unchanged.
  */
 public final class Split {
 

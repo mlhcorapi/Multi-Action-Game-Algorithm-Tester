@@ -15,11 +15,11 @@ every cell is therefore worth exactly B' / B of its budget, in every bootstrap r
     noisy   at 1,000   G(1000) + 10 on even cells, - 2 on odd ones (a known mean and spread)
 
 Plan times: the baseline spends B / 10 ms; `good` spends 250 ms, which the baseline's line through
-(100 ms, G(1000)) and (400 ms, G(4000)) values at exactly G(2000) = good's own value, so its W7
+(100 ms, G(1000)) and (400 ms, G(4000)) values at exactly G(2000) = good's own value, so its wall-clock
 difference is exactly zero, and its wall-clock multiplier is 200 ms needed / 250 ms spent = 0.8.
 
 Scenario 12, visit 0 of `good` is terminal (flagged); scenario 11, visit 1 of `noisy` is terminal by
-magnitude only (a blank flag, as an imported thesis row has).
+magnitude only (a blank flag).
 """
 import json
 import math
@@ -77,16 +77,6 @@ def write_leaf(split_dir: pathlib.Path, arm, budget, rows, telemetry=True, profi
                                                   status="complete")), encoding="utf-8")
 
 
-def write_curve(split_dir: pathlib.Path, arm, budget, offset):
-    d = split_dir / arm / f"{budget}cu"
-    lines = ["scenario,visit,arm,budget,checkpoint,best,advances,units,ms"]
-    for s in range(1, S + 1):
-        for v in range(V):
-            for cp in range(1, 5):
-                lines.append(f"{s},{v},{arm},{budget},{cp},{1000 + 10 * s + cp * 10 + offset * cp},{cp * 100},{cp * 100.0},")
-    (d / "curve.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
 def build(root: pathlib.Path, split="dev", spec_path=None) -> pathlib.Path:
     d = root / split
     d.mkdir(parents=True, exist_ok=True)
@@ -98,8 +88,6 @@ def build(root: pathlib.Path, split="dev", spec_path=None) -> pathlib.Path:
     write_leaf(d, "poor", 1000, leaf_rows("poor", 1000, 500, 90, telemetry=False), telemetry=False)
     write_leaf(d, "noisy", 1000, leaf_rows("noisy", 1000, 1000, 100,
                                            special=lambda s, v: 10 if (s * V + v) % 2 == 0 else -2))
-    write_curve(d, "base", 1000, 0)
-    write_curve(d, "good", 1000, 5)
     run = dict(format=1, split=split, game=dict(id="toy"), portfolio=dict(identity="synthetic"),
                weights=dict(path="synthetic.properties", sha256="0" * 64, reference="base@1000"))
     if spec_path:
@@ -113,8 +101,7 @@ def write_spec(path: pathlib.Path) -> pathlib.Path:
     path.write_text(json.dumps(dict(
         name="synthetic", game="toy", split="dev", baseline="base",
         levels=[dict(budget=1000, visits=V), dict(budget=4000, visits=V)],
-        arms=[dict(id="base"), dict(id="good", attribution="noisy"), dict(id="great"), dict(id="weak"),
-              dict(id="poor"), dict(id="noisy")],
+        arms=[dict(id="base"), dict(id="good"), dict(id="great"), dict(id="weak"), dict(id="poor"), dict(id="noisy")],
         contrasts=[dict(a="great", b="good", label="great over good")])), encoding="utf-8")
     return path
 
@@ -167,10 +154,12 @@ def write_weights_v2(path: pathlib.Path, scale=1.0, drop=None) -> pathlib.Path:
 
 
 def write_weights(path: pathlib.Path, scale=1.0) -> pathlib.Path:
-    lines = ["magat.weights.version = 1", "game = toy", "reference = base@1000",
-             "global.wAdvance = 1.0", "global.wCopy = 0.1", "global.wEval = 0.05"]
+    """The currency the synthetic tree's units were priced in (times `scale`): the forward model only, as its
+    arms declare no operations of their own."""
+    lines = ["magat.weights.version = 2", "game = toy", "reference = base@1000",
+             "global.w.advance = 1.0", "global.w.copy = 0.1", "global.w.eval = 0.05"]
     for name, (a, c, e) in WEIGHTS.items():
-        lines += [f"profile.{name}.wAdvance = {a * scale}", f"profile.{name}.wCopy = {c * scale}",
-                  f"profile.{name}.wEval = {e * scale}"]
+        lines += [f"profile.{name}.w.advance = {a * scale}", f"profile.{name}.w.copy = {c * scale}",
+                  f"profile.{name}.w.eval = {e * scale}"]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path

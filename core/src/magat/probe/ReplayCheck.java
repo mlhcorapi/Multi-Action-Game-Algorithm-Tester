@@ -2,7 +2,6 @@ package magat.probe;
 
 import magat.agent.AgentFactory;
 import magat.agent.Episode;
-import magat.agent.TurnBudget;
 import magat.agent.TurnRecord;
 import magat.game.Game;
 import magat.game.Scenario;
@@ -18,7 +17,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -29,9 +27,7 @@ import java.util.concurrent.Future;
  * that every reproducible field agrees: values, operation counts, nodes, unique sequences, priced
  * units and the mechanism's counters. Wall-clock columns are not compared; nothing else is exempt.
  *
- * <p>Reads both leaf formats: MAGAT's ({@code turns.csv}) and the thesis tree's
- * ({@code turn_telemetry.csv} and {@code results.csv}, whose rows carry no copy or evaluation counts,
- * so those are the fields a legacy replay cannot compare).
+ * <p>Reads a MAGAT leaf ({@code turns.csv}).
  */
 public final class ReplayCheck {
 
@@ -50,15 +46,12 @@ public final class ReplayCheck {
 
     public static final class Leaf {
         public final String format;
-        public final String arm;         // as written in the leaf (a thesis config name for a legacy leaf)
-        /** How the leaf's turns were budgeted: the thesis's always outside; a MAGAT run's as its {@code _run.json} records. */
-        public final TurnBudget.Initialization initialization;
+        public final String arm;         // as written in the leaf
         final List<Row> rows;
 
-        Leaf(String format, String arm, TurnBudget.Initialization initialization, List<Row> rows) {
+        Leaf(String format, String arm, List<Row> rows) {
             this.format = format;
             this.arm = arm;
-            this.initialization = initialization;
             this.rows = rows;
         }
 
@@ -74,22 +67,11 @@ public final class ReplayCheck {
     // ------------------------------------------------------------------ reading a leaf
 
     public static Leaf read(Path dir) throws IOException {
-        if (Files.isRegularFile(dir.resolve("turns.csv"))) return readMagat(dir.resolve("turns.csv"), initializationOf(dir));
-        if (Files.isRegularFile(dir.resolve("turn_telemetry.csv"))) return readLegacy(dir);
-        throw new IOException(dir + " holds neither turns.csv nor turn_telemetry.csv");
+        if (Files.isRegularFile(dir.resolve("turns.csv"))) return readMagat(dir.resolve("turns.csv"));
+        throw new IOException(dir + " holds no turns.csv");
     }
 
-    /** The run's recorded initialization: {@code <split>/_run.json} above {@code <arm>/<budget>cu}; a run without one is the thesis's. */
-    private static TurnBudget.Initialization initializationOf(Path leafDir) throws IOException {
-        Path abs = leafDir.toAbsolutePath();
-        Path run = abs.getParent() == null || abs.getParent().getParent() == null ? null : abs.getParent().getParent().resolve("_run.json");
-        if (run == null || !Files.isRegularFile(run)) return TurnBudget.Initialization.OUTSIDE_BUDGET;
-        com.eclipsesource.json.JsonValue v = com.eclipsesource.json.Json.parse(new String(Files.readAllBytes(run), StandardCharsets.UTF_8))
-                .asObject().get("initialization");
-        return v == null || !v.isString() ? TurnBudget.Initialization.OUTSIDE_BUDGET : TurnBudget.Initialization.of(v.asString());
-    }
-
-    private static Leaf readMagat(Path turns, TurnBudget.Initialization initialization) throws IOException {
+    private static Leaf readMagat(Path turns) throws IOException {
         List<String> lines = Files.readAllLines(turns, StandardCharsets.UTF_8);
         List<String> header = Arrays.asList(lines.get(0).split(","));
         List<Row> rows = new ArrayList<>();
@@ -106,56 +88,7 @@ public final class ReplayCheck {
             }
             rows.add(r);
         }
-        return new Leaf("magat", arm, initialization, rows);
-    }
-
-    /** Thesis columns and the candidate's name for each; the telemetry ones are compared when the candidate reports them. */
-    private static final Map<String, String> LEGACY = new LinkedHashMap<>();
-    static {
-        LEGACY.put("InitialValue", "initial");
-        LEGACY.put("FinalValue", "final");
-        LEGACY.put("NodesEvaluated", "nodes");
-        LEGACY.put("UniqueSequences", "unique");
-        LEGACY.put("MutChildDuplicates", "duplicates");
-        for (String t : new String[]{"MutEvents", "MutBestGains", "MutRepairKept", "MutRepairReplaced", "BiasGreedyPicks", "BiasUniformPicks",
-                "ShortlistCalls", "ShortlistSkipped", "StatUpdates", "ZeroEvalPicks", "RepairUnits", "RepairCandidateEvals"})
-            LEGACY.put(t, "t:" + Character.toLowerCase(t.charAt(0)) + t.substring(1));
-    }
-
-    private static Leaf readLegacy(Path dir) throws IOException {
-        List<String> tele = Files.readAllLines(dir.resolve("turn_telemetry.csv"), StandardCharsets.UTF_8);
-        List<String> header = Arrays.asList(tele.get(0).split(","));
-        Map<String, Row> byKey = new TreeMap<>();
-        String arm = null;
-        for (String line : tele.subList(1, tele.size())) {
-            String[] f = line.split(",", -1);
-            if (f.length != header.size()) continue;
-            Row r = new Row(Integer.parseInt(f[header.indexOf("ScenarioId")]), Integer.parseInt(f[header.indexOf("VisitId")]));
-            arm = f[header.indexOf("Config")];
-            for (Map.Entry<String, String> e : LEGACY.entrySet()) {
-                int i = header.indexOf(e.getKey());
-                if (i >= 0 && !f[i].isEmpty()) r.fields.put(e.getValue(), Double.parseDouble(f[i]));
-            }
-            byKey.put(r.scenario + ":" + r.visit, r);
-        }
-        // results.csv repeats the turn's totals on every burn row; take them from the first.
-        Path results = dir.resolve("results.csv");
-        if (Files.isRegularFile(results)) {
-            List<String> lines = Files.readAllLines(results, StandardCharsets.UTF_8);
-            List<String> h = Arrays.asList(lines.get(0).split(","));
-            for (String line : lines.subList(1, lines.size())) {
-                String[] f = line.split(",", -1);
-                if (f.length != h.size()) continue;
-                Row r = byKey.get(f[h.indexOf("ScenarioId")] + ":" + f[h.indexOf("VisitId")]);
-                if (r == null || r.fields.containsKey("fm")) continue;
-                r.fields.put("fm", Double.parseDouble(f[h.indexOf("FmCalls")]));
-                r.fields.put("units", Double.parseDouble(f[h.indexOf("SearchUnits")]));
-                r.fields.put("avg_node", Double.parseDouble(f[h.indexOf("AvgNodeValue")]));
-            }
-        }
-        List<Row> rows = new ArrayList<>(byKey.values());
-        rows.sort((a, b) -> a.scenario != b.scenario ? Integer.compare(a.scenario, b.scenario) : Integer.compare(a.visit, b.visit));
-        return new Leaf("thesis", arm, TurnBudget.Initialization.OUTSIDE_BUDGET, rows);
+        return new Leaf("magat", arm, rows);
     }
 
     // ------------------------------------------------------------------ replaying
@@ -185,20 +118,8 @@ public final class ReplayCheck {
         return m;
     }
 
-    // A leaf's turns are replayed as they were budgeted (the thesis's: the initialization outside the budget).
     public static <S, A> Result run(Game<S, A> game, Portfolio<S> portfolio, AgentFactory<S, A> arm, long budget, Leaf leaf,
                                     int k, int threads) throws Exception {
-        TurnBudget.Initialization was = TurnBudget.initialization();
-        TurnBudget.setInitialization(leaf.initialization);
-        try {
-            return replay(game, portfolio, arm, budget, leaf, k, threads);
-        } finally {
-            TurnBudget.setInitialization(was);
-        }
-    }
-
-    private static <S, A> Result replay(Game<S, A> game, Portfolio<S> portfolio, AgentFactory<S, A> arm, long budget, Leaf leaf,
-                                        int k, int threads) throws Exception {
         List<Row> pick = new ArrayList<>();
         int n = Math.min(k, leaf.rows.size());
         for (int i = 0; i < n; i++) pick.add(leaf.rows.get((int) ((long) i * leaf.rows.size() / n)));
@@ -234,7 +155,7 @@ public final class ReplayCheck {
         List<String> d = new ArrayList<>();
         for (Map.Entry<String, Double> e : published.fields.entrySet()) {
             Double v = mine.get(e.getKey());
-            if (v == null) continue;     // a counter this arm does not report (a thesis superclass counted it)
+            if (v == null) continue;     // a counter this arm does not report any more
             if (Double.compare(TurnRecord.round4(v), TurnRecord.round4(e.getValue())) != 0)
                 d.add(String.format(Locale.ROOT, "%s %s vs published %s", e.getKey(), TurnRecord.round4(v), TurnRecord.round4(e.getValue())));
         }

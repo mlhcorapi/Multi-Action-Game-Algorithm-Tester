@@ -29,20 +29,14 @@ jobs:
         run: python magat.py build --tests
       - name: Layering
         run: python magat.py layering
-      - name: Unit tests (JUnit, then the analysis package with the worked result's acceptance test)
+      - name: Unit tests (JUnit, then the analysis package)
         run: python magat.py test
       - name: Contract laws (Tribes, 4 published positions)
         run: python magat.py check contract --game tribes --scenarios 4
-      - name: Equivalence gate (emcts vs the thesis agent, 2 positions, 8k units)
+      - name: Equivalence gate (emcts vs the engine's agent, 2 positions, 8k units)
         run: python magat.py check equivalence --game tribes --arms emcts --scenarios 2 --visits 1 --budgets 8000
-      - name: The headline arm, its control and a biased arm reproduce their thesis oracles
-        run: python magat.py check equivalence --game tribes --arms comma-z0-coarse,comma-rand15,comma-bias-e25 --scenarios 2 --visits 1 --budgets 8000
       - name: Audit (each arm's declared operations and forward model account for its turn)
-        run: python magat.py check overhead --audit --game tribes --arms emcts,comma-z0-coarse --budget 4000 --turns 2 --reps 1 --warmup 1
-      - name: Structure (selection equivalences, the baseline contract, mechanisms differ from their controls)
-        run: python magat.py check structure --game tribes --spec experiments/tribes/structure.json
-      - name: Replay published R7615 holdout turns field for field
-        run: python magat.py check replay --game tribes --leaf games/tribes/results/replay/Comma_Off/80000cu --turns 3
+        run: python magat.py check audit --game tribes --arms emcts --budget 4000 --turns 2 --reps 1 --warmup 1
       - name: Published portfolio verifies (bins, identity, split rule)
         run: python magat.py portfolio verify --game tribes
       - name: Toy portfolio build, freeze, and verify against the published rows
@@ -50,34 +44,26 @@ jobs:
           python magat.py portfolio build --game tribes --out "$RUNNER_TEMP/toy" --targets single=2,dual=1 --threads 2
           python magat.py portfolio freeze --portfolio "$RUNNER_TEMP/toy"
           python magat.py portfolio verify --game tribes --portfolio "$RUNNER_TEMP/toy" --published games/tribes/portfolio/v1 --subset --plan 3
-      - name: The published currency prices every worked-result arm
-        run: python magat.py weights --game tribes --arms @worked-result
-      - name: Toy calibration writes, merges, and checks without writing
+      - name: Toy calibration writes, and checks without writing
         run: |
           python magat.py machine
           python magat.py calibrate --estimate --game tribes --arms emcts --levels 2000,4000 --reps 2 --turns 2 --warmup 1 --toy | grep -q "ESTIMATE: "
           python magat.py calibrate --game tribes --out "$RUNNER_TEMP/calib" --arms emcts --levels 2000,4000 --reps 2 --turns 2 --warmup 1 --toy
-          python magat.py calibrate --game tribes --out "$RUNNER_TEMP/calib" --arms emcts-comma --levels 2000,4000 --reps 2 --warmup 1 --toy
           grep -q "magat.weights.version = 2" "$RUNNER_TEMP/calib/compute_weights.properties"
-          grep -q "profile.emcts-comma@4000.w.emcts.generation" "$RUNNER_TEMP/calib/compute_weights.properties"
+          grep -q "profile.emcts@4000.w.emcts.generation" "$RUNNER_TEMP/calib/compute_weights.properties"
           # a toy drift verdict may land either side of the gate (exit 0 or 1); anything else is a failure
-          rc=0; python magat.py calibrate --check --game tribes --weights "$RUNNER_TEMP/calib/compute_weights.properties" --arms emcts-comma --levels 4000 --reps 2 --warmup 1 --toy || rc=$?
+          rc=0; python magat.py calibrate --check --game tribes --weights "$RUNNER_TEMP/calib/compute_weights.properties" --arms emcts --levels 4000 --reps 2 --warmup 1 --toy || rc=$?
           test "$rc" -le 1
-      - name: Controlled toy calibration in sections (plan, one section, the rest and the self-check, a priced section skipped)
+      - name: Controlled toy calibration (plan, the session and the self-check, a priced section skipped)
         run: |
-          CC="--name ci --toy --out $RUNNER_TEMP/controlled --arms emcts,emcts-comma,comma-z0-coarse --batch 1 --levels 2000,4000 --turns 2 --reps 2 --warmup 1 --soak-minutes 0 --interval 2"
-          python magat.py calibrate-controlled $CC --plan | grep -q "SECTIONS: 2"
-          python magat.py calibrate-controlled $CC --section 2 > "$RUNNER_TEMP/section2.log" || { tail -80 "$RUNNER_TEMP/section2.log"; exit 1; }
-          grep -q "SECTION 2: " "$RUNNER_TEMP/section2.log"
+          CC="--name ci --toy --out $RUNNER_TEMP/controlled --arms emcts --batch 1 --levels 2000,4000 --turns 2 --reps 2 --warmup 1 --soak-minutes 0 --interval 2"
+          python magat.py calibrate-controlled $CC --plan | grep -q "SECTIONS: 1"
           python magat.py calibrate-controlled $CC > "$RUNNER_TEMP/rest.log" || { tail -80 "$RUNNER_TEMP/rest.log"; exit 1; }
           grep -q "CONTROLLED CALIBRATION: COMPLETE" "$RUNNER_TEMP/rest.log"
-          grep -q "profile.emcts-comma@4000.w.advance" "$RUNNER_TEMP/controlled/compute_weights.properties"
+          grep -q "profile.emcts@4000.w.advance" "$RUNNER_TEMP/controlled/compute_weights.properties"
           python magat.py calibrate-controlled $CC --section 1 | grep -q "already priced"
-      - name: The shipped experiment specs validate against the published currency
+      - name: The shipped experiment spec validates
         run: |
-          for s in ab-emcts-dev ab-emcts-holdout; do
-            python magat.py experiment validate --experiment experiments/tribes/$s.json
-          done
           # The reference ladder runs at the published levels, which no published currency prices yet.
           python magat.py experiment validate --no-weights --experiment experiments/tribes/reference-ladder.json
       - name: Toy run on dev and holdout, and a resume that skips every leaf
@@ -86,19 +72,13 @@ jobs:
           $RUN --split dev
           $RUN --split dev | grep -q "SKIP (done)"
           $RUN --split holdout
-          test "$(wc -l < "$RUNNER_TEMP/run/dev/_completed.txt")" -eq 6
+          test "$(wc -l < "$RUNNER_TEMP/run/dev/_completed.txt")" -eq 4
           head -1 "$RUNNER_TEMP/run/dev/emcts/2000cu/turns.csv" | grep -q "op_emcts.generation"
-      - name: Analyze the toy run side by side, re-priced in its own currency
+      - name: Analyze the toy run, re-priced in its own currency
         run: |
-          python magat.py analyze --run "$RUNNER_TEMP/run/dev" --holdout "$RUNNER_TEMP/run/holdout" --reprice "$RUNNER_TEMP/calib/compute_weights.properties" --out "$RUNNER_TEMP/analysis"
-          for t in replication headline budget_multiplier w7_wallclock gain_multiple contrasts oracle anytime efficiency variance repriced; do
+          python magat.py analyze --run "$RUNNER_TEMP/run" --reprice "$RUNNER_TEMP/calib/compute_weights.properties" --out "$RUNNER_TEMP/analysis"
+          for t in headline budget_multiplier wallclock contrasts variance repriced; do
             test -s "$RUNNER_TEMP/analysis/tables/$t.csv"
           done
-      - name: Import the thesis replay fixture
-        run: |
-          python magat.py import-legacy --stage1-tree games/tribes/results/replay --split holdout --out "$RUNNER_TEMP/legacy"
-          test "$(wc -l < "$RUNNER_TEMP/legacy/holdout/emcts-comma/80000cu/turns.csv")" -eq 21
-      - name: The worked result re-analyses from its published rows
-        run: python magat.py analyze --run games/tribes/results/ab-emcts --out "$RUNNER_TEMP/ab-emcts"
       - name: Notebook self-test
         run: python magat.py notebook selftest

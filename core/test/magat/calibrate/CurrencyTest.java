@@ -3,7 +3,6 @@ package magat.calibrate;
 import magat.meter.Weights;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -12,28 +11,29 @@ import static org.junit.Assert.*;
 
 public class CurrencyTest {
 
-    /** A version-1 file whose reference weight is far from 1, so multiplying and dividing by it differ visibly. */
+    /** A file whose reference weight is far from 1, so multiplying and dividing by it differ visibly. */
     private static final List<String> FILE = Arrays.asList(
-            "magat.weights.version = 1",
+            "magat.weights.version = 2",
             "game = toy",
             "reference = ref@100",
             "referenceAdvanceNanos = 500.000",
             "turnsPerRep = 2,2",
             "portfolio.identity = abc",
-            "global.wAdvance = 2.000000",
-            "global.wCopy = 0.400000",
-            "global.wEval = 0.200000",
-            "profile.ref@100.wAdvance = 2.000000",
-            "profile.ref@100.wCopy = 0.400000",
-            "profile.ref@100.wEval = 0.200000",
-            "profile.ref@100.advanceNanos = 1000.000",
-            "profile.x@100.wAdvance = 3.000000",
-            "profile.x@100.wCopy = 0.600000",
-            "profile.x@100.wEval = 0.300000",
-            "profile.x@100.advanceNanos = 1500.000",
-            "profile.keep@100.wAdvance = 1.500000",
-            "profile.keep@100.wCopy = 0.100000",
-            "profile.keep@100.wEval = 0.050000");
+            "operations = advance,copy,eval",
+            "global.w.advance = 2.000000",
+            "global.w.copy = 0.400000",
+            "global.w.eval = 0.200000",
+            "profile.ref@100.w.advance = 2.000000",
+            "profile.ref@100.w.copy = 0.400000",
+            "profile.ref@100.w.eval = 0.200000",
+            "profile.ref@100.ns.advance = 1000.000",
+            "profile.x@100.w.advance = 3.000000",
+            "profile.x@100.w.copy = 0.600000",
+            "profile.x@100.w.eval = 0.300000",
+            "profile.x@100.ns.advance = 1500.000",
+            "profile.keep@100.w.advance = 1.500000",
+            "profile.keep@100.w.copy = 0.100000",
+            "profile.keep@100.w.eval = 0.050000");
 
     private static Weights file() {
         return Weights.parse(null, FILE);
@@ -78,9 +78,9 @@ public class CurrencyTest {
             assertEquals(4.0, w.profile("new@100")[0], 1e-6);
             assertEquals(0.5, w.profile("new@100")[1], 1e-6);
             assertEquals(0.24, w.profile("new@100")[2], 1e-6);
-            // Dividing by the factor (the bug the thesis caught in a unit test) would have written 1.0.
+            // Dividing by the factor would have written 1.0.
             assertNotEquals(cells.get(2).wAdvance / Currency.factor(file()), w.profile("new@100")[0], 1e-3);
-            // The thesis's absolute re-denomination would have charged a slower machine's arm more.
+            // Absolute re-denomination (nanoseconds over the file's reference) would have charged a slower machine's arm more.
             assertEquals(4.0 * speed, cells.get(2).tAdvance / file().referenceAdvanceNanos(), 1e-9);
         }
     }
@@ -114,10 +114,10 @@ public class CurrencyTest {
     }
 
     @Test
-    public void theLaptopsRecordedCheckPassesUnderTheTurnPriceGate() {
-        // ORIGIN.md, 2026-10-04: evaluations a third cheaper relative to advances, copies a few percent,
-        // advances within the gate; the turn price within 4%. A Tribes turn of emcts@40000 is roughly
-        // 40,000 advances, 1,200 copies and 1,100 evaluations of the units budget (search plus repair).
+    public void evaluationsAThirdCheaperMoveATribesTurnPriceLittle() {
+        // Evaluations a third cheaper relative to advances, copies a few percent, advances within the gate:
+        // a Tribes turn is mostly advances (roughly 36,000 advances, 1,200 copies and 1,100 evaluations at
+        // 40,000 units), so its price moves well within the gate.
         Cell ref = Cell.measured("ref", 100, 1000, 200, 100);
         Cell x = Cell.measured("x", 100, 1500 * 1.03, 300 * 0.93, 150 * 0.622);
         x.advances = 36_000; x.copies = 1_200; x.evals = 1_100;
@@ -140,19 +140,14 @@ public class CurrencyTest {
         assertEquals(2.0, w.global()[0], 0);
         assertArrayEquals(new double[]{1.5, 0.1, 0.05}, w.profile("keep@100"), 0);
         assertArrayEquals(new double[]{3.0, 0.6, 0.3}, w.profile("x@100"), 1e-6);
-        assertEquals("x is written once, not twice", 1, count(merged, "profile.x@100.wAdvance"));
+        assertEquals("x is written once, not twice", 1, count(merged, "profile.x@100.w.advance"));
         assertEquals(1, count(merged, "# merged now: 2 profile(s)"));
         assertTrue(merged.contains("re-denominated x2.000000"));
     }
 
     @Test
-    public void mergingIsRefusedIntoAThesisFileOrAgainstAnotherReference() {
+    public void mergingIsRefusedAgainstAnotherReference() {
         List<Cell> cells = session(1.0, 1.0);
-        List<String> thesis = new ArrayList<>(FILE.subList(1, FILE.size()));
-        try {
-            Currency.merge(thesis, Weights.parse(null, thesis), s(), Collections.singletonList(cells.get(2)), cells.get(0));
-            fail();
-        } catch (IllegalStateException expected) { }
         try {
             Currency.merge(FILE, file(), s(), Collections.singletonList(cells.get(2)), cells.get(1));
             fail();

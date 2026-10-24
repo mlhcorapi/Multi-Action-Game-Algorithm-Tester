@@ -3,7 +3,6 @@ package magat.calibrate;
 import magat.agent.AgentFactory;
 import magat.agent.AgentRegistry;
 import magat.agent.Episode;
-import magat.agent.TurnBudget;
 import magat.agent.TurnRecord;
 import magat.game.Game;
 import magat.game.Scenario;
@@ -32,11 +31,11 @@ import java.util.TreeSet;
  *
  * <p><b>Why per cell.</b> Operations with the same names cost different amounts for different arms
  * (they reach different states) and at different budgets (a ten-times larger tree stops fitting in
- * cache: the thesis measured the top level at 26.7x the wall-clock of the bottom one instead of 10x).
+ * cache: on the R7615 a ten-times larger level once took 26.7x the wall-clock of the bottom one).
  * Under one global weight set a nominal budget buys a different amount of compute for each arm, which
  * is the confound the budget exists to remove; per-cell pricing mis-allocated up to 73% less.
  *
- * <p><b>Method</b> (the thesis calibrator's, unchanged): every cell is measured on the same portfolio
+ * <p><b>Method</b>: every cell is measured on the same portfolio
  * positions with the same seeds; warm-up once per budget level and a collection between levels; one
  * discarded profiled turn per cell; per repetition, the same turns again, nanoseconds reset per turn
  * and counts taken from the turn's own record (initialization plus search, the span the nanoseconds
@@ -46,7 +45,6 @@ import java.util.TreeSet;
  *
  * <p>Single-threaded on an idle machine, because this is a timing measurement: other load inflates
  * copies and evaluations (memory-bound) more than advances, which is precisely the ratio measured.
- * {@code --under-load W} measures the other regime on purpose and writes beside, never over.
  *
  * <p>Writing into an existing file merges (see {@link Currency}); {@code --check} measures and
  * reports drift against a file and writes nothing.
@@ -59,8 +57,7 @@ public final class Calibrator {
      * positions price a unit differently: on the laptop, 8,4,2-style subsets made a unit 34 µs at the bottom
      * level and 24 µs at the next. On the same positions a unit is the same time at every level. The pool is
      * the largest entry; a level that runs fewer turns takes a spread subset of it. A file keeps the turns it
-     * was measured with: every {@code 8,4,2} file (the thesis's and MAGAT's before 2026-10-10) has a pool of
-     * eight, as before.
+     * was measured with: a {@code 8,4,2} file has a pool of eight.
      */
     public static final String DEFAULT_TURNS = "16,16,16";
     public static final int DEFAULT_REPS = 3;
@@ -87,14 +84,11 @@ public final class Calibrator {
         /** Turns per repetition per level; null takes the file's, else {@link #DEFAULT_TURNS}. */
         public String turns;
         public int warmup = DEFAULT_WARMUP;
-        public int underLoad = 0;
         public Set<String> replace = new LinkedHashSet<>();
         /** Measure and compare against {@code file}, write nothing. */
         public boolean check;
         /** Report the sample-size and stability gates without enforcing them; mark the file. */
         public boolean toy;
-        /** The version of a new file: 2 prices every declared operation, 1 the forward model only. A merge keeps the file's. */
-        public int format = 2;
         /** Time a few turns, print what the session would take, measure and write nothing else. */
         public boolean estimate;
         /** The audit's warning threshold (a parameter; {@link #AUDIT_WARN} by default). */
@@ -119,24 +113,10 @@ public final class Calibrator {
      */
     public static <S, A> Result run(Game<S, A> game, AgentRegistry<S, A> registry, String referenceArm,
                                     Portfolio<S> portfolio, Path out, Path checkFile, Options o) throws IOException {
-        TurnBudget.Initialization was = TurnBudget.initialization();
-        try {
-            return session(game, registry, referenceArm, portfolio, out, checkFile, o);
-        } finally {
-            TurnBudget.setInitialization(was);           // a check may have played the file's policy
-        }
-    }
-
-    private static <S, A> Result session(Game<S, A> game, AgentRegistry<S, A> registry, String referenceArm,
-                                         Portfolio<S> portfolio, Path out, Path checkFile, Options o) throws IOException {
         Path idle = out == null ? null : out.resolve(Currency.WEIGHTS_FILE);
         Path existingPath = o.check ? checkFile : (idle != null && Files.isRegularFile(idle) ? idle : null);
-        if (o.underLoad > 1) existingPath = null;         // a loaded run writes its own file beside the idle one
         Weights existing = existingPath == null ? null : Weights.load(existingPath);
         if (o.check && existing == null) throw new IllegalArgumentException("--check needs --weights <file>");
-        if (o.format != 1 && o.format != 2) throw new IllegalArgumentException("--format is 1 or 2, not " + o.format);
-        // The version the session writes or compares in: a file's own, else the one asked for.
-        boolean pricesOps = existing != null ? existing.version() >= 2 : o.format >= 2;
 
         // ---- what to measure, and the refusals that must happen before hours of measuring
         if (existing != null && existing.game() != null && !existing.game().equals(game.id()))
@@ -148,23 +128,6 @@ public final class Calibrator {
         long[] levels = o.levels != null ? o.levels
                 : existing != null && existing.header().get("levels") != null ? parseLongs(existing.header().get("levels"))
                 : o.defaultLevels != null ? o.defaultLevels : FALLBACK_LEVELS;
-        // A file's turns were measured with its initialization policy (a file without one is the thesis's: outside).
-        TurnBudget.Initialization initialization = TurnBudget.initialization();
-        if (existing != null && o.underLoad <= 1) {
-            String had = existing.header().get("initialization");
-            TurnBudget.Initialization fileInit = had == null ? TurnBudget.Initialization.OUTSIDE_BUDGET : TurnBudget.Initialization.of(had);
-            if (fileInit != initialization && !o.check)
-                throw new IllegalStateException(existingPath + " was measured with the initialization " + fileInit + " the budget; this "
-                        + "session plays turns with it " + initialization + ". A merge would price unlike turns: calibrate a new currency, "
-                        + "or pass --initialization " + fileInit.id + " to extend this one as it was measured.");
-            if (fileInit != initialization) {
-                // A check compares like with like: it plays the turns the way the file it checks was measured.
-                System.out.println("# " + existingPath + " was measured with the initialization " + fileInit + " the budget: "
-                        + "this check plays its turns so too");
-                initialization = fileInit;
-                TurnBudget.setInitialization(fileInit);
-            }
-        }
         String reference = existing != null && existing.reference() != null ? existing.reference()
                 : Profile.key(referenceArm, Arrays.stream(levels).min().orElse(40_000L));
         String refArm = Profile.arm(reference);
@@ -204,7 +167,7 @@ public final class Calibrator {
         }
 
         List<Cell> toWrite = new ArrayList<>();
-        if (!o.check && o.underLoad <= 1) {
+        if (!o.check) {
             for (Cell c : cells) {
                 boolean present = existing != null && existing.has(c.profile);
                 boolean requested = arms.contains(c.arm);
@@ -220,12 +183,10 @@ public final class Calibrator {
         }
 
         // ---- banner
-        long gapLimitPct = Math.round(100 * (o.underLoad > 1 ? 2 * MAX_GAP : MAX_GAP));
+        long gapLimitPct = Math.round(100 * MAX_GAP);
         System.out.println("############################################################");
         System.out.println("# compute-unit calibration: per arm, per budget level, relative to one reference advance");
-        System.out.println(o.underLoad > 1
-                ? "# UNDER LOAD: each cell is timed on one thread while " + (o.underLoad - 1) + " others run the same arm."
-                : "# single-threaded; needs an idle machine: this is a timing measurement");
+        System.out.println("# single-threaded; needs an idle machine: this is a timing measurement");
         if (o.toy) System.out.println("# TOY: sample-size and stability gates are reported, not enforced; the file is marked toy");
         System.out.println("# " + (o.check ? "checking against " : existing != null ? "extending " : "new currency in ")
                 + (existingPath != null ? existingPath : idle));
@@ -233,10 +194,7 @@ public final class Calibrator {
         System.out.println("# reps " + o.reps + "   turns/rep " + turnsSpec + " over levels " + levelsHeader + "   warmup " + o.warmup
                 + "   gap gate " + gapLimitPct + "%   min ops " + MIN_OPS + (o.toy ? " (reported, not enforced)" : ""));
         System.out.println("# portfolio " + portfolio.identity() + " (" + portfolio.size() + " positions; a pool of " + pool + " of them)");
-        System.out.println("# initialization: " + initialization + (initialization == TurnBudget.Initialization.IN_BUDGET
-                ? " (each turn's budget pays for its initial plan)" : " (each turn's initial plan is outside its budget, as the thesis ran)"));
-        System.out.println(pricesOps ? "# currency version 2: every operation an arm declares is measured and priced"
-                : "# currency version 1: the forward model is priced; the arms' own operations are measured for the audit and stay free");
+        System.out.println("# every operation an arm declares is measured and priced");
         System.out.println(String.format(Locale.ROOT, "# every cell is measured under the fixed measurement weights (advance %s, copy %s, eval %s, "
                 + "the arms' own operations free), whatever the file prices", Weights.DEFAULT[0], Weights.DEFAULT[1], Weights.DEFAULT[2]));
         if (!toWrite.isEmpty() && existing != null)
@@ -263,11 +221,10 @@ public final class Calibrator {
         // the development laptop under version 2), and the merge's ratio would compare unlike things.
         Meter.install(null);
         Meter.allowUnpriced(true);
-        LoadHarness.WORK_TURNS.set(0);
         long t0 = System.currentTimeMillis();
         // Toy runs apply the same gates; only the verdict treats a failed cell as reported rather than fatal.
         long minOps = MIN_OPS;
-        double gapLimit = o.underLoad > 1 ? 2 * MAX_GAP : MAX_GAP;
+        double gapLimit = MAX_GAP;
         try {
             long warmed = -1;
             int done = 0;
@@ -286,12 +243,7 @@ public final class Calibrator {
                     System.gc();                   // each level starts from a comparable heap
                 }
                 int n = turnsFor(c.budget, turnLevels, turns);
-                LoadHarness load = o.underLoad > 1 ? LoadHarness.start(game, arm, c.budget, scenarios, o.underLoad - 1) : null;
-                try {
-                    measure(game, arm, c, scenarios, o.reps, n, pool, minOps, gapLimit, pricesOps);
-                } finally {
-                    if (load != null) load.stop();
-                }
+                measure(game, arm, c, scenarios, o.reps, n, pool, minOps, gapLimit);
                 done++;
                 System.out.println(String.format(Locale.ROOT,
                         "  [%2d/%2d] %-34s advance %8.1f ns  copy %8.1f ns  eval %8.1f ns   (gap %.1f/%.1f/%.1f%% | CV %.1f/%.1f/%.1f%%)"
@@ -312,14 +264,9 @@ public final class Calibrator {
                     Episode.run(game, positionFor(scenarios, i % pool, pool, pool), 9_000 + i, refFactory, refBudget);
                 Meter.PROFILE = false;
                 System.gc();
-                LoadHarness load = o.underLoad > 1 ? LoadHarness.start(game, refFactory, refBudget, scenarios, o.underLoad - 1) : null;
-                try {
-                    bracket = new Cell(refArm, refBudget);
-                    bracket.role = "bracket";
-                    measure(game, refFactory, bracket, scenarios, o.reps, turnsFor(refBudget, turnLevels, turns), pool, minOps, gapLimit, pricesOps);
-                } finally {
-                    if (load != null) load.stop();
-                }
+                bracket = new Cell(refArm, refBudget);
+                bracket.role = "bracket";
+                measure(game, refFactory, bracket, scenarios, o.reps, turnsFor(refBudget, turnLevels, turns), pool, minOps, gapLimit);
                 System.out.println(String.format(Locale.ROOT, "  [bracket] %-32s advance %8.1f ns  copy %8.1f ns  eval %8.1f ns",
                         bracket.profile, bracket.tAdvance, bracket.tCopy, bracket.tEval));
             }
@@ -338,7 +285,7 @@ public final class Calibrator {
         }
         for (Cell c : cells) c.normalise(ref.tAdvance);
         report(cells, ref);
-        audit(cells, pricesOps, o.auditWarn);
+        audit(cells, o.auditWarn);
 
         // ---- is this a fair benchmark?
         List<String> passes = new ArrayList<>(), failures = new ArrayList<>();
@@ -364,13 +311,7 @@ public final class Calibrator {
                     + "cells measured late are not comparable with the reference measured early");
         }
         double loadAfter = MachineProfile.loadPerCore();
-        if (o.underLoad > 1) {
-            long work = LoadHarness.WORK_TURNS.get(), want = (long) cells.size() * (o.underLoad - 1);
-            if (work >= want)
-                passes.add(String.format(Locale.ROOT, "load harness completed %,d turns beside the measured cells (OS load %.2f per core, informational)", work, loadAfter));
-            else
-                failures.add(String.format(Locale.ROOT, "load harness completed only %,d turns (wanted >= %,d): the machine was not reliably loaded", work, want));
-        } else if (loadAfter >= 0) {
+        if (loadAfter >= 0) {
             double limit = MAX_LOAD_PER_CORE + 1.0 / Math.max(1, MachineProfile.get().logicalCpus());
             String busy = String.format(Locale.ROOT, "load average %.2f per core: something else was running; timings are inflated unevenly", loadAfter);
             if (loadAfter <= limit) passes.add(String.format(Locale.ROOT, "machine was idle (load %.2f per core, this job included)", loadAfter));
@@ -407,15 +348,13 @@ public final class Calibrator {
         s.portfolioIdentity = portfolio.identity();
         s.reps = o.reps;
         s.toy = o.toy;
-        s.version = pricesOps ? 2 : 1;
-        Path weightsFile = o.underLoad > 1 ? out.resolve("compute_weights_load" + o.underLoad + ".properties") : idle;
-        Path csv = out.resolve(o.underLoad > 1 ? "compute_profiles_load" + o.underLoad + ".csv" : Currency.PROFILES_CSV);
-        Path opsCsv = out.resolve(o.underLoad > 1 ? "compute_operations_load" + o.underLoad + ".csv" : Currency.OPERATIONS_CSV);
+        Path weightsFile = idle;
+        Path csv = out.resolve(Currency.PROFILES_CSV);
+        Path opsCsv = out.resolve(Currency.OPERATIONS_CSV);
         List<Cell> measuredCells = new ArrayList<>(cells);
         if (bracket != null) { bracket.normalise(ref.tAdvance); measuredCells.add(bracket); }
         RunGuard.atomicWrite(csv, Currency.profilesCsv(measuredCells, ref));
         RunGuard.atomicWrite(opsCsv, Currency.operationsCsv(measuredCells, ref));
-        if (o.underLoad > 1 && idle != null && Files.isRegularFile(idle)) reportLoadVsIdle(cells, ref, Weights.load(idle), o.underLoad);
         if (!fair) {
             System.out.println("\n  VERDICT: FAIL - weights NOT written; the currency in force is unchanged.");
             System.out.println("  The measurements are in " + csv + ". The usual cause is other load on the machine.");
@@ -447,7 +386,7 @@ public final class Calibrator {
      * divide every turn's nanoseconds by the last turn's search count).
      */
     private static <S, A> void measure(Game<S, A> game, AgentFactory<S, A> arm, Cell c, List<Scenario<S>> scenarios,
-                                       int reps, int turns, int pool, long minOps, double gapLimit, boolean pricesOps) {
+                                       int reps, int turns, int pool, long minOps, double gapLimit) {
         long cellStart = System.nanoTime();
         List<String> declared = arm.operations();
         Meter.declare(declared);
@@ -499,7 +438,7 @@ public final class Calibrator {
         }
         c.positions = turns;
         c.turnsPerRep = turns;
-        c.summarise(minOps, gapLimit, pricesOps);
+        c.summarise(minOps, gapLimit);
         c.seconds = (System.nanoTime() - cellStart) / 1e9;
     }
 
@@ -507,10 +446,9 @@ public final class Calibrator {
      * {@code --estimate}: times one repetition of the reference cell at every level of the session (the
      * level's own positions, after one discarded turn, on the profiled code path), and prints what the
      * session's turns would take: every warm-up, every cell's discarded turn and repetitions, and the
-     * bracket. Every arm is taken at the reference arm's time per turn: under a version-2 currency an
-     * arm's own operations are priced, so a unit buys about the same wall-clock of any arm; under version
-     * 1 the worked result's zero-evaluation arms took up to 1.22x the baseline's time per unit, which the
-     * upper end of the printed range allows for. Writes nothing.
+     * bracket. Every arm is taken at the reference arm's time per turn: an arm's own operations are
+     * priced, so a unit buys about the same wall-clock of any arm; the upper end of the printed range
+     * allows an arm 1.22x the reference's time per unit. Writes nothing.
      */
     static <S, A> double estimate(Game<S, A> game, AgentFactory<S, A> ref, List<Cell> cells, long refBudget, List<Scenario<S>> scenarios,
                                   Options o, long[] turnLevels, int[] turns, int pool, Weights existing) {
@@ -563,15 +501,12 @@ public final class Calibrator {
 
     /**
      * The audit: how much of each cell's turn time the operations the currency prices account for, on
-     * the fastest repetition. A version-2 currency prices the forward model and the arm's own operations,
-     * so what is left is the work an arm does without declaring it; under version 1 the arms' own
-     * operations are left too, which is the share a version-1 budget does not charge for. Warns above
+     * the fastest repetition. The currency prices the forward model and the arm's own operations, so what
+     * is left is the work an arm does without declaring it. Warns above
      * {@code warn}; never fails a calibration (a cell is not wrong because an arm does undeclared work).
      */
-    private static void audit(List<Cell> cells, boolean pricesOps, double warn) {
+    private static void audit(List<Cell> cells, double warn) {
         System.out.println("\n=== AUDIT: HOW MUCH OF EACH TURN THE CURRENCY PRICES ===");
-        System.out.println(pricesOps ? "  version 2: the forward model and every operation the arm declares are priced"
-                : "  version 1: the forward model is priced; the arms' own operations are timed here and left free");
         System.out.println(String.format(Locale.ROOT, "  %-34s %10s %10s %10s %12s %10s", "profile", "turn ms", "fwd model", "own ops",
                 "unaccounted", "unpriced"));
         List<String> warnings = new ArrayList<>();
@@ -582,7 +517,7 @@ public final class Calibrator {
                 warnings.add(String.format(Locale.ROOT, "%s: %.1f%% of its turn time is not priced (threshold %.0f%%)%s", c.profile,
                         100 * c.unpriced, 100 * warn, c.unaccounted > warn
                                 ? ": the arm does work it does not declare; a unit budget buys it more wall-clock than the reference"
-                                : ": its own operations account for it, and a version-2 currency would price them"));
+                                : ""));
             for (String n : c.notes) System.out.println("    note: " + c.profile + ": " + n);
         }
         for (String w : warnings) System.out.println("  [warn] " + w);
@@ -659,28 +594,6 @@ public final class Calibrator {
                 System.out.println(String.format(Locale.ROOT, "  %8d  %.3f to %.3f ms: %.1f%% unfair (%s vs %s)",
                         level, lo, hi, 100 * (hi / lo - 1), loName, hiName));
         }
-    }
-
-    /** Gate A3': do the per-arm ratios hold under load? Both sides in the idle file's unit. */
-    private static void reportLoadVsIdle(List<Cell> cells, Cell ref, Weights idle, int underLoad) {
-        System.out.println("\n=== PER-ARM WEIGHT RATIOS, IDLE vs " + underLoad + " THREADS ===");
-        double f = Currency.factor(idle);
-        double worst = 0;
-        String where = "";
-        int compared = 0;
-        for (Cell c : cells) {
-            double[] w = idle.profile(c.profile);
-            if (w == null || w[0] <= 0) continue;
-            double change = c.wAdvance * f / w[0] - 1;
-            compared++;
-            if (Math.abs(change) > Math.abs(worst)) { worst = change; where = c.profile; }
-            System.out.println(String.format(Locale.ROOT, "  %-34s idle %8.4f  loaded %8.4f  %+6.1f%%", c.profile, w[0], c.wAdvance * f, 100 * change));
-        }
-        if (compared == 0) { System.out.println("  no overlapping profiles"); return; }
-        System.out.println(String.format(Locale.ROOT, "  largest move %.1f%% (%s) over %d profiles", 100 * worst, where, compared));
-        System.out.println(Math.abs(worst) <= MAX_GAP
-                ? "  VERDICT: ratios HOLD under load; the idle weights are the currency, wall-clock (W7) a check."
-                : "  VERDICT: ratios MOVE under load; report every headline in units AND seconds (W7 co-primary).");
     }
 
     // ------------------------------------------------------------------ helpers

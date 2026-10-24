@@ -28,7 +28,6 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>Results are unaffected: budgets are deterministic counts and every turn depends only on its
  * (scenario, visit) seed, so concurrency changes wall-clock and nothing else.
  *
- * <p>Extracted from the thesis tree's {@code LoadGovernor}, unchanged.
  */
 public final class LoadGovernor {
 

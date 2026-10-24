@@ -22,9 +22,8 @@ import java.util.concurrent.Future;
 
 /**
  * The equivalence gate: a ported arm must reproduce its oracle's signature on every (scenario,
- * visit) at every budget, both sides priced by the same weights. This is the thesis tree's
- * {@code Stage1Runner verify}, widened from one turn to a grid, and it is what says the seam is in
- * the right place.
+ * visit) at every budget, both sides priced by the same weights. It is what says a port plays the turns
+ * its original plays.
  */
 public final class EquivalenceCheck {
 
@@ -59,7 +58,7 @@ public final class EquivalenceCheck {
 
     private EquivalenceCheck() {}
 
-    // The thesis's turns: its budgets bounded the search alone, the initialization outside it (TurnBudget).
+    // The engine's reference agents bound the search alone and pay the initialization outside it (TurnBudget).
     public static <S, A> Result run(Game<S, A> game, AgentFactory<S, A> arm, Oracle<S> oracle,
                                     List<Scenario<S>> scenarios, int visits, long[] budgets,
                                     Weights weights, int threads) throws Exception {
@@ -80,9 +79,10 @@ public final class EquivalenceCheck {
         try {
             for (long budget : budgets) {
                 // Both sides are priced by the arm's profile at this budget; at a budget no file
-                // prices (a toy gate), by the arm's profile at its smallest priced level.
-                String profile = Profile.key(arm.id(), budget);
-                double[] w = weights.profile(profile);
+                // prices (a toy gate), by the arm's profile at its smallest priced level; with no file,
+                // by the fixed measurement weights.
+                String profile = weights == null ? "fixed measurement weights" : Profile.key(arm.id(), budget);
+                double[] w = weights == null ? Weights.DEFAULT.clone() : weights.profile(profile);
                 if (w == null) {
                     String nearest = smallestPricedLevel(weights, arm.id());
                     if (nearest == null)
@@ -144,7 +144,7 @@ public final class EquivalenceCheck {
             String tag = c.passed() ? "ok  " : "FAIL";
             if (verbose || !c.passed())
                 System.out.println(String.format(Locale.ROOT, "  [%s] scenario %3d visit %d @%d  %s",
-                        tag, c.scenarioId, c.visit, c.budget, c.candidate.thesisLine()));
+                        tag, c.scenarioId, c.visit, c.budget, c.candidate.line()));
             for (String d : c.differences) System.out.println("         " + d);
         }
         System.out.println(String.format(Locale.ROOT, "  %d cells, %d failed", r.cells.size(), r.failures()));

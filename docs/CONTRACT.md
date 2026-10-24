@@ -12,7 +12,7 @@ The forward model an algorithm receives is always the metered one: `MeteredGame`
 counts every `advance`, `copy` and `evaluate`, and times them while calibrating. An agent cannot
 reach the unmetered game, and a game adapter never counts its own calls. The counts are what the
 budget spends and what every result row reports. They transfer exactly between machines, so they
-must be complete. Law L10 below checks that.
+must be complete. Law L9 below checks that.
 
 ## `Game<S, A>`
 
@@ -32,7 +32,6 @@ Every method is total (no exceptions for ordinary inputs) and deterministic.
 | `boolean endsTurn(A action)` | true if the action ends the active player's turn |
 | `A endTurnAction(S state)` | the explicit end-of-turn action, or `null` if turns end implicitly |
 | `String actionKey(A action)` | the canonical identity of an action within a state; plans are de-duplicated on it. Two distinct legal actions of one state never share a key (L7) |
-| `String actionClass(S, A, Granularity)` | the action abstracted for learned tables: COARSE (`MOVE`), MID (`MOVE:RIDER`), FINE (the full identity). Coarser levels partition finer ones (L8) |
 | `int branchingFactor(S state)` | a descriptive count for stratification and reporting; the game says what it counts |
 | `void reseed(S state, long seed)` | pins the state's own randomness (Tribes: ruin outcomes), so two copies reseeded alike behave alike |
 | `byte[] serialize(S)`, `S deserialize(byte[])` | the portfolio's bins |
@@ -83,9 +82,8 @@ Each law is a runnable check over captured positions. The shakedown and CI run t
 | L5 | Applying `endTurnAction(s)` satisfies `endsTurn` and changes the active player or the turn counter |
 | L6 | `deserialize(serialize(s))` agrees with `s` on every L1 observable after a fixed action sequence |
 | L7 | `actionKey` is injective over `legalActions(s)` |
-| L8 | `actionClass(FINE)` determines `actionClass(MID)`, which determines `actionClass(COARSE)` |
-| L9 | `evaluate` is deterministic, finite, and independent of the meter's state |
-| L10 | After N advances, copies and evaluations through `MeteredGame`, the meter reads exactly N of each: no forward-model work bypasses the contract |
+| L8 | `evaluate` is deterministic, finite, and independent of the meter's state |
+| L9 | After N advances, copies and evaluations through `MeteredGame`, the meter reads exactly N of each: no forward-model work bypasses the contract |
 
 ## The agent protocol
 
@@ -102,7 +100,7 @@ Meter.useProfile(Profile.key(arm.id(), budgetUnits));  // the arm's own price: "
 TurnBudget budget = TurnBudget.units(budgetUnits);
 SearchAgent<S, A> agent = arm.create(seed, budget);     // a fresh agent per turn
 TurnRecord record = agent.plan(metered, state, metered.activePlayer(state), budget);
-// then: refused if it recorded an undeclared operation, or one its version-2 profile does not price
+// then: refused if it recorded an undeclared operation, or one its profile does not price
 ```
 
 `Episode` installs the profile from the arm id and the budget, so an arm cannot run under a price that
@@ -114,23 +112,21 @@ is not its own. Because every arm replans the same position with the same seed, 
 |---|---|
 | `String id()` | the arm id: lowercase, kebab-case, permanent once a result is published under it. It is the profile key's left half (`<arm>@<budget>`) and the results directory's name |
 | `SearchAgent<S,A> create(long seed, TurnBudget budget)` | a fresh agent for one turn |
-| `String attributionControl()` | the arm that is this one with its mechanism replaced by noise, or `null`. The validator requires it in the grid |
 | `boolean priced()` | false for an arm whose work does not depend on the budget (the random floor); such an arm is not calibrated |
-| `List<String> operations()` | the algorithm's own operations, which a version-2 currency prices ([`CURRENCY.md`](CURRENCY.md)) |
+| `List<String> operations()` | the algorithm's own operations, which the currency prices ([`CURRENCY.md`](CURRENCY.md)) |
 | `String description()` | one line for banners and `magat arms` |
 
 ### `SearchAgent<S, A>`
 
 `TurnRecord plan(Game<S,A> game, S state, int player, TurnBudget budget)` plans one turn from the
-agent's own copy of the position. `support()` reports mechanism counters for `magat probe support`;
-it is empty for agents without a learned mechanism.
+agent's own copy of the position.
 
 ### `TurnBudget`
 
-- `beginSearch()` snapshots the initialization spend and resets the meter. In the budget, the default,
-  the search then gets what the initialization left, so the whole turn spends the budget; outside it
-  (the thesis's rule, `"initialization": "outside-budget"`) the budget bounds the search alone. An
-  agent with no initialization phase never calls it, and the whole turn counts.
+- `beginSearch()` snapshots the initialization spend and resets the meter. The search then gets what
+  the initialization left, so the whole turn spends the budget. (Only the equivalence gate budgets the
+  search alone, as the engine's reference agents count.) An agent with no initialization phase never
+  calls it, and the whole turn counts.
 - `exhausted()` is `Meter.units() >=` the search's share.
 - `ceiling(phase, phases)` is the EMCTS phase rule, `(phase+1) * share / phases`, whole units.
 - `units()` is the budget.
@@ -143,7 +139,7 @@ it is empty for agents without a learned mechanism.
 | `terminal` | whether the best plan reaches a terminal state |
 | `advances`, `copies`, `evals`, `units` | the search's spend after `beginSearch()`: raw counts always, units priced by the profile in force |
 | `operations` | the count of each declared operation (one `op_<name>` column each in `turns.csv`) |
-| `initAdvances` ... `initUnits`, `initMillis`, `initOperations` | the initialization's spend, reported separately and paid from the budget (unless the turn is budgeted outside it) |
+| `initAdvances` ... `initUnits`, `initMillis`, `initOperations` | the initialization's spend, reported separately and paid from the budget |
 | `planMillis` | the wall-clock of the whole episode: co-primary evidence, never a budget |
 | `nodes`, `unique`, `duplicates` | candidates evaluated, the distinct plans among them, and the candidates whose plan had already been evaluated |
 | `sequenceLength` | the actions in the final plan |
@@ -155,13 +151,11 @@ it is empty for agents without a learned mechanism.
 - **All forward-model work goes through the `Game` it was given.** A game-agnostic agent has no other
   handle. For Tribes the only escape hatch is greppable, and `tools/check_layering.py` keeps it in the
   adapter.
-- **Its only randomness is `new Random(seed)` as given, consumed in a fixed order.** Two arms that differ
-  only in a switched-off mechanism consume identical random streams, which is what makes an attribution
-  control a control.
+- **Its only randomness is `new Random(seed)` as given, consumed in a fixed order.** A turn is then
+  reproducible from its seed, which pairing and `check replay` rely on.
 - **`beginSearch()` is called at most once**, at the boundary the agent documents.
 - **It records exactly the operations its factory declares**: a turn that records an undeclared one is
   refused.
 
 [`ADDING_A_GAME.md`](ADDING_A_GAME.md) and [`ADDING_AN_ALGORITHM.md`](ADDING_AN_ALGORITHM.md) walk
-through each side. `MAGAT/DESIGN.md` §4–5 is the full design, with the Tribes adapter method by
-method.
+through each side.

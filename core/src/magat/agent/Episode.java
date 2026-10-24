@@ -41,29 +41,6 @@ public final class Episode {
 
     private static <S, A> TurnRecord run(Game<S, A> game, Scenario<S> scenario, int visit,
                                          AgentFactory<S, A> arm, long budgetUnits, Runnable pricing) {
-        return planned(game, scenario, visit, arm, budgetUnits, pricing).record;
-    }
-
-    /** A planned turn together with the agent that planned it, for probes that read its {@code support()}. */
-    public static final class Planned<S, A> {
-        public final SearchAgent<S, A> agent;
-        public final TurnRecord record;
-
-        Planned(SearchAgent<S, A> agent, TurnRecord record) {
-            this.agent = agent;
-            this.record = record;
-        }
-    }
-
-    /** As {@link #run(Game, Scenario, int, AgentFactory, long)}, keeping the agent. */
-    public static <S, A> Planned<S, A> planned(Game<S, A> game, Scenario<S> scenario, int visit,
-                                               AgentFactory<S, A> arm, long budgetUnits) {
-        String profile = Profile.key(arm.id(), budgetUnits);
-        return planned(game, scenario, visit, arm, budgetUnits, () -> Meter.useProfile(profile));
-    }
-
-    private static <S, A> Planned<S, A> planned(Game<S, A> game, Scenario<S> scenario, int visit,
-                                                AgentFactory<S, A> arm, long budgetUnits, Runnable pricing) {
         MeteredGame<S, A> metered = MeteredGame.of(game);
         long seed = Seeds.visit(scenario.id, visit);
         S state = metered.inner().copy(scenario.state);    // the working copy is not the agent's spend
@@ -75,7 +52,7 @@ public final class Episode {
         TurnBudget budget = TurnBudget.units(budgetUnits);
         SearchAgent<S, A> agent = arm.create(seed, budget);
         TurnRecord record = agent.plan(metered, state, metered.activePlayer(state), budget);
-        return new Planned<>(agent, withOperations(arm, declared, record, budget));
+        return withOperations(arm, declared, record, budget);
     }
 
     /**

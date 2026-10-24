@@ -78,7 +78,7 @@ RETRIES = 1
 INTERVAL = 10.0
 OTHER_CPUS = 1.0
 SPEED_TOLERANCE = 0.05
-CHECK_ARMS = ("emcts", "emcts-comma")
+CHECK_ARMS = ("emcts",)
 
 # Programs worth closing before a timing measurement, and why.
 NOTABLE = {
@@ -1474,6 +1474,17 @@ def reliability(row, a, clock) -> list:
 
 # ---------------------------------------------------------------------------------------------------
 
+def launcher_published_weights(game: str):
+    """The game's published currency as the launcher knows it, or None while there is none."""
+    sys.path.insert(0, str(ROOT))
+    try:
+        import magat as launcher
+    finally:
+        sys.path.pop(0)
+    f = launcher.PUBLISHED.get(game, {}).get("weights")
+    return f if f is not None and f.is_file() else None
+
+
 def main(argv) -> int:
     try:
         sys.stdout.reconfigure(errors="replace")
@@ -1490,7 +1501,6 @@ def main(argv) -> int:
     ap.add_argument("--section", default="all", help="all | next | checks | <number>")
     ap.add_argument("--redo", action="store_true", help="with --section <n>: measure it again (calibrate --replace)")
     ap.add_argument("--plan", action="store_true", help="print the sections and what is priced; measure nothing")
-    ap.add_argument("--format", type=int, default=2, choices=(1, 2))
     ap.add_argument("--levels"), ap.add_argument("--turns"), ap.add_argument("--reps"), ap.add_argument("--warmup")
     ap.add_argument("--soak-minutes", type=float, default=SOAK_MINUTES, help="at least this long before the first section")
     ap.add_argument("--soak-max-minutes", type=float, default=SOAK_MAX_MINUTES)
@@ -1648,7 +1658,9 @@ def main(argv) -> int:
     def pending_sections():
         return [k for k, sec in enumerate(sections, 1) if not (weights.is_file() and all(x in covered for x in sec))]
 
-    checks_all = [] if a.no_checks else (["self"] if a.toy else ["published", "self"])
+    # The published check needs the game's published currency (the reference machine's), once there is one.
+    published = launcher_published_weights(a.game)
+    checks_all = [] if a.no_checks else (["self"] if a.toy or published is None else ["published", "self"])
     if a.section == "all":
         todo_sections, todo_checks = pending_sections(), checks_all
     elif a.section == "next":
@@ -1656,7 +1668,7 @@ def main(argv) -> int:
         todo_sections = pend[:1]
         todo_checks = [] if pend else [c for c in checks_all if c not in state.get("checks", {})][:2]
     elif a.section == "checks":
-        todo_sections, todo_checks = [], checks_all or ["published", "self"]
+        todo_sections, todo_checks = [], checks_all or (["self"] if published is None else ["published", "self"])
     else:
         asked = list(dict.fromkeys(int(x) for x in a.section.split(",")))
         if any(not 1 <= k <= len(sections) for k in asked):
@@ -1767,7 +1779,7 @@ def main(argv) -> int:
         est = None
         while True:
             k = len(soak_rows) + 1
-            rc, lines = runner.launch(["calibrate", "--estimate", "--game", a.game, "--format", a.format, "--arms", ref_arm,
+            rc, lines = runner.launch(["calibrate", "--estimate", "--game", a.game, "--arms", ref_arm,
                                        *passthrough, *toy], f"soak {k}", "soak", measure=True)
             if monitor.power_lost.is_set():
                 raise PowerLost()
@@ -1840,7 +1852,7 @@ def main(argv) -> int:
                 print(f"\n=== {label.upper()} of {len(sections)}: {', '.join(sec) or ref_arm} ===")
                 events(f"[section] {label} starts: {len(sec) or 1} arm(s)")
                 before = time.time()
-                args = ["calibrate", "--game", a.game, "--out", out, "--arms", ",".join(sec) or ref_arm, "--format", a.format,
+                args = ["calibrate", "--game", a.game, "--out", out, "--arms", ",".join(sec) or ref_arm,
                         *passthrough, *toy]
                 if a.redo and sec and weights.is_file():
                     args += ["--replace", ",".join(sec)]

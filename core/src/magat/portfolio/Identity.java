@@ -11,9 +11,8 @@ import java.util.Locale;
 
 /**
  * A portfolio's identity: SHA-256 over its ordered {@code id,source,phase} lines, one per scenario,
- * each terminated by a newline. It is the thesis tree's formula unchanged, so the published Tribes
- * portfolio keeps the identity its split files, its weights file and every archived result already
- * name ({@code ec243fd7...}).
+ * each terminated by a newline. The formula is fixed: the published Tribes portfolio's identity
+ * ({@code ec243fd7...}), which its split files, every currency and every result name, depends on it.
  *
  * <p>Branching and the {@code describe} facts are outside it on purpose: they may be recomputed,
  * while a changed identity means a different portfolio. The game and its configuration are recorded

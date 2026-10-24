@@ -14,11 +14,10 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py portfolio build  --game tribes --out DIR [--threads N] [--targets single=200,dual=200]
     python magat.py portfolio freeze --portfolio DIR
     python magat.py portfolio verify --game tribes [--portfolio DIR] [--published DIR] [--subset] [--plan N]
-    python magat.py portfolio ledger --portfolio DIR
     python magat.py machine
     python magat.py threads   --game tribes --out DIR [--portfolio DIR] [--levels ...] [--ladder 2,4,8] [--segment-seconds 25]
-    python magat.py calibrate --game tribes --out DIR [--portfolio DIR] [--levels ...] [--arms a,b|@set] [--replace a] [--under-load W] [--toy]
-                              [--format 2|1] [--audit-warn 0.10]
+    python magat.py calibrate --game tribes --out DIR [--portfolio DIR] [--levels ...] [--arms a,b|@set] [--replace a] [--toy]
+                              [--audit-warn 0.10]
     python magat.py calibrate --estimate --game tribes [the same arguments]     what the session would take; writes nothing
     python magat.py calibrate --check --game tribes --arms a,b [--weights FILE] [--portfolio DIR]   gates each cell's turn price
     python magat.py calibrate-controlled --name NAME [--preflight | --plan] [--section all|next|checks|N [--redo]] ...
@@ -28,19 +27,14 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
                               reference machine; refused without --remeasure once games/<game>/levels.json is published)
     python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...]
     python magat.py run --experiment SPEC [--split dev|holdout|all] [--out DIR] [--portfolio DIR] [--weights FILE]
-                        [--threads N] [--threads-at 400000=31] [--frozen FILE] [--retire-leaf arm@budget] [--toy]
+                        [--threads N] [--threads-at 400000=31] [--retire-leaf arm@budget] [--toy]
     python magat.py experiment validate --experiment SPEC [--weights FILE | --no-weights] [--split ...]
     python magat.py bundle --name NAME --paths P [P ...] [--exclude seqlog_,mutlog_]
-    python magat.py check structure --game tribes --spec experiments/tribes/structure.json
     python magat.py check replay    --game tribes --leaf DIR [--portfolio DIR] [--weights FILE] [--turns 20]
-    python magat.py check overhead  --game tribes [--arm emcts] [--budget 40000]
     python magat.py check time      --game tribes (--weights FILE | --fixed-weights) [--levels ...] [--arms a,b] [--targets ms,...]
                                     single-threaded whole turns over spread positions: each level's thinking time here
-    python magat.py check overhead --audit --game tribes [--arms a,b|@set] [--budget 40000] [--warn 0.10] [--fail 0.25]
-    python magat.py probe support   --game tribes --arm ARM [--levels ...] [--scenarios 20] [--out DIR]
-    python magat.py analyze --run DIR [--holdout DIR] [--experiment SPEC] [--baseline ARM] [--reprice WEIGHTS] --out DIR
-    python magat.py import-legacy --stage1-tree DIR --out RUN [--map tools/legacy-arms.json] [--portfolio DIR]
-                                  [--split NAME] [--experiment SPEC] [--weights FILE] [--no-curve] [--label TEXT]
+    python magat.py check audit     --game tribes [--arms a,b|@set] [--budget 40000] [--warn 0.10] [--fail 0.25]
+    python magat.py analyze --run DIR [--experiment SPEC] [--baseline ARM] [--reprice WEIGHTS] --out DIR
     python magat.py java <args...>          raw magat.cli.Main invocation
     python magat.py layering
     python magat.py notebook build|selftest
@@ -103,8 +97,8 @@ HEAP_BASE_MB, HEAP_PER_WORKER_MB, HEAP_MIN_MB = 1024, 256, 2048
 
 
 def big_heap() -> tuple:
-    """The heap for work that runs a search per worker: a portfolio build, a thread sweep, a run, a loaded
-    calibration. Sized to the workers, not to the machine. A Tribes worker holds 5-35 MB (DESIGN 8.6); the
+    """The heap for work that runs a search per worker: a portfolio build, a thread sweep, a run. Sized to
+    the workers, not to the machine. A Tribes worker holds 5-35 MB; the
     rest of its heap is the engine's short-lived garbage, about 2-3 GB a second, which G1 lets fill whatever
     heap it is given before it collects. 256 MB of room per worker keeps collecting near 4% of the time at
     every thread count. Workers: MAGAT_MAX_THREADS, else half the logical CPUs (one per physical core).
@@ -136,11 +130,11 @@ ENGINE_PROPS = {
     "tribes": lambda engine: [f"-Dtribes.home={engine}"],
 }
 
-# Published artefacts per game: the defaults the CLI is pointed at when a flag is not given.
+# Published artefacts per game: the defaults the CLI is pointed at when a flag is not given. A game's
+# published currency ("weights") is the reference machine's, once it is published.
 PUBLISHED = {
     "tribes": {
         "portfolio": GAMES / "tribes" / "portfolio" / "v1",
-        "weights": GAMES / "tribes" / "calibration" / "r7615" / "compute_weights.properties",
         "levels": GAMES / "tribes" / "levels.json",
     }
 }
@@ -451,10 +445,10 @@ def with_published_defaults(args: list) -> list:
     if "--game" in args:
         game = args[args.index("--game") + 1]
         pub = PUBLISHED.get(game, {})
-        wants_portfolio = args[0] in ("check", "calibrate", "threads", "run", "probe")
+        wants_portfolio = args[0] in ("check", "calibrate", "threads", "run")
         if wants_portfolio and "--portfolio" not in args and "portfolio" in pub and pub["portfolio"].is_dir():
             args += ["--portfolio", str(pub["portfolio"])]
-        wants_weights = ("equivalence" in args or "replay" in args or "overhead" in args or args[0] in ("weights", "run", "probe")
+        wants_weights = ("equivalence" in args or "replay" in args or args[0] in ("weights", "run")
                          or (args[0] == "calibrate" and "--check" in args) or args[:2] == ["experiment", "validate"])
         if wants_weights and not no_weights and "--weights" not in args and "weights" in pub and pub["weights"].is_file():
             args += ["--weights", str(pub["weights"])]
@@ -487,7 +481,7 @@ def main(argv: list) -> None:
             os.environ["PYTHONPATH"] = os.pathsep.join(p for p in (str(ANALYSIS), os.environ.get("PYTHONPATH")) if p)
             run([sys.executable, "-m", "unittest", "discover", "-s", str(ANALYSIS / "tests"), "-t", str(ANALYSIS), "-v"],
                 log="test")
-    elif cmd in ("analyze", "import-legacy"):
+    elif cmd == "analyze":
         python_analysis([cmd, *rest], log=cmd)
     elif cmd in ("run", "experiment"):
         args = with_published_defaults(with_spec_game([cmd, *rest]))
@@ -498,8 +492,8 @@ def main(argv: list) -> None:
         java(args, heap="big" if cmd == "run" else None, log=log)
     elif cmd == "bundle":
         bundle(rest)
-    elif cmd in ("check", "arms", "portfolio", "calibrate", "threads", "machine", "weights", "probe"):
-        big = (cmd == "portfolio" and rest[:1] == ["build"]) or cmd == "threads" or "--under-load" in rest
+    elif cmd in ("check", "arms", "portfolio", "calibrate", "threads", "machine", "weights"):
+        big = (cmd == "portfolio" and rest[:1] == ["build"]) or cmd == "threads"
         log = cmd + ("-" + rest[0] if rest and not rest[0].startswith("--") else "")
         if cmd == "calibrate" and "--check" in rest:
             log = "calibrate-check"

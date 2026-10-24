@@ -47,10 +47,6 @@ public final class Main {
             else if (cmd.equals("machine")) code = CalibrateCommand.machine();
             else if (cmd.equals("weights")) code = CalibrateCommand.weights(args);
             else if (cmd.equals("run")) code = RunCommand.run(args, argv);
-            else if (cmd.equals("probe")) {
-                if (!"support".equals(args.word(1))) throw new IllegalArgumentException("probe what? support");
-                code = ProbeCommand.support(args);
-            }
             else if (cmd.equals("experiment")) {
                 if (!"validate".equals(args.word(1))) throw new IllegalArgumentException("experiment what? validate");
                 code = RunCommand.validate(args);
@@ -71,7 +67,7 @@ public final class Main {
         System.out.println("  version");
         System.out.println("  arms  --game <name>");
         System.out.println("  check contract    --game <name> --portfolio <dir> [--scenarios 8] [--ids 1,2,...]");
-        System.out.println("  check equivalence --game <name> --portfolio <dir> --weights <file> [--arms emcts]");
+        System.out.println("  check equivalence --game <name> --portfolio <dir> [--weights <file>] [--arms emcts]");
         System.out.println("  check time        --game <name> --portfolio <dir> (--weights <file> | --fixed-weights) --levels a,b [--arms ...] "
                 + "[--targets ms,ms] [--positions 64] [--tolerance 0.05] [--out time.json]");
         System.out.println("                    [--scenarios 8] [--visits 2] [--budgets 8000,40000] [--threads N] [--ids ...] [--verbose]");
@@ -135,11 +131,10 @@ public final class Main {
         String what = args.word(1);
         if ("contract".equals(what)) return checkContract(args);
         if ("equivalence".equals(what)) return checkEquivalence(args);
-        if ("structure".equals(what)) return ProbeCommand.structure(args);
         if ("replay".equals(what)) return ProbeCommand.replay(args);
-        if ("overhead".equals(what)) return ProbeCommand.overhead(args);
+        if ("audit".equals(what)) return ProbeCommand.audit(args);
         if ("time".equals(what)) return ProbeCommand.time(args);
-        throw new IllegalArgumentException("check what? contract | equivalence | structure | replay | overhead | time");
+        throw new IllegalArgumentException("check what? contract | equivalence | replay | audit | time");
     }
 
     private static <S, A> int checkContract(Args args) throws Exception {
@@ -160,9 +155,10 @@ public final class Main {
         banner("check equivalence");
         GameModule<S, A> module = Games.load(args.require("game"));
         Game<S, A> game = module.game();
-        Weights weights = Weights.load(Paths.get(args.require("weights")));
+        // Both sides of every cell are priced alike, so any prices do: a currency's, or the fixed measurement weights.
+        Weights weights = args.has("weights") ? Weights.load(Paths.get(args.get("weights"))) : null;
         Meter.install(weights);
-        System.out.println("# weights: " + weights.summary());
+        System.out.println("# weights: " + (weights == null ? "the fixed measurement weights" : weights.summary()));
         Portfolio<S> p = loadPortfolio(game, args);
         List<Scenario<S>> scenarios = pickScenarios(p, args);
         int visits = args.getInt("visits", 2);

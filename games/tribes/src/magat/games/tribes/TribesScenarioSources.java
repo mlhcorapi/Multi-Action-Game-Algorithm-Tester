@@ -30,7 +30,7 @@ import java.util.Locale;
  * ({@link Weights#DEFAULT}), never by a calibration.
  *
  * <p>The two sources set the engine's turn cap differently and the cap is a global, so a builder
- * plays one source at a time, as the thesis builder did.
+ * plays one source at a time.
  */
 public final class TribesScenarioSources implements ScenarioSource<TribesState> {
 

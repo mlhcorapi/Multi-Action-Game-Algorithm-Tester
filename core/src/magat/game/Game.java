@@ -73,19 +73,13 @@ public interface Game<S, A> {
     /** The explicit end-of-turn action in this state, or {@code null} if the game ends turns implicitly. */
     A endTurnAction(S state);
 
-    // ---- identity and abstraction of actions ---------------------------------------------------
+    // ---- identity of actions -------------------------------------------------------------------
 
     /**
      * Canonical identity of an action within a state; sequences are de-duplicated on it. Two
      * distinct legal actions of one state never share a key.
      */
     String actionKey(A action);
-
-    /**
-     * The action abstracted to a granularity, for learned tables: {@code COARSE} ("MOVE"),
-     * {@code MID} ("MOVE:RIDER"), {@code FINE} (the full identity). Coarser levels partition finer ones.
-     */
-    String actionClass(S state, A action, Granularity level);
 
     /** A descriptive count for stratification and reporting; the game documents what it counts. */
     int branchingFactor(S state);

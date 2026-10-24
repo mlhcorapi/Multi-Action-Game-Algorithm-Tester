@@ -1,12 +1,10 @@
 *.bin binary
 *.jar binary
 *.png binary
-# Files whose bytes are hashed into provenance (specs, frozen choices, result tables): the same bytes on
+# Files whose bytes are hashed into provenance (specs, result tables): the same bytes on
 # every platform, whatever core.autocrlf says, so a hash recorded on one machine matches the file on another.
 *.csv text eol=lf
 *.json text eol=lf
 experiments/** text eol=lf
-# A currency's bytes are hashed into every run's provenance. The R7615 import was committed with CRLF line
-# ends and runs have recorded its hash, so it stays byte for byte as committed.
+# A currency's bytes are hashed into every run's provenance: the same bytes on every platform too.
 *.properties text eol=lf
-games/tribes/calibration/r7615/compute_weights.properties -text

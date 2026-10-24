@@ -17,9 +17,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "notebooks" / "run_magat.ipynb"
 OUT_LEVELS = ROOT / "notebooks" / "maintainers" / "measure_levels.ipynb"
-# Section cells for the calibration: Tribes registers 32 priced arms besides the reference arm, eight to a
-# section. A different count only means the 'rest' cell measures what the numbered cells do not.
-CAL_SECTIONS = 4
 
 
 def md(text: str) -> dict:
@@ -66,14 +63,13 @@ assert ROOT not in DATA.parents and DATA != ROOT, f"data root {DATA} must be out
 GAME = "tribes"
 PY = sys.executable
 PUBLISHED_PORTFOLIO = ROOT / "games" / GAME / "portfolio" / "v1"
-PUBLISHED_WEIGHTS = ROOT / "games" / GAME / "calibration" / "r7615" / "compute_weights.properties"
 # Workers for parallel stages. Half the logical CPUs (SMT siblings add heat, not throughput) less two
-# for the machine; MAGAT_WORKERS overrides. The machine profile (milestone 3) replaces this guess.
+# for the machine; MAGAT_WORKERS overrides. `magat machine` reports the measured ceiling.
 WORKERS = int(os.environ.get("MAGAT_WORKERS") or max(1, (os.cpu_count() or 2) // 2 - 2))
 # This machine's own currency: <data>/calibration/<game>-<name>. The published R7615 currency stays in
 # the repository; a new calibration of the R7615 is published beside it under this name, never over it.
-# A currency keeps the levels it was first measured at: "r7615-time" is the first at the published levels
-# (games/<game>/levels.json); "r7615-v2" was the name for one at the thesis's 40,000 / 80,000 / 400,000.
+# A currency keeps the levels it was first measured at, so a currency at the published levels
+# (games/<game>/levels.json) has a name of its own.
 CURRENCY_NAME = os.environ.get("MAGAT_CURRENCY") or "r7615-time"
 
 def magat(*args, check=True):
@@ -187,10 +183,8 @@ bundle("threads", [CALIBRATION / "threads.json", CALIBRATION / "thread_sweep.csv
 CALIBRATE_CELL = r'''
 # This machine's own currency, on this machine's own portfolio, in sections (calibrate-controlled; read
 # docs/CALIBRATING_A_MACHINE.md, "On a shared server"). Idle and single-threaded: nothing else of yours
-# may run while a section measures. Every section cell below skips itself once its arms are priced.
-# Version 2 (CURRENCY_VERSION = 2) prices every operation an arm declares, its own work included; version
-# 1 prices the forward model only, as the published R7615 currency does.
-CURRENCY_VERSION = 2
+# may run while a section measures. The measuring cell below skips itself once every arm is priced.
+# The currency prices every operation an arm declares, its own work included.
 CAL_BATCH = 8           # arms per section, fixed when the first section runs
 CAL_OTHER_CPUS = 4.0    # other work on the machine, in logical CPUs, that makes a section SUSPECT
 CAL_WAIT_QUIET = 30     # minutes a section waits for the machine to drop below that before refusing to start
@@ -201,13 +195,16 @@ def calibrate_section(section, redo=False):
     # One section (a number), "checks", or "rest" (every section still missing). Raises unless the section
     # passed or is suspect; a suspect one is measured again with redo=True when the machine is quiet.
     args = ["calibrate-controlled", "--name", CURRENCY_NAME, "--game", GAME, "--portfolio", PORTFOLIO,
-            "--format", CURRENCY_VERSION, "--batch", CAL_BATCH, "--other-cpus", CAL_OTHER_CPUS,
+            "--batch", CAL_BATCH, "--other-cpus", CAL_OTHER_CPUS,
             "--wait-quiet", CAL_WAIT_QUIET, "--soak-minutes", CAL_SOAK_MINUTES, "--levels", LEVELS]
     args += ["--section", "all", "--no-checks"] if section == "rest" else ["--section", section]
     if redo:
         args.append("--redo")
     rc = magat(*args, check=False)
-    if rc == 5:
+    if rc == 5 and section == "rest":
+        print("\n*** SUSPECT: see the reasons above. When the machine is quiet, measure each suspect section k again "
+              "with calibrate_section(k, redo=True); record/SUMMARY.md names them.")
+    elif rc == 5:
         print(f"\n*** SUSPECT: see the reasons above. When the machine is quiet, run calibrate_section({section!r}, redo=True).")
     elif rc == 4:
         raise RuntimeError("the machine stayed busy and nothing was started: run this cell again later")
@@ -220,38 +217,19 @@ magat("calibrate-controlled", "--name", CURRENCY_NAME, "--game", GAME, "--portfo
       "--other-cpus", CAL_OTHER_CPUS, "--batch", CAL_BATCH, "--preflight")
 '''
 
-SECTION_CELL = r'''
-calibrate_section({k})
-'''
-
-REST_CELL = r'''
-# Any section still missing: one that failed twice, or sections added since (a new arm, another batch).
+MEASURE_CELL = r'''
+# Every section still missing, one after another: a re-run measures only what the currency does not price.
 calibrate_section("rest")
 '''
 
 CHECKS_CELL = r'''
-# Two checks that write nothing. Against its own new currency, at the published levels: did this machine
-# hold its speed across the calibration? Against the published R7615 currency, at that file's own levels
-# (the thesis's 40,000 / 80,000 / 400,000, its initialization outside the budget): how far this machine's
-# prices are from the thesis's (on the R7615 itself, how far they moved since the thesis measured them).
+# Checks that write nothing. Against its own new currency: did this machine hold its speed across the
+# calibration? And, once the game's reference machine has published its currency, against that one: how
+# far this machine's prices are from the reference machine's.
 calibrate_section("checks")
-# The metering overhead on this machine, at the middle level of the new currency (ORIGIN.md lists the
-# R7615's line as not measured yet).
-magat("check", "overhead", "--game", GAME, "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--budget", MID_LEVEL,
-      "--reps", 4, check=False)
 magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", "@reference", "--levels", LEVELS)
 print((CALIBRATION / "record" / "SUMMARY.md").read_text(encoding="utf-8"))
-bundle("calibration", [CALIBRATION, LOGS / "calibrate-controlled.log", LOGS / "check-overhead.log"])
-'''
-
-UNDER_LOAD_CELL = r'''
-# Gate A3' (off by default). The thesis resolved it: the idle currency is the ruler and wall-clock
-# (W7) is co-primary, so this is a diagnostic, not a step. It writes compute_weights_load<W>.properties
-# beside the idle file, never over it, and prints the idle-versus-loaded ratios.
-RUN_UNDER_LOAD = False
-if RUN_UNDER_LOAD:
-    magat("calibrate", "--game", GAME, "--portfolio", PORTFOLIO, "--out", CALIBRATION,
-          "--arms", "emcts,emcts-comma", "--under-load", WORKERS)
+bundle("calibration", [CALIBRATION, LOGS / "calibrate-controlled.log"])
 '''
 
 GATES_CELL = r'''
@@ -259,43 +237,21 @@ magat("check", "contract", "--game", GAME, "--scenarios", 8)
 assert_in_log("check-contract", "CONTRACT: PASS")
 magat("check", "equivalence", "--game", GAME, "--scenarios", 8, "--visits", 2, "--budgets", "8000,40000")
 assert_in_log("check-equivalence", "EQUIVALENCE: PASS")
-magat("check", "structure", "--game", GAME, "--spec", ROOT / "experiments" / GAME / "structure.json")
-assert_in_log("check-structure", "STRUCTURE: PASS")
 # The audit: each arm's declared operations and forward model account for its turn (fails above 25% unaccounted).
-magat("check", "overhead", "--audit", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "@reference", "--budget", MID_LEVEL)
-assert_in_log("check-overhead", "OVERHEAD AUDIT: PASS")
-magat("check", "replay", "--game", GAME, "--leaf", ROOT / "games" / GAME / "results" / "replay" / "Comma_Off" / "80000cu",
-      "--portfolio", PORTFOLIO, "--weights", PUBLISHED_WEIGHTS, "--turns", 20)
-assert_in_log("check-replay", "REPLAY: PASS")
-magat("probe", "support", "--game", GAME, "--arm", "comma-bias-e25", "--scenarios", 20, "--weights", WEIGHTS,
-      "--out", CALIBRATION, check=False)      # a failing level is a reporting level, not an error
-bundle("gates", [LOGS / f"{n}.log" for n in ("check-contract", "check-equivalence", "check-structure", "check-replay",
-                                             "check-overhead", "probe-support", "test")] + [CALIBRATION / "support_probe_comma-bias-e25.csv"])
-'''
-
-WORKED_CELL = r'''
-# The published worked result (the thesis's AB-EMCTS line, imported), re-analysed here in seconds. It must
-# reproduce games/tribes/results/ab-emcts/report; docs/results/tribes-ab-emcts.md sets it beside the
-# thesis retrospective, number by number.
-WORKED = DATA / GAME / "results" / "ab-emcts-published"
-magat("analyze", "--run", ROOT / "games" / GAME / "results" / "ab-emcts", "--out", WORKED)
-assert_in_log("analyze", "ANALYZE: OK")
-summary(WORKED, until="## Headline (dev)")
-bundle("worked-result", [WORKED / "SUMMARY.md", WORKED / "tables", LOGS / "analyze.log"])
+magat("check", "audit", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "@reference", "--budget", MID_LEVEL)
+assert_in_log("check-audit", "AUDIT: PASS")
+bundle("gates", [LOGS / f"{n}.log" for n in ("check-contract", "check-equivalence", "check-audit", "test")])
 '''
 
 
 def experiment_cells(game: str) -> list:
     """One markdown and one code cell per experiment in experiments/<game>/, so the notebook cannot drift
-    from the specs it runs. A development experiment runs, is analysed, and is bundled. A holdout
-    experiment checks the currency for drift first, refuses to run until its frozen choices exist, then
-    runs and is analysed side by side with its development partner (`<x>-holdout.json` pairs with
-    `<x>-dev.json`). The shakedown spec runs inside the shakedown."""
+    from the specs it runs: each runs its split, is analysed, and is bundled. The shakedown spec runs
+    inside the shakedown."""
     cells = []
-    specs = {p.name: p for p in sorted((ROOT / "experiments" / game).glob("*.json"))}
-    for spec in specs.values():
+    for spec in sorted((ROOT / "experiments" / game).glob("*.json")):
         x = json.loads(spec.read_text(encoding="utf-8"))
-        if x.get("name") == "shakedown" or "levels" not in x:      # the shakedown's own spec; structure.json
+        if x.get("name") == "shakedown" or "levels" not in x:      # the shakedown's own spec
             continue
         name, split = x["name"], x.get("split", "all")
         levels = ", ".join(f"{l['budget']:,} x {l['visits']}" for l in x.get("levels", []))
@@ -310,36 +266,10 @@ Split `{split}`; baseline `{x.get("baseline")}`; levels (budget x visits) {level
 ({turns:,} turns per scenario of the split). Re-running the cell resumes: finished leaves are skipped,
 a partial leaf continues where it stopped.
 """))
-        head = f'''SPEC = ROOT / "experiments" / GAME / "{spec.name}"
+        cells.append(code(f'''SPEC = ROOT / "experiments" / GAME / "{spec.name}"
 RUN = DATA / GAME / "runs" / "{name}"
 RESULTS = DATA / GAME / "results" / "{name}"
-'''
-        if split == "holdout":
-            partner = spec.name.replace("-holdout.json", "-dev.json")
-            dev_name = json.loads(specs[partner].read_text(encoding="utf-8"))["name"] if partner in specs else None
-            frozen = x.get("frozen", "")
-            body = head + f'''FROZEN = SPEC.parent / "{frozen}"
-# 1. Drift: does this machine still spend the currency the development half was priced in? Writes nothing.
-magat("calibrate", "--check", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "{x.get("baseline")}", "--weights", WEIGHTS, check=False)
-# 2. The holdout is read once, and only for choices written down before it is read.
-assert FROZEN.is_file(), f"no frozen choices at {{FROZEN}}: write them, from development only, before reading the holdout"
-print(FROZEN.read_text(encoding="utf-8"))
-magat("run", "--experiment", SPEC, "--split", "holdout", "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--frozen", FROZEN, "--out", RUN)
-assert_in_log("run-holdout", "RUN: COMPLETE")
-'''
-            if dev_name:
-                body += f'''DEV = DATA / GAME / "runs" / "{dev_name}" / "dev"
-magat("analyze", "--run", DEV, "--holdout", RUN / "holdout", "--out", RESULTS)
-'''
-            else:
-                body += '''magat("analyze", "--run", RUN / "holdout", "--out", RESULTS)
-'''
-            body += f'''assert_in_log("analyze", "ANALYZE: OK")
-summary(RESULTS)
-bundle("run-{name}", [RUN / "holdout", RESULTS / "SUMMARY.md", RESULTS / "tables", LOGS / "calibrate-check.log"])'''
-            cells.append(code(body, tags=("holdout",)))
-        else:
-            cells.append(code(head + f'''magat("run", "--experiment", SPEC, "--split", "{split}", "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--out", RUN)
+magat("run", "--experiment", SPEC, "--split", "{split}", "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--out", RUN)
 assert_in_log("run-{split}", "RUN: COMPLETE")
 magat("analyze", "--run", RUN / "{split}", "--out", RESULTS)
 assert_in_log("analyze", "ANALYZE: OK")
@@ -356,9 +286,8 @@ CALIBRATION = globals().get("CALIBRATION", DATA / "calibration" / f"{GAME}-{CURR
 BUNDLED = [
     ("portfolio", "this machine's portfolio: manifest, split files, identity, the verify log"),
     ("threads", "the thread sweep and threads.json"),
-    ("calibration", f"the currency {CURRENCY_NAME}: weights, every section's record and verdict, the checks, the overhead"),
-    ("gates", "contract, equivalence, structure, audit, replay, support probe"),
-    ("worked-result", "the published worked result, re-analysed here"),
+    ("calibration", f"the currency {CURRENCY_NAME}: weights, every section's record and verdict, the checks"),
+    ("gates", "contract, equivalence, audit"),
 @RUNS@    ("shakedown", "the shakedown's log"),
 ]
 FILES = [
@@ -458,43 +387,34 @@ levels mean every currency must be measured again.
     md("""
 ### This machine's currency, in sections
 
-`calibrate-controlled` prices every arm at the levels above, in sections of eight. Each section is one
-calibration session, under an hour on the R7615, that writes all or nothing and merges into the currency by ratio, so a
-culled server or a busy afternoon costs one section, never the whole currency. Before each section it
+`calibrate-controlled` prices every arm at the levels above, in sections of up to eight arms. Each
+section is one calibration session that writes all or nothing and merges into the currency by ratio, so
+a culled server or a busy afternoon costs one section, never the whole currency. Before each section it
 waits (up to `CAL_WAIT_QUIET` minutes) for the machine to be quiet and checks that two estimates agree.
 After each it gives a verdict:
 - **PASS**: the calibrator's gates passed and nothing was seen disturbing it.
 - **SUSPECT**: the gates passed, but the machine was busy with other work (`CAL_OTHER_CPUS`), the
-  container was CPU-throttled, or the session ran at a different speed from the first. Run the cell
-  again with `redo=True` when the machine is quiet.
+  container was CPU-throttled, or the session ran at a different speed from the first. Measure that
+  section again with `calibrate_section(k, redo=True)` when the machine is quiet.
 - **FAIL**: nothing was written; it is retried once, and running the cell again measures what is
   missing.
 
-Run the cells one at a time; every one skips itself once its section is priced. Keep this tab open
-while a section runs, and start nothing else in this server. `record/SUMMARY.md` in the currency's
-folder has every section's verdict, and the last cell bundles it all.
+The measuring cell skips itself once every arm is priced, and running it again after an interruption
+measures only what is missing. Keep this tab open while it runs, and start nothing else in this server.
+`record/SUMMARY.md` in the currency's folder has every section's verdict, and the last cell bundles it
+all.
 """),
     code(CALIBRATE_CELL, tags=("calibrate",)),
-    *[code(SECTION_CELL.replace("{k}", str(k)), tags=("calibrate", f"section-{k}")) for k in range(1, CAL_SECTIONS + 1)],
-    code(REST_CELL, tags=("calibrate",)),
+    code(MEASURE_CELL, tags=("calibrate", "measure")),
     code(CHECKS_CELL, tags=("calibrate", "checks")),
-    code(UNDER_LOAD_CELL, tags=("under-load",)),
     md("""
 ## Gates and probes
 
 The contract laws on published positions; the equivalence gate, where every ported arm must reproduce
-its thesis-tree oracle field for field, mechanism counters included (all of them: about ten minutes);
-the structure check; the replay of published R7615 holdout turns on this machine's own portfolio; the
-support probe for the biased arms. Nothing downstream runs otherwise.
+the engine agent it was ported from, field for field; and the audit, where each arm's declared
+operations and forward model must account for its turn. Nothing downstream runs otherwise.
 """),
     code(GATES_CELL, tags=("gates",)),
-    md("""
-## The worked result, re-analysed
-
-The thesis's AB-EMCTS line, imported into MAGAT's run layout: every measure of the brief, in seconds,
-from the published rows. A newcomer's first look at what a MAGAT report says.
-"""),
-    code(WORKED_CELL, tags=("worked-result",)),
     *experiment_cells("tribes"),
     md("""
 ## Shakedown

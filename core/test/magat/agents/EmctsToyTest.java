@@ -4,8 +4,6 @@ import magat.agent.Episode;
 import magat.agent.Signature;
 import magat.agent.TurnRecord;
 import magat.agents.emcts.EmctsFactory;
-import magat.agents.emcts.EmctsParams;
-import magat.agents.emcts.Selection;
 import magat.agents.random.RandomAgent;
 import magat.game.Scenario;
 import magat.meter.Meter;
@@ -81,24 +79,6 @@ public class EmctsToyTest {
         assertTrue(a.differences(b, 0).isEmpty());
         Signature c = Signature.of(Episode.run(game, positions.get(1), 4, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 1_500));
         assertFalse("a different visit is a different search", a.differences(c, 0).isEmpty());
-    }
-
-    @Test
-    public void plusAndCommaDiffer() {
-        // Two arms producing identical output is a bug, not thin data.
-        Signature plus = Signature.of(Episode.run(game, positions.get(2), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 3_000));
-        Signature comma = Signature.of(Episode.run(game, positions.get(2), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>comma(5), 3_000));
-        assertFalse(plus.differences(comma, 0).isEmpty());
-    }
-
-    @Test
-    public void everySelectionModeRuns() {
-        for (Selection s : Selection.values()) {
-            EmctsFactory<ToyGame.State, ToyGame.Move> f = new EmctsFactory<>("x-" + s.name().toLowerCase().replace('_', '-'), "", () -> {
-                EmctsParams p = new EmctsParams(); p.selection = s; p.childrenPerGeneration = s == Selection.PLUS ? 1 : 3; return p; });
-            TurnRecord r = Episode.run(game, positions.get(0), 1, f, 1_000);
-            assertTrue(s + " improved or held", r.finalValue >= r.initial);
-        }
     }
 
     @Test

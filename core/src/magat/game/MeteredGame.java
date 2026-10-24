@@ -11,8 +11,7 @@ import java.util.Map;
  * {@link Meter#PROFILE} is on, timed) on the calling thread. {@code advance}, {@code copy} and
  * {@code evaluate} are the three operations a unit is made of; everything else delegates.
  *
- * <p>Counting happens before the operation, so an operation that throws is still counted, exactly
- * as the thesis tree's engine hooks behaved.
+ * <p>Counting happens before the operation, so an operation that throws is still counted.
  */
 public final class MeteredGame<S, A> implements Game<S, A> {
 
@@ -79,7 +78,6 @@ public final class MeteredGame<S, A> implements Game<S, A> {
     @Override public boolean endsTurn(A action) { return inner.endsTurn(action); }
     @Override public A endTurnAction(S state) { return inner.endTurnAction(state); }
     @Override public String actionKey(A action) { return inner.actionKey(action); }
-    @Override public String actionClass(S state, A action, Granularity level) { return inner.actionClass(state, action, level); }
     @Override public int branchingFactor(S state) { return inner.branchingFactor(state); }
     @Override public void reseed(S state, long seed) { inner.reseed(state, seed); }
     @Override public byte[] serialize(S state) { return inner.serialize(state); }

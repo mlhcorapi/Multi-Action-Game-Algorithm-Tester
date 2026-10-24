@@ -1,9 +1,0 @@
-
->>>>> 2026-08-28 23:58:01 $ java -Xmx8g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dcompute.weightsFile="/home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties"  -cp "out:lib/*" core.data.exp.Stage1Runner verify
-[ComputeMeter] compute.wAdvance = 1.0 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 1.0)
-[ComputeMeter] compute.wCopy = 0.137451 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.16)
-[ComputeMeter] compute.wEval = 0.056738 (from /home/jovyan/ab_runs/stage1/_calibration/compute_weights.properties; compiled default was 0.077)
-[stage1-verify] plain:    init=6231.0 final=6486.0 fm=37354 nodes=430 unique=356 units=40056.0483
-[stage1-verify] baseline: init=6231.0 final=6486.0 fm=37354 nodes=430 unique=356 units=40056.0483
-[stage1-verify] PASS — Baseline is bit-identical to plain EMCTS
-===== exit 0 after 0:00:03.484217

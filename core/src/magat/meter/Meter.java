@@ -19,7 +19,7 @@ import java.util.regex.Pattern;
  * lookups, ranking, tree bookkeeping) is declared by its {@link magat.agent.AgentFactory} as named
  * operations and recorded by the algorithm through an {@link Op} handle:
  * <pre>
- *   static final Meter.Op UPDATE = Meter.register("qd.update");
+ *   static final Meter.Op UPDATE = Meter.register("x.update");
  *   UPDATE.count();                                          // one occurrence, untimed
  *   try (Meter.Span s = RANK.span()) { ... }                 // one occurrence, timed while profiling
  *   try (Meter.Span s = LOOKUP.span(n)) { ...n lookups... }  // n occurrences timed as one batch
@@ -31,12 +31,8 @@ import java.util.regex.Pattern;
  *
  * <p><b>Pricing.</b> A unit is {@code sum over operations of count * weight}, priced by the profile
  * installed on the calling thread with {@link #useProfile}. Profiles come from a {@link Weights} file
- * installed once per JVM with {@link #install}; there is deliberately no default file path. A version-1
- * file prices the three forward-model operations only, so an algorithm's own operations weigh exactly
- * 0.0 under it and every unit is the double it always was; a version-2 file prices every operation.
- *
- * <p>Extracted from the thesis tree's {@code core/game/ComputeMeter.java}; the forward-model counting
- * and pricing semantics are unchanged.
+ * installed once per JVM with {@link #install}; there is deliberately no default file path. A file
+ * prices every operation: the forward model's three and each one an arm declares.
  */
 public final class Meter {
 
@@ -165,7 +161,7 @@ public final class Meter {
             if (o != null) return o;
             if (name == null || !OP_NAME.matcher(name).matches())
                 throw new IllegalArgumentException("operation name '" + name + "': lowercase dot-separated segments, the first "
-                        + "naming the algorithm family (qd.update, emcts.legal); the forward-model operations are metered by MeteredGame");
+                        + "naming the algorithm family (first.sample, emcts.legal); the forward-model operations are metered by MeteredGame");
             int idx = opCount;
             if (idx >= CAPACITY) throw new IllegalStateException("more than " + (CAPACITY - FORWARD_MODEL) + " algorithm operations registered");
             NAMES[idx] = name;
@@ -233,7 +229,7 @@ public final class Meter {
         final double[] weights = new double[CAPACITY];
         final boolean[] priced = new boolean[CAPACITY];
         String profile;           // null: the global weights
-        boolean strict;           // a version-2 profile: every counted operation must be priced
+        boolean strict;           // a file's profile: every counted operation must be priced
         final Span[] stack = new Span[MAX_DEPTH];
         int depth;
 
@@ -305,13 +301,13 @@ public final class Meter {
         Arrays.fill(s.priced, false);
         file.fill(profile, s.weights, s.priced);
         s.profile = profile;
-        s.strict = file.version() >= 2;
+        s.strict = true;
     }
 
     /**
      * Installs an explicit forward-model weight triple on the calling thread under a label; every
      * algorithm operation weighs 0 under it. For probes that must price both sides of a comparison
-     * identically at a budget no file prices (the oracle gate, the structure check); a run never uses it.
+     * identically at a budget no file prices (the oracle gate); a run never uses it.
      */
     public static void useWeights(double[] w, String label) {
         State s = STATE.get();
@@ -344,8 +340,8 @@ public final class Meter {
 
     /**
      * Operations counted on this thread since the last {@link #reset} (or among {@code extra}) that the
-     * version-2 profile in force does not price; empty under a version-1 profile, the global weights or a
-     * probe's triple, which price the forward model only by definition, and empty while
+     * profile in force does not price; empty under the global weights or a probe's triple, which price the
+     * forward model only by definition, and empty while
      * {@link #allowUnpriced} is on (the calibrator measures arms whose operations are not priced yet).
      */
     public static List<String> unpricedCounted(long[] extra) {

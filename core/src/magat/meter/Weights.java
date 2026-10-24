@@ -22,27 +22,19 @@ import java.util.TreeMap;
  * reference portfolio positions, on the calibrated machine. Every weight is a ratio to that advance's
  * nanoseconds, per {@code <arm>@<budget>} profile.
  *
- * <p><b>Version 1</b> prices the three forward-model operations: {@code profile.<p>.{wAdvance,wCopy,wEval}},
- * with {@code advanceNanos}, {@code copyNanos} and {@code evalNanos} where measured. Under it an algorithm's
- * own operations cost nothing, exactly as they did when the published R7615 currency was measured.
- * <b>Version 2</b> prices every operation: {@code profile.<p>.w.<op>} and {@code profile.<p>.ns.<op>} for
- * {@code advance}, {@code copy}, {@code eval} and each operation the arm declares, the calibration audit's
- * {@code profile.<p>.unpriced} share, {@code global.w.<op>}, and the header line {@code operations}.
- * The thesis tree's {@code compute.*} format is read as version 1, so the published R7615 file can be used
- * before it is converted.
+ * <p>The file format is version 2 ({@code magat.weights.version = 2}): it prices every operation,
+ * {@code profile.<p>.w.<op>} and {@code profile.<p>.ns.<op>} for {@code advance}, {@code copy}, {@code eval}
+ * and each operation the arm declares, the calibration audit's {@code profile.<p>.unpriced} share,
+ * {@code global.w.<op>}, and the header line {@code operations}. Any other version is refused.
  */
 public final class Weights {
 
     /**
-     * The fixed weights used when no file is installed, and the weights every portfolio capture is
-     * priced with: {@code advance 1, copy 0.16, eval 0.077}, the thesis tree's compiled defaults.
-     * A portfolio must not depend on a calibration, or a recalibration would silently rebuild it.
+     * The fixed measurement weights, used when no file is installed and by every portfolio capture and
+     * calibration session: {@code advance 1, copy 0.16, eval 0.077}. A portfolio must not depend on a
+     * calibration, or a recalibration would silently rebuild it.
      */
     public static final double[] DEFAULT = {1.0, 0.16, 0.077};
-
-    /** Version-1 keys of the forward-model weights and nanoseconds, in {@link Meter} index order. */
-    public static final String[] OPS = {"wAdvance", "wCopy", "wEval"};
-    public static final String[] NANO_KEYS = {"advanceNanos", "copyNanos", "evalNanos"};
 
     private final Path source;
     private final Map<String, String> header;                  // every non-profile key, verbatim
@@ -72,6 +64,7 @@ public final class Weights {
 
     /** Parses the file's lines; exposed so tests can build a file without touching disk. */
     public static Weights parse(Path source, List<String> lines) {
+        String name = source == null ? "weights" : source.toString();
         Map<String, String> raw = new LinkedHashMap<>();
         for (String line : lines) {
             String t = line.trim();
@@ -90,30 +83,23 @@ public final class Weights {
         Map<String, Double> globalOps = new LinkedHashMap<>();
         for (Map.Entry<String, String> e : raw.entrySet()) {
             String k = e.getKey();
-            String profilePrefix = k.startsWith("profile.") ? "profile."
-                    : k.startsWith("compute.profile.") ? "compute.profile." : null;
-            if (profilePrefix == null) {
-                String hk = normaliseHeaderKey(k);
-                if (hk.startsWith("global.w.")) globalOps.put(hk.substring("global.w.".length()), parseDouble(e.getValue()));
-                else header.put(hk, e.getValue());
+            if (!k.startsWith("profile.")) {
+                if (k.startsWith("global.w.")) globalOps.put(k.substring("global.w.".length()), parseDouble(e.getValue()));
+                else header.put(k, e.getValue());
                 continue;
             }
             // <arm>@<budget>.<field>: arm ids hold no dots, budgets are digits, so the name ends at the
             // first dot after the '@'.
-            String rest = k.substring(profilePrefix.length());
+            String rest = k.substring("profile.".length());
             int at = rest.indexOf('@');
             int dot = at < 0 ? -1 : rest.indexOf('.', at);
             if (dot <= 0) continue;
-            String name = rest.substring(0, dot);
+            String profile = rest.substring(0, dot);
             String field = rest.substring(dot + 1);
             double v = parseDouble(e.getValue());
-            int fm = indexOf(OPS, field);
-            if (fm >= 0) { prices.computeIfAbsent(name, n -> new LinkedHashMap<>()).put(Meter.FORWARD_MODEL_OPS.get(fm), v); continue; }
-            int ns = indexOf(NANO_KEYS, field);
-            if (ns >= 0) { nanos.computeIfAbsent(name, n -> new LinkedHashMap<>()).put(Meter.FORWARD_MODEL_OPS.get(ns), v); continue; }
-            if (field.startsWith("w.")) { prices.computeIfAbsent(name, n -> new LinkedHashMap<>()).put(field.substring(2), v); continue; }
-            if (field.startsWith("ns.")) { nanos.computeIfAbsent(name, n -> new LinkedHashMap<>()).put(field.substring(3), v); continue; }
-            if (field.equals("unpriced")) unpriced.put(name, v);
+            if (field.startsWith("w.")) { prices.computeIfAbsent(profile, n -> new LinkedHashMap<>()).put(field.substring(2), v); continue; }
+            if (field.startsWith("ns.")) { nanos.computeIfAbsent(profile, n -> new LinkedHashMap<>()).put(field.substring(3), v); continue; }
+            if (field.equals("unpriced")) unpriced.put(profile, v);
         }
         // A profile is only usable when its three forward-model weights are present and plausible (0, 1000),
         // and every algorithm operation it prices has a finite, non-negative weight (zero: declared, never
@@ -132,41 +118,22 @@ public final class Weights {
         }
         for (String n : incomplete) prices.remove(n);
 
+        String v = header.get("magat.weights.version");
+        if (!"2".equals(v == null ? null : v.trim()))
+            throw new IllegalArgumentException(name + " is " + (v == null ? "not a MAGAT weights file (no magat.weights.version)"
+                    : "a version-" + v.trim() + " weights file") + "; MAGAT reads version 2 (calibrate this machine with magat calibrate)");
         double[] global = new double[]{
-                globalWeight(header, globalOps, "wAdvance", "advance", DEFAULT[0]),
-                globalWeight(header, globalOps, "wCopy", "copy", DEFAULT[1]),
-                globalWeight(header, globalOps, "wEval", "eval", DEFAULT[2])};
+                globalWeight(globalOps, "advance", DEFAULT[0]),
+                globalWeight(globalOps, "copy", DEFAULT[1]),
+                globalWeight(globalOps, "eval", DEFAULT[2])};
         for (String fm : Meter.FORWARD_MODEL_OPS) globalOps.remove(fm);
-        int version = 1;
-        try {
-            version = Integer.parseInt(header.getOrDefault("magat.weights.version", "1").trim());
-        } catch (NumberFormatException ignore) { }
-        if (version < 2) globalOps.clear();     // a version-1 file prices the forward model only
-        return new Weights(source, header, version, global, globalOps, prices, nanos, unpriced);
+        return new Weights(source, header, 2, global, globalOps, prices, nanos, unpriced);
     }
 
-    /** Maps the thesis tree's {@code compute.*} header keys onto the version-1 names. */
-    private static String normaliseHeaderKey(String k) {
-        switch (k) {
-            case "compute.reference":            return "reference";
-            case "compute.referenceAdvanceNanos": return "referenceAdvanceNanos";
-            case "compute.turnsPerRep":          return "turnsPerRep";
-            case "compute.wAdvance":             return "global.wAdvance";
-            case "compute.wCopy":                return "global.wCopy";
-            case "compute.wEval":                return "global.wEval";
-            default:                             return k;
-        }
-    }
-
-    /** A global forward-model weight: the version-2 key, else the version-1 key, else the default; plausible only in (0, 1000). */
-    private static double globalWeight(Map<String, String> h, Map<String, Double> v2, String v1Key, String op, double dflt) {
-        Double d = v2.get(op);
-        if (d == null) {
-            String v = h.get("global." + v1Key);
-            if (v == null) return dflt;
-            d = parseDouble(v);
-        }
-        return (d > 0 && d < 1000) ? d : dflt;
+    /** A global forward-model weight, else the default; plausible only in (0, 1000). */
+    private static double globalWeight(Map<String, Double> global, String op, double dflt) {
+        Double d = global.get(op);
+        return d != null && d > 0 && d < 1000 ? d : dflt;
     }
 
     /** A header number with no plausibility bound (nanoseconds). */
@@ -181,11 +148,6 @@ public final class Weights {
         try { return Double.parseDouble(s.trim()); } catch (NumberFormatException e) { return Double.NaN; }
     }
 
-    private static int indexOf(String[] arr, String s) {
-        for (int i = 0; i < arr.length; i++) if (arr[i].equals(s)) return i;
-        return -1;
-    }
-
     // ------------------------------------------------------------------ queries
 
     public Path source() { return source; }
@@ -196,7 +158,7 @@ public final class Weights {
     public String turnsPerRep() { return header.get("turnsPerRep"); }
     public String portfolioIdentity() { return header.get("portfolio.identity"); }
 
-    /** 1: the forward model priced only; 2: every operation priced. */
+    /** The file format's version: always 2. */
     public int version() { return version; }
 
     /** The global fallback weights: the reference cell's, or {@link #DEFAULT} if the file has none. */
@@ -217,7 +179,7 @@ public final class Weights {
         return w == null ? null : Collections.unmodifiableMap(w);
     }
 
-    /** The algorithm operations a profile prices (empty in a version-1 file), in the file's order. */
+    /** The algorithm operations a profile prices, in the file's order. */
     public Set<String> operations(String name) {
         Map<String, Double> w = prices.get(name);
         Set<String> out = new LinkedHashSet<>();
@@ -245,7 +207,7 @@ public final class Weights {
         return d == null ? Double.NaN : d;
     }
 
-    /** Version 2: the global weights of the reference cell's own algorithm operations. */
+    /** The global weights of the reference cell's own algorithm operations. */
     public Map<String, Double> globalOperations() { return globalOps; }
 
     public Set<String> profiles() { return prices.keySet(); }
@@ -257,10 +219,9 @@ public final class Weights {
         return out;
     }
 
-    /** The operations among {@code declared} that a version-2 profile does not price (none in version 1, which prices the forward model only). */
+    /** The operations among {@code declared} that a profile does not price. */
     public List<String> unpricedOperations(String profile, Collection<String> declared) {
         List<String> out = new ArrayList<>();
-        if (version < 2) return out;
         Map<String, Double> w = prices.get(profile);
         for (String op : declared) if (w == null || !w.containsKey(op)) out.add(op);
         return out;
@@ -279,7 +240,7 @@ public final class Weights {
         }
     }
 
-    /** The global weights on the meter's dense indices: the forward model always, the reference cell's operations in version 2. */
+    /** The global weights on the meter's dense indices: the forward model, and the reference cell's operations. */
     void fillGlobal(double[] dense, boolean[] priced) {
         for (int i = 0; i < Meter.FORWARD_MODEL; i++) { dense[i] = global[i]; priced[i] = true; }
         int n = Meter.operationCount();
@@ -293,9 +254,8 @@ public final class Weights {
     public String summary() {
         int ops = 0;
         for (String p : prices.keySet()) ops = Math.max(ops, operations(p).size());
-        return String.format(Locale.ROOT, "%s: version %d, %d profiles%s, reference %s (%.1f ns/advance), global %.4f/%.4f/%.4f%s",
-                source == null ? "(in-memory)" : source.getFileName(), version, prices.size(),
-                version >= 2 ? ", up to " + ops + " algorithm operation(s) each" : " (forward model only)",
+        return String.format(Locale.ROOT, "%s: %d profiles, up to %d algorithm operation(s) each, reference %s (%.1f ns/advance), global %.4f/%.4f/%.4f%s",
+                source == null ? "(in-memory)" : source.getFileName(), prices.size(), ops,
                 reference(), referenceAdvanceNanos(), global[0], global[1], global[2],
                 "true".equals(header.get("toy")) ? "   TOY CALIBRATION, not a currency" : "");
     }

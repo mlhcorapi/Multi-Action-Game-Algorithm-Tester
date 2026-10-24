@@ -1,4 +1,4 @@
-"""The measures of brief section 4, one function each (design section 11.2).
+"""The measures, one function each.
 
 Every comparison is PAIRED per (budget, scenario, visit): every arm replans the same positions with
 the same seeds, so an arm's effect is the distribution of final(arm) - final(baseline) over the pairs
@@ -6,9 +6,12 @@ it shares with the baseline, and every interval resamples scenarios (stats.py). 
 position can dominate exist in two strata: `all` and `no-terminal` (pairs where neither side's turn
 reached a terminal state, worth about +/-2e9).
 
-Moved from the thesis's analyze_stage1.py: headline, contrasts (now from the spec), W7, anytime,
-efficiency (generalised), variance. New: the budget multiplier (and its wall-clock twin), the
-search-gain multiple, oracle regret, Cohen's d, dev/holdout replication, re-pricing.
+    headline           the paired difference against the baseline, with Cohen's d
+    budget_multiplier  how much budget the baseline would need to match an arm (and in its seconds)
+    wallclock          each arm re-scored against the baseline at the wall-clock it spent
+    contrasts          the spec's own paired comparisons
+    variance           what a scenario and a visit each buy (the design)
+    reprice            each turn's work priced in another machine's currency, re-scored
 """
 import numpy as np
 import pandas as pd
@@ -48,11 +51,11 @@ def stratum(j: pd.DataFrame, s: str) -> pd.DataFrame:
     return j if s == "all" else j[~j["term_any"]]
 
 
-# --------------------------------------------------------------------------- 1 and 8: headline, d
+# --------------------------------------------------------------------------- headline
 def headline(t, baseline, split="", n=N_BOOT) -> pd.DataFrame:
-    """#1 the paired difference against the baseline, per budget and arm, with win/loss/tie counts,
-    per-source intervals (a pooled mean can hide a mechanism's scope: the thesis's bias effect was +53
-    on single-source scenarios and -10 on dual), and #8 Cohen's d on the paired differences."""
+    """The paired difference against the baseline, per budget and arm, with win/loss/tie counts,
+    per-source intervals (a pooled mean can hide where an effect lives), and Cohen's d on the paired
+    differences."""
     rows = []
     for budget in sorted(t.budget.unique()):
         if not ((t.arm == baseline) & (t.budget == budget)).any():
@@ -78,10 +81,9 @@ def headline(t, baseline, split="", n=N_BOOT) -> pd.DataFrame:
     return frame(rows, ["Budget", "Arm", "Stratum"])
 
 
-# --------------------------------------------------------------------------- 5: contrasts
+# --------------------------------------------------------------------------- contrasts
 def contrasts(t, pairs, split="", n=N_BOOT) -> pd.DataFrame:
-    """#5 paired a-minus-b differences for the spec's contrasts and every arm's attribution control
-    (the same arm with its mechanism replaced by noise), at every budget where both arms ran."""
+    """Paired a-minus-b differences for the spec's contrasts, at every budget where both arms ran."""
     rows = []
     for budget in sorted(t.budget.unique()):
         present = set(t[t.budget == budget].arm)
@@ -94,13 +96,13 @@ def contrasts(t, pairs, split="", n=N_BOOT) -> pd.DataFrame:
                 if d.empty:
                     continue
                 m, lo, hi, k = cluster_boot_ci(d, "diff", n=n, key=("contrast", split, budget, c["a"], c["b"], s))
-                rows.append(dict(Budget=int(budget), Kind=c["kind"], Label=c["label"], A=c["a"], B=c["b"], Stratum=s,
+                rows.append(dict(Budget=int(budget), Label=c["label"], A=c["a"], B=c["b"], Stratum=s,
                                  Pairs=len(d), Scenarios=k, MeanDiff=m, Lo=lo, Hi=hi, D=cohens_d(d["diff"]),
                                  WinRate=float((d["diff"] > 0).sum() / max(1, int((d["diff"] != 0).sum())))))
     return frame(rows, ["Budget"])
 
 
-# --------------------------------------------------------------------------- 2: budget multiplier
+# --------------------------------------------------------------------------- budget multiplier
 def locate(M: np.ndarray, A: np.ndarray):
     """Where each arm gain A sits on its baseline curve M (rows: resamples, columns: budget levels).
 
@@ -123,7 +125,7 @@ def along(X: np.ndarray, i: np.ndarray, frac: np.ndarray) -> np.ndarray:
 
 
 def budget_multiplier(t, baseline, split="", n=N_BOOT) -> pd.DataFrame:
-    """#2 the equivalent budget multiplier: how much budget the baseline would need to match the arm.
+    """The equivalent budget multiplier: how much budget the baseline would need to match the arm.
 
     Search gain (final - initial) on the (scenario, visit) cells where the baseline ran at every one
     of its levels and the arm ran, none of them terminal. The baseline's mean gain per level is
@@ -184,31 +186,8 @@ def budget_multiplier(t, baseline, split="", n=N_BOOT) -> pd.DataFrame:
     return frame(rows, ["Budget", "Arm"])
 
 
-# --------------------------------------------------------------------------- 6: search-gain multiple
-def gain_multiple(t, baseline, split="", n=N_BOOT) -> pd.DataFrame:
-    """#6 the arm's mean search gain over the baseline's at the same budget, on the pairs where
-    neither turn is terminal; the interval resamples scenarios."""
-    rows = []
-    for budget in sorted(t.budget.unique()):
-        if not ((t.arm == baseline) & (t.budget == budget)).any():
-            continue
-        for arm in arms_at(t, budget, baseline):
-            j = stratum(paired(t, arm, baseline, budget), "no-terminal")
-            if j.empty:
-                continue
-            sums, counts, _ = cluster_table(j, ["gain", "gain_b"])
-            ga, gb = sums.sum(axis=0) / counts.sum()
-            boot = resampled_means(sums, counts, n, rng_for("gain-multiple", split, budget, arm, baseline))
-            with np.errstate(divide="ignore", invalid="ignore"):
-                lo, hi = quantiles(boot[:, 0] / boot[:, 1])
-            rows.append(dict(Budget=int(budget), Arm=arm, Baseline=baseline, Pairs=int(counts.sum()),
-                             Scenarios=len(counts), ArmGain=float(ga), BaseGain=float(gb),
-                             GainMultiple=float(ga / gb) if gb != 0 else np.nan, Lo=lo, Hi=hi))
-    return frame(rows, ["Budget", "Arm"])
-
-
-# --------------------------------------------------------------------------- 3: W7, and re-pricing
-def rescore(t, baseline, x, split="", n=N_BOOT, key="w7", min_pairs=10) -> pd.DataFrame:
+# --------------------------------------------------------------------------- wall-clock, and re-pricing
+def rescore(t, baseline, x, split="", n=N_BOOT, key="wallclock", min_pairs=10) -> pd.DataFrame:
     """Every arm re-scored against the baseline INTERPOLATED AT THE ARM'S OWN SPEND on axis x.
 
     The baseline's (x, final) points across the budget ladder form a value-versus-spend curve per
@@ -242,14 +221,13 @@ def rescore(t, baseline, x, split="", n=N_BOOT, key="w7", min_pairs=10) -> pd.Da
     return frame(rows, ["Budget", "Arm"])
 
 
-def w7(t, baseline, head: pd.DataFrame, split="", n=N_BOOT) -> pd.DataFrame:
-    """#3 W7, wall-clock fairness, co-primary since the thesis's Gate A3' (2026-08-29).
+def wallclock(t, baseline, head: pd.DataFrame, split="", n=N_BOOT) -> pd.DataFrame:
+    """Wall-clock fairness: each arm re-scored against the baseline at the wall-clock it actually spent.
 
-    The currency is calibrated idle and single-threaded, and under load a cache-light arm's relative op
-    cost rose ~24%, so a unit budget can subsidise exactly the arm that looks best. W7 re-scores each arm
-    against the baseline at the wall-clock it actually spent. Needs the baseline at >= 2 budgets. An arm
-    that wins in units but not here is unresolved: a bookkeeping artefact until shown otherwise."""
-    w = rescore(t, baseline, "plan_ms", split, n, key="w7")
+    The currency is calibrated idle and single-threaded, so under other conditions a unit budget can buy
+    one arm more time than another. Needs the baseline at >= 2 budgets. An arm that wins in units but not
+    here is unresolved: a bookkeeping artefact until shown otherwise."""
+    w = rescore(t, baseline, "plan_ms", split, n, key="wallclock")
     if w.empty:
         return w
     w = w.rename(columns={"Diff": "WallDiff", "Lo": "WallLo", "Hi": "WallHi", "MeanSpend": "MeanArmMillis"})
@@ -269,16 +247,15 @@ def w7(t, baseline, head: pd.DataFrame, split="", n=N_BOOT) -> pd.DataFrame:
 
 def reprice(t, leaves, weights, baseline, split="", n=N_BOOT):
     """Each turn's units recomputed under another machine's weights, and every arm re-scored against
-    the baseline's value-versus-units curve in that currency, as W7 re-scores against wall-clock.
+    the baseline's value-versus-units curve in that currency, as the wall-clock table re-scores against time.
 
     What re-pricing cannot do is re-run the stop rule: every search stopped when it had spent its
     budget under the weights it ran with, so a re-priced arm did not do the work it would have done
     under the new prices. Returns (re-scored table, spend per leaf, notes).
 
-    A leaf's work is its forward-model counts and, from version 2 on, one `op_<name>` count per
-    operation its arm declares. It is re-priced only when the other file prices exactly the operations
-    the leaf counts: a version-2 leaf in a version-1 currency, or a version-1 leaf in a version-2 one,
-    is named and skipped, since one side's work would be priced on an operation the other never counted."""
+    A leaf's work is its forward-model counts and one `op_<name>` count per operation its arm declares. It
+    is re-priced only when the other file prices exactly the operations the leaf counts; otherwise it is
+    named and skipped, since one side's work would be priced on an operation the other never counted."""
     t = t.copy()
     t["units_x"] = np.nan
     ran_global = {(int(m.get("budget", -1)), str(m.get("arm"))) for m in leaves
@@ -317,101 +294,6 @@ def reprice(t, leaves, weights, baseline, split="", n=N_BOOT):
     return table, frame(spend, ["Budget", "Arm"]), notes
 
 
-# --------------------------------------------------------------------------- 7: oracle
-def oracle(t, split="") -> pd.DataFrame:
-    """#7 best-of-field share and mean regret per arm, over the (scenario, visit) pairs at a budget
-    where every arm has a row and none reached a terminal. Needs >= 3 arms to mean anything: with two,
-    best-of-field is a win rate."""
-    rows = []
-    for budget, d in t.groupby("budget"):
-        arms = sorted(d.arm.unique())
-        if len(arms) < 3:
-            continue
-        idx = d.set_index(KEYS + ["arm"])
-        fv = idx["final"].unstack("arm")
-        tm = idx["term"].astype(float).unstack("arm")
-        ok = fv.notna().all(axis=1) & (tm.fillna(1.0) == 0).all(axis=1)
-        fv = fv[ok]
-        if fv.empty:
-            continue
-        mx = fv.max(axis=1)
-        best = fv.eq(mx, axis=0).mean()
-        regret = fv.rsub(mx, axis=0).mean()
-        for arm in arms:
-            rows.append(dict(Budget=int(budget), Arm=arm, Turns=len(fv), Arms=len(arms),
-                             BestShare=float(best[arm]), MeanRegret=float(regret[arm])))
-    df = frame(rows)
-    return df.sort_values(["Budget", "BestShare"], ascending=[True, False], kind="mergesort").reset_index(drop=True) \
-        if not df.empty else df
-
-
-# --------------------------------------------------------------------------- 9: anytime
-def anytime(curve, t, baseline, split="") -> pd.DataFrame:
-    """#9 the paired difference of the best value found so far, per anytime checkpoint (EMCTS: per
-    bridge-burn phase): when does an effect appear. Pairs where either turn ends terminal are left out,
-    since a terminal found a checkpoint earlier would otherwise dominate the mean."""
-    if curve is None or curve.empty:
-        return frame([])
-    rows = []
-    term = t.set_index(KEYS + ["arm", "budget"])["term"]
-    for budget, d in curve.groupby("budget"):
-        b = d[d.arm == baseline][KEYS + ["checkpoint", "best"]]
-        if b.empty:
-            continue
-        for arm in sorted(a for a in d.arm.unique() if a != baseline):
-            j = d[d.arm == arm][KEYS + ["checkpoint", "best"]].merge(b, on=KEYS + ["checkpoint"], suffixes=("", "_b"))
-            if j.empty:
-                continue
-            ta = term.reindex(pd.MultiIndex.from_arrays([j.scenario, j.visit, [arm] * len(j), [budget] * len(j)]))
-            tb = term.reindex(pd.MultiIndex.from_arrays([j.scenario, j.visit, [baseline] * len(j), [budget] * len(j)]))
-            j = j[~(ta.fillna(False).to_numpy(bool) | tb.fillna(False).to_numpy(bool))]
-            j = j.assign(diff=j["best"] - j["best_b"])
-            for cp, g in j.groupby("checkpoint"):
-                rows.append(dict(Budget=int(budget), Arm=arm, Checkpoint=int(cp), MeanDiff=float(g["diff"].mean()),
-                                 Pairs=len(g)))
-    return frame(rows, ["Budget", "Arm", "Checkpoint"])
-
-
-# --------------------------------------------------------------------------- 10: diversity
-def efficiency(t, baseline, split="", ref_ns=None) -> pd.DataFrame:
-    """#10 nodes, unique sequences and the duplicate share per leaf, with the agent's own telemetry
-    means appended. Within-run diagnostics of a mechanism, never a headline: they say how an arm spent
-    its budget, not whether that was good.
-
-    `UnpricedShare` is the audit (DESIGN 6.6): the share of the leaf's plan time its priced units do not
-    predict, 1 - sum(units + init_units) * reference-advance ns / sum(plan_ms). It is measured where the
-    turns ran (threads, machine), so it also holds contention and any machine difference; the
-    calibration's idle audit is the clean figure. Blank without the reference nanoseconds or the
-    initialization units (an imported thesis leaf). Mean `op_` counts are appended like the telemetry."""
-    rows = []
-    for (budget, arm), g in t.groupby(["budget", "arm"]):
-        if "t_mutEvents" in g and g["t_mutEvents"].notna().any():
-            dup, basis = (g["duplicates"] / g["t_mutEvents"].replace(0, np.nan)).mean(), "per mutation event"
-        else:
-            dup, basis = (g["duplicates"] / g["nodes"].replace(0, np.nan)).mean(), "per node"
-        unpriced = np.nan
-        if ref_ns and "init_units" in g and g["init_units"].notna().all() and g["plan_ms"].sum() > 0:
-            unpriced = 1 - float((g["units"] + g["init_units"]).sum()) * ref_ns / 1e6 / float(g["plan_ms"].sum())
-        row = dict(Budget=int(budget), Arm=arm, Turns=len(g), MeanNodes=float(g["nodes"].mean()),
-                   MeanUnique=float(g["unique"].mean()), DupShare=float(dup), DupBasis=basis,
-                   MeanPlanMillis=float(g["plan_ms"].mean()), MeanUnits=float(g["units"].mean()),
-                   TerminalShare=float(g["term"].mean()), UnpricedShare=unpriced)
-        for c in [c for c in g.columns if c.startswith("op_")]:
-            if g[c].notna().any():
-                row[c] = float(g[c].mean())
-        for c in sorted(c for c in g.columns if c.startswith("t_")):
-            if g[c].notna().any():
-                row[c] = float(g[c].mean())
-        rows.append(row)
-    df = frame(rows, ["Budget", "Arm"])
-    if df.empty:
-        return df
-    base = df[df.Arm == baseline].set_index("Budget")["MeanNodes"]
-    df.insert(5, "NodesVsBase", [r.MeanNodes / base[r.Budget] if r.Budget in base.index else np.nan
-                                 for r in df.itertuples(index=False)])
-    return df
-
-
 # --------------------------------------------------------------------------- design: variance
 def variance(t, baseline, split="") -> pd.DataFrame:
     """The ICC of each paired difference and what a scenario and a visit each buy (stats.py)."""
@@ -426,47 +308,6 @@ def variance(t, baseline, split="") -> pd.DataFrame:
                 if c is not None:
                     rows.append(dict(Budget=int(budget), Arm=arm, Stratum=s, **c, **design_advice(c)))
     return frame(rows, ["Budget", "Arm", "Stratum"])
-
-
-# --------------------------------------------------------------------------- 4: dev/holdout side by side
-def replicates(dev_lo, dev_hi, hold_mean, hold_lo, hold_hi, null=0.0) -> str:
-    """`yes` when the holdout point lands inside the development interval and the holdout interval
-    excludes the null; `ns both` when neither interval excludes it (a null that replicated); else `no`."""
-    if any(not np.isfinite(x) for x in (dev_lo, dev_hi, hold_mean, hold_lo, hold_hi)):
-        return "n/a"
-    tol = 1e-9 * max(1.0, abs(dev_lo), abs(dev_hi))           # a degenerate interval must contain its own point
-    dev_sig = dev_lo > null or dev_hi < null
-    hold_sig = hold_lo > null or hold_hi < null
-    if dev_lo - tol <= hold_mean <= dev_hi + tol and hold_sig:
-        return "yes"
-    if not dev_sig and not hold_sig:
-        return "ns both"
-    return "no"
-
-
-def replication(dev: dict, hold: dict) -> pd.DataFrame:
-    """#4 every headline, contrast and multiplier row that both splits have, side by side."""
-    rows = []
-    specs = (("headline", ["Budget", "Arm", "Stratum"], lambda r: r["Arm"], ("MeanDiff", "Lo", "Hi"), 0.0),
-             ("contrast", ["Budget", "A", "B", "Stratum"], lambda r: r["Label"], ("MeanDiff", "Lo", "Hi"), 0.0),
-             ("multiplier", ["Budget", "Arm"], lambda r: r["Arm"], ("Multiplier", "Lo", "Hi"), 1.0))
-    tables = {"headline": "headline", "contrast": "contrasts", "multiplier": "budget_multiplier"}
-    for kind, keys, name, (m, lo, hi), null in specs:
-        d, h = dev.get(tables[kind]), hold.get(tables[kind])
-        if d is None or h is None or d.empty or h.empty:
-            continue
-        j = d.merge(h, on=keys, suffixes=("_dev", "_hold"))
-        for r in j.to_dict("records"):
-            rd = {k: r[k] for k in keys}
-            nm = name({**r, "Label": r.get("Label_dev", r.get("Label"))})
-            rows.append(dict(Kind=kind, Budget=int(r["Budget"]), Name=nm,
-                             Stratum=r.get("Stratum", "no-terminal"),
-                             A=rd.get("A", rd.get("Arm")), B=rd.get("B", r.get("Baseline_dev", "")),
-                             DevMean=r[f"{m}_dev"], DevLo=r[f"{lo}_dev"], DevHi=r[f"{hi}_dev"],
-                             HoldMean=r[f"{m}_hold"], HoldLo=r[f"{lo}_hold"], HoldHi=r[f"{hi}_hold"],
-                             Replicates=replicates(r[f"{lo}_dev"], r[f"{hi}_dev"], r[f"{m}_hold"],
-                                                   r[f"{lo}_hold"], r[f"{hi}_hold"], null)))
-    return frame(rows)
 
 
 def terminal_rates(t) -> pd.DataFrame:

@@ -2,9 +2,6 @@ package magat.agent;
 
 import magat.game.Game;
 
-import java.util.Collections;
-import java.util.Map;
-
 /**
  * A search algorithm, written against the {@link Game} contract. A fresh instance is created for
  * every planned turn, so an agent may keep per-turn state freely and must keep no state across turns.
@@ -21,12 +18,4 @@ public interface SearchAgent<S, A> {
      * {@link TurnBudget#beginSearch}.
      */
     TurnRecord plan(Game<S, A> game, S state, int player, TurnBudget budget);
-
-    /**
-     * Mechanism-support counters for the support probe, read after {@link #plan}. Empty for agents
-     * without a learned mechanism.
-     */
-    default Map<String, Double> support() {
-        return Collections.emptyMap();
-    }
 }

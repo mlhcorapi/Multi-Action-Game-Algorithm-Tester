@@ -3,8 +3,7 @@
 An algorithm is a `SearchAgent<S, A>` written against the `Game` contract ([`CONTRACT.md`](CONTRACT.md)),
 with an `AgentFactory` that names it. Once registered it is an **arm**: priced, run, analysed and
 compared like every arm before it. This page walks through a complete example, then covers what a real
-algorithm adds: its own operations, a mechanism and its control, or an implementation it was ported
-from.
+algorithm adds: its own operations, or an implementation it was ported from.
 
 ## The example: `FirstAgent`
 
@@ -34,7 +33,7 @@ import java.util.Set;
  * The worked example of {@code docs/ADDING_AN_ALGORITHM.md}: random restarts, the smallest search that
  * spends a budget. Until the budget is exhausted it samples a random plan for the turn from a copy of
  * the position, evaluates where the plan leaves the game, and keeps the best. It declares one operation
- * of its own, a sampled plan's work outside the forward model, so a version-2 currency prices it.
+ * of its own, a sampled plan's work outside the forward model, so the currency prices it.
  *
  * <p>No game registers it; the guide shows the one line that does.
  */
@@ -56,7 +55,7 @@ public final class FirstAgent<S, A> implements SearchAgent<S, A> {
     public TurnRecord plan(Game<S, A> game, S state, int player, TurnBudget budget) {
         long t0 = System.currentTimeMillis();
         double initial = game.evaluate(state, player);
-        budget.beginSearch();                         // the initial evaluation is the initialization (in the budget, by default)
+        budget.beginSearch();                         // the initial evaluation is the initialization, paid from the budget
         double best = initial, sum = 0;
         boolean bestTerminal = false;
         int bestLength = 0;
@@ -127,18 +126,17 @@ What each part does:
 - **`TurnRecord`** carries the values, the raw counts and `Meter.units()`, the wall-clock, the
   diversity counts (`nodes`, `unique`, `duplicates`), and optionally anytime checkpoints and telemetry.
 - **The factory** gives the arm its id and declares its operations. The id is permanent once a result
-  is published under it: lowercase, kebab-case, the left half of every profile key (`first@40000`), and
+  is published under it: lowercase, kebab-case, the left half of every profile key (`first@9500`), and
   the name of its results directory.
 
 ## Declaring your algorithm's operations
 
-The forward model is not all an algorithm does. Tree bookkeeping, a learned table's updates and
-lookups, ranking candidates and legal-action queries take time too. Under a version-1 currency they
-are free, so an arm doing more of them buys more wall-clock per unit than its baseline. A version-2
-currency prices them ([`CURRENCY.md`](CURRENCY.md#why-version-2)), provided the arm declares them.
+The forward model is not all an algorithm does. Tree bookkeeping, ranking candidates and legal-action
+queries take time too. The currency prices them
+([`CURRENCY.md`](CURRENCY.md#why-every-operation-is-priced)), provided the arm declares them.
 
 1. **Name them.** Lowercase, dot-separated, led by the algorithm's family: `first.sample`,
-   `emcts.legal`, `qd.update`. `AgentFactory.operations()` returns exactly what this arm's
+   `emcts.legal`. `AgentFactory.operations()` returns exactly what this arm's
    parameters make it perform, and the factory registers them with `Meter.declare` when it is created.
 2. **Record them** through a handle registered once:
    `static final Meter.Op SAMPLE = Meter.register("first.sample")`.
@@ -156,14 +154,14 @@ currency prices them ([`CURRENCY.md`](CURRENCY.md#why-version-2)), provided the 
    `MeteredGame`, the anchor nobody can under-report.
 4. **It is enforced:**
    - a turn that records an undeclared operation is refused;
-   - so is a turn under a version-2 profile that leaves a recorded operation unpriced;
-   - the experiment validator refuses a version-2 run that leaves a declared operation unpriced.
-5. **The audit checks the declarations.** `magat check overhead --audit --arms <id>` times the arm's
-   turns and attributes the time to the forward model, to each declared operation, and to nothing. It
-   warns above 10% unaccounted and fails above 25%. Undeclared work shows up as "nothing".
+   - so is a turn under a profile that leaves a recorded operation unpriced;
+   - the experiment validator refuses a run whose currency leaves a declared operation unpriced.
+5. **The audit checks the declarations.** `magat check audit --arms <id>` times the arm's turns and
+   attributes the time to the forward model, to each declared operation, and to nothing. It warns
+   above 10% unaccounted and fails above 25%. Undeclared work shows up as "nothing".
 
-On Tribes, `emcts` declares five operations and `QdeltaEmcts` adds up to five more. Together they
-leave 0.1-0.7% of a turn unaccounted.
+On Tribes, `emcts` declares five operations, and with the forward model they leave well under 1% of
+its turn unaccounted.
 
 ## Registering it
 
@@ -181,33 +179,13 @@ python magat.py arms --game tribes
 `first` is now listed. Before anything is measured, check its declarations:
 
 ```bash
-python magat.py check overhead --audit --game tribes --arms first --budget 8000
+python magat.py check audit --game tribes --arms first --budget 8000
 ```
-
-## A mechanism and its control
-
-If the algorithm adds a mechanism to an existing one (a learned table, a ranking, a bias), the
-methodology only credits the mechanism against its **attribution control**: the same arm with the
-mechanism replaced by noise ([methods](METHODS.md#5-grids-carry-their-nulls-and-their-controls)).
-
-- Write the control as a parameter of the same agent, not a separate algorithm, so everything else is
-  identical.
-- Make the control consume **the same random draws** in the same order. `comma-z0-random` draws
-  uniformly exactly where `comma-z0-coarse` consults its table; otherwise the two differ in their random
-  stream as well as in the mechanism.
-- Return the control's id from `attributionControl()`; the validator then requires it in every grid
-  that has the arm.
-- A parameter sweep names its null: the setting at which the mechanism is off.
-- A learned mechanism should report its support counters from `SearchAgent.support()`, so that
-  `magat probe support` can say whether the estimates it acts on rest on enough observations.
-
-`QdeltaEmcts` (`core/src/magat/agents/emcts/`) is the worked example: one agent, with every mechanism a
-parameter. `QdeltaArms` defines 31 arms from it, controls included.
 
 ## An algorithm ported from an existing implementation
 
-If the algorithm already exists elsewhere (a paper's code, a thesis tree), port it, and gate the port
-against the original rather than trusting it:
+If the algorithm already exists elsewhere (a paper's code, a game's own agents), port it, and gate the
+port against the original rather than trusting it:
 
 1. Implement an `Oracle<S>` that drives the original implementation on a scenario with the same seed
    and budget, and returns its signature:
@@ -223,26 +201,20 @@ against the original rather than trusting it:
    ```
 
    It requires the port to reproduce the original field for field, with identical weights on both
-   sides. Initialization copies the original makes and never reads are declared with
-   `deadInitCopies()`. `emcts` and every `QdeltaEmcts` arm passed this gate against the thesis's agents,
-   counters included.
-3. Add the arm's equivalences and differences to `experiments/<game>/structure.json` and run `check
-   structure`: pairs that must behave identically, and every mechanism against its control.
+   sides: the fixed measurement weights, unless `--weights` names a currency. Initialization copies
+   the original makes and never reads are declared with `deadInitCopies()`. `emcts` passes this gate
+   against the engine's EMCTS agent, counters included.
 
 ## Pricing it, running it, comparing it
 
-1. **Price it in your machine's currency.** Measuring and comparing arms needs an idle machine.
-   - With a version-2 currency of your own, from `calibrate-controlled`, add the arm:
+1. **Price it in your machine's currency.** Measuring and comparing arms needs an idle machine. With a
+   currency of your own, from `calibrate-controlled`, add the arm:
 
-     ```bash
-     python magat.py calibrate --game tribes --out ~/magat_runs/calibration/tribes-<machine> --arms first
-     ```
+   ```bash
+   python magat.py calibrate --game tribes --out ~/magat_runs/calibration/tribes-<machine> --arms first
+   ```
 
-     This merges into the currency by ratio, and prices its operations as well.
-   - To stay in the published (version-1) currency, merge into a copy of the R7615 file instead. Run
-     `calibrate --check --arms emcts,emcts-comma` first: the drift report says how far your machine's
-     prices are from the published ones. In a version-1 file only the forward model is priced, and the
-     arm's own operations run free, as they do in every published version-1 result.
+   This merges into the currency by ratio, and prices its operations as well.
 2. **Write a spec** with the arm, the baseline at two levels or more, and the comparisons. For example
    `experiments/tribes/first.json`:
 
@@ -251,11 +223,10 @@ against the original rather than trusting it:
      "name": "first",
      "game": "tribes",
      "split": "dev",
-     "baseline": "emcts-comma",
-     "initialization": "in-budget",
-     "levels": [ { "budget": 40000, "visits": 4 }, { "budget": 80000, "visits": 4 } ],
-     "arms": [ { "id": "emcts-comma" }, { "id": "first" } ],
-     "contrasts": [ { "a": "first", "b": "emcts-comma", "label": "random restarts against the baseline" } ]
+     "baseline": "emcts",
+     "levels": [ { "budget": 9500, "visits": 4 }, { "budget": 20000, "visits": 4 } ],
+     "arms": [ { "id": "emcts" }, { "id": "first" } ],
+     "contrasts": [ { "a": "first", "b": "emcts", "label": "random restarts against the baseline" } ]
    }
    ```
 
@@ -267,10 +238,10 @@ against the original rather than trusting it:
    python magat.py analyze --run ~/magat_runs/tribes/runs/first --out ~/magat_runs/tribes/results/first
    ```
 
-   `SUMMARY.md` gives the paired difference against the baseline in units and in seconds, the budget
-   multiplier, and the search-gain multiple. Budget multipliers are dimensionless, so they compare
-   with the published ones (`docs/results/tribes-ab-emcts.md`) across machines and currencies.
-4. **Confirm on the holdout only once.** Freeze the choices first, and run with `--split holdout
-   --frozen <file>` ([methods](METHODS.md#3-the-holdout-is-read-once)).
+   `SUMMARY.md` gives the paired difference against the baseline in units and in seconds, and the
+   budget multiplier. Budget multipliers are dimensionless, so they compare across machines and
+   currencies.
+4. **Confirm on the holdout.** Once the choices are made on the development half, run the same spec
+   with `--split holdout` ([methods](METHODS.md#3-two-halves-explore-on-one-confirm-on-the-other)).
 
 The README's "afternoon path" does all of this at toy size in a few minutes.

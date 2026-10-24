@@ -12,7 +12,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code portfolio.csv}, version 1, and the thesis tree's manifest, which is read as it is.
+ * {@code portfolio.csv}, version 1, and the original manifest format the published Tribes portfolio is
+ * written in, which is read as it is.
  *
  * <p>Version 1 is a block of {@code # key: value} header lines followed by the CSV:
  * <pre>
@@ -26,7 +27,7 @@ import java.util.Map;
  * Nothing in it depends on the machine, the thread count or the time, so a rebuild reproduces it
  * byte for byte wherever the game, its configuration and its sources are the same.
  *
- * <p>The thesis manifest ({@code ScenarioId,Source,SourceGameId,SourceLevelSeed,SourceGameSeed,
+ * <p>The original format ({@code ScenarioId,Source,SourceGameId,SourceLevelSeed,SourceGameSeed,
  * CapturedTick,...,BranchingFactor,...}) has no header block; its rows map onto the same fields.
  */
 public final class Manifest {
@@ -35,7 +36,7 @@ public final class Manifest {
     public static final int FORMAT = 1;
     public static final List<String> CORE_COLUMNS = Collections.unmodifiableList(Arrays.asList(
             "ScenarioId", "Source", "SourceAttempt", "SourceSeed", "Phase", "Branching"));
-    /** Columns of the thesis manifest that are fields here or constants of the source, not facts. */
+    /** Columns of the original format that are fields here or constants of the source, not facts. */
     private static final List<String> LEGACY_NON_FACTS = Arrays.asList(
             "ScenarioId", "Source", "SourceGameId", "SourceLevelSeed", "SourceGameSeed", "CapturedTick", "BranchingFactor");
 
@@ -145,7 +146,7 @@ public final class Manifest {
     public boolean legacy() { return legacy; }
     public Map<String, String> meta() { return meta; }
 
-    /** The game the manifest was built for, or null for a thesis manifest (which does not say). */
+    /** The game the manifest was built for, or null for the original format (which does not say). */
     public String game() { return meta.get("game"); }
 
     /** {@code configuration.*} header entries, with the prefix removed. */

@@ -40,7 +40,7 @@ class SyntheticTree(unittest.TestCase):
         t = self.t
         self.assertTrue(t[(t.arm == "good") & (t.scenario == 12) & (t.visit == 0)].term.all())
         noisy = t[t.arm == "noisy"]
-        self.assertTrue(noisy["terminal"].isna().all(), "the noisy leaf has a blank flag, like an imported row")
+        self.assertTrue(noisy["terminal"].isna().all(), "the noisy leaf has a blank flag")
         self.assertEqual(noisy.term.sum(), 1, "only its |final| >= 1e9 row is terminal")
         self.assertEqual(int(t.term.sum()), 2)
 
@@ -48,12 +48,11 @@ class SyntheticTree(unittest.TestCase):
         self.assertEqual([p.name for p in load.find_splits(self.tmp / "run")], ["dev", "holdout"])
         self.assertEqual(load.find_splits(self.tmp / "run" / "holdout"), [self.tmp / "run" / "holdout"])
 
-    def test_the_spec_contrasts_come_before_the_attribution_controls(self):
+    def test_the_contrasts_come_from_the_spec(self):
         pairs = load.comparisons(load.load_spec(self.spec))
-        self.assertEqual([(p["kind"], p["a"], p["b"]) for p in pairs],
-                         [("contrast", "great", "good"), ("attribution", "good", "noisy")])
+        self.assertEqual([(p["a"], p["b"], p["label"]) for p in pairs], [("great", "good", "great over good")])
 
-    # ------------------------------------------------------------------ 1, 8
+    # ------------------------------------------------------------------ the headline and d
     def test_headline_in_both_strata(self):
         h = measures.headline(self.t, "base", "dev", n=500)
         nt = self.row(h, Budget=1000, Arm="good", Stratum="no-terminal")
@@ -79,7 +78,7 @@ class SyntheticTree(unittest.TestCase):
         self.assertTrue(math.isnan(self.row(h, Budget=1000, Arm="good", Stratum="no-terminal").D),
                         "a constant difference has no spread, so no d")
 
-    # ------------------------------------------------------------------ 2
+    # ------------------------------------------------------------------ the budget multiplier
     def test_the_budget_multiplier_inside_past_and_below_the_ladder(self):
         b = measures.budget_multiplier(self.t, "base", "dev", n=300)
         for arm, budget, m, flag in (("good", 1000, 2.0, "inside"), ("great", 1000, 8.0, "extrapolated"),
@@ -107,10 +106,10 @@ class SyntheticTree(unittest.TestCase):
         self.assertEqual(r.Flag, "non-monotone")
         self.assertTrue(math.isnan(r.Multiplier))
 
-    # ------------------------------------------------------------------ 3
-    def test_w7_rescores_at_the_arms_own_wall_clock(self):
+    # ------------------------------------------------------------------ wall-clock
+    def test_the_wall_clock_table_rescores_at_the_arms_own_time(self):
         h = measures.headline(self.t, "base", "dev", n=200)
-        w = measures.w7(self.t, "base", h, "dev", n=200)
+        w = measures.wallclock(self.t, "base", h, "dev", n=200)
         g = self.row(w, Arm="good", Budget=1000)
         self.assertAlmostEqual(g.WallDiff, 0.0, places=9)
         self.assertEqual(g.ClampedShare, 0.0)
@@ -120,73 +119,13 @@ class SyntheticTree(unittest.TestCase):
         self.assertAlmostEqual(gr.WallDiff, 50 * LN2, places=9)
         self.assertEqual(gr.Verdict, "wins both")
 
-    # ------------------------------------------------------------------ 4
-    def test_dev_and_holdout_side_by_side(self):
-        ho = load.load_split(self.tmp / "run" / "holdout")
-        dev = {"headline": measures.headline(self.t, "base", "dev", n=200),
-               "contrasts": measures.contrasts(self.t, load.comparisons(load.load_spec(self.spec)), "dev", n=200),
-               "budget_multiplier": measures.budget_multiplier(self.t, "base", "dev", n=200)}
-        hold = {"headline": measures.headline(ho.turns, "base", "holdout", n=200),
-                "contrasts": measures.contrasts(ho.turns, load.comparisons(load.load_spec(self.spec)), "holdout", n=200),
-                "budget_multiplier": measures.budget_multiplier(ho.turns, "base", "holdout", n=200)}
-        r = measures.replication(dev, hold)
-        self.assertEqual(self.row(r, Kind="headline", Name="good", Budget=1000, Stratum="no-terminal").Replicates, "yes")
-        self.assertEqual(self.row(r, Kind="multiplier", Name="great", Budget=1000).Replicates, "yes")
-        self.assertEqual(set(r.Kind), {"headline", "contrast", "multiplier"})
-
-    def test_the_replication_rule(self):
-        self.assertEqual(measures.replicates(10, 20, 15, 5, 25), "yes")
-        self.assertEqual(measures.replicates(10, 20, 25, 20, 30), "no", "outside the development interval")
-        self.assertEqual(measures.replicates(10, 20, 15, -5, 30), "no", "the holdout interval includes zero")
-        self.assertEqual(measures.replicates(-5, 20, 2, -3, 8), "ns both")
-        self.assertEqual(measures.replicates(1.5, 3, 2, 1.2, 2.5, null=1.0), "yes")
-
-    # ------------------------------------------------------------------ 5
-    def test_contrasts_and_attribution_from_the_spec(self):
+    # ------------------------------------------------------------------ contrasts and the design
+    def test_contrasts_from_the_spec(self):
         c = measures.contrasts(self.t, load.comparisons(load.load_spec(self.spec)), "dev", n=200)
         gg = self.row(c, A="great", B="good", Budget=1000, Stratum="no-terminal")
         self.assertAlmostEqual(gg.MeanDiff, 50 * math.log(4), places=9)
-        self.assertEqual(gg.Kind, "contrast")
-        self.assertEqual(self.row(c, A="good", B="noisy", Budget=1000, Stratum="all").Kind, "attribution")
+        self.assertEqual(gg.Label, "great over good")
         self.assertTrue(c[c.Budget == 4000].empty, "no contrast has both its arms at 4,000")
-
-    # ------------------------------------------------------------------ 6
-    def test_the_gain_multiple(self):
-        g = self.row(measures.gain_multiple(self.t, "base", "dev", n=200), Arm="good", Budget=1000)
-        cells = [(s, v) for s in range(1, syn.S + 1) for v in range(syn.V) if (s, v) != (12, 0)]
-        base = np.mean([syn.gain(1000, s, v) for s, v in cells])
-        self.assertAlmostEqual(g.GainMultiple, (base + 50 * LN2) / base, places=9)
-        self.assertLessEqual(g.Lo, g.GainMultiple)
-        self.assertGreaterEqual(g.Hi, g.GainMultiple)
-
-    # ------------------------------------------------------------------ 7
-    def test_oracle_best_of_field_and_regret(self):
-        o = measures.oracle(self.t, "dev")
-        o = o[o.Budget == 1000]
-        self.assertEqual(int(o.Turns.iloc[0]), syn.S * syn.V - 2, "turns where any arm is terminal are left out")
-        self.assertEqual(o.iloc[0].Arm, "great")
-        self.assertEqual(self.row(o, Arm="great").BestShare, 1.0)
-        self.assertAlmostEqual(self.row(o, Arm="base").MeanRegret, 50 * math.log(8), places=9)
-        self.assertAlmostEqual(self.row(o, Arm="good").MeanRegret, 50 * math.log(4), places=9)
-        self.assertTrue(measures.oracle(self.t[self.t.budget == 4000]).empty, "two arms are not a field")
-
-    # ------------------------------------------------------------------ 9, 10, design
-    def test_anytime_on_the_curve(self):
-        a = measures.anytime(self.sp.curve, self.t, "base", "dev")
-        for cp in range(1, 5):
-            r = self.row(a, Arm="good", Checkpoint=cp)
-            self.assertAlmostEqual(r.MeanDiff, 5 * cp, places=9)
-            self.assertEqual(r.Pairs, syn.S * syn.V - 1, "the terminal turn's checkpoints are left out")
-
-    def test_efficiency_duplicate_share_and_telemetry(self):
-        e = measures.efficiency(self.t, "base")
-        b = self.row(e, Arm="base", Budget=1000)
-        self.assertEqual(b.DupBasis, "per mutation event")
-        self.assertAlmostEqual(b.DupShare, np.mean([5 / (50 + s - 1) for s in range(1, syn.S + 1)]), places=9)
-        self.assertIn("t_mutEvents", e.columns)
-        p = self.row(e, Arm="poor", Budget=1000)
-        self.assertEqual(p.DupBasis, "per node", "a leaf without mutation counts falls back to nodes")
-        self.assertAlmostEqual(self.row(e, Arm="base", Budget=1000).NodesVsBase, 1.0)
 
     def test_variance_components_separate_scenarios_from_visits(self):
         between = pd.DataFrame(dict(scenario=np.repeat(np.arange(10), 4), diff=np.repeat(np.arange(10.0), 4)))
@@ -217,12 +156,10 @@ class SyntheticTree(unittest.TestCase):
         self.assertTrue(any("poor@1000" in n and "no copy" in n for n in notes), notes)
         self.assertNotIn("weak", set(spend.Arm))
 
-    # ------------------------------------------------------------------ currency version 2
-    def test_a_version_two_leaf_reprices_with_its_operations(self):
+    def test_a_leaf_reprices_with_its_operations(self):
         tree = syn.build_v2(self.tmp / "v2")
         sp = load.load_split(tree)
         w = load.read_weights(syn.write_weights_v2(self.tmp / "v2.properties"))
-        self.assertEqual(w["version"], 2)
         self.assertEqual(w["profiles"]["good@1000"]["x.step"], 0.6)
         table, spend, notes = measures.reprice(sp.turns, sp.leaves, w, "base", "dev", n=50)
         self.assertEqual(notes, [])
@@ -235,8 +172,8 @@ class SyntheticTree(unittest.TestCase):
     def test_currencies_that_price_different_work_are_not_mixed(self):
         tree = syn.build_v2(self.tmp / "v2mix")
         sp = load.load_split(tree)
-        # A version-2 leaf in a version-1 currency: the leaf counts operations the file does not price.
-        _, spend, notes = measures.reprice(sp.turns, sp.leaves, load.read_weights(syn.write_weights(self.tmp / "v1.properties")),
+        # A leaf whose operations the file does not price.
+        _, spend, notes = measures.reprice(sp.turns, sp.leaves, load.read_weights(syn.write_weights(self.tmp / "fm.properties")),
                                            "base", "dev", n=50)
         self.assertTrue(spend.empty)
         self.assertTrue(any("x.step" in n and "does not price" in n for n in notes), notes)
@@ -244,21 +181,16 @@ class SyntheticTree(unittest.TestCase):
         _, spend, notes = measures.reprice(sp.turns, sp.leaves, load.read_weights(syn.write_weights_v2(self.tmp / "v2d.properties",
                                                                                                          drop="x.look")), "base", "dev", n=50)
         self.assertTrue(spend.empty)
-        # A version-1 leaf in a version-2 currency: the file prices operations the leaf never counted.
+        # A file that prices operations the leaf never counted.
         _, spend, notes = measures.reprice(self.t, self.sp.leaves, load.read_weights(syn.write_weights_v2(self.tmp / "v2b.properties")),
                                            "base", "dev", n=50)
         self.assertTrue(any("does not count" in n for n in notes), notes)
 
-    def test_efficiency_carries_the_audit_and_the_operation_counts(self):
-        sp = load.load_split(syn.build_v2(self.tmp / "v2eff"))
-        e = measures.efficiency(sp.turns, "base", ref_ns=50_000)
-        b = self.row(e, Arm="base", Budget=1000)
-        g = sp.turns[(sp.turns.arm == "base") & (sp.turns.budget == 1000)]
-        want = 1 - float((g["units"] + g["init_units"]).sum()) * 50_000 / 1e6 / float(g["plan_ms"].sum())
-        self.assertAlmostEqual(b.UnpricedShare, want, places=9)
-        self.assertIn("op_x.step", e.columns)
-        self.assertTrue(math.isnan(self.row(measures.efficiency(sp.turns, "base"), Arm="base", Budget=1000).UnpricedShare),
-                        "without the reference nanoseconds there is no audit")
+    def test_a_file_of_another_version_is_refused(self):
+        p = self.tmp / "v1.properties"
+        p.write_text("magat.weights.version = 1\nreference = base@1000\nprofile.base@1000.wAdvance = 1\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            load.read_weights(p)
 
     # ------------------------------------------------------------------ bootstrap
     def test_the_bootstrap_is_deterministic_per_row(self):
@@ -278,19 +210,16 @@ class SyntheticTree(unittest.TestCase):
         self.assertEqual(rc, 0)
         for name in report.TABLES + ("repriced", "repriced_spend"):
             self.assertTrue((out / "tables" / f"{name}.csv").is_file(), name)
-        for name in ("headline", "budget_multiplier", "w7_wallclock", "replication", "contrasts", "oracle",
-                     "gain_multiple", "anytime", "efficiency", "variance"):
+        for name in ("headline", "budget_multiplier", "wallclock", "contrasts", "variance"):
             df = pd.read_csv(out / "tables" / f"{name}.csv")
             self.assertFalse(df.empty, name)
-            if name != "replication":
-                self.assertEqual(set(df.Split), {"dev", "holdout"} if name != "anytime" else {"dev", "holdout"}, name)
+            self.assertEqual(set(df.Split), {"dev", "holdout"}, name)
             self.assertIn("currency", df.columns, name)
         summary = (out / "SUMMARY.md").read_text(encoding="utf-8")
-        for heading in ("## Provenance", "## Replication", "## Headline (holdout)", "## Budget multiplier (dev)",
-                        "## Attribution and contrasts", "## Oracle regret", "## Effect size", "## Anytime",
-                        "## Diversity", "## Design", "## Re-priced", "## Scope notes"):
+        for heading in ("## Provenance", "## Headline (holdout)", "## Budget multiplier (dev)", "## Contrasts",
+                        "## Design", "## Re-priced", "## Scope notes"):
             self.assertIn(heading, summary)
-        self.assertLess(summary.index("## Replication"), summary.index("## Headline"))
+        self.assertLess(summary.index("## Headline (dev)"), summary.index("## Headline (holdout)"))
         self.assertTrue((out / "report.json").is_file())
 
         twin = self.tmp / "twin"
