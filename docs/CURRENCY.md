@@ -48,7 +48,7 @@ turns under its own prices at guessed levels, rescales until each level's mean i
 time, and rounds to the nearest 500 units. The result is published as `games/<game>/levels.json`
 (units per level, the measured mean, median, quartiles and range, and the machine and engine), and the
 launcher then uses those levels wherever no `--levels` is named. `magat check time` reports any arm's
-time at any level under any currency.
+time at any level under any currency, and its mean spend against the level.
 
 For Tribes, measured on the R7615 on 2026-10-10 over 64 positions:
 
@@ -144,12 +144,15 @@ Its gates, all enforced:
 
 A session that fails any gate writes nothing. Its measurements still go to `compute_profiles.csv`, and
 to `compute_operations.csv` per operation. An audit prints how much of each cell's turn time the
-priced operations account for, and warns above 10%.
+priced operations account for, and warns above 10%. A spend check prints each cell's mean turn,
+initialization included, against its level, and flags a cell above 1.10× it (`SPEND:`): such a turn
+thinks longer than its level says, usually because an initialization cannot stop when the budget runs
+out. Neither fails a calibration.
 
 `magat calibrate --estimate` times one repetition of the reference cell per level and prints what
 the session would take; it writes nothing. For a calibration you can trust,
-`magat calibrate-controlled` runs the same calibrator in sections, with a stability check, a monitor
-and a reliability verdict per section: see [`CALIBRATING_A_MACHINE.md`](CALIBRATING_A_MACHINE.md).
+`magat calibrate-controlled` runs the same calibrator in one session, with a preflight, a stability check,
+a monitor and a reliability verdict: see [`CALIBRATING_A_MACHINE.md`](CALIBRATING_A_MACHINE.md).
 
 ### Merging: re-denomination by ratio
 

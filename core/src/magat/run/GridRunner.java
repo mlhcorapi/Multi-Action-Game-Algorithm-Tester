@@ -406,8 +406,11 @@ public final class GridRunner {
                                                 String weightsSha, Split.Half half, Options o) throws IOException {
         JsonObject cfg = new JsonObject();
         for (Map.Entry<String, String> e : game.configuration().entrySet()) cfg.add(e.getKey(), e.getValue());
-        prov.set("magat", new JsonObject().add("version", System.getProperty("magat.version", "unknown"))
-                .add("commit", System.getProperty("magat.git.commit", "unknown")));
+        // The commit is -dirty for code changes only; a notebook saved with its outputs is named apart.
+        JsonObject magat = new JsonObject().add("version", System.getProperty("magat.version", "unknown"))
+                .add("commit", System.getProperty("magat.git.commit", "unknown"));
+        if (System.getProperty("magat.git.notebook") != null) magat.add("notebook", System.getProperty("magat.git.notebook"));
+        prov.set("magat", magat);
         if (prov.fresh) {
             prov.set("game", new JsonObject().add("id", game.id()).add("configuration", cfg));
             prov.set("portfolio", new JsonObject().add("dir", portfolio.dir().toAbsolutePath().toString()).add("identity", portfolio.identity()));

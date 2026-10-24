@@ -19,7 +19,7 @@ wrap it). It:
 | Command | What it does |
 |---|---|
 | `build [--clean] [--tests]` | compile the core, the game adapters and the engines |
-| `test [--java \| --python]` | JUnit, then the analysis package's unit tests |
+| `test [--java \| --python]` | JUnit, then the analysis package's unit tests: one line, and each failure when there is one. Everything the tests print is in `<data>/logs/test.log` |
 | `layering` | the core imports no game and no engine |
 | `shakedown` | every moving part at toy size, about ten minutes; exits non-zero on any failure. Run it before every pull request |
 | `arms --game G [--arms a,b\|@set]` | the registered arms, their oracles, which arm is the reference and which are not priced |
@@ -27,11 +27,11 @@ wrap it). It:
 | `portfolio build \| freeze \| verify` | [the portfolio](METHODS.md#1-the-portfolio) |
 | `threads` | the thread sweep: the knee of sustained throughput per budget level, into `threads.json` |
 | `calibrate`, `calibrate --estimate`, `calibrate --check` | [the currency](CURRENCY.md#calibrating) |
-| `calibrate-controlled` | a calibration in sections, with reliability checks ([guide](CALIBRATING_A_MACHINE.md)) |
+| `calibrate-controlled` | a calibration in one session, with reliability checks ([guide](CALIBRATING_A_MACHINE.md)) |
 | `calibrate-time --remeasure [--times 500,1000,5000]` | the levels that are those milliseconds of thinking time on this machine: a maintainer's tool for the reference machine, refused without `--remeasure` once the game's levels are published ([units as time](CURRENCY.md#units-as-time)) |
-| `weights --weights F [--game G --arms ...]` | what a weights file prices; exit 1 if anything asked for is missing |
+| `weights --weights F [--game G --arms ...] [--progress]` | what a weights file prices; exit 1 if anything asked for is missing. With `--progress`, a probe of a calibration under way: what is still to price, and exit 0 |
 | `check contract \| equivalence \| replay \| audit` | the gates (below) |
-| `check time (--weights F \| --fixed-weights) [--levels ...] [--arms ...] [--targets ms,...]` | single-threaded whole turns over positions spread across the portfolio: each level's thinking time on this machine |
+| `check time (--weights F \| --fixed-weights) [--levels ...] [--arms ...] [--targets ms,...]` | single-threaded whole turns over positions spread across the portfolio: each level's thinking time on this machine, and each cell's mean spend against its level, flagged above 1.10× |
 | `experiment validate --experiment SPEC [--weights F \| --no-weights]` | the spec validator alone |
 | `run --experiment SPEC --split dev\|holdout\|all` | run an experiment (below) |
 | `analyze --run DIR [--experiment SPEC] [--baseline ARM] [--reprice W] --out DIR` | every measure, as tables and `SUMMARY.md` |
@@ -62,7 +62,9 @@ results.
 ### A run tree: `<run>/<split>/`
 
 - `_run.json` records:
-  - the MAGAT commit;
+  - the MAGAT commit, marked `-dirty` when a tracked file other than a notebook has uncommitted changes.
+    A notebook run in Jupyter saves its outputs into the file, so that is recorded apart, as
+    `"notebook": "modified"`;
   - the game, the engine commit and the configuration;
   - the portfolio identity;
   - the weights file and its hash;
@@ -90,8 +92,8 @@ else, so it cannot drift from the CLI. Its stages:
 2. **Build, tests and layering.**
 3. **Portfolio.** It builds this machine's own, freezes it, and verifies it against the published one.
 4. **Machine, threads and calibration.** It reads the published levels, sweeps the thread counts, and
-   measures this machine's currency: a preflight, one cell that measures every section still missing,
-   and a checks cell ([guide](CALIBRATING_A_MACHINE.md#on-a-shared-server-the-r7615-through-jupyterhub)).
+   measures this machine's currency: a preflight, one cell that measures the currency in one session and
+   checks it, and one that bundles it ([guide](CALIBRATING_A_MACHINE.md#on-a-shared-server-the-r7615-through-jupyterhub)).
 5. **Gates.** The contract, equivalence on every ported arm, and the audit.
 6. **One cell per experiment** in `experiments/<game>/`: run, analyse, summarise, bundle.
 7. **The shakedown.**

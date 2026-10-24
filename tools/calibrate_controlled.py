@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
-"""Calibrate this machine's own currency in sections, under conditions this script controls where it can
-and records where it cannot, with a reliability verdict for every section.
+"""Calibrate this machine's own currency in one session, under conditions this script controls where it
+can and records where it cannot, with a reliability verdict.
 
-    python magat.py calibrate-controlled --name laptop-i9-14900hx --preflight   the checklist; measures nothing
-    python magat.py calibrate-controlled --name laptop-i9-14900hx --plan        the sections; measures nothing
-    python magat.py calibrate-controlled --name laptop-i9-14900hx               every section, then the checks
-    python magat.py calibrate-controlled --name r7615-time --section 2          one section (one notebook cell)
-    python magat.py calibrate-controlled --name r7615-time --section 2 --redo   section 2 measured again
-    python magat.py calibrate-controlled --name r7615-time --section checks     the two drift checks
+    python magat.py calibrate-controlled --name laptop-i9-14900hx-time --preflight   the checklist; measures nothing
+    python magat.py calibrate-controlled --name laptop-i9-14900hx-time               the session, then the checks
+    python magat.py calibrate-controlled --name laptop-i9-14900hx-time --checks      the checks alone, again
 
 The measurement is `magat calibrate`, unchanged: the same cells, gates, bracket and merge. This script
 decides how it is run and keeps the evidence. docs/CALIBRATING_A_MACHINE.md is the guide.
@@ -20,33 +17,32 @@ decides how it is run and keeps the evidence. docs/CALIBRATING_A_MACHINE.md is t
    server with several L3 domains they run on the quietest one, so the measured thread never migrates
    across caches. On Windows they also run at high priority with EcoQoS off, and the machine is kept
    awake.
-3. Sections. The arms, in a fixed order, in sections of 8. Each section is one `magat calibrate`
-   session, which writes all or nothing and merges into the currency by ratio. A session that runs for
-   hours stakes every cell on its bracket. Sections are planned once per currency and keep their
-   numbers, so a notebook can give each one its own cell and re-run any of them.
-4. Before each section, a stability check (`calibrate --estimate`, which writes nothing) until two
-   estimates in a row agree within 3%, and optionally a wait for the machine to be quiet.
-5. After each section, a verdict:
+3. A stability check (`calibrate --estimate`, which writes nothing) until two estimates in a row agree
+   within 3%, and optionally a wait for the machine to be quiet.
+4. The session: every arm in one `magat calibrate`, which writes all or nothing. Run again over a
+   currency that lacks an arm (one registered since), it prices that arm in one session, merged by ratio.
+5. A verdict:
    - PASS: the calibrator's gates passed, and nothing was seen disturbing it.
    - SUSPECT: the gates passed, but something was seen: sustained other work, CPU throttling of the
-     container, or a session that ran at a different speed from the first.
-   - FAIL: the gates failed, and nothing was written.
-   A failed section is retried once; a suspect one is measured again with --redo, when you choose.
-6. Checks, which write nothing: this machine against the published currency, and against its own new
-   currency at the end.
+     container, or arms added at a different speed from the currency's first session.
+   - FAIL: the gates failed, and nothing was written. A failed session is retried once.
+6. Checks, which write nothing: this machine against its own new currency, and against the game's
+   published currency once there is one.
 7. A monitor throughout: power source, other work on the machine (and which programs), throttling, and
    the busiest measuring core's clock and temperature.
 
-Output lives outside the clone: <data>/calibration/<game>-<name>/ holds the currency, and record/ holds
-state.json, a cumulative SUMMARY.md, and one folder per invocation.
+The screen gets the verdict and a few lines; the rest goes to the record. Output lives outside the
+clone: <data>/calibration/<game>-<name>/ holds the currency, and record/ holds one folder per
+invocation (SUMMARY.md, events.log, monitor.csv, the logs and the session's tables), with the latest
+invocation's summary as record/SUMMARY.md.
 
 Exit codes:
-- 0: complete, or the section passed.
-- 1: a section failed, or the run is incomplete; run the same command again.
+- 0: complete.
+- 1: the session failed twice, or the stability check never settled; run the same command again.
 - 2: refused, or a usage error.
 - 3: stopped because the machine left mains power.
 - 4: the machine stayed busy, so nothing was started.
-- 5: a section is suspect, or the self-check failed.
+- 5: the session is suspect, or the self-check failed.
 - 130: interrupted.
 """
 import argparse
@@ -70,7 +66,6 @@ WINDOWS = os.name == "nt"
 LINUX = sys.platform.startswith("linux")
 
 # Every default is a flag.
-BATCH = 8
 SOAK_MINUTES = 10.0
 SOAK_MAX_MINUTES = 45.0
 STABLE_WITHIN = 0.03
@@ -111,8 +106,11 @@ BANNER_REPS = re.compile(r"^# reps (\d+)\s+turns/rep (\S+) over levels (\S+)\s+w
 BRACKET = re.compile(r"the reference cell moved ([+-]?[\d.]+)% / ([+-]?[\d.]+)% / ([+-]?[\d.]+)%")
 SPEED = re.compile(r"reference advance is x([\d.]+) the file's")
 DRIFT = re.compile(r"largest drift in a turn's price ([+-]?[\d.]+)% \(([^)]*)\)")
-MISSING = re.compile(r"^\s+missing: (\S+)")
+TO_PRICE = re.compile(r"^\s+to price: (\S+)")
 ARM_LINE = re.compile(r"^  ([a-z0-9][a-z0-9._-]*)\s")
+CELL_LINE = re.compile(r"^\s+\[\s*(\d+)/\s*(\d+)\]\s+(\S+)\s.*\s(\d+) s(?:\s+<-- (.*))?$")
+BRACKET_LINE = re.compile(r"^\s+\[bracket\]\s+(\S+)")
+CELL_SPEND = re.compile(r"spend ([\d.]+)x")
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -627,10 +625,11 @@ class Events:
         self.path = path
         self.lock = threading.Lock()
 
-    def __call__(self, text):
+    def __call__(self, text, screen=True):
         line = f"[{now()}] {text}"
         with self.lock:
-            print(line, flush=True)
+            if screen:
+                print(line, flush=True)
             with open(self.path, "a", encoding="utf-8") as fh:
                 fh.write(line + "\n")
 
@@ -1026,10 +1025,14 @@ def jupyter_kernels(plat) -> int:
     return n
 
 
-def git_state() -> str:
-    rev = run_text(["git", "-C", str(ROOT), "rev-parse", "HEAD"]).strip()
-    dirty = run_text(["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=no"]).strip()
-    return (rev or "unknown") + ("-dirty" if dirty else "")
+def launcher():
+    """The launcher, magat.py: what it publishes and what state the checkout is in are its to say."""
+    sys.path.insert(0, str(ROOT))
+    try:
+        import magat
+    finally:
+        sys.path.pop(0)
+    return magat
 
 
 def _ranges(cpus) -> str:
@@ -1076,8 +1079,10 @@ def choose_cpus(a, plat):
 
 def preflight(a, plat, out, data, portfolio) -> tuple:
     """(facts, [(level, text)]) with level ok | info | warn | refuse. Reads; changes nothing."""
+    commit, notebook = launcher().git_state()
     facts, items = {"time": now(), "argv": sys.argv[1:], "platform": plat.name, "cpu": cpu_name(),
-                    "machine": machine_model(), "python": sys.version.split()[0], "commit": git_state()}, []
+                    "machine": machine_model(), "python": sys.version.split()[0], "commit": commit,
+                    "notebook": "modified" if notebook else None}, []
 
     def item(level, text):
         items.append((level, text))
@@ -1092,7 +1097,7 @@ def preflight(a, plat, out, data, portfolio) -> tuple:
         if p["ac"] is False:
             item("refuse" if enforce and not a.allow_battery else "warn",
                  f"on battery ({p['battery']}%): plug in. On battery the development laptop measured at about a third of "
-                 "its speed, and a battery can run out mid-section")
+                 "its speed, and a battery can run out mid-session")
         else:
             item("ok", f"on mains power, battery {p['battery']}%")
         if p.get("saver"):
@@ -1148,7 +1153,7 @@ def preflight(a, plat, out, data, portfolio) -> tuple:
         k = jupyter_kernels(plat)
         if k:
             item("warn", f"{k} other Jupyter kernel(s) are running in this server: make sure none of them runs anything "
-                         "while a section measures (shut down the notebooks you are not using)")
+                         "while the calibration measures (shut down the notebooks you are not using)")
 
     before = cg.get("usage_s") if cg else None
     other, busy = sample_other_work(plat, 5.0)
@@ -1164,7 +1169,7 @@ def preflight(a, plat, out, data, portfolio) -> tuple:
                      f", all of it this container's: either the machine is quiet or /proc shows only this container, in which "
                      "case other users' work is invisible from here")
         item("warn" if other > a.other_cpus else "ok",
-             f"work on the machine now: {other:.1f} logical CPUs{where}; a section is suspect above {a.other_cpus:g} of other work")
+             f"work on the machine now: {other:.1f} logical CPUs{where}; the session is suspect above {a.other_cpus:g} of other work")
 
     up = network_up()
     facts["network_up"] = up
@@ -1226,7 +1231,7 @@ def preflight(a, plat, out, data, portfolio) -> tuple:
 
     free = shutil.disk_usage(data).free / 2**30
     item("warn" if free < 2 else "ok", f"{free:.0f} GB free under the data root")
-    java = run_text(["java", "-version"]).strip().splitlines()
+    java = [line for line in run_text(["java", "-version"]).strip().splitlines() if not line.startswith("Picked up ")]
     facts["java"] = java[:3]
     item("ok" if java else "refuse", "java: " + (java[0] if java else "not found on PATH"))
     facts["portfolio"] = str(portfolio)
@@ -1236,6 +1241,9 @@ def preflight(a, plat, out, data, portfolio) -> tuple:
         item("refuse", f"no portfolio at {portfolio}")
     if facts["commit"].endswith("-dirty"):
         item("warn", "the checkout has uncommitted changes: the currency records the commit as -dirty")
+    elif facts["notebook"]:
+        item("info", "a notebook differs from the commit (saved with its outputs, most likely): the commit is recorded "
+                     "clean, with \"notebook modified\" beside it")
     return facts, items
 
 
@@ -1247,8 +1255,9 @@ class Runner:
         self.a, self.plat, self.monitor, self.events, self.record = a, plat, monitor, events, record
         self.spans = []                       # (phase, start, end) for the counters
 
-    def launch(self, args, phase, log_name, measure, echo=True):
-        """One launcher command: output streamed and kept, the measuring JVM found and tuned."""
+    def launch(self, args, phase, log_name, measure, show=None):
+        """One launcher command: its output kept in the record, the measuring JVM found and tuned. The screen
+        gets what `show` makes of each line (nothing where it returns None, and nothing at all without it)."""
         if measure and self.monitor is not None and self.monitor.power_lost.is_set():
             raise PowerLost()
         if self.monitor is not None:
@@ -1270,8 +1279,9 @@ class Runner:
         with open(log, "a", encoding="utf-8") as fh:
             fh.write(f"\n>>>>> {now()} $ magat {' '.join(map(str, args))}\n")
             for line in p.stdout:
-                if echo and (not self.a.quiet or not measure):
-                    print(line, end="", flush=True)
+                shown = show(line.rstrip("\n")) if show else None
+                if shown is not None:
+                    print(shown, flush=True)
                 fh.write(f"{datetime.datetime.now():%H:%M:%S} {line}")
                 lines.append(line.rstrip("\n"))
             rc = p.wait()
@@ -1286,7 +1296,7 @@ class Runner:
         self.spans.append((phase, start, time.time()))
         if measure and "pid" in tuned:
             self.events(f"[controls] {phase}: JVM pid {tuned['pid']}, CPUs {_ranges(tuned.get('cpus')) or '?'}"
-                        + "".join(f", {k} {v}" for k, v in (tuned.get("applied") or {}).items()))
+                        + "".join(f", {k} {v}" for k, v in (tuned.get("applied") or {}).items()), screen=False)
         return rc, lines
 
     def _find_jvm(self, p, tuned):
@@ -1466,7 +1476,7 @@ def reliability(row, a, clock) -> list:
     if (clock or {}).get("throttled_s", 0) > 0:
         reasons.append(f"the container was CPU-throttled for {clock['throttled_s']:.1f} s")
     if "speed_vs_file" in row and abs(row["speed_vs_file"] - 1) > a.speed_tolerance:
-        reasons.append(f"ran at x{row['speed_vs_file']:.3f} the speed of the currency's first session")
+        reasons.append(f"added arms at x{row['speed_vs_file']:.3f} the speed of the currency's first session")
     if (clock or {}).get("busiest_on_performance_core", 1) < 0.95:
         reasons.append("the measured thread ran on an efficient core part of the time")
     return reasons
@@ -1476,13 +1486,26 @@ def reliability(row, a, clock) -> list:
 
 def launcher_published_weights(game: str):
     """The game's published currency as the launcher knows it, or None while there is none."""
-    sys.path.insert(0, str(ROOT))
-    try:
-        import magat as launcher
-    finally:
-        sys.path.pop(0)
-    f = launcher.PUBLISHED.get(game, {}).get("weights")
+    f = launcher().PUBLISHED.get(game, {}).get("weights")
     return f if f is not None and f.is_file() else None
+
+
+def read_json(path) -> dict:
+    try:
+        return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def cell_progress(line):
+    """The calibrator's line for a finished cell (or the bracket), shortened to progress; None for any other."""
+    m = CELL_LINE.match(line)
+    if m:
+        spend = CELL_SPEND.search(line)
+        return (f"  cell {m.group(1)}/{m.group(2)}  {m.group(3)}" + (f"  spend {spend.group(1)}x" if spend else "")
+                + f"  {m.group(4)} s" + (f"   <-- {m.group(5)}" if m.group(5) else ""))
+    m = BRACKET_LINE.match(line)
+    return f"  bracket  {m.group(1)} again" if m else None
 
 
 def main(argv) -> int:
@@ -1497,46 +1520,37 @@ def main(argv) -> int:
     ap.add_argument("--out", help="the calibration directory (default <data>/calibration/<game>-<name>)")
     ap.add_argument("--portfolio", help="default: the game's published portfolio")
     ap.add_argument("--arms", help="arms or @sets to price (default: every priced arm the game registers)")
-    ap.add_argument("--batch", type=int, default=BATCH, help="arms per section, when the sections are first planned")
-    ap.add_argument("--section", default="all", help="all | next | checks | <number>")
-    ap.add_argument("--redo", action="store_true", help="with --section <n>: measure it again (calibrate --replace)")
-    ap.add_argument("--plan", action="store_true", help="print the sections and what is priced; measure nothing")
     ap.add_argument("--levels"), ap.add_argument("--turns"), ap.add_argument("--reps"), ap.add_argument("--warmup")
-    ap.add_argument("--soak-minutes", type=float, default=SOAK_MINUTES, help="at least this long before the first section")
+    ap.add_argument("--checks", action="store_true", help="only the checks, against the currency as it is")
+    ap.add_argument("--no-checks", action="store_true", help="the session only")
+    ap.add_argument("--soak-minutes", type=float, default=SOAK_MINUTES, help="at least this long before measuring")
     ap.add_argument("--soak-max-minutes", type=float, default=SOAK_MAX_MINUTES)
     ap.add_argument("--stable-within", type=float, default=STABLE_WITHIN)
     ap.add_argument("--wait-quiet", type=float, default=0.0,
-                    help="minutes to wait for other work to drop below --other-cpus before a section (0: do not wait)")
-    ap.add_argument("--other-cpus", type=float, default=OTHER_CPUS, help="other work, in logical CPUs, that makes a section suspect")
+                    help="minutes to wait for other work to drop below --other-cpus before measuring (0: do not wait)")
+    ap.add_argument("--other-cpus", type=float, default=OTHER_CPUS, help="other work, in logical CPUs, that makes the session suspect")
     ap.add_argument("--speed-tolerance", type=float, default=SPEED_TOLERANCE,
-                    help="a section running this far from the first session's speed is suspect")
+                    help="arms added this far from the speed of the currency's first session make the session suspect")
     ap.add_argument("--retries", type=int, default=RETRIES)
     ap.add_argument("--check-arms", default=",".join(CHECK_ARMS))
-    ap.add_argument("--no-checks", action="store_true", help="--section all: skip the two drift checks")
-    ap.add_argument("--redo-checks", action="store_true", help="run the drift checks again even if recorded")
     ap.add_argument("--priority", default="high", choices=("normal", "above", "high"), help="Windows only")
     ap.add_argument("--cpus", help="run the measuring JVMs on these CPUs, e.g. 0-15")
     ap.add_argument("--no-affinity", action="store_true", help="let the OS place the measuring JVMs on any CPU")
     ap.add_argument("--let-display-sleep", action="store_true", help="keep the system awake but let the display turn off")
     ap.add_argument("--interval", type=float, default=INTERVAL)
-    ap.add_argument("--quiet", action="store_true", help="do not echo the calibrator's own output (it is still logged)")
     ap.add_argument("--preflight", action="store_true", help="the checklist only; measure nothing")
     ap.add_argument("--allow-battery", action="store_true")
     ap.add_argument("--allow-online", action="store_true")
     ap.add_argument("--allow-other-java", action="store_true")
-    ap.add_argument("--allow-policy-change", action="store_true", help="continue a currency under a different clock policy")
+    ap.add_argument("--allow-policy-change", action="store_true", help="measure a currency under a different clock policy")
     ap.add_argument("--toy", action="store_true", help="toy sizes for the shakedown: gates reported, not enforced")
     a = ap.parse_args(argv)
 
     if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", a.name):
         print("--name: lower-case letters, digits, '.', '_' and '-'", file=sys.stderr)
         return 2
-    numbered = re.fullmatch(r"\d+(,\d+)*", a.section) is not None
-    if a.section not in ("all", "next", "checks") and not numbered:
-        print("--section: all, next, checks, a section number, or a list of them (2,3,4)", file=sys.stderr)
-        return 2
-    if a.redo and not numbered:
-        print("--redo needs --section <number>[,<number>...]", file=sys.stderr)
+    if a.checks and a.no_checks:
+        print("--checks runs only the checks and --no-checks none of them: choose one", file=sys.stderr)
         return 2
     plat = platform_api()
     data = pathlib.Path(os.environ.get("MAGAT_DATA") or (pathlib.Path.home() / "magat_runs")).resolve()
@@ -1551,25 +1565,19 @@ def main(argv) -> int:
     record = record_root / stamp
     record.mkdir(parents=True, exist_ok=True)
     events = Events(record / "events.log")
-    state_path = record_root / "state.json"
-    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.is_file() else {}
-
-    def save_state():
-        tmp = state_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
-        tmp.replace(state_path)
+    # The clock policy of the session that wrote the currency: a later session or check under another is refused.
+    policy_file = record_root / "policy.json"
 
     print("############################################################")
-    print(f"# MAGAT controlled calibration   {a.game}-{a.name}   section {a.section}{' (redo)' if a.redo else ''}"
+    print(f"# MAGAT controlled calibration   {a.game}-{a.name}" + ("   the checks" if a.checks else "")
           + ("   (TOY)" if a.toy else ""))
     print(f"# currency  {out}")
     print(f"# record    {record}")
     print("############################################################")
     quiet_runner = Runner(a, plat, None, events, record)
 
-    # ---- the arms and their sections: planned once per currency, so a section keeps its number
-    rc, lines = quiet_runner.launch(["arms", "--game", a.game, *(["--arms", a.arms] if a.arms else [])], "arms", "build", False,
-                                    echo=False)
+    # ---- the arms, and what the currency prices already
+    rc, lines = quiet_runner.launch(["arms", "--game", a.game, *(["--arms", a.arms] if a.arms else [])], "arms", "build", False)
     if rc != 0:
         print(f"cannot list the arms (exit {rc}); read {record / 'build.log'}", file=sys.stderr)
         return 2
@@ -1581,116 +1589,74 @@ def main(argv) -> int:
         ref_arm = m.group(1) if m else ref_arm
     if ref_arm is None:
         ref_arm = arms[0] if arms else CHECK_ARMS[0]
-    plan = state.get("plan")
-    if plan and plan.get("batch") != a.batch and a.batch != BATCH:
-        print(f"note: this currency's sections were planned with --batch {plan['batch']}; --batch {a.batch} is ignored")
-    if not plan:
-        todo = [x for x in arms if x != ref_arm]
-        size = a.batch if a.batch > 0 else max(1, len(todo))
-        plan = {"batch": a.batch, "reference": ref_arm, "sections": [todo[i:i + size] for i in range(0, len(todo), size)]}
-    else:
-        known = {x for s in plan["sections"] for x in s}
-        new = [x for x in arms if x not in known and x != plan["reference"]]
-        size = plan["batch"] if plan["batch"] > 0 else max(1, len(new))
-        plan["sections"] += [new[i:i + size] for i in range(0, len(new), size)]
-    sections = plan["sections"] or [[]]          # the reference arm alone still makes a currency
 
     def coverage(runner):
-        """The arms the currency prices at every level, and what it lacks."""
+        """The arms the currency prices at every level, and what it lacks: a probe of progress (exit 0), not a gate."""
         if not weights.is_file():
             return set(), list(arms)
         levels = re.search(r"^levels\s*=\s*(\S+)", weights.read_text(encoding="utf-8", errors="replace"), re.M)
         rc, lines = runner.launch(["weights", "--weights", weights, "--game", a.game, "--arms", ",".join([ref_arm, *arms]),
-                                   *(["--levels", levels.group(1)] if levels else [])], "coverage", "coverage", measure=False,
-                                  echo=False)
-        missing = [m.group(1) for line in lines for m in [MISSING.match(line)] if m]
+                                   *(["--levels", levels.group(1)] if levels else []), "--progress"], "coverage", "coverage",
+                                  measure=False)
+        missing = [m.group(1) for line in lines for m in [TO_PRICE.match(line)] if m]
         gone = {x.split("@")[0] for x in missing}
         return {x for x in [ref_arm, *arms] if x not in gone}, missing
 
-    def latest(section_no):
-        rows = [r for r in state.get("sessions", []) if r.get("section") == section_no]
-        return rows[-1] if rows else None
-
     covered, _ = coverage(quiet_runner)
+    # The session prices what the currency does not: every arm of a new currency, and for one that exists the
+    # arms registered since, merged by ratio. The calibrator measures the reference cell in every session itself.
+    fresh = not weights.is_file()
+    new_arms = [x for x in arms if x != ref_arm and x not in covered]
+    session_arms = new_arms or [ref_arm]                      # what --arms names
+    priced_arms = ([ref_arm] if fresh else []) + new_arms     # what the session writes into the currency
+    measure = not a.checks and bool(priced_arms)
+    published = launcher_published_weights(a.game)
+    checks = [] if a.no_checks else ["self"] if a.toy or published is None else ["published", "self"]
 
-    def print_plan():
-        print(f"\n=== PLAN: {len(arms)} arm(s) in {len(sections)} section(s) of up to {plan['batch'] or len(arms)}, the "
-              f"reference arm {plan['reference']} measured in every one ===")
-        for k, sec in enumerate(sections, 1):
-            done = all(x in covered for x in sec) and weights.is_file()
-            last = latest(k)
-            verdict = (last.get("reliability") or last.get("verdict")) if last else "-"
-            pace = state.get("pace")
-            mins = f"~{project(pace, len(sec)) / 60:.0f} min" if pace else "duration after the first estimate"
-            print(f"  section {k}: {'priced' if done else 'to measure':10}  last verdict {verdict:9}  {mins:>10}   "
-                  f"{', '.join(sec) or plan['reference']}")
-        ch = state.get("checks", {})
-        print("  checks:    " + (", ".join(f"{k} {v.get('verdict')}" for k, v in ch.items()) or "not run"))
-        print(f"SECTIONS: {len(sections)}")
+    def plan():
+        """What this invocation measures, in a line."""
+        what = []
+        if measure:
+            what.append(f"one session pricing {len(priced_arms)} arm(s): {', '.join(priced_arms)}"
+                        + ("" if fresh else ", merged into the currency by ratio"))
+        if checks and (measure or a.checks):
+            what.append("the check" + ("s " if len(checks) > 1 else " ") + " and ".join(
+                "against this machine's own new currency" if c == "self" else "against the published currency" for c in checks))
+        return "; then ".join(what) or "nothing: the currency already prices every arm"
 
-    if a.plan:
-        print_plan()
+    if not measure and not a.checks and not a.preflight:
+        print(f"\nThe currency already prices every arm ({', '.join(sorted(covered))}) at its levels: nothing to measure. "
+              "--checks checks it again; to measure it again, calibrate under another --name.")
+        print("CONTROLLED CALIBRATION: COMPLETE (nothing to measure)")
         return 0
 
     # ---- preflight
     facts, items = preflight(a, plat, out, data, portfolio)
-    previous = state.get("policy") if weights.is_file() else None
+    previous = read_json(policy_file).get("policy") if weights.is_file() else None
     policy = {k: facts.get("power_settings", {}).get(k) for k in POLICY}
     if previous and previous != policy:
         changed = ", ".join(f"{k} {previous.get(k)} -> {policy.get(k)}" for k in POLICY if previous.get(k) != policy.get(k))
         items.append(("refuse" if not (a.allow_policy_change or a.toy) else "warn",
-                      f"the clock policy differs from this currency's first session ({changed}). A currency measured under "
-                      "two clock policies is two currencies: restore the policy, or calibrate under another --name"))
+                      f"the clock policy differs from the session that wrote this currency ({changed}). A currency measured "
+                      "under two clock policies is two currencies, and a check under another policy reports the change as "
+                      "drift: restore the policy, or calibrate under another --name"))
     (record / "preflight.json").write_text(json.dumps({"facts": facts, "items": items}, indent=2, default=str), encoding="utf-8")
-    print("\n=== PREFLIGHT ===")
-    for level, text in items:
-        print(f"  [{level:6}] {text}")
     refusals = [t for lvl, t in items if lvl == "refuse"]
+    shown = items if a.preflight else [(lvl, t) for lvl, t in items if lvl in ("warn", "refuse")]
+    if shown:
+        print("\n=== PREFLIGHT ===" + ("" if a.preflight else "   (its warnings; preflight.json has every item)"))
+        for level, text in shown:
+            print(f"  [{level:6}] {text}")
     if refusals or a.preflight:
         verdict = f"NOT READY ({len(refusals)} refusal(s))" if refusals else "READY" + (
             " (read the warnings)" if any(lvl == "warn" for lvl, _ in items) else "")
         print(f"\nPREFLIGHT: {verdict}")
         if not refusals:
-            print_plan()
+            print(f"It would measure {plan()}.")
         return 2 if refusals else 0
-
-    # ---- what this invocation does
-    def pending_sections():
-        return [k for k, sec in enumerate(sections, 1) if not (weights.is_file() and all(x in covered for x in sec))]
-
-    # The published check needs the game's published currency (the reference machine's), once there is one.
-    published = launcher_published_weights(a.game)
-    checks_all = [] if a.no_checks else (["self"] if a.toy or published is None else ["published", "self"])
-    if a.section == "all":
-        todo_sections, todo_checks = pending_sections(), checks_all
-    elif a.section == "next":
-        pend = pending_sections()
-        todo_sections = pend[:1]
-        todo_checks = [] if pend else [c for c in checks_all if c not in state.get("checks", {})][:2]
-    elif a.section == "checks":
-        todo_sections, todo_checks = [], checks_all or (["self"] if published is None else ["published", "self"])
-    else:
-        asked = list(dict.fromkeys(int(x) for x in a.section.split(",")))
-        if any(not 1 <= k <= len(sections) for k in asked):
-            print(f"there are {len(sections)} section(s); --plan lists them", file=sys.stderr)
-            return 2
-        pend = pending_sections()
-        todo_sections = [k for k in asked if a.redo or k in pend]
-        todo_checks = []
-    todo_checks = [c for c in todo_checks if a.redo_checks or c not in state.get("checks", {})]
-    if not todo_sections and not todo_checks:
-        if numbered:
-            worst = 0
-            for k in dict.fromkeys(int(x) for x in a.section.split(",")):
-                last = latest(k)
-                v = (last or {}).get("reliability") or (last or {}).get("verdict") or "PASS"
-                print(f"\nsection {k} is already priced (last verdict {v}); --redo measures it again")
-                print(f"SECTION {k}: {v} (already priced)")
-                worst = worst if v == "PASS" or a.toy else 5
-            return worst
-        print_plan()
-        print("\nCONTROLLED CALIBRATION: " + ("COMPLETE" if not pending_sections() else "nothing to do in this section"))
-        return 0
+    if a.checks and not weights.is_file():
+        print(f"--checks checks a currency, and there is none at {weights} yet: run without --checks first", file=sys.stderr)
+        return 2
 
     # ---- one invocation at a time
     lock = record_root / ".lock"
@@ -1719,18 +1685,9 @@ def main(argv) -> int:
     monitor.start_counters(elsewhere)
     monitor.start()
     runner = Runner(a, plat, monitor, events, record)
-    events(f"[start] {a.game}-{a.name}: sections {todo_sections or '-'}, checks {todo_checks or '-'}; "
+    events(f"[start] {a.game}-{a.name}: {plan()}; "
            + (f"JVMs on CPUs {_ranges(cpus)} ({facts.get('measuring_cpus_why')})" if confined else "JVMs placed by the OS")
            + (", kept awake" if awake else "") + (f", priority {a.priority}" if WINDOWS else ""))
-    state["plan"] = plan
-    state.setdefault("first", stamp)
-    state.setdefault("sessions", [])
-    state.setdefault("checks", {})
-    state.setdefault("invocations", []).append({"stamp": stamp, "section": a.section, "redo": a.redo,
-                                                "facts": {k: facts.get(k) for k in ("power", "power_settings", "power_mode",
-                                                                                    "cgroup", "measuring_cpus", "other_cpus_now",
-                                                                                    "uptime_hours", "network_up", "commit", "java")}})
-    save_state()
 
     passthrough = []
     for flag in ("levels", "turns", "reps", "warmup"):
@@ -1742,7 +1699,6 @@ def main(argv) -> int:
     t_start = time.time()
     code, why = 0, None
     soak_rows, session_rows, check_rows = [], [], []
-    clock = {}
 
     def clocks():
         if WINDOWS:
@@ -1766,6 +1722,45 @@ def main(argv) -> int:
             events(f"[quiet] {other:.1f} logical CPUs of other work before {label}: waiting (until "
                    f"{datetime.datetime.fromtimestamp(deadline):%H:%M})")
             time.sleep(30)
+
+    def session(attempt):
+        """One `magat calibrate` of the session's arms: its verdict, and why it is in doubt."""
+        label = "session" + (f" attempt {attempt + 1}" if attempt else "")
+        events(f"[session] {label} starts: {', '.join(priced_arms)}; the calibrator's output goes to {record / 'session.log'}")
+        before = time.time()
+        rc, lines = runner.launch(["calibrate", "--game", a.game, "--out", out, "--arms", ",".join(session_arms),
+                                   *passthrough, *toy], label, "session", measure=True, show=cell_progress)
+        for f in ("compute_profiles.csv", "compute_operations.csv"):
+            if (out / f).is_file() and (out / f).stat().st_mtime >= before:
+                shutil.copy2(out / f, record / f)
+        text = "\n".join(lines)
+        passed = rc == 0 and "CALIBRATION: PASS" in text
+        row = {"label": label, "attempt": attempt + 1, "arms": priced_arms, "invocation": stamp,
+               "verdict": "PASS" if passed else ("STOPPED (power)" if monitor.power_lost.is_set() else "FAIL"),
+               "minutes": round((time.time() - before) / 60, 1)}
+        m = BRACKET.search(text)
+        if m:
+            row["bracket"] = [float(x) for x in m.groups()]
+        m = SPEED.search(text)
+        if m:
+            row["speed_vs_file"] = float(m.group(1))
+        row["failures"] = [line.strip()[7:] for line in lines if line.strip().startswith("[FAIL]")]
+        spend = next((line for line in lines if line.startswith("SPEND: ")), None)
+        if spend:
+            row["spend"] = spend[len("SPEND: "):]
+        s = monitor.stats.get(label, {})
+        if s.get("n"):
+            row["other_cpus_mean"] = round(s["other"] / s["n"], 2)
+            row["other_cpus_worst"] = round(s["worst"], 2)
+            row["load_events"] = s["events"]
+        row["clock"] = clocks().get(label)
+        row["reasons"] = reliability(row, a, row["clock"]) if passed else []
+        row["reliability"] = ("SUSPECT" if row["reasons"] else "PASS") if passed else row["verdict"]
+        events(f"[session] {label}: {row['reliability']} in {row['minutes']} min"
+               + (f"; bracket {row['bracket'][0]:+.1f}/{row['bracket'][1]:+.1f}/{row['bracket'][2]:+.1f}%" if "bracket" in row else "")
+               + (f"; speed x{row['speed_vs_file']:.3f} the currency's first session's" if "speed_vs_file" in row else "")
+               + "".join(f"; {r}" for r in row["reasons"] + row["failures"]))
+        return row
 
     try:
         rc, _ = runner.launch(["version"], "build", "build", measure=False)
@@ -1803,24 +1798,18 @@ def main(argv) -> int:
                 break
             if elapsed >= a.soak_max_minutes:
                 raise Stop(1, f"the machine did not hold its speed: not steady after {elapsed:.0f} min of estimates (last "
-                              f"change {100 * (change or 0):.1f}%), so a section would compare cells measured at different "
+                              f"change {100 * (change or 0):.1f}%), so the session would compare cells measured at different "
                               "speeds; docs/CALIBRATING_A_MACHINE.md says what to change")
-        state["pace"] = {"levels": est["levels"], "positions": est["positions"], "reps": est["reps"],
-                         "warmup": est["warmup"], "reference": est["reference"]}
-        save_state()
         last = clocks().get(f"soak {len(soak_rows)}")
         if last:
             events("[stability] busiest measuring core during the last estimate: " + describe_counters(last))
 
-        hours = sum(project(est, len(sections[k - 1])) for k in todo_sections) / 3600
+        hours = project(est, len([x for x in session_arms if x != ref_arm])) / 3600 if measure else 0.0
         check_arms = [x for x in a.check_arms.split(",") if x in arms or x == ref_arm] or [ref_arm]
-        check_hours = len(todo_checks) * project(est, len([x for x in check_arms if x != ref_arm])) / 3600
+        check_hours = len(checks) * project(est, len([x for x in check_arms if x != ref_arm])) / 3600
         finish = datetime.datetime.now() + datetime.timedelta(hours=hours + check_hours)
-        print(f"\n=== THIS INVOCATION: section(s) {todo_sections or '-'}, check(s) {todo_checks or '-'} ===")
-        for k in todo_sections:
-            print(f"  section {k}: {', '.join(sections[k - 1]) or ref_arm}   ~{project(est, len(sections[k - 1])) / 60:.0f} min")
-        events(f"[plan] about {hours:.1f} h of sections and {check_hours:.1f} h of checks at this pace; expected to finish "
-               f"around {finish:%H:%M} (up to 25% later if the arms run slower than the reference)")
+        events(f"[plan] about {hours:.1f} h for the session and {check_hours:.1f} h for the checks at this pace; expected to "
+               f"finish around {finish:%H:%M} (up to 25% later if the arms run slower than the reference)")
         if WINDOWS and not a.toy:
             mt = facts.get("maintenance")
             hh, mm = (int(mt[11:13]), int(mt[14:16])) if mt and len(mt) >= 16 and mt[11:13].isdigit() else (2, 0)
@@ -1832,83 +1821,30 @@ def main(argv) -> int:
                 events(f"[plan] WARNING: the run will still be going at {hh:02d}:{mm:02d}, when Windows' automatic maintenance "
                        "starts on an idle machine (scans, updates). Move the maintenance time or start earlier; "
                        "docs/CALIBRATING_A_MACHINE.md, 'Before the run', step 7")
-        if todo_sections and not a.toy:
+        if not a.toy:
             events("[plan] leave the machine alone from here: nothing else should run until it finishes")
 
-        # ---- sections
-        failed = []
-        for attempt in range(1 + max(0, a.retries)):
-            queue = todo_sections if attempt == 0 else failed
-            failed = []
-            for n, k in enumerate(queue):
-                sec = sections[k - 1]
-                if not a.redo and weights.is_file() and sec:
-                    covered, _ = coverage(runner)
-                    if all(x in covered for x in sec):
-                        continue
-                if n or attempt:
-                    wait_quiet(f"section {k}")
-                label = f"section {k}" + (" redo" if a.redo else "") + (f" attempt {attempt + 1}" if attempt else "")
-                print(f"\n=== {label.upper()} of {len(sections)}: {', '.join(sec) or ref_arm} ===")
-                events(f"[section] {label} starts: {len(sec) or 1} arm(s)")
-                before = time.time()
-                args = ["calibrate", "--game", a.game, "--out", out, "--arms", ",".join(sec) or ref_arm,
-                        *passthrough, *toy]
-                if a.redo and sec and weights.is_file():
-                    args += ["--replace", ",".join(sec)]
-                rc, lines = runner.launch(args, label, "sections", measure=True)
-                keep = record / label.replace(" ", "-")
-                keep.mkdir(exist_ok=True)
-                for f in ("compute_profiles.csv", "compute_operations.csv"):
-                    if (out / f).is_file() and (out / f).stat().st_mtime >= before:
-                        shutil.copy2(out / f, keep / f)
-                text = "\n".join(lines)
-                passed = rc == 0 and "CALIBRATION: PASS" in text
-                row = {"section": k, "attempt": attempt + 1, "redo": a.redo, "arms": sec or [ref_arm], "label": label,
-                       "verdict": "PASS" if passed else ("STOPPED (power)" if monitor.power_lost.is_set() else "FAIL"),
-                       "minutes": round((time.time() - before) / 60, 1), "invocation": stamp}
-                m = BRACKET.search(text)
-                if m:
-                    row["bracket"] = [float(x) for x in m.groups()]
-                m = SPEED.search(text)
-                if m:
-                    row["speed_vs_file"] = float(m.group(1))
-                row["failures"] = [line.strip()[7:] for line in lines if line.strip().startswith("[FAIL]")]
-                s = monitor.stats.get(label, {})
-                if s.get("n"):
-                    row["other_cpus_mean"] = round(s["other"] / s["n"], 2)
-                    row["other_cpus_worst"] = round(s["worst"], 2)
-                    row["load_events"] = s["events"]
-                clock = clocks()
-                row["clock"] = clock.get(label)
-                if passed:
-                    row["reasons"] = reliability(row, a, row["clock"])
-                    row["reliability"] = "SUSPECT" if row["reasons"] else "PASS"
-                    state.setdefault("policy", policy)
-                else:
-                    row["reliability"] = row["verdict"]
-                session_rows.append(row)
-                state["sessions"].append(row)
-                save_state()
-                events(f"[section] {label}: {row['reliability']} in {row['minutes']} min"
-                       + (f"; bracket {row['bracket'][0]:+.1f}/{row['bracket'][1]:+.1f}/{row['bracket'][2]:+.1f}%" if "bracket" in row else "")
-                       + (f"; speed x{row['speed_vs_file']:.3f} the first session's" if "speed_vs_file" in row else "")
-                       + "".join(f"; {r}" for r in row.get("reasons", []) + row["failures"]))
-                print(f"SECTION {k}: {row['reliability']}" + (" - " + "; ".join(row["reasons"]) if row.get("reasons") else ""))
+        # ---- the session, retried once if its gates fail
+        if measure:
+            print(f"\n=== THE SESSION: {', '.join(priced_arms)} ===")
+            for attempt in range(1 + max(0, a.retries)):
+                if attempt:
+                    wait_quiet("the retry")
+                session_rows.append(session(attempt))
                 if monitor.power_lost.is_set():
                     raise PowerLost()
-                if not passed:
-                    failed.append(k)
-            if not failed:
-                break
-        covered, missing = coverage(runner)
+                if session_rows[-1]["verdict"] == "PASS":
+                    break
+            if session_rows[-1]["verdict"] == "PASS" and not policy_file.is_file():
+                policy_file.write_text(json.dumps({"policy": policy, "session": stamp}, indent=2) + "\n", encoding="utf-8")
 
         # ---- checks (write nothing)
-        if weights.is_file() and not failed:
-            for which in todo_checks:
+        if weights.is_file() and (not session_rows or session_rows[-1]["verdict"] == "PASS"):
+            covered, _ = coverage(runner)
+            for which in checks:
                 label = f"check {which}"
                 if not all(x in covered for x in check_arms):
-                    events(f"[check] {which}: skipped, the currency does not price {', '.join(check_arms)} yet")
+                    events(f"[check] {which}: skipped, the currency does not price {', '.join(check_arms)}")
                     continue
                 wait_quiet(label)
                 print(f"\n=== CHECK AGAINST {'THE PUBLISHED CURRENCY' if which == 'published' else 'THE NEW CURRENCY'} "
@@ -1941,21 +1877,16 @@ def main(argv) -> int:
                     row["other_cpus_worst"] = round(s["worst"], 2)
                 row["clock"] = clocks().get(label)
                 check_rows.append(row)
-                if verdict in ("PASS", "FAIL"):
-                    state["checks"][which] = row
-                    save_state()
                 events(f"[check] {which}: {verdict}" + (f", largest turn-price drift {row['drift']}" if "drift" in row else ""))
-                print(f"CHECK {which.upper()}: {verdict}")
 
-        if a.section == "all":
-            code = 1 if failed or missing else 0
-        elif a.section == "checks" or (a.section == "next" and todo_checks):
-            code = 1 if any(r["verdict"].startswith("ERROR") for r in check_rows) else 0
-        else:
-            code = 1 if failed else 0
-        if code == 0 and any(r.get("reliability") == "SUSPECT" for r in session_rows) and not a.toy:
+        session_row = session_rows[-1] if session_rows else None
+        if session_row and session_row["verdict"] != "PASS":
+            code = 1
+        elif any(r["verdict"].startswith("ERROR") for r in check_rows):
+            code = 1
+        elif session_row and session_row["reliability"] == "SUSPECT" and not a.toy:
             code = 5
-        if code == 0 and any(r["check"] == "self" and r["verdict"] == "FAIL" for r in check_rows) and not a.toy:
+        elif any(r["check"] == "self" and r["verdict"] == "FAIL" for r in check_rows) and not a.toy:
             code = 5
     except PowerLost:
         code = 3
@@ -1971,33 +1902,49 @@ def main(argv) -> int:
         counters_file = monitor.stop_counters()
         plat.keep_awake(False, display=False)
 
-    # ---- summary and bundle
+    # ---- the verdict, the summary and the bundle
     if WINDOWS:
         counters = counter_stats(counters_file, runner.spans, nominal_mhz(), set(cpus), confined) if counters_file else {}
     else:
         counters = monitor.clock_stats()
-    try:
-        covered, _ = coverage(runner)
-    except Exception:
-        pass
-    summary = write_summary(a, out, record, facts, plan, sections, state, soak_rows, session_rows, check_rows, counters,
-                            monitor.stats, weights, covered, time.time() - t_start, code, confined, cpus, awake)
-    print("\n" + summary)
-    _unlock(lock)
-    if weights.is_file():
-        subprocess.run([PY, str(MAGAT), "bundle", "--name", f"calibration-{a.game}-{a.name}", "--paths", str(out)],
-                       cwd=str(ROOT), check=False)
-    pend = [k for k, sec in enumerate(sections, 1) if not (weights.is_file() and all(x in covered for x in sec))]
-    suspect = [r["section"] for r in session_rows if r.get("reliability") == "SUSPECT"]
-    verdicts = {0: "COMPLETE" if not pend else f"DONE - {len(pend)} section(s) still to measure: {pend}",
-                1: f"INCOMPLETE - {why}" if why else "INCOMPLETE - run the same command again to measure what is missing",
+    session_row = session_rows[-1] if session_rows else None
+    failed_why = "; ".join((session_row or {}).get("failures", [])[:2]) or "its gates failed"
+    verdicts = {0: "COMPLETE",
+                1: f"INCOMPLETE - {why}" if why else
+                   (f"INCOMPLETE - the session wrote nothing ({failed_why}); run the same command again"
+                    if session_row and session_row["verdict"] != "PASS" else "INCOMPLETE - a check did not run; read the record"),
                 2: f"NOT STARTED - {why}", 3: "STOPPED - the machine went on battery; plug in and run the same command again",
                 4: f"NOT STARTED - {why}",
-                5: (f"SUSPECT - the currency is written, but section(s) {suspect} are in doubt (reasons above); once the cause "
-                    f"is gone, measure them again with --section {','.join(map(str, suspect))} --redo"
-                    if suspect else "SUSPECT - the self-check failed: the machine did not hold its speed across the run"),
-                130: "INTERRUPTED - run the same command again to continue"}
-    print(f"CONTROLLED CALIBRATION: {verdicts.get(code, code)}")
+                5: (f"SUSPECT - the currency is written, but the session is in doubt: {'; '.join(session_row['reasons'])}. "
+                    "Once the cause is gone, calibrate again under another --name"
+                    if session_row and session_row.get("reliability") == "SUSPECT"
+                    else "SUSPECT - the self-check failed: the machine did not hold its speed across the run"),
+                130: "INTERRUPTED - run the same command again"}
+    verdict = verdicts.get(code, str(code))
+    write_summary(a, record, facts, soak_rows, session_rows, check_rows, counters, monitor.stats, weights,
+                  time.time() - t_start, code, verdict, confined, cpus, awake)
+    shutil.copy2(record / "SUMMARY.md", record_root / "SUMMARY.md")
+    _unlock(lock)
+
+    print("\n=== RESULT ===")
+    if session_row:
+        print(f"  session  {session_row['reliability']} in {session_row['minutes']} min" + (" (retried)" if len(session_rows) > 1 else "")
+              + f": {', '.join(session_row['arms'])}"
+              + (f"; bracket {'/'.join(f'{x:+.1f}%' for x in session_row['bracket'])}" if "bracket" in session_row else ""))
+        for r in session_row["reasons"] + session_row["failures"][:3]:
+            print(f"           {r}")
+        if "spend" in session_row:
+            print(f"  spend    {session_row['spend']}")
+    for r in check_rows:
+        print(f"  check    {r['check']}: {r['verdict']}" + (f", largest turn-price drift {r['drift']}" if "drift" in r else ""))
+    if check_rows and published is None:
+        print("  check    published: not run, no currency is published for this game yet")
+    print(f"  summary  {record_root / 'SUMMARY.md'}")
+    if weights.is_file():
+        subprocess.run([PY, str(MAGAT), "bundle", "--name", f"calibration-{a.game}-{a.name}", "--paths", str(out)],
+                       cwd=str(ROOT), check=False, stdout=subprocess.DEVNULL)
+        print(f"  bundle   {data / 'bundles' / f'calibration-{a.game}-{a.name}.zip'}")
+    print(f"CONTROLLED CALIBRATION: {verdict}")
     return code
 
 
@@ -2018,26 +1965,29 @@ def _unlock(lock):
         pass
 
 
-def write_summary(a, out, record, facts, plan, sections, state, soak, sessions, checks, counters, mstats, weights,
-                  covered, seconds, code, confined, cpus, awake) -> str:
+def write_summary(a, record, facts, soak, sessions, checks, counters, mstats, weights, seconds, code, verdict,
+                  confined, cpus, awake) -> str:
+    """This invocation's SUMMARY.md: the verdict, the conditions, the stability check, the session and the checks."""
     ps = facts.get("power_settings", {})
     p = facts.get("power") or {}
     cg = facts.get("cgroup") or {}
     net = facts.get("network_up")
     L = [f"# Controlled calibration: {a.game}-{a.name}" + (" (toy)" if a.toy else ""), "",
-         f"- Currency: `{weights}`" + (" (written)" if weights.is_file() else " (not written yet)"),
-         f"- This invocation: section `{a.section}`{' (redo)' if a.redo else ''}, record `{record}`, {seconds / 3600:.2f} h, "
-         f"finished {now()}, exit {code}",
-         f"- Commit {facts.get('commit')}; {facts.get('cpu')}; {facts.get('machine')}; "
+         f"- Verdict: {verdict}",
+         f"- Currency: `{weights}`" + (" (written)" if weights.is_file() else " (not written)"),
+         "- This invocation: " + ("the checks" if a.checks else "the session" + ("" if a.no_checks else " and the checks"))
+         + f"; record `{record}`, {seconds / 3600:.2f} h, finished {now()}, exit {code}",
+         f"- Commit {facts.get('commit')}" + (", notebook modified" if facts.get("notebook") else "")
+         + f"; {facts.get('cpu')}; {facts.get('machine')}; "
          f"{(facts.get('java') or ['java ?'])[0]}", "",
-         "## Conditions of this invocation", "", "| | |", "|---|---|"]
+         "## Conditions", "", "| | |", "|---|---|"]
     if p.get("battery") is not None:
         L.append(f"| Power | {'mains' if p.get('ac') is not False else 'battery'}, battery {p.get('battery')}%"
                  + (", charging" if p.get("charging") else "") + " |")
     if ps.get("plan"):
         L.append(f"| Power plan | {ps['plan']}; power mode {facts.get('power_mode', {}).get('effective', '-')} |")
     L += [f"| Clock policy | {describe_clock(ps)} |",
-          f"| Measuring JVMs | " + (f"CPUs {_ranges(cpus)}: {facts.get('measuring_cpus_why')}" if confined else "placed by the OS")
+          "| Measuring JVMs | " + (f"CPUs {_ranges(cpus)}: {facts.get('measuring_cpus_why')}" if confined else "placed by the OS")
           + (f"; priority {a.priority}; power throttling off" if WINDOWS else "") + " |"]
     if cg:
         L.append(f"| Container | cgroup v{cg.get('version')}, CPUs {facts.get('allowed_cpus')}, "
@@ -2061,71 +2011,37 @@ def write_summary(a, out, record, facts, plan, sections, state, soak, sessions, 
                      + (f"{100 * r['change']:.1f}%" if r["change"] is not None else "-") + " | "
                      + describe_counters(counters.get(f"soak {i}")) + " |")
         L.append("")
-
-    def session_table(rows, title):
-        out_ = [title, "", "| Section | Arms | Verdict | Minutes | Bracket (adv/copy/eval) | Speed vs first | Other work: mean / worst | Busiest core | When |",
-                "|---|---|---|---|---|---|---|---|---|"]
-        for r in rows:
-            out_.append(f"| {r['label']} | {', '.join(r['arms'])} | {r.get('reliability', r['verdict'])} | {r['minutes']} | "
-                        + ("/".join(f"{x:+.1f}%" for x in r["bracket"]) if "bracket" in r else "-") + " | "
-                        + (f"x{r['speed_vs_file']:.3f}" if "speed_vs_file" in r else "first") + " | "
-                        + (f"{r['other_cpus_mean']:.1f} / {r['other_cpus_worst']:.1f}" if "other_cpus_mean" in r else "-") + " | "
-                        + describe_counters(r.get("clock")) + f" | {r.get('invocation', '')} |")
-        for r in rows:
-            for f in r.get("reasons", []) + r.get("failures", []):
-                out_.append(f"- {r['label']}: {f}")
-        return out_ + [""]
-
     if sessions:
-        L += session_table(sessions, "## Sections measured in this invocation")
+        L += ["## The session", "", "| Attempt | Arms | Verdict | Minutes | Bracket (adv/copy/eval) | Speed vs the file | "
+              "Other work: mean / worst | Busiest core |", "|---|---|---|---|---|---|---|---|"]
+        for r in sessions:
+            L.append(f"| {r['attempt']} | {', '.join(r['arms'])} | {r['reliability']} | {r['minutes']} | "
+                     + ("/".join(f"{x:+.1f}%" for x in r["bracket"]) if "bracket" in r else "-") + " | "
+                     + (f"x{r['speed_vs_file']:.3f}" if "speed_vs_file" in r else "-") + " | "
+                     + (f"{r['other_cpus_mean']:.1f} / {r['other_cpus_worst']:.1f}" if "other_cpus_mean" in r else "-") + " | "
+                     + describe_counters(r.get("clock")) + " |")
+        for r in sessions:
+            for f in r["reasons"] + r["failures"]:
+                L.append(f"- attempt {r['attempt']}: {f}")
+            if "spend" in r:
+                L.append(f"- attempt {r['attempt']}, spend: {r['spend']}")
+        L += ["", "The calibrator's own output, every cell and table, is in `session.log`; its measurements in "
+              "`compute_profiles.csv` and `compute_operations.csv`.", ""]
     if checks:
-        L += ["## Checks in this invocation (write nothing)", "", "| Check | Verdict | Largest turn-price drift | Bracket | Busiest core |",
+        L += ["## Checks (write nothing)", "", "| Check | Verdict | Largest turn-price drift | Bracket | Busiest core |",
               "|---|---|---|---|---|"]
         for r in checks:
             L.append(f"| {r['check']} | {r['verdict']} | {r.get('drift', '-')} | "
                      + ("/".join(f"{x:+.1f}%" for x in r["bracket"]) if "bracket" in r else "-") + " | "
                      + describe_counters(r.get("clock")) + " |")
-        L.append("")
+        L += ["", "Each check's drift table is in `checks.log`.", ""]
     events = sum(s.get("events", 0) for s in mstats.values())
     L += [f"Other work above {a.other_cpus:g} logical CPU(s), sustained: {events} period(s); each is in `events.log` with "
-          "the programs that were using the CPU, and `monitor.csv` has every sample.", ""]
-
-    # the whole currency, every invocation
-    C = [f"# Controlled calibration: {a.game}-{a.name}" + (" (toy)" if a.toy else ""), "",
-         f"Currency `{weights}`" + (" (written)" if weights.is_file() else " (not written yet)") + f"; updated {now()}.", "",
-         "## Sections", "", "| Section | Arms | Priced | Latest verdict | Bracket | Speed vs first | Other work, worst | Busiest core | When |",
-         "|---|---|---|---|---|---|---|---|---|"]
-    redo = []
-    for k, sec in enumerate(sections, 1):
-        rows = [r for r in state.get("sessions", []) if r.get("section") == k]
-        r = rows[-1] if rows else {}
-        priced = weights.is_file() and all(x in covered for x in sec)
-        v = r.get("reliability", r.get("verdict", "-"))
-        if v == "SUSPECT":
-            redo.append(k)
-        C.append(f"| {k} | {', '.join(sec) or plan['reference']} | {'yes' if priced else 'no'} | {v} | "
-                 + ("/".join(f"{x:+.1f}%" for x in r["bracket"]) if "bracket" in r else "-") + " | "
-                 + (f"x{r['speed_vs_file']:.3f}" if "speed_vs_file" in r else ("first" if r else "-")) + " | "
-                 + (f"{r['other_cpus_worst']:.1f}" if "other_cpus_worst" in r else "-") + " | "
-                 + describe_counters(r.get("clock")) + f" | {r.get('invocation', '-')} |")
-    C.append("")
-    for k in redo:
-        rows = [r for r in state["sessions"] if r.get("section") == k]
-        C.append(f"- Section {k} is suspect: {'; '.join(rows[-1].get('reasons', []))}.")
-    if redo:
-        C.append(f"- Once the cause is gone, measure them again in one session: "
-                 f"`python magat.py calibrate-controlled --name {a.name} --section {','.join(map(str, redo))} --redo`")
-    ch = state.get("checks", {})
-    C += ["", "## Checks", "", "| Check | Verdict | Largest turn-price drift | When |", "|---|---|---|---|"]
-    for name in ("published", "self"):
-        r = ch.get(name)
-        C.append(f"| {name} | {r['verdict'] if r else 'not run'} | {r.get('drift', '-') if r else '-'} | "
-                 f"{r.get('invocation', '-') if r else '-'} |")
-    C += ["", f"Every invocation's record is in `{record.parent}`; this one's summary is `{record / 'SUMMARY.md'}`.", ""]
+          "the programs that were using the CPU, and `monitor.csv` has every sample. Every invocation keeps its own "
+          f"folder in `{record.parent}`.", ""]
     text = "\n".join(L)
     (record / "SUMMARY.md").write_text(text + "\n", encoding="utf-8")
-    (record.parent / "SUMMARY.md").write_text("\n".join(C) + "\n", encoding="utf-8")
-    return text + "\n" + "\n".join(C)
+    return text
 
 
 if __name__ == "__main__":

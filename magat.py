@@ -7,7 +7,8 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
 <data>/logs/<name>.log with a timestamped header. The notebook calls this and nothing else.
 
     python magat.py build [--clean] [--tests]
-    python magat.py test [--java | --python]          JUnit, then the analysis package's unit tests
+    python magat.py test [--java | --python]          JUnit, then the analysis package's unit tests: one line and any
+                                                      failures; everything they print in <data>/logs/test.log
     python magat.py check contract    --game tribes [--portfolio DIR] [--scenarios N] [--ids 1,2]
     python magat.py check equivalence --game tribes [--portfolio DIR] [--weights FILE] [--arms emcts] ...
     python magat.py arms --game tribes
@@ -20,12 +21,12 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
                               [--audit-warn 0.10]
     python magat.py calibrate --estimate --game tribes [the same arguments]     what the session would take; writes nothing
     python magat.py calibrate --check --game tribes --arms a,b [--weights FILE] [--portfolio DIR]   gates each cell's turn price
-    python magat.py calibrate-controlled --name NAME [--preflight | --plan] [--section all|next|checks|N [--redo]] ...
-                              this machine's own currency in sections, with reliability checks (docs/CALIBRATING_A_MACHINE.md)
+    python magat.py calibrate-controlled --name NAME [--preflight | --checks | --no-checks] ...
+                              this machine's own currency in one session, with reliability checks (docs/CALIBRATING_A_MACHINE.md)
     python magat.py calibrate-time --game tribes --remeasure [--times 500,1000,5000] [--positions 64] [--tolerance 0.05] [--round 500]
                               the levels that are those milliseconds of thinking time here (a maintainer's tool, run on the
                               reference machine; refused without --remeasure once games/<game>/levels.json is published)
-    python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...]
+    python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...] [--progress]
     python magat.py run --experiment SPEC [--split dev|holdout|all] [--out DIR] [--portfolio DIR] [--weights FILE]
                         [--threads N] [--threads-at 400000=31] [--retire-leaf arm@budget] [--toy]
     python magat.py experiment validate --experiment SPEC [--weights FILE | --no-weights] [--split ...]
@@ -266,22 +267,37 @@ def newest_mtime(paths) -> float:
     return max((os.path.getmtime(p) for p in paths), default=0.0)
 
 
-def run(cmd, log: str = None, check: bool = True, cwd=None) -> int:
-    """Run a command, stream it, tee it to <data>/logs/<log>.log (append, timestamped)."""
+def say(text: str = "", end: str = "\n") -> None:
+    """Print, unless whoever reads this output has gone (`magat ... | grep -q` stops at its match): from then
+    on the screen gets nothing, and the command still runs to its end, logged, with its own exit code."""
+    try:
+        print(text, end=end, flush=True)
+    except BrokenPipeError:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+
+
+def run(cmd, log: str = None, check: bool = True, cwd=None, echo: bool = True, lines: list = None) -> int:
+    """Run a command, stream it (unless echo is off), tee it to <data>/logs/<log>.log (append, timestamped);
+    `lines` collects its output."""
     logfile = data_root() / "logs" / f"{log or 'magat'}.log"
     started = datetime.datetime.now()
     shown = " ".join(str(c) for c in cmd)
-    print(f"$ {shown}\n  -> {logfile}", flush=True)
+    if echo:
+        say(f"$ {shown}\n  -> {logfile}")
     with open(logfile, "a", encoding="utf-8") as fh:
         fh.write(f"\n>>>>> {started:%Y-%m-%d %H:%M:%S} $ {shown}\n")
         p = subprocess.Popen([str(c) for c in cmd], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                              text=True, encoding="utf-8", errors="replace", bufsize=1, cwd=cwd or str(ROOT))
         for line in p.stdout:
-            print(line, end="", flush=True)
+            if echo:
+                say(line, end="")
             fh.write(line)
+            if lines is not None:
+                lines.append(line.rstrip("\n"))
         rc = p.wait()
         fh.write(f"===== exit {rc} after {datetime.datetime.now() - started}\n")
-    print(f"[exit {rc}] after {datetime.datetime.now() - started}", flush=True)
+    if echo:
+        say(f"[exit {rc}] after {datetime.datetime.now() - started}")
     if check and rc != 0:
         sys.exit(rc)
     return rc
@@ -305,7 +321,17 @@ def clean_build_dir() -> None:
         sys.exit(f"cannot clean {BUILD}: {e}\nset MAGAT_BUILD to a directory outside any synced folder")
 
 
-def build(clean: bool = False, tests: bool = False, force: bool = False) -> None:
+def compile_java(cmd, echo: bool) -> None:
+    """javac; quiet unless it fails (echo off), when its output is shown and the launcher stops."""
+    out = []
+    rc = run(cmd, log="build", check=False, echo=echo, lines=out)
+    if rc != 0:
+        if not echo:
+            print("\n".join(out))
+        sys.exit(rc)
+
+
+def build(clean: bool = False, tests: bool = False, force: bool = False, echo: bool = True) -> None:
     if clean:
         clean_build_dir()
     BUILD.mkdir(parents=True, exist_ok=True)
@@ -318,10 +344,11 @@ def build(clean: bool = False, tests: bool = False, force: bool = False) -> None
         CLASSES.mkdir(parents=True, exist_ok=True)
         listing = BUILD / "sources.txt"
         listing.write_text("\n".join(srcs) + "\n", encoding="utf-8")
-        run(["javac", "--release", "11", "-encoding", "UTF-8", "-nowarn", "-d", CLASSES,
-             "-cp", classpath(), f"@{listing}"], log="build")
+        compile_java(["javac", "--release", "11", "-encoding", "UTF-8", "-nowarn", "-d", CLASSES,
+                      "-cp", classpath(), f"@{listing}"], echo)
         stamp.touch()
-        print(f"BUILD OK - {len(srcs)} sources")
+        if echo:
+            print(f"BUILD OK - {len(srcs)} sources")
     if tests:
         tsrcs = java_files(source_dirs(tests=True))
         tstamp = TEST_CLASSES / ".built"
@@ -329,10 +356,11 @@ def build(clean: bool = False, tests: bool = False, force: bool = False) -> None
             TEST_CLASSES.mkdir(parents=True, exist_ok=True)
             listing = BUILD / "test-sources.txt"
             listing.write_text("\n".join(tsrcs) + "\n", encoding="utf-8")
-            run(["javac", "--release", "11", "-encoding", "UTF-8", "-nowarn", "-d", TEST_CLASSES,
-                 "-cp", classpath(CLASSES), f"@{listing}"], log="build")
+            compile_java(["javac", "--release", "11", "-encoding", "UTF-8", "-nowarn", "-d", TEST_CLASSES,
+                          "-cp", classpath(CLASSES), f"@{listing}"], echo)
             tstamp.touch()
-            print(f"TEST BUILD OK - {len(tsrcs)} sources")
+            if echo:
+                print(f"TEST BUILD OK - {len(tsrcs)} sources")
 
 
 def test_classes() -> dict:
@@ -347,12 +375,85 @@ def test_classes() -> dict:
     return {k: sorted(v) for k, v in groups.items()}
 
 
+# Stack frames of the test runners themselves, left out of a failure as shown (the log keeps them).
+RUNNER_FRAMES = ("at org.junit.", "at junit.", "at java.base/jdk.internal.", "at java.base/java.lang.reflect.",
+                 "at jdk.internal.", "at sun.reflect.", "at java.lang.reflect.")
+
+
+def junit_result(lines: list, rc: int) -> tuple:
+    """(tests, failed, the failures as shown) from JUnitCore's output."""
+    for line in lines:
+        if line.startswith("OK (") and rc == 0:
+            return int(line.split("(")[1].split()[0]), 0, []
+    total = next((line for line in lines if line.startswith("Tests run:")), None)
+    if total is None:                                   # the JVM itself failed: show the end of what it said
+        return 0, 1, lines[-30:]
+    tests, failed = (int(part.split(":")[1]) for part in total.split(",")[:2])
+    start = next((i for i, line in enumerate(lines) if line.startswith("There w") and "failure" in line), 0)
+    end = next((i for i, line in enumerate(lines) if line.startswith("FAILURES!!!")), len(lines))
+    shown = [line for line in lines[start:end] if not line.strip().startswith(RUNNER_FRAMES)]
+    return tests, failed, shown
+
+
+def unittest_result(lines: list, rc: int) -> tuple:
+    """(tests, failed, the failures as shown) from `python -m unittest`'s output."""
+    ran = next((line for line in lines if line.startswith("Ran ") and " test" in line), None)
+    if ran is None:
+        return 0, 1, lines[-30:]
+    tests = int(ran.split()[1])
+    if rc == 0:
+        return tests, 0, []
+    verdict = next((line for line in reversed(lines) if line.startswith("FAILED (")), "FAILED (failures=1)")
+    failed = sum(int(part.split("=")[1]) for part in verdict[len("FAILED ("):-1].split(", ")
+                 if part.split("=")[0] in ("failures", "errors"))
+    start = next((i for i, line in enumerate(lines) if line.startswith("=" * 70)), len(lines))
+    end = max((i for i, line in enumerate(lines) if line.startswith("-" * 70)), default=len(lines))
+    return tests, failed, lines[start:end]
+
+
+def test(rest: list) -> int:
+    """MAGAT's JUnit tests, each engine's own, then the analysis package's. The screen gets one line, and the
+    real failures when there are any; <data>/logs/test.log gets everything the tests printed."""
+    started = time.time()
+    groups, shown = [], []
+    if "--python" not in rest:
+        build(tests=True, echo=False)
+        engines = {engine_dir(g).resolve(): g for g in games()}
+        for cwd, classes in test_classes().items():
+            name = f"{engines[cwd.resolve()]} engine" if cwd.resolve() in engines else "MAGAT"
+            out = []
+            rc = run(["java", f"-Xmx{DEFAULT_HEAP}", "-cp", classpath(TEST_CLASSES, CLASSES), "org.junit.runner.JUnitCore",
+                      *classes], log="test", cwd=str(cwd), check=False, echo=False, lines=out)
+            tests, failed, failures = junit_result(out, rc)
+            groups.append((name, tests, failed))
+            shown += failures
+    if "--java" not in rest:
+        os.environ["PYTHONPATH"] = os.pathsep.join(p for p in (str(ANALYSIS), os.environ.get("PYTHONPATH")) if p)
+        out = []
+        rc = run([sys.executable, "-m", "unittest", "discover", "-s", str(ANALYSIS / "tests"), "-t", str(ANALYSIS), "-v"],
+                 log="test", check=False, echo=False, lines=out)
+        tests, failed, failures = unittest_result(out, rc)
+        groups.append(("analysis", tests, failed))
+        shown += failures
+    tests, failed = sum(g[1] for g in groups), sum(g[2] for g in groups)
+    for line in shown:
+        print(line)
+    verdict = f"FAIL - {failed} of {tests} failed" if failed else f"PASS - {tests} tests"
+    parts = ", ".join(f"{name} {bad} of {n}" if bad else f"{name} {n}" for name, n, bad in groups)
+    print(f"TESTS: {verdict} ({parts}) in {time.time() - started:.0f} s; "
+          f"the full output is in {data_root() / 'logs' / 'test.log'}")
+    return 1 if failed else 0
+
+
 def java(args, heap: str = None, props=(), log: str = None, check: bool = True) -> int:
     build()
     game = None
     if "--game" in args:
         game = args[args.index("--game") + 1]
-    sysprops = [f"-Dmagat.data={data_root()}", f"-Dmagat.git.commit={git_commit()}"]
+    commit, notebook = git_state()
+    sysprops = [f"-Dmagat.data={data_root()}", f"-Dmagat.git.commit={commit}"]
+    if notebook:
+        sysprops.append("-Dmagat.git.notebook=modified")
     if game:
         sysprops.append(f"-Dmagat.engine.commit={engine_commit(game)}")
         sysprops += ENGINE_PROPS.get(game, lambda d: [])(engine_dir(game))
@@ -364,15 +465,19 @@ def java(args, heap: str = None, props=(), log: str = None, check: bool = True) 
     return run(cmd, log=log or (args[0] if args else "java"), check=check)
 
 
-def git_commit() -> str:
-    """This checkout's commit, with -dirty when the tree has uncommitted changes, for provenance."""
+def git_state() -> tuple:
+    """(this checkout's commit, whether a notebook differs from it), for provenance. The commit carries -dirty when
+    a tracked file other than a notebook has uncommitted changes. A notebook run in Jupyter saves its outputs
+    into the file, which says nothing about the code a result came from, so it is reported apart."""
     try:
         rev = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, timeout=10).stdout.strip()
-        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT, capture_output=True,
-                               text=True, timeout=10).stdout.strip()
-        return (rev or "unknown") + ("-dirty" if dirty else "")
+        changed = subprocess.run(["git", "diff", "--name-only", "-z", "HEAD"], cwd=ROOT, capture_output=True,
+                                 text=True, timeout=10).stdout.split("\0")
     except Exception:
-        return "unknown"
+        return "unknown", False
+    changed = [f for f in changed if f]
+    notebooks = [f for f in changed if f.endswith(".ipynb")]
+    return (rev or "unknown") + ("-dirty" if len(notebooks) < len(changed) else ""), bool(notebooks)
 
 
 def with_spec_game(args: list) -> list:
@@ -404,26 +509,28 @@ def bundle(argv: list) -> None:
             break
         paths.append(a)
     data = data_root()
-    files = set()
+    files = {}                                       # file -> the folder its name in the zip is relative to
     for item in paths:
         pth = pathlib.Path(item)
         if not pth.is_absolute():
             pth = data / pth
         if pth.is_dir():
-            files.update(q for q in pth.rglob("*") if q.is_file())
+            files.update((q, pth.resolve().parent) for q in pth.rglob("*") if q.is_file())
         elif pth.exists():
-            files.add(pth)
+            files[pth] = pth.resolve().parent
         else:
-            files.update(pathlib.Path(h) for h in glob.glob(str(pth)) if pathlib.Path(h).is_file())
-    files = sorted(f for f in files if not any(x in f.name for x in exclude))
+            files.update((pathlib.Path(h), pathlib.Path(h).resolve().parent) for h in glob.glob(str(pth))
+                         if pathlib.Path(h).is_file())
+    files = {f: base for f, base in sorted(files.items()) if not any(x in f.name for x in exclude)}
     out = data / "bundles" / f"{name}.zip"
     out.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-        for f in files:
+        for f, base in files.items():
+            # Inside the data root, the path under it; outside, the path under the folder that was named.
             try:
                 arc = f.resolve().relative_to(data)
             except ValueError:
-                arc = pathlib.Path(f.name)
+                arc = f.resolve().relative_to(base)
             z.write(f, str(arc))
     print(f"BUNDLE: {len(files)} files -> {out}")
 
@@ -472,15 +579,7 @@ def main(argv: list) -> None:
     elif cmd == "build":
         build(clean="--clean" in rest, tests="--tests" in rest, force=True)
     elif cmd == "test":
-        if "--python" not in rest:
-            build(tests=True)
-            for cwd, classes in test_classes().items():
-                run(["java", f"-Xmx{DEFAULT_HEAP}", "-cp", classpath(TEST_CLASSES, CLASSES),
-                     "org.junit.runner.JUnitCore", *classes], log="test", cwd=str(cwd))
-        if "--java" not in rest:
-            os.environ["PYTHONPATH"] = os.pathsep.join(p for p in (str(ANALYSIS), os.environ.get("PYTHONPATH")) if p)
-            run([sys.executable, "-m", "unittest", "discover", "-s", str(ANALYSIS / "tests"), "-t", str(ANALYSIS), "-v"],
-                log="test")
+        sys.exit(test(rest))
     elif cmd == "analyze":
         python_analysis([cmd, *rest], log=cmd)
     elif cmd in ("run", "experiment"):
@@ -517,4 +616,10 @@ def main(argv: list) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    try:
+        main(sys.argv[1:])
+        sys.stdout.flush()
+    except BrokenPipeError:
+        # Output the launcher prints itself, after its reader has gone: Python's own recipe for that.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        sys.exit(1)

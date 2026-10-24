@@ -14,6 +14,7 @@ import magat.meter.Weights;
 import magat.portfolio.Portfolio;
 import magat.portfolio.PortfolioBuilder;
 import magat.portfolio.Split;
+import magat.testgame.Stdout;
 import magat.testgame.ToyArms;
 import magat.testgame.ToyGame;
 import org.junit.After;
@@ -245,7 +246,10 @@ public class GridRunnerTest {
         GridRunner.run(module(game, new ArrayList<>()), x, portfolio,
                 Weights.load(weights(work, "w1.properties", 0, "emcts", "emcts-alt")), options(Split.Half.DEV));
         Weights repriced = Weights.load(weights(work, "w2.properties", 0.05, "emcts", "emcts-alt"));
-        assertEquals(GridRunner.MISMATCH, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, repriced, options(Split.Half.DEV)));
+        Stdout.Captured<Integer> refused = Stdout.capture(() ->
+                GridRunner.run(module(game, new ArrayList<>()), x, portfolio, repriced, options(Split.Half.DEV)));
+        assertEquals(GridRunner.MISMATCH, (int) refused.value);
+        assertTrue(refused.out, refused.out.contains("ABORT (currency lock)"));
 
         Path root = out.resolve("dev");
         String untouched = read(Leaf.dir(root, "emcts", 600).resolve(Leaf.TURNS));
@@ -266,8 +270,10 @@ public class GridRunnerTest {
         Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-twin"));
         String spec = "{ \"name\": \"twins\", \"game\": \"toy\", \"baseline\": \"emcts\","
                 + " \"levels\": [ {\"budget\": 300, \"visits\": 1} ], \"arms\": [ {\"id\": \"emcts\"}, {\"id\": \"emcts-twin\"} ] }";
-        assertEquals(GridRunner.IDENTICAL, GridRunner.run(module(game, Collections.singletonList(twin())),
+        Stdout.Captured<Integer> stopped = Stdout.capture(() -> GridRunner.run(module(game, Collections.singletonList(twin())),
                 Experiment.load(spec(spec)), portfolio, w, options(Split.Half.DEV)));
+        assertEquals(GridRunner.IDENTICAL, (int) stopped.value);
+        assertTrue(stopped.out, stopped.out.contains("RUN: STOPPED (identical arms)"));
     }
 
     @Test
@@ -278,14 +284,19 @@ public class GridRunnerTest {
         Path other = Files.createTempDirectory("magat-run-portfolio2");
         PortfolioBuilder.build(game, Collections.singletonMap("toy", 6), other, 1);
         Split.freeze(other);
-        assertEquals(GridRunner.MISMATCH, GridRunner.run(module(game, new ArrayList<>()), x, Portfolio.load(game, other), w, options(Split.Half.DEV)));
+        Stdout.Captured<Integer> refused = Stdout.capture(() ->
+                GridRunner.run(module(game, new ArrayList<>()), x, Portfolio.load(game, other), w, options(Split.Half.DEV)));
+        assertEquals(GridRunner.MISMATCH, (int) refused.value);
+        assertTrue(refused.out, refused.out.contains("ABORT: ") && refused.out.contains("portfolio identity"));
     }
 
     @Test
     public void anInvalidSpecRunsNothing() throws Exception {
         Weights w = Weights.load(weights(work, "w.properties", 0, "emcts"));     // emcts-alt unpriced
-        assertEquals(GridRunner.INVALID, GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), portfolio, w,
-                options(Split.Half.DEV)));
+        Stdout.Captured<Integer> invalid = Stdout.capture(() ->
+                GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), portfolio, w, options(Split.Half.DEV)));
+        assertEquals(GridRunner.INVALID, (int) invalid.value);
+        assertTrue(invalid.out, invalid.out.contains("VALIDATION: FAIL") && invalid.out.contains("emcts-alt@300"));
         assertFalse(Files.exists(out.resolve("dev")));
         assertEquals(Arrays.asList(600L, 300L), Arrays.asList(Experiment.load(spec(SPEC)).levels.get(0).budget, Experiment.load(spec(SPEC)).levels.get(1).budget));
     }

@@ -130,7 +130,7 @@ be measured, however good its engine.
    python magat.py calibrate-controlled --name <machine> --game <game> --portfolio games/<game>/portfolio/v1
    ```
 
-   This prices every registered arm at the ladder, in sections. Choose the ladder first, with the
+   This prices every registered arm at the ladder, in one session. Choose the ladder first, with the
    crossing you expect inside it ([methods](METHODS.md#2-the-paired-design)). Commit the result as
    `games/<game>/calibration/<machine>/` with an `ORIGIN.md`.
 3. **The gates.** `check audit` on the reference arms, `check equivalence` for every ported arm, and

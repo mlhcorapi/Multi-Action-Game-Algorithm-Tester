@@ -1,6 +1,7 @@
 package magat.cli;
 
 import magat.agent.AgentFactory;
+import magat.agent.TurnBudget;
 import magat.calibrate.Calibrator;
 import magat.game.Game;
 import magat.game.GameModule;
@@ -140,6 +141,7 @@ final class ProbeCommand {
             TimeCheck.write(out, TimeCheck.json(cells, weights, Math.min(positions, p.size()), module.game().id()));
             System.out.println("# -> " + out);
         }
+        System.out.println(Calibrator.spendVerdict(TimeCheck.overspent(cells), TurnBudget.OVERSPEND));
         if (targets == null) {
             System.out.println("TIME: MEASURED");
             return 0;

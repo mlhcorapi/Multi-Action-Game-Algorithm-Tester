@@ -36,25 +36,20 @@ python magat.py calibrate-controlled --name laptop-i9-14900hx-time --preflight
 ```
 
 ```bash
-python magat.py calibrate-controlled --name laptop-i9-14900hx-time --plan
-```
-
-```bash
 python magat.py calibrate-controlled --name laptop-i9-14900hx-time
 ```
 
-1. `--preflight` reads the machine, changes nothing, measures nothing, and says READY or NOT READY.
-2. `--plan` lists the sections and what is already priced.
-3. With neither, it measures every section that is not yet priced, then runs the checks.
+1. `--preflight` reads the machine, changes nothing, measures nothing, and says READY or NOT READY and
+   what the run would measure.
+2. Without it, it measures the whole currency in one session, then runs the checks.
 
-`--section N` measures one section, `--section N --redo` measures a section again, and
-`--section checks` runs only the checks.
+`--checks` runs only the checks, against the currency as it is; `--no-checks` leaves them out.
 
 **What it does:**
 
 1. **Preflight.** It refuses a machine on battery or in battery saver, a second JVM, a memory limit under
    6 GB, and files it cannot read, such as online-only OneDrive files once the network is off.
-   Everything it reads goes into `preflight.json`.
+   Everything it reads goes into `preflight.json`; the screen shows its warnings.
 2. **Controls.** These apply to the measuring JVMs only; nothing on the machine is changed.
    - On a hybrid CPU (this laptop), the JVMs run on the performance cores, so the measured thread never
      lands on an efficient core at half the speed.
@@ -62,65 +57,59 @@ python magat.py calibrate-controlled --name laptop-i9-14900hx-time
      was quietest when the invocation started, so the measured thread never migrates between caches.
    - On Windows they also run at high priority with power throttling (EcoQoS) off, and the machine is
      kept awake with the display on (`--let-display-sleep` lets the display turn off).
-3. **Sections.** The arms are divided into sections of 8 (`--batch`), planned once per currency and
-   numbered for good. Each section is one `magat calibrate` session. The first section run creates the
-   currency, and each later one merges into it by ratio, exactly as `calibrate --arms <new>` always has.
-4. **A stability check before each section.** It runs `calibrate --estimate`, which writes nothing, back
-   to back until two estimates in a row agree within 3%. On a laptop the first of these runs for at
-   least 10 minutes, which also warms the machine up (`--soak-minutes`). `--wait-quiet N` holds a
-   section for up to N minutes until other work on the machine drops below `--other-cpus`. If it does
-   not drop, nothing is started.
-5. **A verdict after each section:**
+3. **A stability check.** It runs `calibrate --estimate`, which writes nothing, back to back until two
+   estimates in a row agree within 3%. On a laptop this runs for at least 10 minutes, which also warms the
+   machine up (`--soak-minutes`). `--wait-quiet N` holds the start for up to N minutes until other work on
+   the machine drops below `--other-cpus`. If it does not drop, nothing is started. The plan it prints
+   then says when the run should finish.
+4. **The session.** Every arm the game registers, in one `magat calibrate` session, which writes all or
+   nothing. Over a currency that lacks an arm (one registered since it was measured), it prices that arm
+   in one session and merges it into the currency by ratio, exactly as `calibrate --arms <new>` always has.
+5. **A verdict:**
    - **PASS:** the calibrator's gates passed, and the monitor saw nothing disturbing it.
    - **SUSPECT:** the gates passed, but the monitor saw one of these:
      - other work above `--other-cpus` logical CPUs, sustained for 30 seconds;
      - CPU throttling of the container;
-     - a section whose reference advance ran more than 5% away from the first section's speed
-       (`--speed-tolerance`).
+     - arms added to a currency more than 5% away from the speed of its first session (`--speed-tolerance`).
 
-     Measure a suspect section again with `--redo` when the machine is quiet.
-   - **FAIL:** the gates failed and nothing was written. A failed section is retried once.
+     The currency is written. Once the cause is gone, measure it again under a new `--name`.
+   - **FAIL:** the gates failed and nothing was written. A failed session is retried once.
 6. **Checks**, which write nothing:
-   - this machine against the game's published currency, once there is one;
-   - this machine against its own new currency, at the end. After the whole calibration it should
-     still agree with itself.
+   - this machine against its own new currency: after the whole session, it should still agree with itself;
+   - this machine against the game's published currency, once there is one.
 7. **A monitor**, every 10 seconds, throughout:
-   - the power source; a machine that leaves mains power has its section stopped;
+   - the power source; a machine that leaves mains power has its session stopped;
    - the CPU used by anything other than the calibration, naming the programs when it stays high;
    - the container's throttling;
    - the busiest measuring CPU's clock;
    - the temperature, where it can be read.
-8. **Summaries.** `record/SUMMARY.md` is cumulative: every section's latest verdict, the checks, and the
-   `--redo` command for each suspect section. Every invocation also keeps its own folder with
-   `SUMMARY.md`, `events.log`, `monitor.csv`, the logs and each section's CSVs. A zip of everything goes
-   to `<data>/bundles/calibration-<game>-<name>.zip`.
+8. **The record.** The screen shows the verdict and a few lines. Each invocation keeps its own folder,
+   `record/<date>-<time>/`, with `SUMMARY.md` (the conditions, the stability check, the session and the
+   checks), `events.log`, `monitor.csv`, the calibrator's own output in `session.log` and `checks.log`, and
+   the session's `compute_profiles.csv` and `compute_operations.csv`. `record/SUMMARY.md` is the latest
+   invocation's. A zip of everything goes to `<data>/bundles/calibration-<game>-<name>.zip`.
 
-**Why sections.** A session writes all or nothing. With many arms a calibration runs for hours (33 arms
-took 3.7 hours as one session on the development laptop), and then one noisy cell, a machine that has
-slowed by the end, or a Jupyter server culled mid-run discards all of it. A section of up to 8 arms
-bounds what one failure costs. Each section is bracketed on its own and costs about 12 more minutes of
-warm-ups and reference cells.
-
-**Resuming.** Run the same command again: it measures only what the currency does not price, and skips
-checks already recorded (`--redo-checks` repeats them). The currency's clock policy is locked by its
-first section that passes, and continuing under a different policy is refused. A merge cancels a
-uniform change of speed, but not a change in how compute-bound and memory-bound work scale against
-each other.
+**Running it again** measures nothing once the currency prices every arm, and `--checks` checks it again.
+A session that did not finish wrote nothing, so the same command measures it again. The clock policy of
+the session that wrote the currency is kept in `record/policy.json`, and a later session or check under
+a different policy is refused: a merge cancels a uniform change of speed, but not a change in how
+compute-bound and memory-bound work scale against each other, and a check would report the change as
+drift.
 
 **Output.** Everything goes under the data root, outside the clone, in
-`<data>/calibration/<game>-<name>/`: `compute_weights.properties`, the last section's
-`compute_profiles.csv` and `compute_operations.csv`, any `threads.json`, and `record/`.
+`<data>/calibration/<game>-<name>/`: `compute_weights.properties`, the session's `compute_profiles.csv`
+and `compute_operations.csv`, any `threads.json`, and `record/`.
 
 **Exit codes.**
 
 | Code | Meaning |
 |---|---|
-| 0 | complete, or the section passed |
-| 1 | a section failed twice, or the stability check never settled; run it again |
+| 0 | complete |
+| 1 | the session failed twice, or the stability check never settled; run it again |
 | 2 | refused |
 | 3 | stopped: the machine went on battery |
 | 4 | the machine stayed busy and nothing was started |
-| 5 | a section is suspect, or the self-check failed |
+| 5 | the session is suspect, or the self-check failed |
 | 130 | interrupted |
 
 ## On the laptop
@@ -179,7 +168,7 @@ records it, and locks it to the currency.
 | C. As shipped: boost on, no cap | follows the temperature | the shortest | you accept some drift; the checks and the brackets measure how much |
 
 With a cap well below the sustained single-core clock, temperature no longer moves the clock. A cell
-measured at the end of a section then costs what it would have cost at the start.
+measured at the end of the session then costs what it would have cost at the start.
 
 Make a separate power plan for calibrating, so your everyday plan is untouched. In PowerShell
 (administrator, if Windows refuses):
@@ -222,7 +211,7 @@ powercfg /setactive SCHEME_BALANCED
 Keep the "MAGAT calibration" plan, and switch back to it before any later check on this laptop.
 
 **Is the cap honoured?** The stability check prints the busiest core's clock, and the summary prints it
-for every section. On Windows that clock is approximate: it is derived from the processor's performance
+for the session and each check. On Windows that clock is approximate: it is derived from the processor's performance
 counter and the nominal frequency in the registry. On this laptop, capped at 4,000 MHz, it reads about
 4,225. Read the spread, not the level. Under policy A the clock is flat (this laptop's first calibration:
 4,180-4,250 MHz within every section, against 3,700-5,700 with boost on), and the stability check settles
@@ -233,11 +222,11 @@ sensor; read them as a trend.
 
 ## On a shared server (the R7615, through JupyterHub)
 
-The notebook's calibration stage is the server's path. It has one cell with the parameters, the
-preflight and the plan, then one cell that measures every section still missing, and a checks cell.
-The measuring cell skips itself once every arm is priced, and run again after an interruption it
-measures only what is missing, so the currency can be spread over as many sittings as you like. The
-plan prints the expected time after its first estimate.
+The notebook's calibration stage is the server's path. It has one cell with the parameters and the
+preflight, one cell that measures the currency and checks it, and one that confirms every reference arm
+is priced and bundles the record. The measuring cell skips itself once the currency exists. A session
+cut short wrote nothing, and running the cell again measures it again. The plan prints the expected
+finishing time after the stability check.
 
 ### What you cannot change
 
@@ -257,27 +246,27 @@ The script reads what it can of these and records it. From inside the container,
 
 ### What you can do
 
-1. **Run sections when the machine is quiet:** nights and weekends. The preflight prints the work on
-   the machine right now. Before each section the cell waits up to `CAL_WAIT_QUIET` minutes (30) for
-   other work to drop below `CAL_OTHER_CPUS` logical CPUs (4). If it does not, the cell refuses to
-   start, and you run it again later. A section that saw other work anyway is SUSPECT; measure it again
-   with `calibrate_section(k, redo=True)`.
+1. **Measure when the machine is quiet:** nights and weekends. The preflight prints the work on the
+   machine right now. Before measuring, the cell waits up to `CAL_WAIT_QUIET` minutes (30) for other work
+   to drop below `CAL_OTHER_CPUS` logical CPUs (4). If it does not, the cell refuses to start, and you
+   run it again later. A session that saw other work anyway is SUSPECT; measure it again under a new
+   `CURRENCY_NAME`.
 2. **Read the preflight's line about other users.** Many JupyterHub containers see the host's `/proc`,
    so the monitor sees other users' work and names it "not visible from here". Then a quiet machine is
    something the script can verify. If the preflight says all the work is this container's, the machine
    may be quiet, or `/proc` may show only this container. In the second case other users are invisible:
-   the stability check, the brackets and the speed of each section against the first are the only
-   evidence. Rely on them, and consider measuring one section a second time on another day to compare.
-3. **Start nothing else in your server while a section runs.** No other notebook executing, no
+   the stability check, the bracket and the self-check are the only evidence. Rely on them, and consider
+   running `--checks` again on another day to compare.
+3. **Start nothing else in your server while the calibration runs.** No other notebook executing, no
    terminal job, no `magat run`. The preflight counts the other Jupyter kernels; shut down the
    notebooks you are not using.
-4. **Keep the tab open while a section runs.** If the hub culls idle servers, a running cell usually
-   counts as activity, but a server's maximum age can still end it. If that happens mid-section,
-   nothing is written: run the cell again.
+4. **Keep the tab open while it runs.** If the hub culls idle servers, a running cell usually counts
+   as activity, but a server's maximum age can still end it. If that happens mid-session, nothing is
+   written: run the cell again.
 5. **Pick the largest server the hub offers** when you start it, if there is a choice of profiles. More
    guaranteed CPUs means no throttling of the JVM's compiler and collector threads, and at least 6 GB of
-   memory is needed. The preflight prints the limits it finds. Any throttling during a section makes it
-   SUSPECT.
+   memory is needed. The preflight prints the limits it finds. Any throttling during the session makes
+   it SUSPECT.
 6. **Ask the administrators.** You cannot change these yourself, but each one helps:
    - Is the R7615 shared, and when is it quiet?
    - Could it be reserved for you for a night?
@@ -299,27 +288,27 @@ reference machine's.
 
 ## Reading the result
 
-`record/SUMMARY.md` has a row per section:
-- **The latest verdict.**
-- **The bracket**, which says how far the reference cell moved between the section's start and end. The
-  gate is ±10%; on a steady machine it is within a few percent.
-- **Speed vs first:** the section's reference advance as a multiple of the first section's. The merge
-  cancels it, and anything between 0.98 and 1.02 says every section ran at the same speed.
-- **The worst sustained other work.**
-- **The busiest measuring CPU's clock and temperature.**
+`record/SUMMARY.md` starts with the verdict, then the conditions, the stability check, and the session:
+- **its verdict**, with the reasons for a SUSPECT one;
+- **the bracket**, which says how far the reference cell moved between the session's start and end. The
+  gate is ±10%; on a steady machine it is within a few percent;
+- **speed vs the file**, for a session that added arms to a currency: its reference advance as a multiple
+  of the currency's first session's. The merge cancels it, and anything between 0.98 and 1.02 says the
+  two ran at the same speed;
+- **the worst sustained other work**;
+- **the busiest measuring CPU's clock and temperature**.
 
 Then come the checks.
 
 What to do about what it finds:
 
-- **SUSPECT.** Read the reasons, remove their cause, and measure the sections again in one invocation:
-  `--section 2,3,4 --redo` (the summary prints the command). If a section is suspect again for the same
-  reason, the cause has not gone. Decide whether that reason matters for this section. If it was a short
-  burst of other work, the gates that passed say probably not.
+- **SUSPECT.** Read the reasons, and remove their cause. If it was a short burst of other work, the
+  gates that passed say it probably did not matter; otherwise measure the currency again under a new
+  `--name`.
 - **FAIL.** Run the same command again.
 - **The self-check failed.** The machine changed speed during the run. Look at the clocks and the
-  speeds across sections. Usually this calls for a tighter clock policy (laptop) or quieter hours
-  (server), and a fresh currency under a new `--name`.
+  bracket. Usually this calls for a tighter clock policy (laptop) or quieter hours (server), and a fresh
+  currency under a new `--name`.
 
 ## Publishing it
 
@@ -329,7 +318,7 @@ That folder holds:
 - `record/SUMMARY.md`, and usually the rest of `record/` except the raw `counters.csv` files, which
   `monitor.csv` summarises;
 - an `ORIGIN.md`, which says the machine and the date, the clock policy (and, on a laptop, the maker's
-  performance mode), the sections and their verdicts, both checks, and the commit.
+  performance mode), the session and its verdict, both checks, and the commit.
 
 The reference machine's levels are published as `games/<game>/levels.json`, with its `SUMMARY.md` as
 `games/<game>/levels.md` and the rest of the measurement in `games/<game>/levels-record/`. A currency's

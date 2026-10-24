@@ -8,3 +8,5 @@
 experiments/** text eol=lf
 # A currency's bytes are hashed into every run's provenance: the same bytes on every platform too.
 *.properties text eol=lf
+# The notebooks are generated: the same bytes on every platform, so a regeneration shows only what changed.
+*.ipynb text eol=lf

@@ -238,6 +238,9 @@ def provenance(split: Split, spec) -> dict:
     cfg = game.get("configuration") or {}
     w = r.get("weights") or {}
     p = r.get("portfolio") or {}
+    m = r.get("magat") or {}
+    # -dirty marks code changes only; a notebook saved with its outputs is named apart.
+    commit = (m.get("commit") or m.get("version") or "unknown") + (f" (notebook {m['notebook']})" if m.get("notebook") else "")
     out = dict(
         split=split.name,
         path=shown(split.path),
@@ -248,7 +251,7 @@ def provenance(split: Split, spec) -> dict:
         currency_reference=w.get("reference", "unknown"),
         experiment=(spec or {}).get("name") or (r.get("experiment") or {}).get("name", "none"),
         experiment_sha256=(spec or {}).get("_sha256") or (r.get("experiment") or {}).get("sha256", ""),
-        magat_commit=(r.get("magat") or {}).get("commit") or (r.get("magat") or {}).get("version") or "unknown",
+        magat_commit=commit,
         toy=bool(r.get("toy", False)),
         leaves=len(split.leaves),
         turns=int(len(split.turns)),

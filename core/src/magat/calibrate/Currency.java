@@ -286,14 +286,14 @@ public final class Currency {
 
     public static String profilesCsv(List<Cell> cells, Cell ref) {
         StringBuilder sb = new StringBuilder("Profile,Arm,Budget,Positions,Advances,Copies,Evals,AdvanceNanos,CopyNanos,EvalNanos,"
-                + "GapAdvance,GapCopy,GapEval,CvAdvance,CvCopy,CvEval,W_ADVANCE,W_COPY,W_EVAL,Role,Status,Seconds,Unpriced,Unaccounted\n");
+                + "GapAdvance,GapCopy,GapEval,CvAdvance,CvCopy,CvEval,W_ADVANCE,W_COPY,W_EVAL,Role,Status,Seconds,Unpriced,Unaccounted,Spend\n");
         for (Cell c : cells)
-            sb.append(String.format(Locale.ROOT, "%s,%s,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.6f,%.6f,%.6f,%s,%s,%.1f,%.4f,%.4f\n",
+            sb.append(String.format(Locale.ROOT, "%s,%s,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.6f,%.6f,%.6f,%s,%s,%.1f,%.4f,%.4f,%.4f\n",
                     c.profile, c.arm, c.budget, c.positions, c.advances, c.copies, c.evals, c.tAdvance, c.tCopy, c.tEval,
                     c.gapAdvance, c.gapCopy, c.gapEval, c.cvAdvance, c.cvCopy, c.cvEval, c.wAdvance, c.wCopy, c.wEval,
                     c == ref ? "reference" : c.role,
                     c.failures.isEmpty() ? "ok" : "PROBLEM: " + String.join("; ", c.failures).replace(',', ';'),
-                    c.seconds, c.unpriced, c.unaccounted));
+                    c.seconds, c.unpriced, c.unaccounted, c.spend));
         return sb.toString();
     }
 

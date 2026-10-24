@@ -181,54 +181,38 @@ bundle("threads", [CALIBRATION / "threads.json", CALIBRATION / "thread_sweep.csv
 '''
 
 CALIBRATE_CELL = r'''
-# This machine's own currency, on this machine's own portfolio, in sections (calibrate-controlled; read
-# docs/CALIBRATING_A_MACHINE.md, "On a shared server"). Idle and single-threaded: nothing else of yours
-# may run while a section measures. The measuring cell below skips itself once every arm is priced.
-# The currency prices every operation an arm declares, its own work included.
-CAL_BATCH = 8           # arms per section, fixed when the first section runs
-CAL_OTHER_CPUS = 4.0    # other work on the machine, in logical CPUs, that makes a section SUSPECT
-CAL_WAIT_QUIET = 30     # minutes a section waits for the machine to drop below that before refusing to start
+# This machine's own currency, on this machine's own portfolio, in one session (calibrate-controlled; read
+# docs/CALIBRATING_A_MACHINE.md, "On a shared server"). Idle and single-threaded: nothing else of yours may
+# run while it measures. The currency prices every operation an arm declares, its own work included.
+CAL_OTHER_CPUS = 4.0    # other work on the machine, in logical CPUs, that makes the session SUSPECT
+CAL_WAIT_QUIET = 30     # minutes to wait for the machine to drop below that before refusing to start
 CAL_SOAK_MINUTES = 0    # a server needs no warming up: the stability check is two estimates that agree within 3%
 WEIGHTS = CALIBRATION / "compute_weights.properties"     # the currency every run below spends
-
-def calibrate_section(section, redo=False):
-    # One section (a number), "checks", or "rest" (every section still missing). Raises unless the section
-    # passed or is suspect; a suspect one is measured again with redo=True when the machine is quiet.
-    args = ["calibrate-controlled", "--name", CURRENCY_NAME, "--game", GAME, "--portfolio", PORTFOLIO,
-            "--batch", CAL_BATCH, "--other-cpus", CAL_OTHER_CPUS,
+CAL_ARGS = ["--name", CURRENCY_NAME, "--game", GAME, "--portfolio", PORTFOLIO, "--other-cpus", CAL_OTHER_CPUS,
             "--wait-quiet", CAL_WAIT_QUIET, "--soak-minutes", CAL_SOAK_MINUTES, "--levels", LEVELS]
-    args += ["--section", "all", "--no-checks"] if section == "rest" else ["--section", section]
-    if redo:
-        args.append("--redo")
-    rc = magat(*args, check=False)
-    if rc == 5 and section == "rest":
-        print("\n*** SUSPECT: see the reasons above. When the machine is quiet, measure each suspect section k again "
-              "with calibrate_section(k, redo=True); record/SUMMARY.md names them.")
-    elif rc == 5:
-        print(f"\n*** SUSPECT: see the reasons above. When the machine is quiet, run calibrate_section({section!r}, redo=True).")
-    elif rc == 4:
-        raise RuntimeError("the machine stayed busy and nothing was started: run this cell again later")
-    elif rc != 0:
-        raise RuntimeError(f"exit {rc}: run this cell again (a re-run measures only what is missing); "
-                           f"the record is {CALIBRATION / 'record' / 'SUMMARY.md'}")
-    return rc
-
-magat("calibrate-controlled", "--name", CURRENCY_NAME, "--game", GAME, "--portfolio", PORTFOLIO,
-      "--other-cpus", CAL_OTHER_CPUS, "--batch", CAL_BATCH, "--preflight")
+magat("calibrate-controlled", *CAL_ARGS, "--preflight")
 '''
 
 MEASURE_CELL = r'''
-# Every section still missing, one after another: a re-run measures only what the currency does not price.
-calibrate_section("rest")
+# The session, then the checks. Skips itself once the currency exists; a session that did not finish wrote
+# nothing, so running the cell again measures it again.
+if WEIGHTS.is_file():
+    print(f"[skip] {WEIGHTS} exists")
+else:
+    rc = magat("calibrate-controlled", *CAL_ARGS, check=False)
+    if rc == 5:
+        print("\n*** SUSPECT: the currency is written, but read the reasons above. To measure it again when the machine "
+              "is quiet, give CURRENCY_NAME a new name in the first cell and run it and the calibration cells again.")
+    elif rc == 4:
+        raise RuntimeError("the machine stayed busy and nothing was started: run this cell again later")
+    elif rc != 0:
+        raise RuntimeError(f"exit {rc}: run this cell again; the record is {CALIBRATION / 'record' / 'SUMMARY.md'}")
+summary(CALIBRATION / "record", until="## ")
 '''
 
 CHECKS_CELL = r'''
-# Checks that write nothing. Against its own new currency: did this machine hold its speed across the
-# calibration? And, once the game's reference machine has published its currency, against that one: how
-# far this machine's prices are from the reference machine's.
-calibrate_section("checks")
+# Every reference arm priced at every level, then the bundle: the currency and its whole record.
 magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", "@reference", "--levels", LEVELS)
-print((CALIBRATION / "record" / "SUMMARY.md").read_text(encoding="utf-8"))
 bundle("calibration", [CALIBRATION, LOGS / "calibrate-controlled.log"])
 '''
 
@@ -279,21 +263,20 @@ bundle("run-{name}", [RUN / "{split}", RESULTS / "SUMMARY.md", RESULTS / "tables
 
 
 INVENTORY_CELL = r'''
-import json
 # Defaults, so this cell also runs on its own after a kernel restart.
 PORTFOLIO = globals().get("PORTFOLIO", DATA / "portfolio" / GAME)
 CALIBRATION = globals().get("CALIBRATION", DATA / "calibration" / f"{GAME}-{CURRENCY_NAME}")
 BUNDLED = [
     ("portfolio", "this machine's portfolio: manifest, split files, identity, the verify log"),
     ("threads", "the thread sweep and threads.json"),
-    ("calibration", f"the currency {CURRENCY_NAME}: weights, every section's record and verdict, the checks"),
+    ("calibration", f"the currency {CURRENCY_NAME}: weights, the session's record and verdict, the checks"),
     ("gates", "contract, equivalence, audit"),
 @RUNS@    ("shakedown", "the shakedown's log"),
 ]
 FILES = [
     (PORTFOLIO / "identity.txt", "the portfolio's identity"),
     (CALIBRATION / "compute_weights.properties", "this machine's currency"),
-    (CALIBRATION / "record" / "SUMMARY.md", "every calibration section's verdict"),
+    (CALIBRATION / "record" / "SUMMARY.md", "the calibration's verdict"),
     (CALIBRATION / "threads.json", "the thread choices runs read"),
 @REPORTS@]
 total, missing = 0, []
@@ -309,15 +292,10 @@ print(f"  {total / 2**20:.1f} MB in all")
 print("\nThe files behind them:")
 for path, what in FILES:
     print(f"  [{'ok' if path.exists() else 'missing':7}] {path}   ({what})")
-state = CALIBRATION / "record" / "state.json"
-if state.is_file():
-    latest = {}
-    for row in json.loads(state.read_text(encoding="utf-8")).get("sessions", []):
-        latest[row["section"]] = row.get("reliability", row.get("verdict"))
-    print("\nCalibration sections, latest verdict: " + (", ".join(f"{k} {v}" for k, v in sorted(latest.items())) or "none yet"))
-    doubtful = sorted(k for k, v in latest.items() if v != "PASS")
-    if doubtful:
-        print(f"  measure these again when the machine is quiet, with calibrate_section(k, redo=True): {doubtful}")
+record = CALIBRATION / "record" / "SUMMARY.md"
+if record.is_file():
+    verdict = next((line for line in record.read_text(encoding="utf-8").splitlines() if line.startswith("- Verdict:")), None)
+    print("\nCalibration, latest invocation: " + (verdict[len("- Verdict: "):] if verdict else f"read {record}"))
 print("\nINVENTORY: " + ("COMPLETE" if not missing else f"{len(missing)} bundle(s) missing: " + ", ".join(missing)))
 '''
 
@@ -385,24 +363,21 @@ levels mean every currency must be measured again.
     code(LEVELS_CELL, tags=("levels",)),
     code(THREADS_CELL, tags=("threads",)),
     md("""
-### This machine's currency, in sections
+### This machine's currency, in one session
 
-`calibrate-controlled` prices every arm at the levels above, in sections of up to eight arms. Each
-section is one calibration session that writes all or nothing and merges into the currency by ratio, so
-a culled server or a busy afternoon costs one section, never the whole currency. Before each section it
-waits (up to `CAL_WAIT_QUIET` minutes) for the machine to be quiet and checks that two estimates agree.
-After each it gives a verdict:
+`calibrate-controlled` prices every arm at the levels above in one calibration session, which writes all
+or nothing. First it waits (up to `CAL_WAIT_QUIET` minutes) for the machine to be quiet and checks that
+two estimates agree. Then it measures, and gives a verdict:
 - **PASS**: the calibrator's gates passed and nothing was seen disturbing it.
-- **SUSPECT**: the gates passed, but the machine was busy with other work (`CAL_OTHER_CPUS`), the
-  container was CPU-throttled, or the session ran at a different speed from the first. Measure that
-  section again with `calibrate_section(k, redo=True)` when the machine is quiet.
-- **FAIL**: nothing was written; it is retried once, and running the cell again measures what is
-  missing.
+- **SUSPECT**: the gates passed, but the machine was busy with other work (`CAL_OTHER_CPUS`) or the
+  container was CPU-throttled. The currency is written; to measure it again when the machine is quiet,
+  give `CURRENCY_NAME` a new name.
+- **FAIL**: nothing was written. It is retried once, and running the cell again measures it again.
 
-The measuring cell skips itself once every arm is priced, and running it again after an interruption
-measures only what is missing. Keep this tab open while it runs, and start nothing else in this server.
-`record/SUMMARY.md` in the currency's folder has every section's verdict, and the last cell bundles it
-all.
+Then it checks the new currency against itself (did the machine hold its speed?), and against the
+published currency once there is one. The measuring cell skips itself once the currency exists. Keep
+this tab open while it runs, and start nothing else in this server. The screen shows the verdict;
+`record/SUMMARY.md` in the currency's folder has the rest, and the last cell bundles it all.
 """),
     code(CALIBRATE_CELL, tags=("calibrate",)),
     code(MEASURE_CELL, tags=("calibrate", "measure")),
@@ -426,8 +401,8 @@ Every moving part at toy size, minutes, exits non-zero on any failure. Run befor
 ## Inventory
 
 What to keep from this machine: every bundle the stages above wrote, with a tick, the files behind
-them, and the calibration's section verdicts. Download the bundles; everything else can be
-regenerated from them.
+them, and the calibration's verdict. Download the bundles; everything else can be regenerated from
+them.
 """),
     code(inventory_cell("tribes"), tags=("inventory",)),
 ]
@@ -543,15 +518,16 @@ def main(argv) -> int:
     for out, cells in NOTEBOOKS:
         text = json.dumps(notebook(cells), indent=1, ensure_ascii=False) + "\n"
         if "--check" in argv:
-            current = out.read_text(encoding="utf-8") if out.exists() else ""
-            if current != text:
+            # Bytes, not text: a notebook written with other line endings is stale too.
+            current = out.read_bytes() if out.exists() else b""
+            if current != text.encode("utf-8"):
                 print(f"{out} is stale: regenerate with `python tools/make_notebook.py`")
                 stale = 1
             else:
                 print(f"{out} is up to date")
             continue
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(text, encoding="utf-8")
+        out.write_text(text, encoding="utf-8", newline="\n")      # LF on every platform, as git keeps it
         print(f"wrote {out} ({len(cells)} cells)")
     return stale
 

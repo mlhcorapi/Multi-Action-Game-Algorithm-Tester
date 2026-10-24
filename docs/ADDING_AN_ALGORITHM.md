@@ -116,8 +116,9 @@ What each part does:
   for every turn, so it may keep per-turn state freely and must keep none across turns.
 - **`budget.beginSearch()`** marks the boundary: what came before is initialization, reported in the
   `init_*` columns. It is paid from the budget (the search gets what is left), so a level is the whole
-  turn's thinking time, and an expensive initialization is not free. An agent with no initialization
-  never calls it, and then the whole turn counts.
+  turn's thinking time, and an expensive initialization is not free. Let it stop when the budget runs out:
+  the calibration and `check time` flag a cell whose turns spend more than 1.10× their level. An agent
+  with no initialization never calls it, and then the whole turn counts.
 - **`budget.exhausted()`** is the stop rule: units spent, at this arm's prices, reach the budget. Every
   `copy`, `advance` and `evaluate` through `game` is counted by the meter, which the agent never touches
   for the forward model.

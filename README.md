@@ -164,7 +164,7 @@ At toy size the numbers mean nothing; the path is the point.
 | [`docs/ADDING_AN_ALGORITHM.md`](docs/ADDING_AN_ALGORITHM.md) | writing, registering, pricing and gating an algorithm; declaring its operations |
 | [`docs/ADDING_A_GAME.md`](docs/ADDING_A_GAME.md) | writing a game adapter, capturing a portfolio, publishing a currency |
 | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | the launcher, where output goes, the notebook, runs and their guards, the gates |
-| [`docs/CALIBRATING_A_MACHINE.md`](docs/CALIBRATING_A_MACHINE.md) | calibrating a laptop or a shared server, in sections, with reliability checks |
+| [`docs/CALIBRATING_A_MACHINE.md`](docs/CALIBRATING_A_MACHINE.md) | calibrating a laptop or a shared server, in one session, with reliability checks |
 | [`docs/TRAPS.md`](docs/TRAPS.md) | every trap that cost time, and what now prevents it |
 | [`docs/ARCHIVE.md`](docs/ARCHIVE.md) | what v0.1 set aside, where it lives, and how to re-add it |
 
