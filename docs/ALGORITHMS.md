@@ -87,7 +87,10 @@ greedy initialization is never cut short: on Tribes it takes about 2,000 of the 
 smallest level ([`CURRENCY.md`](CURRENCY.md)). Code: `core/src/magat/agents/emcts/`.
 
 **Gated** against the engine's agent, whose greedy initialization is paid outside the budget, so its
-gate plays the port by that rule: `check equivalence --arms emcts`, 32 cells, 0 failed.
+gate plays the port by that rule: `check equivalence --arms emcts`, 32 cells, 0 failed (and 128 on 64
+positions). The port makes the engine's two copies of the state that the engine never reads, because
+each draws from the state's random generator: without them, the copies after them meet other chance
+events.
 
 ## `oep`: Online Evolutionary Planning
 
@@ -156,9 +159,9 @@ gate's budgets or at a published level. Operations: `tbets.turn` (a candidate tu
 `core/src/magat/agents/tbets/`.
 
 **Gated** against the engine's agent, which charges its seeding to the budget, so its gate plays the
-port by that rule: `check equivalence --arms tbets`, 32 cells, 0 failed. The port makes the engine's two
-copies of the state before the seeding: each draws from the state's random generator, and without them
-the seeded turns would meet other chance events.
+port by that rule: `check equivalence --arms tbets`, 32 cells, 0 failed (and 128 on 64 positions). The
+port makes the engine's two copies of the state before the seeding: each draws from the state's random
+generator, and without them the seeded turns would meet other chance events.
 
 ## References
 

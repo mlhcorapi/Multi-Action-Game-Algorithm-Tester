@@ -27,7 +27,9 @@ public interface Oracle<S> {
     /**
      * Initialization copies the reference implementation makes that have no effect on anything it
      * computes, and which the port therefore does not make. The gate expects exactly this many more
-     * initialization copies on the oracle's side.
+     * initialization copies on the oracle's side. A copy that draws from the state's random generator,
+     * as every Tribes copy does, is never dead: the copies after it are seeded from what is left, so a
+     * port makes it.
      */
     default int deadInitCopies() {
         return 0;

@@ -205,9 +205,12 @@ port against the original rather than trusting it:
    ```
 
    It requires the port to reproduce the original field for field, with identical weights on both
-   sides: the fixed measurement weights, unless `--weights` names a currency. Initialization copies
-   the original makes and never reads are declared with `deadInitCopies()`. `emcts` passes this gate
-   against the engine's EMCTS agent and `tbets` against its TBETS agent, counters included.
+   sides: the fixed measurement weights, unless `--weights` names a currency. Make every copy the
+   original makes, even one it never reads: where a copy draws from the state's random generator, as
+   every Tribes copy does, the copies after it are seeded from what is left, and leaving one out lets
+   a chance event come out otherwise. Only a copy that draws nothing may be left out, and declared
+   with `deadInitCopies()`. `emcts` passes this gate against the engine's EMCTS agent and `tbets`
+   against its TBETS agent, counters included: 32 cells each by default, and 128 each on 64 positions.
 
 ## Pricing it, running it, comparing it
 

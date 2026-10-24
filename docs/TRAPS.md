@@ -58,7 +58,7 @@ this page says what it was holding back.
 | Trap | What it cost | What prevents it now |
 |---|---|---|
 | Trusting a port | a re-implementation that differs in one random draw is a different algorithm | the oracle gate, field for field, counters included |
-| Initialization work the original does and never uses | the engine's EMCTS agent makes two dead copies; a faithful port does not | the oracle declares them (`deadInitCopies`) and the gate expects exactly that offset |
+| A copy the original makes and never reads, left out of the port | every Tribes copy draws from the state's random generator, so the `emcts` port, which left out the engine's two unread copies, seeded every later copy otherwise: it passed its gate's 32 turns, but failed 12 of 128 on 64 positions where a chance event came out otherwise (found 2026-10-24) | the ports make every copy their originals make; `deadInitCopies` is only for a copy that draws nothing |
 
 ## The machine you develop on
 
