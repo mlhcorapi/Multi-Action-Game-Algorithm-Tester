@@ -125,6 +125,9 @@ def main(argv) -> int:
           "largest drift in a turn's price", codes=(0, 1), then=lambda: weights.read_text(encoding="utf-8") == snapshot["w"])
     check("the toy currency prices the reference arms at its own levels",
           [PY, ROOT / "magat.py", "weights", "--game", game, "--weights", weights, "--arms", "@reference"], "WEIGHTS: COVERED")
+    check("a coverage probe says what is still to price and exits 0: progress, not a gate",
+          [PY, ROOT / "magat.py", "weights", "--game", game, "--weights", weights, "--arms", "emcts", "--levels", "2000,4000,8000",
+           "--progress"], "WEIGHTS: 1 TO PRICE")
     check("check time: whole turns under the toy currency, single-threaded, against a target",
           [PY, ROOT / "magat.py", "check", "time", "--game", game, "--weights", weights, "--arms", "emcts",
            "--levels", "2000,4000", "--targets", "100,200", "--positions", "3", "--warmup", "1",

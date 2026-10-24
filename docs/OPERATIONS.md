@@ -29,7 +29,7 @@ wrap it). It:
 | `calibrate`, `calibrate --estimate`, `calibrate --check` | [the currency](CURRENCY.md#calibrating) |
 | `calibrate-controlled` | a calibration in sections, with reliability checks ([guide](CALIBRATING_A_MACHINE.md)) |
 | `calibrate-time --remeasure [--times 500,1000,5000]` | the levels that are those milliseconds of thinking time on this machine: a maintainer's tool for the reference machine, refused without `--remeasure` once the game's levels are published ([units as time](CURRENCY.md#units-as-time)) |
-| `weights --weights F [--game G --arms ...]` | what a weights file prices; exit 1 if anything asked for is missing |
+| `weights --weights F [--game G --arms ...] [--progress]` | what a weights file prices; exit 1 if anything asked for is missing. With `--progress`, a probe of a calibration under way: what is still to price, and exit 0 |
 | `check contract \| equivalence \| replay \| audit` | the gates (below) |
 | `check time (--weights F \| --fixed-weights) [--levels ...] [--arms ...] [--targets ms,...]` | single-threaded whole turns over positions spread across the portfolio: each level's thinking time on this machine |
 | `experiment validate --experiment SPEC [--weights F \| --no-weights]` | the spec validator alone |

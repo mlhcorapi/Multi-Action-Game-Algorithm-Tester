@@ -111,7 +111,7 @@ BANNER_REPS = re.compile(r"^# reps (\d+)\s+turns/rep (\S+) over levels (\S+)\s+w
 BRACKET = re.compile(r"the reference cell moved ([+-]?[\d.]+)% / ([+-]?[\d.]+)% / ([+-]?[\d.]+)%")
 SPEED = re.compile(r"reference advance is x([\d.]+) the file's")
 DRIFT = re.compile(r"largest drift in a turn's price ([+-]?[\d.]+)% \(([^)]*)\)")
-MISSING = re.compile(r"^\s+missing: (\S+)")
+TO_PRICE = re.compile(r"^\s+to price: (\S+)")
 ARM_LINE = re.compile(r"^  ([a-z0-9][a-z0-9._-]*)\s")
 
 
@@ -1596,14 +1596,14 @@ def main(argv) -> int:
     sections = plan["sections"] or [[]]          # the reference arm alone still makes a currency
 
     def coverage(runner):
-        """The arms the currency prices at every level, and what it lacks."""
+        """The arms the currency prices at every level, and what it lacks: a probe of progress (exit 0), not a gate."""
         if not weights.is_file():
             return set(), list(arms)
         levels = re.search(r"^levels\s*=\s*(\S+)", weights.read_text(encoding="utf-8", errors="replace"), re.M)
         rc, lines = runner.launch(["weights", "--weights", weights, "--game", a.game, "--arms", ",".join([ref_arm, *arms]),
-                                   *(["--levels", levels.group(1)] if levels else [])], "coverage", "coverage", measure=False,
-                                  echo=False)
-        missing = [m.group(1) for line in lines for m in [MISSING.match(line)] if m]
+                                   *(["--levels", levels.group(1)] if levels else []), "--progress"], "coverage", "coverage",
+                                  measure=False, echo=False)
+        missing = [m.group(1) for line in lines for m in [TO_PRICE.match(line)] if m]
         gone = {x.split("@")[0] for x in missing}
         return {x for x in [ref_arm, *arms] if x not in gone}, missing
 

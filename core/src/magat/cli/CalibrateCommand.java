@@ -31,6 +31,7 @@ final class CalibrateCommand {
         System.out.println("  calibrate --estimate ... (the same arguments): times a few turns, prints what the session would take, writes nothing");
         System.out.println("  calibrate --check --game <name> --portfolio <dir> --weights <file> --arms a,b [--levels ...]");
         System.out.println("  weights           --weights <file> [--game <name> --arms a,b|@set --levels ...]   (default: the file's own levels)");
+        System.out.println("                    [--progress]: what is still to price, as progress (exit 0) rather than a gate");
     }
 
     static int machine() {
@@ -97,7 +98,11 @@ final class CalibrateCommand {
         return r.pass ? 0 : 1;
     }
 
-    /** Coverage: which of the given arms and levels a weights file prices. */
+    /**
+     * Coverage: which of the given arms and levels a weights file prices. A gate by default (exit 1 when
+     * something asked for is missing); with {@code --progress} a probe of a calibration under way, which says
+     * what is still to price and exits 0, since a currency that does not price everything yet has not failed.
+     */
     static <S, A> int weights(Args args) throws Exception {
         Weights w = Weights.load(Paths.get(args.require("weights")));
         System.out.println("# " + w.summary());
@@ -137,8 +142,10 @@ final class CalibrateCommand {
             }
         System.out.println(String.format(Locale.ROOT, "# %d arm(s) x %d level(s): %d of %d profiles priced%s", arms.size(), levels.length,
                 want.size() - w.missing(want).size(), want.size(), ", every declared operation checked"));
-        for (String m : missing) System.out.println("  missing: " + m);
-        System.out.println(missing.isEmpty() ? "WEIGHTS: COVERED" : "WEIGHTS: " + missing.size() + " MISSING");
-        return missing.isEmpty() ? 0 : 1;
+        boolean progress = args.flag("progress");
+        for (String m : missing) System.out.println((progress ? "  to price: " : "  missing: ") + m);
+        if (missing.isEmpty()) System.out.println("WEIGHTS: COVERED");
+        else System.out.println("WEIGHTS: " + missing.size() + (progress ? " TO PRICE" : " MISSING"));
+        return missing.isEmpty() || progress ? 0 : 1;
     }
 }
