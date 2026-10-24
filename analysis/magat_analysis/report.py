@@ -21,7 +21,7 @@ EXIT_OK, EXIT_INPUT, EXIT_IDENTICAL = 0, 2, 5
 EMPTY = {
     "headline": "Split Budget Arm Baseline Stratum Pairs Scenarios MeanDiff Lo Hi D RelDiff RelLo RelHi Wins Losses Ties "
                 "WinRate currency",
-    "budget_multiplier": "Split Budget Arm Baseline Cells Scenarios ArmGain BaseGains Multiplier Lo Hi EquivBudget Flag "
+    "budget_multiplier": "Split Budget Arm Baseline Cells Scenarios ArmFinal BaseFinals Multiplier Lo Hi EquivBudget Flag "
                          "BootUndefined ArmMs BaseMs ArmTimeRatio TimeMultiplier TimeLo TimeHi currency",
     "wallclock": "Split Budget Arm Baseline Pairs UnitsDiff Scenarios WallDiff WallLo WallHi ClampedShare MeanArmMillis "
                  "Verdict currency",
@@ -253,24 +253,24 @@ def multiplier_section(split, R, baseline) -> list:
         return [f"## Budget multiplier ({split})", "",
                 f"Not computable: `{baseline}` ran at fewer than two budgets here, so it has no curve to read against.", ""]
     L = [f"## Budget multiplier ({split})", "",
-         f"How much budget `{baseline}` would need to match each arm: the baseline's mean search gain per level,",
-         "interpolated log-linearly in budget, solved for the arm's gain, over the cells where every baseline level",
-         "and the arm ran and none ended terminal. `extrapolated` means the crossing lies past the top of the ladder:",
-         "a lower bound, since gain is concave in budget. The wall-clock column solves the same crossing in the",
-         "baseline's own seconds and divides by the arm's; `arm/baseline time` is the arm's plan time over the",
-         "baseline's at the same budget.", ""]
+         f"How much budget `{baseline}` would need to match each arm: the baseline's mean plan value per level,",
+         "interpolated log-linearly in budget, solved for the arm's mean value, over the cells where every baseline",
+         "level and the arm ran and none ended terminal (values, not search gains: each arm's `initial` is its own",
+         "starting plan). `extrapolated` means the crossing lies past the top of the ladder: a lower bound, since",
+         "value is concave in budget. The wall-clock column solves the same crossing in the baseline's own seconds",
+         "and divides by the arm's; `arm/baseline time` is the arm's plan time over the baseline's at the same budget.", ""]
     base = b.iloc[0]
-    lv = [p.split(":") for p in base.BaseGains.split(";")]
+    lv = [p.split(":") for p in base.BaseFinals.split(";")]
     ms = [p.split(":") for p in base.BaseMs.split(";")]
     if len(lv) >= 2:
         step = float(lv[-1][0]) / float(lv[-2][0])
         tstep = float(ms[-1][1]) / float(ms[-2][1]) if float(ms[-2][1]) > 0 else np.nan
-        L += [f"The baseline's ladder (on the first arm's cells): " + ", ".join(f"{int(a):,}: gain {float(g):.1f}"
+        L += [f"The baseline's ladder (on the first arm's cells): " + ", ".join(f"{int(a):,}: value {float(g):.1f}"
               for a, g in lv) + f". Its top step is {step:.1f}x the units and {f(tstep, '.1f')}x the seconds.", ""]
-    rows = [[x.Budget, x.Arm, x.Cells, f(x.ArmGain, ".1f"), mult(x.Multiplier, x.Lo, x.Hi), x.Flag,
+    rows = [[x.Budget, x.Arm, x.Cells, f(x.ArmFinal, ".1f"), mult(x.Multiplier, x.Lo, x.Hi), x.Flag,
              mult(x.TimeMultiplier, x.TimeLo, x.TimeHi), f(x.ArmTimeRatio, ".2f")]
             for x in b.itertuples(index=False)]
-    return L + table(["Budget", "Arm", "Cells", "Arm gain", "Multiplier [CI]", "Where", "Wall-clock multiplier [CI]",
+    return L + table(["Budget", "Arm", "Cells", "Arm value", "Multiplier [CI]", "Where", "Wall-clock multiplier [CI]",
                       "Arm/baseline time"], rows)
 
 

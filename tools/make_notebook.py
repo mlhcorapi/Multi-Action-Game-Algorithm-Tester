@@ -486,7 +486,7 @@ must be idle: nothing else of yours may run while it measures.
 Bundle `levels` holds the measurement. To publish it, in a pull request:
 1. `levels.json` becomes `games/<game>/levels.json`, `SUMMARY.md` becomes `games/<game>/levels.md`, and
    `probe.json` and `iter-*/` replace `games/<game>/levels-record/` (update its README).
-2. Set the levels of every spec that runs at the published levels (`experiments/<game>/reference-ladder.json`),
+2. Set the levels of every spec that runs at the published levels (`experiments/<game>/reference.json`),
    and the expected units in `PublishedLevelsTest`.
 3. Every currency is then measured again, under a new name (`CURRENCY_NAME` in `run_magat.ipynb`).
 """),

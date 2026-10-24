@@ -3,7 +3,8 @@
 An algorithm is a `SearchAgent<S, A>` written against the `Game` contract ([`CONTRACT.md`](CONTRACT.md)),
 with an `AgentFactory` that names it. Once registered it is an **arm**: priced, run, analysed and
 compared like every arm before it. This page walks through a complete example, then covers what a real
-algorithm adds: its own operations, or an implementation it was ported from.
+algorithm adds: its own operations, or an implementation it was ported from. The four reference
+algorithms ([`ALGORITHMS.md`](ALGORITHMS.md)) are examples at full size.
 
 ## The example: `FirstAgent`
 
@@ -194,7 +195,9 @@ port against the original rather than trusting it:
    - the initialization spend;
    - the counters.
 
-   Register it in the game module's `oracles()`.
+   It also says whether the original pays its initialization from the budget (`initialization()`): the
+   gate plays the port by the same rule, so the two stop at the same point. Register it in the game
+   module's `oracles()`.
 2. Run the oracle gate:
 
    ```bash
@@ -202,9 +205,12 @@ port against the original rather than trusting it:
    ```
 
    It requires the port to reproduce the original field for field, with identical weights on both
-   sides: the fixed measurement weights, unless `--weights` names a currency. Initialization copies
-   the original makes and never reads are declared with `deadInitCopies()`. `emcts` passes this gate
-   against the engine's EMCTS agent, counters included.
+   sides: the fixed measurement weights, unless `--weights` names a currency. Make every copy the
+   original makes, even one it never reads: where a copy draws from the state's random generator, as
+   every Tribes copy does, the copies after it are seeded from what is left, and leaving one out lets
+   a chance event come out otherwise. Only a copy that draws nothing may be left out, and declared
+   with `deadInitCopies()`. `emcts` passes this gate against the engine's EMCTS agent and `tbets`
+   against its TBETS agent, counters included: 32 cells each by default, and 128 each on 64 positions.
 
 ## Pricing it, running it, comparing it
 

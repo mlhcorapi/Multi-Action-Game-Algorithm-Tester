@@ -78,12 +78,14 @@ How they are computed:
    because a terminal plan carries a sentinel value. Win/loss/tie counts and per-source means go beside
    it. The raw difference is a heuristic delta, never a result on its own: it is always read beside the
    budget multiplier.
-2. **The budget multiplier.** The search gain (`final − initial`) of the baseline at every level it
-   ran, interpolated log-linearly in budget. For each arm and level the analyzer solves for the
-   baseline budget that reaches the arm's gain. The multiplier is that budget divided by the arm's,
-   with a bootstrap interval. It is flagged `inside`, `extrapolated` (past the top of the ladder),
-   `outside` (below it) or `non-monotone` (a baseline curve that does not rise cannot be inverted).
-   Its wall-clock twin solves the same crossing on the baseline's plan time.
+2. **The budget multiplier.** The baseline's mean `final` at every level it ran, interpolated
+   log-linearly in budget. For each arm and level the analyzer solves for the baseline budget that
+   reaches the arm's mean `final` on the same cells. The multiplier is that budget divided by the
+   arm's, with a bootstrap interval. It is flagged `inside`, `extrapolated` (past the top of the
+   ladder), `outside` (below it) or `non-monotone` (a baseline curve that does not rise cannot be
+   inverted). Its wall-clock twin solves the same crossing on the baseline's plan time. It compares
+   values, not search gains (`final − initial`): an arm's `initial` is its own starting plan (the
+   position, a greedy plan, the best of a random population), so a gain does not compare across arms.
 3. **The wall-clock re-score.** The arm is re-scored on the baseline's value-versus-`plan_ms` curve at
    its own wall-clock. The verdict is one of *wins both*, *units only* (unresolved: a units-only win
    may be a pricing artefact), *wall-clock only* or *none*. Wall-clock is co-primary: every headline is
