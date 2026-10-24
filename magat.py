@@ -16,8 +16,8 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py portfolio verify --game tribes [--portfolio DIR] [--published DIR] [--subset] [--plan N]
     python magat.py machine
     python magat.py threads   --game tribes --out DIR [--portfolio DIR] [--levels ...] [--ladder 2,4,8] [--segment-seconds 25]
-    python magat.py calibrate --game tribes --out DIR [--portfolio DIR] [--levels ...] [--arms a,b|@set] [--replace a] [--under-load W] [--toy]
-                              [--format 2|1] [--audit-warn 0.10]
+    python magat.py calibrate --game tribes --out DIR [--portfolio DIR] [--levels ...] [--arms a,b|@set] [--replace a] [--toy]
+                              [--audit-warn 0.10]
     python magat.py calibrate --estimate --game tribes [the same arguments]     what the session would take; writes nothing
     python magat.py calibrate --check --game tribes --arms a,b [--weights FILE] [--portfolio DIR]   gates each cell's turn price
     python magat.py calibrate-controlled --name NAME [--preflight | --plan] [--section all|next|checks|N [--redo]] ...
@@ -133,11 +133,11 @@ ENGINE_PROPS = {
     "tribes": lambda engine: [f"-Dtribes.home={engine}"],
 }
 
-# Published artefacts per game: the defaults the CLI is pointed at when a flag is not given.
+# Published artefacts per game: the defaults the CLI is pointed at when a flag is not given. A game's
+# published currency ("weights") is the reference machine's, once it is published.
 PUBLISHED = {
     "tribes": {
         "portfolio": GAMES / "tribes" / "portfolio" / "v1",
-        "weights": GAMES / "tribes" / "calibration" / "r7615" / "compute_weights.properties",
         "levels": GAMES / "tribes" / "levels.json",
     }
 }
@@ -496,7 +496,7 @@ def main(argv: list) -> None:
     elif cmd == "bundle":
         bundle(rest)
     elif cmd in ("check", "arms", "portfolio", "calibrate", "threads", "machine", "weights"):
-        big = (cmd == "portfolio" and rest[:1] == ["build"]) or cmd == "threads" or "--under-load" in rest
+        big = (cmd == "portfolio" and rest[:1] == ["build"]) or cmd == "threads"
         log = cmd + ("-" + rest[0] if rest and not rest[0].startswith("--") else "")
         if cmd == "calibrate" and "--check" in rest:
             log = "calibrate-check"

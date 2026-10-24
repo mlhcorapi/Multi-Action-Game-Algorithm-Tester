@@ -233,7 +233,7 @@ public final class Meter {
         final double[] weights = new double[CAPACITY];
         final boolean[] priced = new boolean[CAPACITY];
         String profile;           // null: the global weights
-        boolean strict;           // a version-2 profile: every counted operation must be priced
+        boolean strict;           // a file's profile: every counted operation must be priced
         final Span[] stack = new Span[MAX_DEPTH];
         int depth;
 
@@ -305,7 +305,7 @@ public final class Meter {
         Arrays.fill(s.priced, false);
         file.fill(profile, s.weights, s.priced);
         s.profile = profile;
-        s.strict = file.version() >= 2;
+        s.strict = true;
     }
 
     /**
@@ -344,8 +344,8 @@ public final class Meter {
 
     /**
      * Operations counted on this thread since the last {@link #reset} (or among {@code extra}) that the
-     * version-2 profile in force does not price; empty under a version-1 profile, the global weights or a
-     * probe's triple, which price the forward model only by definition, and empty while
+     * profile in force does not price; empty under the global weights or a probe's triple, which price the
+     * forward model only by definition, and empty while
      * {@link #allowUnpriced} is on (the calibrator measures arms whose operations are not priced yet).
      */
     public static List<String> unpricedCounted(long[] extra) {

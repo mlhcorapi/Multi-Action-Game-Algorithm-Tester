@@ -23,11 +23,14 @@ public class ValidatorTest {
         return r;
     }
 
+    /** A currency pricing the given arms at 300 and 600: the forward model and every EMCTS operation. */
     private static Weights priced(String... arms) {
-        StringBuilder sb = new StringBuilder("magat.weights.version = 1\nreference = emcts@300\n");
-        for (String a : arms) for (int b : new int[]{300, 600})
-            for (String op : new String[]{"wAdvance", "wCopy", "wEval"})
-                sb.append("profile.").append(a).append('@').append(b).append('.').append(op).append(" = 0.5\n");
+        StringBuilder sb = new StringBuilder("magat.weights.version = 2\nreference = emcts@300\n");
+        for (String a : arms) for (int b : new int[]{300, 600}) {
+            String p = "profile." + a + "@" + b + ".";
+            for (String op : new String[]{"advance", "copy", "eval"}) sb.append(p).append("w.").append(op).append(" = 0.5\n");
+            for (String op : magat.agents.emcts.Emcts.OPERATIONS) sb.append(p).append("w.").append(op).append(" = 0.1\n");
+        }
         return Weights.parse(null, Arrays.asList(sb.toString().split("\n")));
     }
 
@@ -48,7 +51,7 @@ public class ValidatorTest {
     }
 
     @Test
-    public void aVersionTwoCurrencyMustPriceEveryOperationAnArmDeclares() {
+    public void theCurrencyMustPriceEveryOperationAnArmDeclares() {
         Experiment x = spec("{\"id\":\"emcts\"},{\"id\":\"emcts-alt\"}", "");
         StringBuilder sb = new StringBuilder("magat.weights.version = 2\nreference = emcts@300\n");
         for (String a : new String[]{"emcts", "emcts-alt"})
@@ -61,10 +64,7 @@ public class ValidatorTest {
         Validator.Report r = check(x, Split.Half.DEV, Weights.parse(null, Arrays.asList(sb.toString().split("\n"))));
         assertFalse(r.ok());
         assertTrue(r.errors.toString(), says(r, "emcts-alt@600.emcts.burn", true));
-        // A version-1 currency prices the forward model only: the operations run free, which is said, not refused.
-        Validator.Report v1 = check(x, Split.Half.DEV, priced("emcts", "emcts-alt"));
-        assertTrue(v1.ok());
-        assertTrue(v1.warnings.toString(), says(v1, "run free", false));
+        assertTrue(check(x, Split.Half.DEV, priced("emcts", "emcts-alt")).ok());
     }
 
     @Test

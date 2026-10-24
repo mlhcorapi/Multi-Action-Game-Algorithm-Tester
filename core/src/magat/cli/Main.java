@@ -67,7 +67,7 @@ public final class Main {
         System.out.println("  version");
         System.out.println("  arms  --game <name>");
         System.out.println("  check contract    --game <name> --portfolio <dir> [--scenarios 8] [--ids 1,2,...]");
-        System.out.println("  check equivalence --game <name> --portfolio <dir> --weights <file> [--arms emcts]");
+        System.out.println("  check equivalence --game <name> --portfolio <dir> [--weights <file>] [--arms emcts]");
         System.out.println("  check time        --game <name> --portfolio <dir> (--weights <file> | --fixed-weights) --levels a,b [--arms ...] "
                 + "[--targets ms,ms] [--positions 64] [--tolerance 0.05] [--out time.json]");
         System.out.println("                    [--scenarios 8] [--visits 2] [--budgets 8000,40000] [--threads N] [--ids ...] [--verbose]");
@@ -155,9 +155,10 @@ public final class Main {
         banner("check equivalence");
         GameModule<S, A> module = Games.load(args.require("game"));
         Game<S, A> game = module.game();
-        Weights weights = Weights.load(Paths.get(args.require("weights")));
+        // Both sides of every cell are priced alike, so any prices do: a currency's, or the fixed measurement weights.
+        Weights weights = args.has("weights") ? Weights.load(Paths.get(args.get("weights"))) : null;
         Meter.install(weights);
-        System.out.println("# weights: " + weights.summary());
+        System.out.println("# weights: " + (weights == null ? "the fixed measurement weights" : weights.summary()));
         Portfolio<S> p = loadPortfolio(game, args);
         List<Scenario<S>> scenarios = pickScenarios(p, args);
         int visits = args.getInt("visits", 2);

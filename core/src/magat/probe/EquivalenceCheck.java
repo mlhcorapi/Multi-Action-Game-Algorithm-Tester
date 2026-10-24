@@ -80,9 +80,10 @@ public final class EquivalenceCheck {
         try {
             for (long budget : budgets) {
                 // Both sides are priced by the arm's profile at this budget; at a budget no file
-                // prices (a toy gate), by the arm's profile at its smallest priced level.
-                String profile = Profile.key(arm.id(), budget);
-                double[] w = weights.profile(profile);
+                // prices (a toy gate), by the arm's profile at its smallest priced level; with no file,
+                // by the fixed measurement weights.
+                String profile = weights == null ? "fixed measurement weights" : Profile.key(arm.id(), budget);
+                double[] w = weights == null ? Weights.DEFAULT.clone() : weights.profile(profile);
                 if (w == null) {
                     String nearest = smallestPricedLevel(weights, arm.id());
                     if (nearest == null)

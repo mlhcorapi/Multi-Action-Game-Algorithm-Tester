@@ -22,7 +22,7 @@ import java.util.List;
 
 import static org.junit.Assert.*;
 
-/** EMCTS declares its own operations, records exactly those, and is priced by them under a version-2 currency only. */
+/** EMCTS declares its own operations, records exactly those, and is priced by them. */
 public class OperationsToyTest {
 
     private final ToyGame game = new ToyGame();
@@ -60,21 +60,7 @@ public class OperationsToyTest {
     }
 
     @Test
-    public void underAVersionOneCurrencyTheOperationsChangeNothing() {
-        // The same arm, the same turn, priced by the same forward-model weights from a version-1 file and
-        // from a probe's triple: identical in every count and unit, because the operations weigh nothing.
-        Meter.install(Weights.parse(null, Arrays.asList("magat.weights.version = 1", "reference = emcts@1500",
-                "profile.emcts@1500.wAdvance = 1", "profile.emcts@1500.wCopy = 0.16", "profile.emcts@1500.wEval = 0.077")));
-        TurnRecord v1 = Episode.run(game, positions.get(1), 0, EmctsFactory.plain(), 1_500);
-        TurnRecord triple = Episode.run(game, positions.get(1), 0, EmctsFactory.plain(), 1_500, Weights.DEFAULT, "toy");
-        assertEquals(triple.units, v1.units, 0);
-        assertEquals(triple.advances, v1.advances);
-        assertEquals(triple.finalValue, v1.finalValue, 0);
-        assertEquals(triple.operations, v1.operations);
-    }
-
-    @Test
-    public void underAVersionTwoCurrencyTheOperationsAreSpentFromTheBudget() {
+    public void theOperationsAreSpentFromTheBudget() {
         List<String> lines = new ArrayList<>(Arrays.asList("magat.weights.version = 2", "reference = emcts@1500",
                 "profile.emcts@1500.w.advance = 1", "profile.emcts@1500.w.copy = 0.16", "profile.emcts@1500.w.eval = 0.077"));
         for (String op : Emcts.OPERATIONS) lines.add("profile.emcts@1500.w." + op + " = 0.5");
@@ -87,12 +73,12 @@ public class OperationsToyTest {
         assertTrue("a budget that pays for the algorithm's own work buys fewer forward-model calls",
                 r.advances < free.advances);
 
-        // A version-2 profile that leaves a declared operation unpriced is refused at the turn.
+        // A profile that leaves a declared operation unpriced is refused at the turn.
         lines.remove("profile.emcts@1500.w.emcts.burn = 0.5");
         Meter.install(Weights.parse(null, lines));
         try {
             Episode.run(game, positions.get(1), 0, EmctsFactory.plain(), 1_500);
-            fail("an operation counted but not priced in a version-2 profile must be refused");
+            fail("an operation counted but not priced in the profile must be refused");
         } catch (IllegalStateException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("emcts.burn"));
         }

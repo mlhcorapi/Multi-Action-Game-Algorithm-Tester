@@ -30,7 +30,7 @@ final class ProbeCommand {
     static void usage() {
         System.out.println("  check replay      --game <name> --leaf <published leaf dir> --portfolio <dir> --weights <file> [--turns 20]");
         System.out.println("                    [--arm id] [--budget units] [--threads N]");
-        System.out.println("  check overhead    --game <name> --portfolio <dir> --weights <file> [--arm emcts] [--budget 40000] [--reps 3] [--turns 8]");
+        System.out.println("  check overhead    --game <name> --portfolio <dir> [--weights <file>] [--arm emcts] [--budget 40000] [--reps 3] [--turns 8]");
         System.out.println("  check overhead --audit --game <name> --portfolio <dir> [--arms a,b|@set] [--budget 40000] [--turns 4] [--reps 2]");
         System.out.println("                    [--warn 0.10] [--fail 0.25]: how much of each arm's turn its declared operations account for");
     }
@@ -71,8 +71,7 @@ final class ProbeCommand {
         if (args.flag("audit")) return audit(args);
         Main.banner("check overhead");
         GameModule<S, A> module = Games.load(args.require("game"));
-        Weights w = Weights.load(Paths.get(args.require("weights")));
-        Meter.install(w);
+        Meter.install(args.has("weights") ? Weights.load(Paths.get(args.get("weights"))) : null);   // else the fixed measurement weights
         Portfolio<S> p = Portfolio.load(module.game(), Paths.get(args.require("portfolio")));
         String arm = args.get("arm", module.referenceArm());
         long budget = Long.parseLong(args.get("budget", "40000"));

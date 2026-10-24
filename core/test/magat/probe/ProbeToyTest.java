@@ -40,9 +40,13 @@ public class ProbeToyTest {
         Portfolio<ToyGame.State> p = Portfolio.load(game, pdir);
         Path work = Files.createTempDirectory("magat-replay");
         Path weights = work.resolve("w.properties");
-        Files.write(weights, ("magat.weights.version = 1\nreference = emcts@400\nreferenceAdvanceNanos = 1000\n"
-                + "profile.emcts-alt@400.wAdvance = 1\nprofile.emcts-alt@400.wCopy = 0.2\nprofile.emcts-alt@400.wEval = 0.1\n"
-                + "profile.emcts@400.wAdvance = 1\nprofile.emcts@400.wCopy = 0.2\nprofile.emcts@400.wEval = 0.1\n").getBytes(StandardCharsets.UTF_8));
+        StringBuilder file = new StringBuilder("magat.weights.version = 2\nreference = emcts@400\nreferenceAdvanceNanos = 1000\n");
+        for (String arm : new String[]{"emcts-alt", "emcts"}) {
+            String pre = "profile." + arm + "@400.";
+            file.append(pre).append("w.advance = 1\n").append(pre).append("w.copy = 0.2\n").append(pre).append("w.eval = 0.1\n");
+            for (String op : magat.agents.emcts.Emcts.OPERATIONS) file.append(pre).append("w.").append(op).append(" = 0\n");
+        }
+        Files.write(weights, file.toString().getBytes(StandardCharsets.UTF_8));
         Path spec = Files.write(work.resolve("s.json"), ("{\"name\":\"r\",\"game\":\"toy\",\"baseline\":\"emcts\",\"levels\":[{\"budget\":400,\"visits\":2}],"
                 + "\"arms\":[\"emcts\",\"emcts-alt\"]}").getBytes(StandardCharsets.UTF_8));
         GridRunner.Options o = new GridRunner.Options();

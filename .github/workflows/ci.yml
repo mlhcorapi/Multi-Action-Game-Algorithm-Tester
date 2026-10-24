@@ -44,8 +44,6 @@ jobs:
           python magat.py portfolio build --game tribes --out "$RUNNER_TEMP/toy" --targets single=2,dual=1 --threads 2
           python magat.py portfolio freeze --portfolio "$RUNNER_TEMP/toy"
           python magat.py portfolio verify --game tribes --portfolio "$RUNNER_TEMP/toy" --published games/tribes/portfolio/v1 --subset --plan 3
-      - name: The published currency prices the reference arms
-        run: python magat.py weights --game tribes --arms @reference
       - name: Toy calibration writes, and checks without writing
         run: |
           python magat.py machine

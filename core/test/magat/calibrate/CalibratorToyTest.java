@@ -179,31 +179,6 @@ public class CalibratorToyTest {
     }
 
     @Test
-    public void aVersionOneFileStaysVersionOneWhenAnArmIsMergedIntoIt() throws Exception {
-        Portfolio<ToyGame.State> p = portfolio();
-        Path out = Files.createTempDirectory("magat-calib-v1");
-        Calibrator.Options first = toy("emcts");
-        first.turns = "2,2";
-        first.format = 1;
-        assertTrue(Calibrator.run(game, registry(), "emcts", p, out, null, first).pass);
-        Path file = out.resolve(Currency.WEIGHTS_FILE);
-        assertEquals(1, Weights.load(file).version());
-        Calibrator.Result r = Calibrator.run(game, registry(), "emcts", p, out, null, toy("emcts-alt"));
-        assertTrue(r.pass);
-        Weights w = Weights.load(file);
-        assertEquals(1, w.version());
-        assertTrue(w.has("emcts-alt@300"));
-        assertTrue("a version-1 currency prices the forward model only", w.operations("emcts-alt@300").isEmpty());
-        assertFalse(read(file).contains(".w."));
-        // The arm's operations were still measured, for the audit: version 1 leaves them unpriced.
-        Cell alt = null;
-        for (Cell c : r.cells) if (c.profile.equals("emcts-alt@300")) alt = c;
-        assertNotNull(alt);
-        assertFalse(alt.ops.isEmpty());
-        assertTrue(alt.unpriced >= alt.unaccounted);
-    }
-
-    @Test
     public void theAuditReportsWorkAnArmDoesNotDeclare() throws Exception {
         Portfolio<ToyGame.State> p = portfolio();
         Path out = Files.createTempDirectory("magat-calib-audit");

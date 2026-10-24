@@ -18,7 +18,9 @@ public class MeterTest {
     }
 
     private static Weights weights(String... lines) {
-        return Weights.parse(null, Arrays.asList(lines));
+        java.util.List<String> all = new java.util.ArrayList<>(Arrays.asList(lines));
+        all.add(0, "magat.weights.version = 2");
+        return Weights.parse(null, all);
     }
 
     @Test
@@ -37,7 +39,7 @@ public class MeterTest {
     @Test
     public void profilePricing() {
         Meter.install(weights("reference = emcts@40000",
-                "profile.emcts@40000.wAdvance = 1.5", "profile.emcts@40000.wCopy = 0.2", "profile.emcts@40000.wEval = 0.05"));
+                "profile.emcts@40000.w.advance = 1.5", "profile.emcts@40000.w.copy = 0.2", "profile.emcts@40000.w.eval = 0.05"));
         Meter.useProfile("emcts@40000");
         Meter.reset();
         Meter.onAdvance(); Meter.onCopy(); Meter.onEval();
@@ -55,7 +57,7 @@ public class MeterTest {
 
     @Test
     public void unpricedProfileAllowedFallsBackToGlobal() {
-        Meter.install(weights("global.wAdvance = 1", "global.wCopy = 0.5", "global.wEval = 0.25"));
+        Meter.install(weights("global.w.advance = 1", "global.w.copy = 0.5", "global.w.eval = 0.25"));
         Meter.allowUnpriced(true);
         Meter.useProfile("nope@1");
         assertArrayEquals(new double[]{1, 0.5, 0.25}, Meter.activeWeights(), 0.0);
@@ -84,19 +86,8 @@ public class MeterTest {
     }
 
     @Test
-    public void algorithmOperationsAreFreeUnderVersionOneAndPricedUnderVersionTwo() {
-        Meter.install(weights("magat.weights.version = 1", "reference = a@1",
-                "profile.a@1.wAdvance = 1.5", "profile.a@1.wCopy = 0.2", "profile.a@1.wEval = 0.05"));
-        Meter.useProfile("a@1");
-        Meter.reset();
-        Meter.onAdvance(); Meter.onCopy(); Meter.onEval();
-        double fm = Meter.units();
-        WORK.count(7);
-        INNER.count();
-        assertEquals("under version 1 an algorithm operation weighs exactly nothing: the same double", fm, Meter.units(), 0.0);
-        assertTrue(Meter.unpricedCounted(null).isEmpty());
-
-        Meter.install(weights("magat.weights.version = 2", "reference = a@1",
+    public void algorithmOperationsArePricedAndAnUnpricedOneIsNamed() {
+        Meter.install(weights("reference = a@1",
                 "profile.a@1.w.advance = 1.5", "profile.a@1.w.copy = 0.2", "profile.a@1.w.eval = 0.05",
                 "profile.a@1.w.metertest.work = 0.25"));
         Meter.useProfile("a@1");
@@ -107,9 +98,9 @@ public class MeterTest {
         assertEquals(0.25, Meter.activeWeight("metertest.work"), 0);
         assertTrue(Meter.unpricedCounted(null).isEmpty());
         INNER.count();
-        assertEquals("an operation a version-2 profile does not price is named", java.util.Collections.singletonList("metertest.inner"),
+        assertEquals("an operation the profile does not price is named", java.util.Collections.singletonList("metertest.inner"),
                 Meter.unpricedCounted(null));
-        // A probe's explicit triple prices the forward model only, whatever the file's version.
+        // A probe's explicit triple prices the forward model only.
         Meter.useWeights(new double[]{1, 0.16, 0.077}, "probe");
         assertEquals(0.0, Meter.activeWeight("metertest.work"), 0);
         assertTrue(Meter.unpricedCounted(null).isEmpty());

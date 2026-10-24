@@ -66,7 +66,6 @@ assert ROOT not in DATA.parents and DATA != ROOT, f"data root {DATA} must be out
 GAME = "tribes"
 PY = sys.executable
 PUBLISHED_PORTFOLIO = ROOT / "games" / GAME / "portfolio" / "v1"
-PUBLISHED_WEIGHTS = ROOT / "games" / GAME / "calibration" / "r7615" / "compute_weights.properties"
 # Workers for parallel stages. Half the logical CPUs (SMT siblings add heat, not throughput) less two
 # for the machine; MAGAT_WORKERS overrides. The machine profile (milestone 3) replaces this guess.
 WORKERS = int(os.environ.get("MAGAT_WORKERS") or max(1, (os.cpu_count() or 2) // 2 - 2))
@@ -188,9 +187,7 @@ CALIBRATE_CELL = r'''
 # This machine's own currency, on this machine's own portfolio, in sections (calibrate-controlled; read
 # docs/CALIBRATING_A_MACHINE.md, "On a shared server"). Idle and single-threaded: nothing else of yours
 # may run while a section measures. Every section cell below skips itself once its arms are priced.
-# Version 2 (CURRENCY_VERSION = 2) prices every operation an arm declares, its own work included; version
-# 1 prices the forward model only, as the published R7615 currency does.
-CURRENCY_VERSION = 2
+# The currency prices every operation an arm declares, its own work included.
 CAL_BATCH = 8           # arms per section, fixed when the first section runs
 CAL_OTHER_CPUS = 4.0    # other work on the machine, in logical CPUs, that makes a section SUSPECT
 CAL_WAIT_QUIET = 30     # minutes a section waits for the machine to drop below that before refusing to start
@@ -201,7 +198,7 @@ def calibrate_section(section, redo=False):
     # One section (a number), "checks", or "rest" (every section still missing). Raises unless the section
     # passed or is suspect; a suspect one is measured again with redo=True when the machine is quiet.
     args = ["calibrate-controlled", "--name", CURRENCY_NAME, "--game", GAME, "--portfolio", PORTFOLIO,
-            "--format", CURRENCY_VERSION, "--batch", CAL_BATCH, "--other-cpus", CAL_OTHER_CPUS,
+            "--batch", CAL_BATCH, "--other-cpus", CAL_OTHER_CPUS,
             "--wait-quiet", CAL_WAIT_QUIET, "--soak-minutes", CAL_SOAK_MINUTES, "--levels", LEVELS]
     args += ["--section", "all", "--no-checks"] if section == "rest" else ["--section", section]
     if redo:
@@ -230,28 +227,16 @@ calibrate_section("rest")
 '''
 
 CHECKS_CELL = r'''
-# Two checks that write nothing. Against its own new currency, at the published levels: did this machine
-# hold its speed across the calibration? Against the published R7615 currency, at that file's own levels
-# (the thesis's 40,000 / 80,000 / 400,000, its initialization outside the budget): how far this machine's
-# prices are from the thesis's (on the R7615 itself, how far they moved since the thesis measured them).
+# Checks that write nothing. Against its own new currency: did this machine hold its speed across the
+# calibration? And, once the game's reference machine has published its currency, against that one: how
+# far this machine's prices are from the reference machine's.
 calibrate_section("checks")
-# The metering overhead on this machine, at the middle level of the new currency (ORIGIN.md lists the
-# R7615's line as not measured yet).
+# The metering overhead on this machine, at the middle level.
 magat("check", "overhead", "--game", GAME, "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--budget", MID_LEVEL,
       "--reps", 4, check=False)
 magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", "@reference", "--levels", LEVELS)
 print((CALIBRATION / "record" / "SUMMARY.md").read_text(encoding="utf-8"))
 bundle("calibration", [CALIBRATION, LOGS / "calibrate-controlled.log", LOGS / "check-overhead.log"])
-'''
-
-UNDER_LOAD_CELL = r'''
-# Gate A3' (off by default). The thesis resolved it: the idle currency is the ruler and wall-clock
-# (W7) is co-primary, so this is a diagnostic, not a step. It writes compute_weights_load<W>.properties
-# beside the idle file, never over it, and prints the idle-versus-loaded ratios.
-RUN_UNDER_LOAD = False
-if RUN_UNDER_LOAD:
-    magat("calibrate", "--game", GAME, "--portfolio", PORTFOLIO, "--out", CALIBRATION,
-          "--arms", "emcts", "--under-load", WORKERS)
 '''
 
 GATES_CELL = r'''
@@ -441,7 +426,6 @@ folder has every section's verdict, and the last cell bundles it all.
     *[code(SECTION_CELL.replace("{k}", str(k)), tags=("calibrate", f"section-{k}")) for k in range(1, CAL_SECTIONS + 1)],
     code(REST_CELL, tags=("calibrate",)),
     code(CHECKS_CELL, tags=("calibrate", "checks")),
-    code(UNDER_LOAD_CELL, tags=("under-load",)),
     md("""
 ## Gates and probes
 

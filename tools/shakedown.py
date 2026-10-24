@@ -74,13 +74,10 @@ def main(argv) -> int:
     step("3. Contract laws on published positions")
     check("L1-L9 pass", [PY, ROOT / "magat.py", "check", "contract", "--game", game, "--scenarios", "4"], "CONTRACT: PASS")
 
-    step("4. Gates and probes: equivalence, overhead, audit")
+    step("4. Gates and probes: equivalence, audit")
     check("emcts reproduces the engine's agent at 8k on 2 positions",
           [PY, ROOT / "magat.py", "check", "equivalence", "--game", game, "--arms", "emcts",
            "--scenarios", "2", "--visits", "1", "--budgets", "8000"], "EQUIVALENCE: PASS")
-    check("overhead: decorator and dormant counters are measured (toy size)",
-          [PY, ROOT / "magat.py", "check", "overhead", "--game", game, "--turns", "2", "--reps", "2", "--warmup", "1"],
-          "OVERHEAD: MEASURED")
     check("audit: each arm's declared operations and forward model account for its turn (toy size)",
           [PY, ROOT / "magat.py", "check", "overhead", "--audit", "--game", game, "--arms", "emcts",
            "--budget", "4000", "--turns", "2", "--reps", "1", "--warmup", "1"], "OVERHEAD AUDIT: PASS")
@@ -126,13 +123,8 @@ def main(argv) -> int:
           [PY, ROOT / "magat.py", "calibrate", "--check", "--game", game, "--weights", weights, "--arms", "emcts",
            "--levels", "4000", *toy],
           "largest drift in a turn's price", codes=(0, 1), then=lambda: weights.read_text(encoding="utf-8") == snapshot["w"])
-    check("--under-load writes beside the idle file, never over it",
-          [PY, ROOT / "magat.py", "calibrate", "--game", game, "--out", calib, "--arms", "emcts",
-           "--under-load", "3", "--levels", "4000", "--turns", "2", *toy],
-          "IDLE vs 3 THREADS",
-          then=lambda: (calib / "compute_weights_load3.properties").is_file() and weights.read_text(encoding="utf-8") == snapshot["w"])
-    check("the published currency prices the reference arms",
-          [PY, ROOT / "magat.py", "weights", "--game", game, "--arms", "@reference"], "WEIGHTS: COVERED")
+    check("the toy currency prices the reference arms at its own levels",
+          [PY, ROOT / "magat.py", "weights", "--game", game, "--weights", weights, "--arms", "@reference"], "WEIGHTS: COVERED")
     check("check time: whole turns under the toy currency, single-threaded, against a target",
           [PY, ROOT / "magat.py", "check", "time", "--game", game, "--weights", weights, "--arms", "emcts",
            "--levels", "2000,4000", "--targets", "100,200", "--positions", "3", "--warmup", "1",

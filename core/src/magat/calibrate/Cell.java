@@ -97,11 +97,8 @@ public final class Cell {
 
     /**
      * Applies the estimator and the per-cell gates to the repetitions recorded.
-     *
-     * @param pricesOps whether the currency being written prices the algorithm operations (version 2):
-     *                  the audit's {@link #unpriced} share counts them as priced only then
      */
-    void summarise(long minOps, double gapLimit, boolean pricesOps) {
+    void summarise(long minOps, double gapLimit) {
         double[] a = column(0), c = column(1), e = column(2);
         tAdvance = Estimator.fastest(a); cvAdvance = Estimator.cv(a); gapAdvance = Estimator.twoFastestGap(a);
         tCopy = Estimator.fastest(c);    cvCopy = Estimator.cv(c);    gapCopy = Estimator.twoFastestGap(c);
@@ -123,7 +120,7 @@ public final class Cell {
         if (best >= 0) {
             double[] r = wallPerRep.get(best);
             unaccounted = 1 - (r[1] + r[2]) / wall;
-            unpriced = 1 - (r[1] + (pricesOps ? r[2] : 0)) / wall;
+            unpriced = unaccounted;
             forwardModelShare = r[1] / wall;
             operationsShare = r[2] / wall;
             turnMillis = wall / Math.max(1, turnsPerRep) / 1e6;
