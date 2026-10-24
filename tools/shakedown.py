@@ -79,8 +79,8 @@ def main(argv) -> int:
           [PY, ROOT / "magat.py", "check", "equivalence", "--game", game, "--arms", "emcts",
            "--scenarios", "2", "--visits", "1", "--budgets", "8000"], "EQUIVALENCE: PASS")
     check("audit: each arm's declared operations and forward model account for its turn (toy size)",
-          [PY, ROOT / "magat.py", "check", "overhead", "--audit", "--game", game, "--arms", "emcts",
-           "--budget", "4000", "--turns", "2", "--reps", "1", "--warmup", "1"], "OVERHEAD AUDIT: PASS")
+          [PY, ROOT / "magat.py", "check", "audit", "--game", game, "--arms", "emcts",
+           "--budget", "4000", "--turns", "2", "--reps", "1", "--warmup", "1"], "AUDIT: PASS")
 
     step("5. Portfolio: toy build, freeze, verify against the published portfolio")
     data = pathlib.Path(os.environ.get("MAGAT_DATA") or (pathlib.Path.home() / "magat_runs")).resolve()

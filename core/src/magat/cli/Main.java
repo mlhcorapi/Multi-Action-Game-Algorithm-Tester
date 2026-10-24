@@ -132,9 +132,9 @@ public final class Main {
         if ("contract".equals(what)) return checkContract(args);
         if ("equivalence".equals(what)) return checkEquivalence(args);
         if ("replay".equals(what)) return ProbeCommand.replay(args);
-        if ("overhead".equals(what)) return ProbeCommand.overhead(args);
+        if ("audit".equals(what)) return ProbeCommand.audit(args);
         if ("time".equals(what)) return ProbeCommand.time(args);
-        throw new IllegalArgumentException("check what? contract | equivalence | replay | overhead | time");
+        throw new IllegalArgumentException("check what? contract | equivalence | replay | audit | time");
     }
 
     private static <S, A> int checkContract(Args args) throws Exception {

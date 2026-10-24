@@ -36,7 +36,7 @@ jobs:
       - name: Equivalence gate (emcts vs the engine's agent, 2 positions, 8k units)
         run: python magat.py check equivalence --game tribes --arms emcts --scenarios 2 --visits 1 --budgets 8000
       - name: Audit (each arm's declared operations and forward model account for its turn)
-        run: python magat.py check overhead --audit --game tribes --arms emcts --budget 4000 --turns 2 --reps 1 --warmup 1
+        run: python magat.py check audit --game tribes --arms emcts --budget 4000 --turns 2 --reps 1 --warmup 1
       - name: Published portfolio verifies (bins, identity, split rule)
         run: python magat.py portfolio verify --game tribes
       - name: Toy portfolio build, freeze, and verify against the published rows

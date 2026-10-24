@@ -151,13 +151,13 @@ public class ProbeToyTest {
     @Test
     public void theAuditFailsAnArmWhoseWorkIsUndeclared() {
         java.util.List<magat.game.Scenario<ToyGame.State>> positions = game.positions(2);
-        java.util.List<OverheadCheck.Audit> a = OverheadCheck.audit(game, java.util.Arrays.asList(
+        java.util.List<AuditCheck.Audit> a = AuditCheck.audit(game, java.util.Arrays.asList(
                 BusyAgent.<ToyGame.State, ToyGame.Move>factory("busy-declared", true),
                 BusyAgent.<ToyGame.State, ToyGame.Move>factory("busy-undeclared", false)), 300, positions, 2, 1);
-        assertTrue("declared: " + a.get(0).unaccounted, a.get(0).unaccounted < OverheadCheck.AUDIT_WARN);
+        assertTrue("declared: " + a.get(0).unaccounted, a.get(0).unaccounted < AuditCheck.AUDIT_WARN);
         assertTrue(a.get(0).shares.get(BusyAgent.WORK) > 0.5);
-        assertTrue("undeclared: " + a.get(1).unaccounted, a.get(1).unaccounted > OverheadCheck.AUDIT_FAIL);
-        assertTrue(OverheadCheck.report(a.subList(0, 1), OverheadCheck.AUDIT_WARN, OverheadCheck.AUDIT_FAIL));
-        assertFalse(OverheadCheck.report(a, OverheadCheck.AUDIT_WARN, OverheadCheck.AUDIT_FAIL));
+        assertTrue("undeclared: " + a.get(1).unaccounted, a.get(1).unaccounted > AuditCheck.AUDIT_FAIL);
+        assertTrue(AuditCheck.report(a.subList(0, 1), AuditCheck.AUDIT_WARN, AuditCheck.AUDIT_FAIL));
+        assertFalse(AuditCheck.report(a, AuditCheck.AUDIT_WARN, AuditCheck.AUDIT_FAIL));
     }
 }

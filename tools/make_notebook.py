@@ -231,12 +231,9 @@ CHECKS_CELL = r'''
 # calibration? And, once the game's reference machine has published its currency, against that one: how
 # far this machine's prices are from the reference machine's.
 calibrate_section("checks")
-# The metering overhead on this machine, at the middle level.
-magat("check", "overhead", "--game", GAME, "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--budget", MID_LEVEL,
-      "--reps", 4, check=False)
 magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", "@reference", "--levels", LEVELS)
 print((CALIBRATION / "record" / "SUMMARY.md").read_text(encoding="utf-8"))
-bundle("calibration", [CALIBRATION, LOGS / "calibrate-controlled.log", LOGS / "check-overhead.log"])
+bundle("calibration", [CALIBRATION, LOGS / "calibrate-controlled.log"])
 '''
 
 GATES_CELL = r'''
@@ -245,9 +242,9 @@ assert_in_log("check-contract", "CONTRACT: PASS")
 magat("check", "equivalence", "--game", GAME, "--scenarios", 8, "--visits", 2, "--budgets", "8000,40000")
 assert_in_log("check-equivalence", "EQUIVALENCE: PASS")
 # The audit: each arm's declared operations and forward model account for its turn (fails above 25% unaccounted).
-magat("check", "overhead", "--audit", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "@reference", "--budget", MID_LEVEL)
-assert_in_log("check-overhead", "OVERHEAD AUDIT: PASS")
-bundle("gates", [LOGS / f"{n}.log" for n in ("check-contract", "check-equivalence", "check-overhead", "test")])
+magat("check", "audit", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "@reference", "--budget", MID_LEVEL)
+assert_in_log("check-audit", "AUDIT: PASS")
+bundle("gates", [LOGS / f"{n}.log" for n in ("check-contract", "check-equivalence", "check-audit", "test")])
 '''
 
 WORKED_CELL = r'''
@@ -304,7 +301,7 @@ CALIBRATION = globals().get("CALIBRATION", DATA / "calibration" / f"{GAME}-{CURR
 BUNDLED = [
     ("portfolio", "this machine's portfolio: manifest, split files, identity, the verify log"),
     ("threads", "the thread sweep and threads.json"),
-    ("calibration", f"the currency {CURRENCY_NAME}: weights, every section's record and verdict, the checks, the overhead"),
+    ("calibration", f"the currency {CURRENCY_NAME}: weights, every section's record and verdict, the checks"),
     ("gates", "contract, equivalence, audit"),
     ("worked-result", "the published worked result, re-analysed here"),
 @RUNS@    ("shakedown", "the shakedown's log"),
