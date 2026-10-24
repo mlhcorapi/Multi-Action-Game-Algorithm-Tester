@@ -4,7 +4,6 @@
   "description": "Toy sizes: every moving part of a run in seconds, on the shakedown's toy portfolio and toy calibration. It measures nothing.",
   "split": "dev",
   "baseline": "emcts",
-  "initialization": "in-budget",
   "levels": [
     { "budget": 4000, "visits": 1 },
     { "budget": 2000, "visits": 1 }

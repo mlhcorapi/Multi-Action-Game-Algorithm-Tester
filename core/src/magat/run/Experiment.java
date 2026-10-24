@@ -4,7 +4,6 @@ import com.eclipsesource.json.Json;
 import com.eclipsesource.json.JsonArray;
 import com.eclipsesource.json.JsonObject;
 import com.eclipsesource.json.JsonValue;
-import magat.agent.TurnBudget;
 import magat.portfolio.Identity;
 
 import java.io.IOException;
@@ -41,7 +40,7 @@ import java.util.Set;
 public final class Experiment {
 
     private static final Set<String> KNOWN = new LinkedHashSet<>(Arrays.asList("name", "game", "portfolio", "split",
-            "baseline", "levels", "arms", "contrasts", "scenarios", "initialization",
+            "baseline", "levels", "arms", "contrasts", "scenarios",
             "wallclock_anchor", "description"));
 
     public static final class Level {
@@ -86,15 +85,6 @@ public final class Experiment {
     public final List<Arm> arms;
     public final List<Contrast> contrasts;
     public final int scenarios;
-    /**
-     * Whether each turn's initialization is paid from its budget ({@code "initialization": "in-budget"},
-     * MAGAT's standard) or bounds only the search ({@code "outside-budget"}, the thesis's). A spec that does
-     * not say keeps the meaning it was written with: outside the budget. Null when the value is not one of
-     * the two (the validator reports it).
-     */
-    public final TurnBudget.Initialization initialization;
-    public final boolean initializationDeclared;
-    public final String initializationValue;
     public final List<String> unknownKeys;
 
     private Experiment(Path source, String sha256, JsonObject o) {
@@ -122,16 +112,6 @@ public final class Experiment {
         }
         this.contrasts = Collections.unmodifiableList(ct);
         this.scenarios = o.getInt("scenarios", 0);
-        this.initializationValue = o.get("initialization") == null ? null
-                : o.get("initialization").isString() ? o.get("initialization").asString() : o.get("initialization").toString();
-        this.initializationDeclared = initializationValue != null;
-        TurnBudget.Initialization init;
-        try {
-            init = initializationDeclared ? TurnBudget.Initialization.of(initializationValue) : TurnBudget.Initialization.OUTSIDE_BUDGET;
-        } catch (IllegalArgumentException e) {
-            init = null;
-        }
-        this.initialization = init;
         List<String> unknown = new ArrayList<>();
         for (String n : o.names()) if (!KNOWN.contains(n)) unknown.add(n);
         this.unknownKeys = Collections.unmodifiableList(unknown);

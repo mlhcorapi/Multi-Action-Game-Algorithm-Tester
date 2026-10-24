@@ -100,27 +100,22 @@ public class ProbeToyTest {
     }
 
     @Test
-    public void aRunWithItsInitializationInTheBudgetReplaysAsItWasBudgeted() throws Exception {
+    public void aVersionTwoRunReplaysFieldForField() throws Exception {
         Path pdir = Files.createTempDirectory("magat-replay3-portfolio");
         PortfolioBuilder.build(game, Collections.singletonMap("toy", 6), pdir, 1);
         Split.freeze(pdir);
         Portfolio<ToyGame.State> p = Portfolio.load(game, pdir);
         Path work = Files.createTempDirectory("magat-replay3");
         Weights w = Weights.load(magat.run.GridRunnerTest.weightsV2(work, "w2.properties", 0.5, "emcts", "emcts-alt"));
-        Path spec = Files.write(work.resolve("s.json"), ("{\"name\":\"r\",\"game\":\"toy\",\"baseline\":\"emcts\",\"initialization\":\"in-budget\","
+        Path spec = Files.write(work.resolve("s.json"), ("{\"name\":\"r\",\"game\":\"toy\",\"baseline\":\"emcts\","
                 + "\"levels\":[{\"budget\":300,\"visits\":2}],\"arms\":[\"emcts\",\"emcts-alt\"]}").getBytes(StandardCharsets.UTF_8));
         GridRunner.Options o = new GridRunner.Options();
         o.split = Split.Half.ALL;
         o.out = work.resolve("run");
         o.threads = 2;
         assertEquals(GridRunner.OK, GridRunner.run(magat.run.GridRunnerTest.module(game, new ArrayList<>()), Experiment.load(spec), p, w, o));
-        assertEquals("the run leaves the JVM's policy as it found it", magat.agent.TurnBudget.Initialization.IN_BUDGET,
-                magat.agent.TurnBudget.initialization());
-        assertTrue(new String(Files.readAllBytes(o.out.resolve("all").resolve("_run.json")), StandardCharsets.UTF_8)
-                .contains("\"initialization\": \"in-budget\""));
         Path leafDir = magat.run.Leaf.dir(o.out.resolve("all"), "emcts", 300);
         ReplayCheck.Leaf leaf = ReplayCheck.read(leafDir);
-        assertEquals(magat.agent.TurnBudget.Initialization.IN_BUDGET, leaf.initialization);
         Meter.install(w);
         ReplayCheck.Result ok = ReplayCheck.run(game, p, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 300, leaf, 100, 2);
         assertTrue(ok.failures.toString(), ok.pass());
@@ -145,7 +140,7 @@ public class ProbeToyTest {
         Path out = Files.createTempDirectory("magat-time").resolve("time.json");
         TimeCheck.write(out, TimeCheck.json(cells, "fixed", 4, "toy"));
         String json = new String(Files.readAllBytes(out), StandardCharsets.UTF_8);
-        assertTrue(json.contains("\"mean_ms\"") && json.contains("\"ratio\"") && json.contains("\"initialization\": \"in-budget\""));
+        assertTrue(json.contains("\"mean_ms\"") && json.contains("\"ratio\"") && json.contains("\"positions\": 4"));
         assertFalse("profiling is left as it was found", Meter.PROFILE);
     }
 

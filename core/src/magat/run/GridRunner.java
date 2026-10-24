@@ -6,7 +6,6 @@ import com.eclipsesource.json.JsonObject;
 import com.eclipsesource.json.JsonValue;
 import magat.agent.AgentFactory;
 import magat.agent.Episode;
-import magat.agent.TurnBudget;
 import magat.agent.TurnRecord;
 import magat.calibrate.ThreadSweep;
 import magat.game.Game;
@@ -102,17 +101,7 @@ public final class GridRunner {
             System.out.println("  [warn]  the weights were measured on portfolio " + Identity.shortForm(weights.portfolioIdentity())
                     + "; this run reads " + Identity.shortForm(portfolio.identity()));
 
-        // Every turn of this run pays its initialization from its budget, or not, as the spec says.
-        TurnBudget.Initialization wasInit = TurnBudget.initialization();
-        TurnBudget.setInitialization(x.initialization);
-        System.out.println("# initialization: " + x.initialization + (x.initialization == TurnBudget.Initialization.IN_BUDGET
-                ? " (each turn's budget pays for its initial plan: a level is the whole turn)"
-                : " (each turn's initial plan is outside its budget, as the thesis ran)"));
-        try {
-            return runTree(module, x, portfolio, weights, o, game, half);
-        } finally {
-            TurnBudget.setInitialization(wasInit);
-        }
+        return runTree(module, x, portfolio, weights, o, game, half);
     }
 
     private static <S, A> int runTree(GameModule<S, A> module, Experiment x, Portfolio<S> portfolio, Weights weights, Options o,
@@ -432,7 +421,6 @@ public final class GridRunner {
                 .add("reference", String.valueOf(weights.reference())).add("header", header));
         prov.set("experiment", new JsonObject().add("name", x.name).add("path", x.source == null ? "" : x.source.toAbsolutePath().toString())
                 .add("sha256", x.sha256));
-        prov.set("initialization", Json.value(x.initialization.id));
         if (o.toy) prov.set("toy", Json.value(true));
         JsonObject threads = new JsonObject();
         Map<Long, Integer> sweep = o.threadsFile != null && Files.isRegularFile(o.threadsFile) ? ThreadSweep.read(o.threadsFile) : null;

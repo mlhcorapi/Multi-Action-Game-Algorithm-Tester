@@ -1,7 +1,6 @@
 package magat.run;
 
 import magat.agent.AgentRegistry;
-import magat.agent.TurnBudget;
 import magat.agents.emcts.EmctsFactory;
 import magat.agents.random.RandomAgent;
 import magat.meter.Weights;
@@ -46,27 +45,6 @@ public class ValidatorTest {
     private static boolean says(Validator.Report r, String needle, boolean error) {
         for (String s : error ? r.errors : r.warnings) if (s.contains(needle)) return true;
         return false;
-    }
-
-    @Test
-    public void aSpecSaysWhetherTheInitializationIsInTheBudget() {
-        Experiment undeclared = spec("{\"id\":\"emcts\"}", "");
-        assertEquals("a spec that does not say keeps the thesis's meaning",
-                TurnBudget.Initialization.OUTSIDE_BUDGET, undeclared.initialization);
-        Validator.Report r = check(undeclared, Split.Half.DEV, priced("emcts"));
-        assertTrue(r.ok());
-        assertTrue(r.warnings.toString(), says(r, "declare \"initialization\": \"in-budget\"", false));
-
-        Experiment in = spec("{\"id\":\"emcts\"}", ", \"initialization\": \"in-budget\"");
-        assertEquals(TurnBudget.Initialization.IN_BUDGET, in.initialization);
-        Validator.Report ri = check(in, Split.Half.DEV, priced("emcts"));
-        assertTrue(ri.ok());
-        assertFalse(ri.warnings.toString(), says(ri, "initialization", false));
-        assertTrue("a known key", in.unknownKeys.isEmpty());
-
-        Experiment bad = spec("{\"id\":\"emcts\"}", ", \"initialization\": \"inside\"");
-        assertNull(bad.initialization);
-        assertTrue(says(check(bad, Split.Half.DEV, priced("emcts")), "in-budget (MAGAT's standard) or outside-budget", true));
     }
 
     @Test

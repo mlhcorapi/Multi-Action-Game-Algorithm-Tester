@@ -3,7 +3,6 @@ package magat.calibrate;
 import magat.agent.AgentFactory;
 import magat.agent.AgentRegistry;
 import magat.agent.Episode;
-import magat.agent.TurnBudget;
 import magat.agent.TurnRecord;
 import magat.game.Game;
 import magat.game.Scenario;
@@ -119,16 +118,6 @@ public final class Calibrator {
      */
     public static <S, A> Result run(Game<S, A> game, AgentRegistry<S, A> registry, String referenceArm,
                                     Portfolio<S> portfolio, Path out, Path checkFile, Options o) throws IOException {
-        TurnBudget.Initialization was = TurnBudget.initialization();
-        try {
-            return session(game, registry, referenceArm, portfolio, out, checkFile, o);
-        } finally {
-            TurnBudget.setInitialization(was);           // a check may have played the file's policy
-        }
-    }
-
-    private static <S, A> Result session(Game<S, A> game, AgentRegistry<S, A> registry, String referenceArm,
-                                         Portfolio<S> portfolio, Path out, Path checkFile, Options o) throws IOException {
         Path idle = out == null ? null : out.resolve(Currency.WEIGHTS_FILE);
         Path existingPath = o.check ? checkFile : (idle != null && Files.isRegularFile(idle) ? idle : null);
         if (o.underLoad > 1) existingPath = null;         // a loaded run writes its own file beside the idle one
@@ -148,23 +137,6 @@ public final class Calibrator {
         long[] levels = o.levels != null ? o.levels
                 : existing != null && existing.header().get("levels") != null ? parseLongs(existing.header().get("levels"))
                 : o.defaultLevels != null ? o.defaultLevels : FALLBACK_LEVELS;
-        // A file's turns were measured with its initialization policy (a file without one is the thesis's: outside).
-        TurnBudget.Initialization initialization = TurnBudget.initialization();
-        if (existing != null && o.underLoad <= 1) {
-            String had = existing.header().get("initialization");
-            TurnBudget.Initialization fileInit = had == null ? TurnBudget.Initialization.OUTSIDE_BUDGET : TurnBudget.Initialization.of(had);
-            if (fileInit != initialization && !o.check)
-                throw new IllegalStateException(existingPath + " was measured with the initialization " + fileInit + " the budget; this "
-                        + "session plays turns with it " + initialization + ". A merge would price unlike turns: calibrate a new currency, "
-                        + "or pass --initialization " + fileInit.id + " to extend this one as it was measured.");
-            if (fileInit != initialization) {
-                // A check compares like with like: it plays the turns the way the file it checks was measured.
-                System.out.println("# " + existingPath + " was measured with the initialization " + fileInit + " the budget: "
-                        + "this check plays its turns so too");
-                initialization = fileInit;
-                TurnBudget.setInitialization(fileInit);
-            }
-        }
         String reference = existing != null && existing.reference() != null ? existing.reference()
                 : Profile.key(referenceArm, Arrays.stream(levels).min().orElse(40_000L));
         String refArm = Profile.arm(reference);
@@ -233,8 +205,6 @@ public final class Calibrator {
         System.out.println("# reps " + o.reps + "   turns/rep " + turnsSpec + " over levels " + levelsHeader + "   warmup " + o.warmup
                 + "   gap gate " + gapLimitPct + "%   min ops " + MIN_OPS + (o.toy ? " (reported, not enforced)" : ""));
         System.out.println("# portfolio " + portfolio.identity() + " (" + portfolio.size() + " positions; a pool of " + pool + " of them)");
-        System.out.println("# initialization: " + initialization + (initialization == TurnBudget.Initialization.IN_BUDGET
-                ? " (each turn's budget pays for its initial plan)" : " (each turn's initial plan is outside its budget, as the thesis ran)"));
         System.out.println(pricesOps ? "# currency version 2: every operation an arm declares is measured and priced"
                 : "# currency version 1: the forward model is priced; the arms' own operations are measured for the audit and stay free");
         System.out.println(String.format(Locale.ROOT, "# every cell is measured under the fixed measurement weights (advance %s, copy %s, eval %s, "

@@ -95,18 +95,6 @@ public class SeedsAndBudgetTest {
         assertEquals("a phase still has a ceiling to reach", 1.0, b.ceiling(0, 3), 0.0);
     }
 
-    @Test
-    public void theInitializationIsNamedAndParsed() {
-        assertEquals(TurnBudget.Initialization.IN_BUDGET, TurnBudget.Initialization.of("in-budget"));
-        assertEquals(TurnBudget.Initialization.OUTSIDE_BUDGET, TurnBudget.Initialization.of(" Outside-Budget "));
-        try {
-            TurnBudget.Initialization.of("inside");
-            fail();
-        } catch (IllegalArgumentException expected) {
-            assertTrue(expected.getMessage().contains("in-budget or outside-budget"));
-        }
-    }
-
     @Test(expected = IllegalStateException.class)
     public void beginSearchTwiceIsAnError() {
         TurnBudget b = TurnBudget.units(10);

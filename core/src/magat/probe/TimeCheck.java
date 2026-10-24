@@ -5,7 +5,6 @@ import com.eclipsesource.json.JsonObject;
 import com.eclipsesource.json.WriterConfig;
 import magat.agent.AgentFactory;
 import magat.agent.Episode;
-import magat.agent.TurnBudget;
 import magat.agent.TurnRecord;
 import magat.game.Game;
 import magat.game.Scenario;
@@ -28,8 +27,8 @@ import java.util.Locale;
  * several-fold (the engine's legal-action generation grows with the units on the board). So a level's time
  * is a mean over many positions spread across the portfolio, one turn each, and the spread is reported
  * beside it. Each turn is timed whole, initialization included, without the meter's profiling (as a run
- * plays it). Under {@link TurnBudget.Initialization#IN_BUDGET} a turn spends its level, so the mean is the
- * level's thinking time on this machine.
+ * plays it). A turn spends its level, its initialization included, so the mean is the level's thinking
+ * time on this machine.
  *
  * <p>{@code magat calibrate-time} uses it to find the units that make a level a round number of
  * milliseconds on the reference machine; on its own it reports any arms at any levels.
@@ -163,7 +162,7 @@ public final class TimeCheck {
             arr.add(o);
         }
         return new JsonObject().add("format", 1).add("game", game).add("weights", weights)
-                .add("initialization", TurnBudget.initialization().id).add("positions", positions)
+                .add("positions", positions)
                 .add("machine", MachineProfile.get().summary())
                 .add("engine", System.getProperty("magat.engine.commit", "unknown"))
                 .add("magat", System.getProperty("magat.git.commit", "unknown"))

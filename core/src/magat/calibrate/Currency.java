@@ -1,6 +1,5 @@
 package magat.calibrate;
 
-import magat.agent.TurnBudget;
 import magat.meter.Weights;
 
 import java.util.ArrayList;
@@ -89,8 +88,6 @@ public final class Currency {
         sb.append("turnsPerRep = ").append(s.turnsPerRep).append('\n');
         sb.append("portfolio.identity = ").append(s.portfolioIdentity).append('\n');
         sb.append("reps = ").append(s.reps).append('\n');
-        // The turns the prices were measured on paid their initialization from their budget, or not (a merge checks it).
-        sb.append("initialization = ").append(TurnBudget.initialization().id).append('\n');
         if (s.toy) sb.append("toy = true\n");
         if (s.version >= 2) {
             sb.append("operations = ").append(String.join(",", operations(cells, null))).append('\n');

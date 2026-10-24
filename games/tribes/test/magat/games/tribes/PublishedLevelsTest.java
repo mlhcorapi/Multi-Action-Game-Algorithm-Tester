@@ -3,7 +3,6 @@ package magat.games.tribes;
 import com.eclipsesource.json.Json;
 import com.eclipsesource.json.JsonObject;
 import com.eclipsesource.json.JsonValue;
-import magat.agent.TurnBudget;
 import magat.meter.Profile;
 import magat.meter.Weights;
 import magat.portfolio.Manifest;
@@ -77,8 +76,6 @@ public class PublishedLevelsTest {
     @Test
     public void theReferenceLadderRunsAtThePublishedLevels() throws Exception {
         Experiment x = Experiment.load(LADDER);
-        assertEquals(TurnBudget.Initialization.IN_BUDGET, x.initialization);
-        assertTrue(x.initializationDeclared);
         List<Long> budgets = new ArrayList<>();
         for (Experiment.Level l : x.levels) budgets.add(l.budget);
         budgets.sort(null);

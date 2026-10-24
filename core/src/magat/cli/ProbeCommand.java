@@ -1,9 +1,6 @@
 package magat.cli;
 
-import com.eclipsesource.json.Json;
-import com.eclipsesource.json.JsonObject;
 import magat.agent.AgentFactory;
-import magat.agent.TurnBudget;
 import magat.calibrate.Calibrator;
 import magat.game.Game;
 import magat.game.GameModule;
@@ -16,8 +13,6 @@ import magat.probe.ReplayCheck;
 import magat.probe.TimeCheck;
 import magat.run.RunGuard;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -34,7 +29,7 @@ final class ProbeCommand {
 
     static void usage() {
         System.out.println("  check replay      --game <name> --leaf <published leaf dir> --portfolio <dir> --weights <file> [--turns 20]");
-        System.out.println("                    [--arm id] [--budget units] [--map tools/legacy-arms.json] [--threads N]");
+        System.out.println("                    [--arm id] [--budget units] [--threads N]");
         System.out.println("  check overhead    --game <name> --portfolio <dir> --weights <file> [--arm emcts] [--budget 40000] [--reps 3] [--turns 8]");
         System.out.println("  check overhead --audit --game <name> --portfolio <dir> [--arms a,b|@set] [--budget 40000] [--turns 4] [--reps 2]");
         System.out.println("                    [--warn 0.10] [--fail 0.25]: how much of each arm's turn its declared operations account for");
@@ -50,15 +45,7 @@ final class ProbeCommand {
         Game<S, A> game = module.game();
         Path dir = Paths.get(args.require("leaf"));
         ReplayCheck.Leaf leaf = ReplayCheck.read(dir);
-        String arm = args.get("arm");
-        if (arm == null && leaf.format.equals("thesis")) {
-            Path map = Paths.get(args.get("map", "tools/legacy-arms.json"));
-            JsonObject m = Json.parse(new String(Files.readAllBytes(map), StandardCharsets.UTF_8)).asObject();
-            if (m.get(leaf.arm) == null) throw new IllegalArgumentException("no MAGAT arm for thesis config '" + leaf.arm + "' in " + map);
-            arm = m.getString(leaf.arm, null);
-        } else if (arm == null) {
-            arm = leaf.arm;
-        }
+        String arm = args.get("arm", leaf.arm);
         long budget;
         if (args.has("budget")) budget = Long.parseLong(args.get("budget"));
         else {
@@ -139,7 +126,6 @@ final class ProbeCommand {
         Main.banner("check time");
         GameModule<S, A> module = Games.load(args.require("game"));
         Portfolio<S> p = Portfolio.load(module.game(), Paths.get(args.require("portfolio")));
-        TurnBudget.setInitialization(TurnBudget.Initialization.of(args.get("initialization", TurnBudget.Initialization.IN_BUDGET.id)));
         long[] levels = args.getLongs("levels", args.getLongs("default-levels", null));
         if (levels == null) throw new IllegalArgumentException("check time needs --levels (no published levels for this game)");
         List<String> armIds = args.has("arms") ? module.expandArms(args.getList("arms", new ArrayList<>()))
@@ -163,8 +149,7 @@ final class ProbeCommand {
         int positions = args.getInt("positions", TimeCheck.DEFAULT_POSITIONS);
         double tolerance = Double.parseDouble(args.get("tolerance", String.valueOf(TimeCheck.DEFAULT_TOLERANCE)));
         System.out.println(String.format(Locale.ROOT, "# %d arm(s) at %s, single-threaded, one turn on each of %d positions spread over the "
-                + "portfolio; priced by %s; initialization %s", arms.size(), Arrays.toString(levels), Math.min(positions, p.size()),
-                weights, TurnBudget.initialization()));
+                + "portfolio; priced by %s", arms.size(), Arrays.toString(levels), Math.min(positions, p.size()), weights));
         System.out.println(TimeCheck.header());
         RunGuard.install("check time", "re-run the same command");
         List<TimeCheck.Cell> cells = TimeCheck.run(module.game(), arms, p.scenarios(), levels, targets, positions,
