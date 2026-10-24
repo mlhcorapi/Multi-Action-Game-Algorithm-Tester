@@ -128,10 +128,11 @@ def main(argv) -> int:
     check("a coverage probe says what is still to price and exits 0: progress, not a gate",
           [PY, ROOT / "magat.py", "weights", "--game", game, "--weights", weights, "--arms", "emcts", "--levels", "2000,4000,8000",
            "--progress"], "WEIGHTS: 1 TO PRICE")
-    check("check time: whole turns under the toy currency, single-threaded, against a target",
+    check("check time: whole turns under the toy currency, single-threaded, against a target, with each cell's spend",
           [PY, ROOT / "magat.py", "check", "time", "--game", game, "--weights", weights, "--arms", "emcts",
            "--levels", "2000,4000", "--targets", "100,200", "--positions", "3", "--warmup", "1",
-           "--out", calib / "time.json"], "TIME: ", codes=(0, 1), then=lambda: (calib / "time.json").is_file())
+           "--out", calib / "time.json"], "SPEND: ", codes=(0, 1),
+          then=lambda: '"spend"' in (calib / "time.json").read_text(encoding="utf-8"))
     timed = data / "shakedown" / f"levels-{game}"
     shutil.rmtree(timed, ignore_errors=True)
     check("calibrate-time: probe, calibrate, time, rescale, round, levels.json (toy)",

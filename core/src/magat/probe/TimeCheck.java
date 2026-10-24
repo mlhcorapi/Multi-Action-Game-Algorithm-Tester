@@ -5,6 +5,7 @@ import com.eclipsesource.json.JsonObject;
 import com.eclipsesource.json.WriterConfig;
 import magat.agent.AgentFactory;
 import magat.agent.Episode;
+import magat.agent.TurnBudget;
 import magat.agent.TurnRecord;
 import magat.game.Game;
 import magat.game.Scenario;
@@ -28,7 +29,8 @@ import java.util.Locale;
  * is a mean over many positions spread across the portfolio, one turn each, and the spread is reported
  * beside it. Each turn is timed whole, initialization included, without the meter's profiling (as a run
  * plays it). A turn spends its level, its initialization included, so the mean is the level's thinking
- * time on this machine.
+ * time on this machine. A cell whose turns spend more than {@link TurnBudget#OVERSPEND} times their level on
+ * average is flagged: its time is not the level's.
  *
  * <p>{@code magat calibrate-time} uses it to find the units that make a level a round number of
  * milliseconds on the reference machine; on its own it reports any arms at any levels.
@@ -78,6 +80,15 @@ public final class TimeCheck {
         /** Milliseconds per thousand units the turns actually spent. */
         public double msPerThousandUnits() {
             return meanUnits > 0 ? 1000 * meanMs / meanUnits : Double.NaN;
+        }
+
+        /** The units a turn spent on average, initialization included, as a multiple of the level. */
+        public double spend() {
+            return budget > 0 ? meanUnits / budget : Double.NaN;
+        }
+
+        public boolean overspends() {
+            return spend() > TurnBudget.OVERSPEND;
         }
     }
 
@@ -139,15 +150,24 @@ public final class TimeCheck {
     }
 
     public static String header() {
-        return String.format(Locale.ROOT, "  %-28s %8s %6s %9s %9s %17s %9s %9s %10s %8s", "cell", "units", "turns", "mean ms", "median",
-                "quartiles", "min-max", "init ms", "ms/1000u", "target");
+        return String.format(Locale.ROOT, "  %-28s %8s %6s %6s %9s %9s %17s %9s %9s %10s %8s", "cell", "units", "spend", "turns", "mean ms",
+                "median", "quartiles", "min-max", "init ms", "ms/1000u", "target");
     }
 
     static String row(Cell c) {
-        return String.format(Locale.ROOT, "  %-28s %8.0f %6d %9.1f %9.1f %8.0f-%-8.0f %4.0f-%-5.0f %8.1f %10.2f %8s",
-                c.arm + "@" + c.budget, c.meanUnits, c.ms.length, c.meanMs, c.medianMs, c.q1Ms, c.q3Ms, c.minMs, c.maxMs,
+        return String.format(Locale.ROOT, "  %-28s %8.0f %5.2fx %6d %9.1f %9.1f %8.0f-%-8.0f %4.0f-%-5.0f %8.1f %10.2f %8s%s",
+                c.arm + "@" + c.budget, c.meanUnits, c.spend(), c.ms.length, c.meanMs, c.medianMs, c.q1Ms, c.q3Ms, c.minMs, c.maxMs,
                 c.meanInitMs, c.msPerThousandUnits(),
-                c.targetMs > 0 ? String.format(Locale.ROOT, "%+.1f%%", 100 * (c.ratio() - 1)) : "");
+                c.targetMs > 0 ? String.format(Locale.ROOT, "%+.1f%%", 100 * (c.ratio() - 1)) : "",
+                c.overspends() ? "   <-- spends over its level" : "");
+    }
+
+    /** The cells that spend over their level, as {@code arm@budget 1.25x}. */
+    public static List<String> overspent(List<Cell> cells) {
+        List<String> out = new ArrayList<>();
+        for (Cell c : cells)
+            if (c.overspends()) out.add(String.format(Locale.ROOT, "%s@%d %.2fx", c.arm, c.budget, c.spend()));
+        return out;
     }
 
     public static JsonObject json(List<Cell> cells, String weights, int positions, String game) {
@@ -157,7 +177,7 @@ public final class TimeCheck {
                     .add("mean_ms", c.meanMs).add("median_ms", c.medianMs).add("q1_ms", c.q1Ms).add("q3_ms", c.q3Ms)
                     .add("min_ms", c.minMs).add("max_ms", c.maxMs).add("mean_units", c.meanUnits)
                     .add("mean_init_units", c.meanInitUnits).add("mean_init_ms", c.meanInitMs)
-                    .add("ms_per_1000_units", c.msPerThousandUnits());
+                    .add("ms_per_1000_units", c.msPerThousandUnits()).add("spend", c.spend());
             if (c.targetMs > 0) o.add("target_ms", c.targetMs).add("ratio", c.ratio());
             arr.add(o);
         }

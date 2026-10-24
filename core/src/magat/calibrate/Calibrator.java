@@ -3,6 +3,7 @@ package magat.calibrate;
 import magat.agent.AgentFactory;
 import magat.agent.AgentRegistry;
 import magat.agent.Episode;
+import magat.agent.TurnBudget;
 import magat.agent.TurnRecord;
 import magat.game.Game;
 import magat.game.Scenario;
@@ -247,10 +248,10 @@ public final class Calibrator {
                 done++;
                 System.out.println(String.format(Locale.ROOT,
                         "  [%2d/%2d] %-34s advance %8.1f ns  copy %8.1f ns  eval %8.1f ns   (gap %.1f/%.1f/%.1f%% | CV %.1f/%.1f/%.1f%%)"
-                                + "  %d op(s), unpriced %.1f%%  %.0f s%s",
+                                + "  %d op(s), unpriced %.1f%%, spend %.2fx  %.0f s%s",
                         done, cells.size(), c.profile, c.tAdvance, c.tCopy, c.tEval,
                         100 * c.gapAdvance, 100 * c.gapCopy, 100 * c.gapEval, 100 * c.cvAdvance, 100 * c.cvCopy, 100 * c.cvEval,
-                        c.ops.size(), 100 * c.unpriced, c.seconds,
+                        c.ops.size(), 100 * c.unpriced, c.spend, c.seconds,
                         c.failures.isEmpty() ? "" : "   <-- " + c.failures.get(0)));
             }
             // The bracket: the reference cell again, last. Within-cell repetitions cannot see a machine
@@ -286,6 +287,7 @@ public final class Calibrator {
         for (Cell c : cells) c.normalise(ref.tAdvance);
         report(cells, ref);
         audit(cells, o.auditWarn);
+        spend(cells);
 
         // ---- is this a fair benchmark?
         List<String> passes = new ArrayList<>(), failures = new ArrayList<>();
@@ -398,6 +400,7 @@ public final class Calibrator {
         Meter.PROFILE = true;
         Episode.run(game, positionFor(scenarios, 0, turns, pool), 9_500, arm, c.budget);
         Meter.PROFILE = false;
+        double spent = 0;
         for (int rep = 0; rep < reps; rep++) {
             long adv = 0, cop = 0, ev = 0, nsA = 0, nsC = 0, nsE = 0, wall = 0, opNs = 0;
             long[] opCount = new long[idx.length], opTimed = new long[idx.length], opNanos = new long[idx.length];
@@ -413,6 +416,7 @@ public final class Calibrator {
                 adv += r.initAdvances + r.advances;
                 cop += r.initCopies + r.copies;
                 ev += r.initEvals + r.evals;
+                spent += r.initUnits + r.units;
                 nsA += Meter.advanceNanos();
                 nsC += Meter.copyNanos();
                 nsE += Meter.evalNanos();
@@ -438,6 +442,7 @@ public final class Calibrator {
         }
         c.positions = turns;
         c.turnsPerRep = turns;
+        c.spend = spent / Math.max(1, reps * turns) / c.budget;
         c.summarise(minOps, gapLimit);
         c.seconds = (System.nanoTime() - cellStart) / 1e9;
     }
@@ -523,6 +528,31 @@ public final class Calibrator {
         for (String w : warnings) System.out.println("  [warn] " + w);
         if (warnings.isEmpty())
             System.out.println(String.format(Locale.ROOT, "  every cell's priced operations account for at least %.0f%% of its turn time", 100 * (1 - warn)));
+    }
+
+    /**
+     * The spend check: each cell's mean turn, initialization included, against its level. A level is the
+     * thinking time of a turn that spends it, so a cell whose turns spend more than
+     * {@link TurnBudget#OVERSPEND} times their level is flagged (an initialization that cannot stop when the
+     * budget runs out is the usual cause). It never fails a calibration: the prices are measured either way.
+     */
+    private static void spend(List<Cell> cells) {
+        System.out.println(String.format(Locale.ROOT, "%n=== SPEND: EACH CELL'S MEAN TURN AGAINST ITS LEVEL (flagged above %.2fx) ===",
+                TurnBudget.OVERSPEND));
+        List<String> over = new ArrayList<>();
+        for (Cell c : cells) {
+            boolean flagged = c.spend > TurnBudget.OVERSPEND;
+            System.out.println(String.format(Locale.ROOT, "  %-34s %6.2fx%s", c.profile, c.spend, flagged ? "   <-- over" : ""));
+            if (flagged) over.add(String.format(Locale.ROOT, "%s %.2fx", c.profile, c.spend));
+        }
+        System.out.println(spendVerdict(over, TurnBudget.OVERSPEND));
+    }
+
+    /** The one line of the spend check: every cell within the flag, or the cells over it. */
+    public static String spendVerdict(List<String> over, double flag) {
+        return over.isEmpty() ? String.format(Locale.ROOT, "SPEND: every cell's mean turn is within %.2fx of its level", flag)
+                : String.format(Locale.ROOT, "SPEND: %d cell(s) spend more than %.2fx their level: %s", over.size(), flag,
+                String.join(", ", over));
     }
 
     /**

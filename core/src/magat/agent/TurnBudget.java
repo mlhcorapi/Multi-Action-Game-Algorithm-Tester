@@ -39,6 +39,13 @@ public final class TurnBudget {
         }
     }
 
+    /**
+     * A cell whose turns spend on average more than this multiple of their level is flagged, by the calibration
+     * and by {@code check time}: its units are not the level's thinking time. An initialization that cannot stop
+     * when the budget runs out is the usual cause.
+     */
+    public static final double OVERSPEND = 1.10;
+
     /** The JVM's mode: {@code IN_BUDGET}, which only the equivalence gate changes (and restores) for its comparisons. */
     private static volatile Initialization mode = Initialization.IN_BUDGET;
 

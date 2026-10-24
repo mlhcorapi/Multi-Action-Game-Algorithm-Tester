@@ -110,6 +110,7 @@ TO_PRICE = re.compile(r"^\s+to price: (\S+)")
 ARM_LINE = re.compile(r"^  ([a-z0-9][a-z0-9._-]*)\s")
 CELL_LINE = re.compile(r"^\s+\[\s*(\d+)/\s*(\d+)\]\s+(\S+)\s.*\s(\d+) s(?:\s+<-- (.*))?$")
 BRACKET_LINE = re.compile(r"^\s+\[bracket\]\s+(\S+)")
+CELL_SPEND = re.compile(r"spend ([\d.]+)x")
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -1496,7 +1497,9 @@ def cell_progress(line):
     """The calibrator's line for a finished cell (or the bracket), shortened to progress; None for any other."""
     m = CELL_LINE.match(line)
     if m:
-        return f"  cell {m.group(1)}/{m.group(2)}  {m.group(3)}  {m.group(4)} s" + (f"   <-- {m.group(5)}" if m.group(5) else "")
+        spend = CELL_SPEND.search(line)
+        return (f"  cell {m.group(1)}/{m.group(2)}  {m.group(3)}" + (f"  spend {spend.group(1)}x" if spend else "")
+                + f"  {m.group(4)} s" + (f"   <-- {m.group(5)}" if m.group(5) else ""))
     m = BRACKET_LINE.match(line)
     return f"  bracket  {m.group(1)} again" if m else None
 
@@ -1738,6 +1741,9 @@ def main(argv) -> int:
         if m:
             row["speed_vs_file"] = float(m.group(1))
         row["failures"] = [line.strip()[7:] for line in lines if line.strip().startswith("[FAIL]")]
+        spend = next((line for line in lines if line.startswith("SPEND: ")), None)
+        if spend:
+            row["spend"] = spend[len("SPEND: "):]
         s = monitor.stats.get(label, {})
         if s.get("n"):
             row["other_cpus_mean"] = round(s["other"] / s["n"], 2)
@@ -1923,6 +1929,8 @@ def main(argv) -> int:
               + (f"; bracket {'/'.join(f'{x:+.1f}%' for x in session_row['bracket'])}" if "bracket" in session_row else ""))
         for r in session_row["reasons"] + session_row["failures"][:3]:
             print(f"           {r}")
+        if "spend" in session_row:
+            print(f"  spend    {session_row['spend']}")
     for r in check_rows:
         print(f"  check    {r['check']}: {r['verdict']}" + (f", largest turn-price drift {r['drift']}" if "drift" in r else ""))
     if check_rows and published is None:
@@ -2010,6 +2018,8 @@ def write_summary(a, record, facts, soak, sessions, checks, counters, mstats, we
         for r in sessions:
             for f in r["reasons"] + r["failures"]:
                 L.append(f"- attempt {r['attempt']}: {f}")
+            if "spend" in r:
+                L.append(f"- attempt {r['attempt']}, spend: {r['spend']}")
         L += ["", "The calibrator's own output, every cell and table, is in `session.log`; its measurements in "
               "`compute_profiles.csv` and `compute_operations.csv`.", ""]
     if checks:

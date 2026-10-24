@@ -136,6 +136,7 @@ public class ProbeToyTest {
             assertEquals(4, c.ms.length);
             assertTrue(c.meanMs > 0 && c.minMs <= c.medianMs && c.medianMs <= c.maxMs && c.q1Ms <= c.q3Ms);
             assertTrue("a turn spends its level, its initialization included (" + c.meanUnits + ")", c.meanUnits >= c.budget * 0.9);
+            assertEquals(c.meanUnits / c.budget, c.spend(), 1e-12);
             assertTrue(c.meanInitUnits > 0);
             assertEquals(c.meanMs / 1000, c.ratio(), 1e-12);
             assertFalse("a toy turn is nowhere near a second", c.within(0.05));
@@ -147,6 +148,20 @@ public class ProbeToyTest {
         String json = new String(Files.readAllBytes(out), StandardCharsets.UTF_8);
         assertTrue(json.contains("\"mean_ms\"") && json.contains("\"ratio\"") && json.contains("\"positions\": 4"));
         assertFalse("profiling is left as it was found", Meter.PROFILE);
+    }
+
+    @Test
+    public void aTimeCheckFlagsACellThatSpendsPastItsLevel() throws Exception {
+        java.util.List<magat.game.Scenario<ToyGame.State>> positions = game.positions(3);
+        Stdout.Captured<java.util.List<TimeCheck.Cell>> timed = Stdout.capture(() -> TimeCheck.run(game, java.util.Arrays.asList(
+                EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), ToyArms.<ToyGame.State, ToyGame.Move>spendthrift()),
+                positions, new long[]{300}, null, 3, 1, true));
+        TimeCheck.Cell spendthrift = timed.value.get(1);
+        assertEquals(3.0, spendthrift.spend(), 0.1);
+        assertTrue(spendthrift.overspends());
+        assertTrue(timed.out, timed.out.contains("spendthrift@300") && timed.out.contains("<-- spends over its level"));
+        assertTrue(TimeCheck.overspent(timed.value).toString(), TimeCheck.overspent(timed.value).get(
+                TimeCheck.overspent(timed.value).size() - 1).startsWith("spendthrift@300 3.0"));
     }
 
     @Test

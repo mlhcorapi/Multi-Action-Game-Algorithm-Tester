@@ -31,7 +31,7 @@ wrap it). It:
 | `calibrate-time --remeasure [--times 500,1000,5000]` | the levels that are those milliseconds of thinking time on this machine: a maintainer's tool for the reference machine, refused without `--remeasure` once the game's levels are published ([units as time](CURRENCY.md#units-as-time)) |
 | `weights --weights F [--game G --arms ...] [--progress]` | what a weights file prices; exit 1 if anything asked for is missing. With `--progress`, a probe of a calibration under way: what is still to price, and exit 0 |
 | `check contract \| equivalence \| replay \| audit` | the gates (below) |
-| `check time (--weights F \| --fixed-weights) [--levels ...] [--arms ...] [--targets ms,...]` | single-threaded whole turns over positions spread across the portfolio: each level's thinking time on this machine |
+| `check time (--weights F \| --fixed-weights) [--levels ...] [--arms ...] [--targets ms,...]` | single-threaded whole turns over positions spread across the portfolio: each level's thinking time on this machine, and each cell's mean spend against its level, flagged above 1.10× |
 | `experiment validate --experiment SPEC [--weights F \| --no-weights]` | the spec validator alone |
 | `run --experiment SPEC --split dev\|holdout\|all` | run an experiment (below) |
 | `analyze --run DIR [--experiment SPEC] [--baseline ARM] [--reprice W] --out DIR` | every measure, as tables and `SUMMARY.md` |

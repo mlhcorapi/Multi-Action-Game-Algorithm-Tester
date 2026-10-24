@@ -67,6 +67,11 @@ public final class Cell {
     public double turnMillis = Double.NaN, forwardModelShare = Double.NaN, operationsShare = Double.NaN;
     /** Wall-clock seconds the cell took to measure (its discarded turn and every repetition). */
     public double seconds;
+    /**
+     * The units a turn of the cell spent on average, initialization included, as a multiple of its level: under the
+     * measurement weights, which its stop rule ran under too (NaN until measured).
+     */
+    public double spend = Double.NaN;
     /** Turns per repetition. */
     public int turnsPerRep;
 

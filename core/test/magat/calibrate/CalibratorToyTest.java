@@ -210,6 +210,24 @@ public class CalibratorToyTest {
     }
 
     @Test
+    public void theSpendCheckFlagsACellWhoseTurnsSpendPastTheirLevel() throws Exception {
+        Portfolio<ToyGame.State> p = portfolio();
+        Path out = Files.createTempDirectory("magat-calib-spend");
+        AgentRegistry<ToyGame.State, ToyGame.Move> reg = registry();
+        reg.register(ToyArms.spendthrift());
+        Calibrator.Options o = toy("emcts", "spendthrift");
+        o.levels = new long[]{300};
+        o.turns = "2";
+        Stdout.Captured<Calibrator.Result> calibrated = Stdout.capture(() -> Calibrator.run(game, reg, "emcts", p, out, null, o));
+        Cell spendthrift = measured(calibrated.value, "spendthrift@300");
+        assertEquals("three times its level, under the measurement weights", 3.0, spendthrift.spend, 0.1);
+        String verdict = calibrated.out.lines().filter(l -> l.startsWith("SPEND: ")).findFirst().orElse("");
+        assertTrue(calibrated.out, verdict.contains("spendthrift@300 3.0"));
+        assertTrue("a flag, not a failure", calibrated.value.pass);
+        assertTrue(read(out.resolve(Currency.PROFILES_CSV)).split("\n")[0].endsWith(",Spend"));
+    }
+
+    @Test
     public void anEstimateTimesAFewTurnsAndWritesNothing() throws Exception {
         Path out = Files.createTempDirectory("magat-calib-estimate");
         Calibrator.Options o = toy("emcts", "emcts-alt");
