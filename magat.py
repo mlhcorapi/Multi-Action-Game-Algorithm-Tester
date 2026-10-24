@@ -14,7 +14,6 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py portfolio build  --game tribes --out DIR [--threads N] [--targets single=200,dual=200]
     python magat.py portfolio freeze --portfolio DIR
     python magat.py portfolio verify --game tribes [--portfolio DIR] [--published DIR] [--subset] [--plan N]
-    python magat.py portfolio ledger --portfolio DIR
     python magat.py machine
     python magat.py threads   --game tribes --out DIR [--portfolio DIR] [--levels ...] [--ladder 2,4,8] [--segment-seconds 25]
     python magat.py calibrate --game tribes --out DIR [--portfolio DIR] [--levels ...] [--arms a,b|@set] [--replace a] [--under-load W] [--toy]
@@ -28,7 +27,7 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
                               reference machine; refused without --remeasure once games/<game>/levels.json is published)
     python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...]
     python magat.py run --experiment SPEC [--split dev|holdout|all] [--out DIR] [--portfolio DIR] [--weights FILE]
-                        [--threads N] [--threads-at 400000=31] [--frozen FILE] [--retire-leaf arm@budget] [--toy]
+                        [--threads N] [--threads-at 400000=31] [--retire-leaf arm@budget] [--toy]
     python magat.py experiment validate --experiment SPEC [--weights FILE | --no-weights] [--split ...]
     python magat.py bundle --name NAME --paths P [P ...] [--exclude seqlog_,mutlog_]
     python magat.py check replay    --game tribes --leaf DIR [--portfolio DIR] [--weights FILE] [--turns 20]

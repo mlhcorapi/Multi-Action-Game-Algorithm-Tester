@@ -11,7 +11,6 @@ import magat.game.Game;
 import magat.game.GameModule;
 import magat.meter.Meter;
 import magat.meter.Weights;
-import magat.portfolio.HoldoutLedger;
 import magat.portfolio.Portfolio;
 import magat.portfolio.PortfolioBuilder;
 import magat.portfolio.Split;
@@ -41,8 +40,7 @@ public class GridRunnerTest {
 
     static final String SPEC = "{ \"name\": \"toy\", \"game\": \"toy\", \"split\": \"dev\", \"baseline\": \"emcts\","
             + " \"levels\": [ {\"budget\": 600, \"visits\": 2}, {\"budget\": 300, \"visits\": 1} ],"
-            + " \"arms\": [ {\"id\": \"emcts\"}, {\"id\": \"emcts-alt\"}, {\"id\": \"random\"} ],"
-            + " \"sweeps\": [ {\"parameter\": \"selection\", \"arms\": [\"emcts-alt\"], \"null\": \"emcts\"} ] }";
+            + " \"arms\": [ {\"id\": \"emcts\"}, {\"id\": \"emcts-alt\"}, {\"id\": \"random\"} ] }";
 
     /** A module over the toy game with the given extra arms registered. */
     public static GameModule<ToyGame.State, ToyGame.Move> module(ToyGame game, List<AgentFactory<ToyGame.State, ToyGame.Move>> extra) {
@@ -241,18 +239,12 @@ public class GridRunnerTest {
     }
 
     @Test
-    public void theHoldoutNeedsFrozenChoicesAndIsLedgeredOnce() throws Exception {
+    public void eachSplitRunsIntoItsOwnTree() throws Exception {
         Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-alt"));
         Experiment x = Experiment.load(spec(SPEC));
-        assertEquals(GridRunner.INVALID, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, options(Split.Half.HOLDOUT)));
-        assertFalse(Files.exists(out.resolve("holdout")));
         GridRunner.Options o = options(Split.Half.HOLDOUT);
-        o.frozen = Files.write(work.resolve("frozen.txt"), "champion = emcts-alt\n".getBytes(StandardCharsets.UTF_8));
         assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, o));
-        assertEquals(1, HoldoutLedger.load(portfolioDir).entries().size());
-        assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, o));
-        assertEquals("a resume of the same read is not a second read", 1, HoldoutLedger.load(portfolioDir).entries().size());
-        // The holdout tree refuses the development split.
+        assertEquals("a finished run resumes as a no-op", GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, o));
         GridRunner.Options dev = options(Split.Half.DEV);
         dev.out = out.resolve("holdout").getParent();
         assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, dev));

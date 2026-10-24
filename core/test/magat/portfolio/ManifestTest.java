@@ -2,9 +2,6 @@ package magat.portfolio;
 
 import org.junit.Test;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -14,7 +11,7 @@ import java.util.Map;
 
 import static org.junit.Assert.*;
 
-public class ManifestAndLedgerTest {
+public class ManifestTest {
 
     private static List<Manifest.Row> rows() {
         List<Manifest.Row> out = new ArrayList<>();
@@ -58,38 +55,6 @@ public class ManifestAndLedgerTest {
         try {
             Manifest.render("toy", Collections.emptyMap(), Collections.emptyMap(), "",
                     Collections.singletonList(new Manifest.Row(1, "s", 1, 1, 1, 1, facts)));
-            fail();
-        } catch (IllegalStateException expected) { }
-    }
-
-    @Test
-    public void theLedgerRecordsEveryReadAndBelongsToOnePortfolio() throws Exception {
-        Path dir = Files.createTempDirectory("magat-ledger");
-        Files.write(dir.resolve(Manifest.FILE), Manifest.render("toy", Collections.emptyMap(), Collections.emptyMap(), "",
-                rows()).getBytes(StandardCharsets.UTF_8));
-        HoldoutLedger l = HoldoutLedger.load(dir);
-        assertFalse(l.holdoutRead());
-        assertNull(l.warning());
-
-        Path spec = Files.write(dir.resolve("spec.json"), "{\"arms\":[\"emcts\"]}".getBytes(StandardCharsets.UTF_8));
-        Path frozen = Files.write(dir.resolve("frozen.txt"), "champion=emcts-comma\n".getBytes(StandardCharsets.UTF_8));
-        l.append(HoldoutLedger.Entry.now("ab-holdout", spec, Arrays.asList("emcts", "emcts-comma"), frozen, dir.resolve("run")));
-
-        HoldoutLedger again = HoldoutLedger.load(dir);
-        assertEquals(1, again.entries().size());
-        HoldoutLedger.Entry e = again.entries().get(0);
-        assertEquals("ab-holdout", e.experiment);
-        assertEquals(Arrays.asList("emcts", "emcts-comma"), e.arms);
-        assertEquals(Identity.sha256(frozen), e.frozenHash);
-        assertNotNull(again.warning());
-
-        // The same ledger beside a different portfolio is refused.
-        List<Manifest.Row> other = new ArrayList<>(rows());
-        other.remove(3);
-        Files.write(dir.resolve(Manifest.FILE), Manifest.render("toy", Collections.emptyMap(), Collections.emptyMap(), "",
-                other).getBytes(StandardCharsets.UTF_8));
-        try {
-            HoldoutLedger.load(dir);
             fail();
         } catch (IllegalStateException expected) { }
     }

@@ -12,14 +12,6 @@ public interface AgentFactory<S, A> {
     SearchAgent<S, A> create(long seed, TurnBudget budget);
 
     /**
-     * The arm that is this arm with its mechanism replaced by noise, or {@code null} for an arm
-     * without a mechanism. The experiment validator requires it in the grid.
-     */
-    default String attributionControl() {
-        return null;
-    }
-
-    /**
      * Whether the budget buys this arm search, so that it has a price worth calibrating. False for an
      * arm whose work does not depend on the budget (the random floor); a calibration of it would only
      * fail its own sample-size gate.

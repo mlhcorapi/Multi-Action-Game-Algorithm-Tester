@@ -25,13 +25,11 @@ import java.util.Set;
  *
  * <pre>
  * {
- *   "name": "ab-emcts-holdout", "game": "tribes", "split": "holdout", "baseline": "emcts-comma",
- *   "levels": [ { "budget": 80000, "visits": 8 }, { "budget": 400000, "visits": 6, "arms": ["..."] } ],
- *   "arms": [ { "id": "emcts-comma" }, { "id": "comma-z0-coarse", "attribution": "comma-z0-random" } ],
- *   "sweeps": [ { "parameter": "repairKeys", "arms": ["..."], "null": "comma-z0-random" } ],
- *   "contrasts": [ { "a": "comma-z0-coarse", "b": "emcts-comma", "label": "headline" } ],
- *   "scenarios": 4,
- *   "preregistration": "docs/...", "frozen": "frozen_choices.txt"
+ *   "name": "reference", "game": "tribes", "split": "all", "baseline": "emcts",
+ *   "levels": [ { "budget": 20000, "visits": 8 }, { "budget": 101500, "visits": 6, "arms": ["..."] } ],
+ *   "arms": [ { "id": "emcts" }, { "id": "random" } ],
+ *   "contrasts": [ { "a": "emcts", "b": "random", "label": "search over the floor" } ],
+ *   "scenarios": 4
  * }
  * </pre>
  *
@@ -43,7 +41,7 @@ import java.util.Set;
 public final class Experiment {
 
     private static final Set<String> KNOWN = new LinkedHashSet<>(Arrays.asList("name", "game", "portfolio", "split",
-            "baseline", "levels", "arms", "sweeps", "contrasts", "scenarios", "preregistration", "frozen", "initialization",
+            "baseline", "levels", "arms", "contrasts", "scenarios", "initialization",
             "wallclock_anchor", "description"));
 
     public static final class Level {
@@ -61,25 +59,9 @@ public final class Experiment {
 
     public static final class Arm {
         public final String id;
-        /** The arm with this arm's mechanism replaced by noise, when the spec names one. */
-        public final String attribution;
 
-        Arm(String id, String attribution) {
+        Arm(String id) {
             this.id = id;
-            this.attribution = attribution;
-        }
-    }
-
-    public static final class Sweep {
-        public final String parameter;
-        public final List<String> arms;
-        /** The arm at the parameter's null setting; a sweep without one is a design flaw (principle 5). */
-        public final String nullArm;
-
-        Sweep(String parameter, List<String> arms, String nullArm) {
-            this.parameter = parameter;
-            this.arms = Collections.unmodifiableList(arms);
-            this.nullArm = nullArm;
         }
     }
 
@@ -102,11 +84,8 @@ public final class Experiment {
     public final String baseline;
     public final List<Level> levels;
     public final List<Arm> arms;
-    public final List<Sweep> sweeps;
     public final List<Contrast> contrasts;
     public final int scenarios;
-    public final String preregistration;
-    public final String frozen;
     /**
      * Whether each turn's initialization is paid from its budget ({@code "initialization": "in-budget"},
      * MAGAT's standard) or bounds only the search ({@code "outside-budget"}, the thesis's). A spec that does
@@ -134,15 +113,8 @@ public final class Experiment {
         this.levels = Collections.unmodifiableList(lv);
         List<Arm> ar = new ArrayList<>();
         for (JsonValue v : array(o, "arms"))
-            ar.add(v.isString() ? new Arm(v.asString(), null) : new Arm(v.asObject().getString("id", null), v.asObject().getString("attribution", null)));
+            ar.add(new Arm(v.isString() ? v.asString() : v.asObject().getString("id", null)));
         this.arms = Collections.unmodifiableList(ar);
-        List<Sweep> sw = new ArrayList<>();
-        for (JsonValue v : array(o, "sweeps")) {
-            JsonObject s = v.asObject();
-            sw.add(new Sweep(s.getString("parameter", null), s.get("arms") == null ? Collections.emptyList() : strings(s.get("arms").asArray()),
-                    s.get("null") == null || s.get("null").isNull() ? null : s.get("null").asString()));
-        }
-        this.sweeps = Collections.unmodifiableList(sw);
         List<Contrast> ct = new ArrayList<>();
         for (JsonValue v : array(o, "contrasts")) {
             JsonObject c = v.asObject();
@@ -150,8 +122,6 @@ public final class Experiment {
         }
         this.contrasts = Collections.unmodifiableList(ct);
         this.scenarios = o.getInt("scenarios", 0);
-        this.preregistration = o.getString("preregistration", null);
-        this.frozen = o.getString("frozen", null);
         this.initializationValue = o.get("initialization") == null ? null
                 : o.get("initialization").isString() ? o.get("initialization").asString() : o.get("initialization").toString();
         this.initializationDeclared = initializationValue != null;

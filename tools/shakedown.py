@@ -98,8 +98,6 @@ def main(argv) -> int:
            "--published", ROOT / "games" / game / "portfolio" / "v1", "--subset", "--plan", "3"], "VERIFY: PASS")
     check("the published portfolio verifies against itself (bins, identity, split rule)",
           [PY, ROOT / "magat.py", "portfolio", "verify", "--game", game], "VERIFY: PASS")
-    check("the holdout ledger reads", [PY, ROOT / "magat.py", "portfolio", "ledger", "--portfolio",
-                                       ROOT / "games" / game / "portfolio" / "v1"], "holdout ledger")
 
     step("6. Machine, threads, calibration (toy sizes: gates reported, not enforced)")
     check("machine banner", [PY, ROOT / "magat.py", "machine"], "worker ceiling")
@@ -170,7 +168,7 @@ def main(argv) -> int:
           and "op_emcts.generation" in (run_root / "dev" / "emcts" / "2000cu" / "turns.csv").read_text(encoding="utf-8").splitlines()[0])
     check("re-running the same command skips every finished leaf", [*run, "--split", "dev"], "RUN: COMPLETE",
           then=lambda: len(list((run_root / "dev").glob("*/*cu/turns.csv"))) == 4)
-    check("holdout: runs into its own tree and is entered in the holdout ledger", [*run, "--split", "holdout"], "this read is entry 1",
+    check("holdout: runs into its own tree", [*run, "--split", "holdout"], "RUN: COMPLETE",
           then=lambda: (run_root / "holdout" / "_run.json").is_file())
     check("a retired leaf is discarded and re-run", [*run, "--split", "dev", "--retire-leaf", "emcts@4000"], "RETIRED emcts@4000")
     repriced = calib / "compute_weights_repriced.properties"

@@ -16,7 +16,6 @@ import magat.machine.MachineProfile;
 import magat.meter.Meter;
 import magat.meter.Profile;
 import magat.meter.Weights;
-import magat.portfolio.HoldoutLedger;
 import magat.portfolio.Identity;
 import magat.portfolio.Portfolio;
 import magat.portfolio.Split;
@@ -79,7 +78,6 @@ public final class GridRunner {
         public Map<Long, Integer> threadsAt = new LinkedHashMap<>();
         public Path threadsFile;
         public double machineFactor = 1.0;
-        public Path frozen;
         public Set<String> retire = new LinkedHashSet<>();
         public boolean toy;
         public List<String> args = new ArrayList<>();
@@ -91,19 +89,13 @@ public final class GridRunner {
             throws IOException, InterruptedException {
         Game<S, A> game = module.game();
         Split.Half half = o.split != null ? o.split : Split.Half.parse(x.split == null ? "all" : x.split);
-        Path frozen = o.frozen != null ? o.frozen
-                : x.frozen == null ? null : (x.source == null ? Path.of(x.frozen) : x.source.toAbsolutePath().getParent().resolve(x.frozen));
 
         // ---- the spec, before anything is touched
         System.out.println("# experiment " + x.name + " (" + (x.source == null ? "inline" : x.source) + ", sha256 " + Identity.shortForm(x.sha256) + ")");
-        Validator.Report v = Validator.check(x, game.id(), module.agents(), half, weights, frozen == null ? null : frozen.toString(), o.toy);
+        Validator.Report v = Validator.check(x, game.id(), module.agents(), half, weights, o.toy);
         v.print();
         if (!v.ok()) {
             System.out.println("VALIDATION: FAIL (" + v.errors.size() + " error(s)); nothing was run");
-            return INVALID;
-        }
-        if (half == Split.Half.HOLDOUT && (frozen == null || !Files.isRegularFile(frozen))) {
-            System.out.println("VALIDATION: FAIL - the frozen-choices file " + frozen + " does not exist; nothing was run");
             return INVALID;
         }
         if (weights.portfolioIdentity() != null && !weights.portfolioIdentity().equals(portfolio.identity()))
@@ -117,14 +109,14 @@ public final class GridRunner {
                 ? " (each turn's budget pays for its initial plan: a level is the whole turn)"
                 : " (each turn's initial plan is outside its budget, as the thesis ran)"));
         try {
-            return runTree(module, x, portfolio, weights, o, game, half, frozen);
+            return runTree(module, x, portfolio, weights, o, game, half);
         } finally {
             TurnBudget.setInitialization(wasInit);
         }
     }
 
     private static <S, A> int runTree(GameModule<S, A> module, Experiment x, Portfolio<S> portfolio, Weights weights, Options o,
-                                      Game<S, A> game, Split.Half half, Path frozen) throws IOException, InterruptedException {
+                                      Game<S, A> game, Split.Half half) throws IOException, InterruptedException {
         // ---- the tree
         Path root = o.out.resolve(half.key()).toAbsolutePath();
         Files.createDirectories(root);
@@ -157,23 +149,8 @@ public final class GridRunner {
             }
             for (String leaf : o.retire) retire(root, checkpoint, leaf, half, prov, weightsSha);
 
-            recordProvenance(prov, x, game, portfolio, weights, weightsSha, half, frozen, o);
+            recordProvenance(prov, x, game, portfolio, weights, weightsSha, half, o);
             prov.save();
-
-            // ---- the holdout is read once, and the ledger says so
-            if (half == Split.Half.HOLDOUT) {
-                HoldoutLedger ledger = HoldoutLedger.load(portfolio.dir());
-                boolean resuming = false;
-                for (HoldoutLedger.Entry e : ledger.entries())
-                    if (e.run.equals(root.toString()) && e.specHash.equals(x.sha256)) resuming = true;
-                if (!resuming && ledger.warning() != null) System.out.println(ledger.warning());
-                else System.out.println("# " + ledger.describe().replace("\n", "\n# "));
-                if (!resuming) {
-                    ledger.append(new HoldoutLedger.Entry(Instant.now().toString(), x.name, x.sha256, x.armIds(),
-                            frozen.toString(), Identity.sha256(frozen), root.toString()));
-                    System.out.println("# holdout ledger: this read is entry " + ledger.entries().size());
-                }
-            }
 
             // ---- the scenarios
             List<Scenario<S>> scenarios = Split.apply(portfolio.scenarios(), portfolio.dir(), half);
@@ -439,7 +416,7 @@ public final class GridRunner {
     // ------------------------------------------------------------------ provenance, threads, banner
 
     private static <S, A> void recordProvenance(Provenance prov, Experiment x, Game<S, A> game, Portfolio<S> portfolio, Weights weights,
-                                                String weightsSha, Split.Half half, Path frozen, Options o) throws IOException {
+                                                String weightsSha, Split.Half half, Options o) throws IOException {
         JsonObject cfg = new JsonObject();
         for (Map.Entry<String, String> e : game.configuration().entrySet()) cfg.add(e.getKey(), e.getValue());
         prov.set("magat", new JsonObject().add("version", System.getProperty("magat.version", "unknown"))
@@ -456,8 +433,6 @@ public final class GridRunner {
         prov.set("experiment", new JsonObject().add("name", x.name).add("path", x.source == null ? "" : x.source.toAbsolutePath().toString())
                 .add("sha256", x.sha256));
         prov.set("initialization", Json.value(x.initialization.id));
-        if (frozen != null && Files.isRegularFile(frozen))
-            prov.set("frozen", new JsonObject().add("path", frozen.toAbsolutePath().toString()).add("sha256", Identity.sha256(frozen)));
         if (o.toy) prov.set("toy", Json.value(true));
         JsonObject threads = new JsonObject();
         Map<Long, Integer> sweep = o.threadsFile != null && Files.isRegularFile(o.threadsFile) ? ThreadSweep.read(o.threadsFile) : null;

@@ -24,8 +24,8 @@ final class RunCommand {
     static void usage() {
         System.out.println("  run               --game <name> --experiment <spec.json> --portfolio <dir> --weights <file> [--out <run>]");
         System.out.println("                    [--split dev|holdout|all] [--threads N] [--threads-at 400000=31,...] [--threads-file threads.json]");
-        System.out.println("                    [--machine-factor 1.5] [--frozen <file>] [--retire-leaf arm@budget,...] [--toy] [--audit-warn 0.10]");
-        System.out.println("  experiment validate --game <name> --experiment <spec.json> [--weights <file>] [--split ...] [--frozen <file>] [--toy]");
+        System.out.println("                    [--machine-factor 1.5] [--retire-leaf arm@budget,...] [--toy] [--audit-warn 0.10]");
+        System.out.println("  experiment validate --game <name> --experiment <spec.json> [--weights <file>] [--split ...] [--toy]");
     }
 
     static <S, A> int run(Args args, String[] argv) throws Exception {
@@ -49,7 +49,6 @@ final class RunCommand {
         Path defaultSweep = weights.source().toAbsolutePath().getParent().resolve("threads.json");
         o.threadsFile = args.has("threads-file") ? Paths.get(args.get("threads-file")) : Files.isRegularFile(defaultSweep) ? defaultSweep : null;
         o.machineFactor = Double.parseDouble(args.get("machine-factor", "1.0"));
-        if (args.has("frozen")) o.frozen = Paths.get(args.get("frozen")).toAbsolutePath();
         o.retire = new LinkedHashSet<>(args.getList("retire-leaf", new ArrayList<>()));
         o.toy = args.flag("toy");
         o.auditWarn = Double.parseDouble(args.get("audit-warn", "0.10"));
@@ -67,7 +66,7 @@ final class RunCommand {
         Split.Half half = Split.Half.parse(args.get("split", x.split == null ? "all" : x.split));
         System.out.println("# experiment " + x.name + " (" + x.source + "), split " + half.key()
                 + (weights == null ? "" : ", weights " + weights.source()));
-        Validator.Report r = Validator.check(x, module.game().id(), module.agents(), half, weights, args.get("frozen"), args.flag("toy"));
+        Validator.Report r = Validator.check(x, module.game().id(), module.agents(), half, weights, args.flag("toy"));
         r.print();
         System.out.println(r.ok() ? "VALIDATION: PASS" + (r.warnings.isEmpty() ? "" : " (" + r.warnings.size() + " warning(s))")
                 : "VALIDATION: FAIL (" + r.errors.size() + " error(s))");

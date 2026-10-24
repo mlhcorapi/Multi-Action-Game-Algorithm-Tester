@@ -15,6 +15,5 @@
   ],
   "contrasts": [
     { "a": "emcts", "b": "random", "label": "search over the floor" }
-  ],
-  "frozen": "shakedown-frozen.txt"
+  ]
 }

@@ -279,13 +279,10 @@ bundle("worked-result", [WORKED / "SUMMARY.md", WORKED / "tables", LOGS / "analy
 
 def experiment_cells(game: str) -> list:
     """One markdown and one code cell per experiment in experiments/<game>/, so the notebook cannot drift
-    from the specs it runs. A development experiment runs, is analysed, and is bundled. A holdout
-    experiment checks the currency for drift first, refuses to run until its frozen choices exist, then
-    runs and is analysed side by side with its development partner (`<x>-holdout.json` pairs with
-    `<x>-dev.json`). The shakedown spec runs inside the shakedown."""
+    from the specs it runs: each runs its split, is analysed, and is bundled. The shakedown spec runs
+    inside the shakedown."""
     cells = []
-    specs = {p.name: p for p in sorted((ROOT / "experiments" / game).glob("*.json"))}
-    for spec in specs.values():
+    for spec in sorted((ROOT / "experiments" / game).glob("*.json")):
         x = json.loads(spec.read_text(encoding="utf-8"))
         if x.get("name") == "shakedown" or "levels" not in x:      # the shakedown's own spec
             continue
@@ -302,36 +299,10 @@ Split `{split}`; baseline `{x.get("baseline")}`; levels (budget x visits) {level
 ({turns:,} turns per scenario of the split). Re-running the cell resumes: finished leaves are skipped,
 a partial leaf continues where it stopped.
 """))
-        head = f'''SPEC = ROOT / "experiments" / GAME / "{spec.name}"
+        cells.append(code(f'''SPEC = ROOT / "experiments" / GAME / "{spec.name}"
 RUN = DATA / GAME / "runs" / "{name}"
 RESULTS = DATA / GAME / "results" / "{name}"
-'''
-        if split == "holdout":
-            partner = spec.name.replace("-holdout.json", "-dev.json")
-            dev_name = json.loads(specs[partner].read_text(encoding="utf-8"))["name"] if partner in specs else None
-            frozen = x.get("frozen", "")
-            body = head + f'''FROZEN = SPEC.parent / "{frozen}"
-# 1. Drift: does this machine still spend the currency the development half was priced in? Writes nothing.
-magat("calibrate", "--check", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "{x.get("baseline")}", "--weights", WEIGHTS, check=False)
-# 2. The holdout is read once, and only for choices written down before it is read.
-assert FROZEN.is_file(), f"no frozen choices at {{FROZEN}}: write them, from development only, before reading the holdout"
-print(FROZEN.read_text(encoding="utf-8"))
-magat("run", "--experiment", SPEC, "--split", "holdout", "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--frozen", FROZEN, "--out", RUN)
-assert_in_log("run-holdout", "RUN: COMPLETE")
-'''
-            if dev_name:
-                body += f'''DEV = DATA / GAME / "runs" / "{dev_name}" / "dev"
-magat("analyze", "--run", DEV, "--holdout", RUN / "holdout", "--out", RESULTS)
-'''
-            else:
-                body += '''magat("analyze", "--run", RUN / "holdout", "--out", RESULTS)
-'''
-            body += f'''assert_in_log("analyze", "ANALYZE: OK")
-summary(RESULTS)
-bundle("run-{name}", [RUN / "holdout", RESULTS / "SUMMARY.md", RESULTS / "tables", LOGS / "calibrate-check.log"])'''
-            cells.append(code(body, tags=("holdout",)))
-        else:
-            cells.append(code(head + f'''magat("run", "--experiment", SPEC, "--split", "{split}", "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--out", RUN)
+magat("run", "--experiment", SPEC, "--split", "{split}", "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--out", RUN)
 assert_in_log("run-{split}", "RUN: COMPLETE")
 magat("analyze", "--run", RUN / "{split}", "--out", RESULTS)
 assert_in_log("analyze", "ANALYZE: OK")
