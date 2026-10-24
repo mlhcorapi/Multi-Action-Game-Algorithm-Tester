@@ -29,8 +29,8 @@ Every price is a ratio to that operation's nanoseconds:
 
 Prices are set **per (arm, budget)**: the same operation name costs different amounts for different
 arms, which reach different states, and at different budgets, where a ten-times larger tree stops
-fitting in cache. One global weight set once mis-allocated up to 73% of the work between arms at a
-400,000-unit level.
+fitting in cache. One weight set for every arm and budget would mis-allocate work between them
+([`TRAPS.md`](TRAPS.md)).
 
 Budget levels are fixed unit counts and are never re-derived per machine. That is what keeps a search
 deterministic given its counts, and `check replay` exact.
@@ -109,17 +109,17 @@ profile.<arm>@<budget>.unpriced = ...  the calibration audit's share of the cell
 
 MAGAT reads version 2 and refuses any other file with a message. The file records the portfolio
 identity and the turns per repetition, because those select the positions a calibration measures: a
-check on other positions reports drift that is not there. Measured, that was a 55% phantom drift.
+check on other positions would report drift that is not there.
 
 ## Why every operation is priced
 
 The forward model is not all an algorithm does: tree bookkeeping, ranking candidates and legal-action
 queries take time too. If that work were free in compute units, an arm that does more of it would get
-more wall-clock per unit than its baseline; in an earlier study, arms that evaluate nothing spent 17-22%
-more wall-clock per unit than their baseline. So each arm declares its operations, the meter counts and
+more wall-clock per unit than its baseline. So each arm declares its operations, the meter counts and
 times them, the calibrator prices them, and the stop rule spends them. On Tribes the declared
-operations and the forward model account for all but 0.1-0.7% of a turn. The largest of an arm's own
-operations is the legal-action query: one costs about 1.5 advances.
+operations and the forward model account for all but 0.1-0.4% of a turn of each reference algorithm.
+The largest of an arm's own operations is the legal-action query, about 1.5 advances each: over 40% of
+an `oep` or `tbets` turn.
 [`ADDING_AN_ALGORITHM.md`](ADDING_AN_ALGORITHM.md) says how to declare them.
 
 ## Calibrating
@@ -140,7 +140,7 @@ Its gates, all enforced:
 - every weight is plausible;
 - **the bracket**: the reference cell is measured again at the end of the session and must not have
   moved by more than 10%. Every weight is a ratio to the first measurement, and a laptop that boosts
-  while cool once measured its reference advance 14% away from the rest of the session.
+  while cool can measure its reference advance well away from the rest of the session.
 
 A session that fails any gate writes nothing. Its measurements still go to `compute_profiles.csv`, and
 to `compute_operations.csv` per operation. An audit prints how much of each cell's turn time the
@@ -161,10 +161,8 @@ session's own reference measurement, times the file's stored reference weight:
 - a machine uniformly 0.6× or 1.6× as fast cancels exactly;
 - what does not cancel is a change in the ratios themselves, which is what the drift check reports.
 
-An earlier calibrator divided absolute nanoseconds by the file's stored reference instead. On a
-machine (or an afternoon) 58% slower, that priced the new arms 58% too high. A profile already in the
-file is refused unless `--replace` names it: re-pricing an arm changes the currency of every leaf
-already run under it.
+A profile already in the file is refused unless `--replace` names it: re-pricing an arm changes the
+currency of every leaf already run under it.
 
 ### The drift check
 
