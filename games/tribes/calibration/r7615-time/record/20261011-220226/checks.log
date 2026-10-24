@@ -1,0 +1,266 @@
+
+>>>>> 2026-10-11 22:07:36 $ magat calibrate --check --game tribes --arms emcts,emcts-comma --portfolio /home/jovyan/magat_runs/portfolio/tribes
+22:07:36 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main calibrate --check --game tribes --arms emcts,emcts-comma --portfolio /home/jovyan/magat_runs/portfolio/tribes --weights /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/calibration/r7615/compute_weights.properties --default-levels 9500,20000,101500
+22:07:36   -> /home/jovyan/magat_runs/logs/calibrate-check.log
+22:07:36 # magat 0.1.0-m6 calibrate --check
+22:07:36 # data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+22:07:37 # /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/calibration/r7615/compute_weights.properties was measured with the initialization outside-budget the budget: this check plays its turns so too
+22:07:37 ############################################################
+22:07:37 # compute-unit calibration: per arm, per budget level, relative to one reference advance
+22:07:37 # single-threaded; needs an idle machine: this is a timing measurement
+22:07:37 # checking against /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/calibration/r7615/compute_weights.properties
+22:07:37 # reference cell emcts@40000   levels 40000,80000,400000   arms [emcts, emcts-comma]
+22:07:37 # reps 3   turns/rep 8,4,2 over levels 40000,80000,400000   warmup 6   gap gate 10%   min ops 20000
+22:07:37 # portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7 (400 positions; a pool of 8 of them)
+22:07:37 # initialization: outside-budget (each turn's initial plan is outside its budget, as the thesis ran)
+22:07:37 # currency version 1: the forward model is priced; the arms' own operations are measured for the audit and stay free
+22:07:37 # every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+22:07:37 ------------------------------------------------------------
+22:07:37 [machine] calibration
+22:07:37 [machine] AMD EPYC 9534 64-Core Processor | 16 logical / 16 physical (SMT x1) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 1 | worker ceiling 15
+22:07:37 ------------------------------------------------------------
+22:07:37 # load average before starting: 0.04 per core   (idle)
+22:07:37 
+22:07:37 [calibrate] warm-up for level 40000: 6 turns (discarded)
+22:08:44   [ 1/ 6] emcts@40000                        advance  48970.9 ns  copy   8230.8 ns  eval   2576.3 ns   (gap 0.1/0.4/0.4% | CV 0.0/0.7/0.3%)  5 op(s), unpriced 4.0%  52 s
+22:09:38   [ 2/ 6] emcts-comma@40000                  advance  50895.3 ns  copy   8259.1 ns  eval   2592.7 ns   (gap 0.1/0.1/0.0% | CV 0.1/0.3/0.0%)  5 op(s), unpriced 3.7%  54 s
+22:09:38 
+22:09:38 [calibrate] warm-up for level 80000: 6 turns (discarded)
+22:11:18   [ 3/ 6] emcts@80000                        advance  73531.8 ns  copy   9981.8 ns  eval   3627.7 ns   (gap 0.0/0.1/0.3% | CV 0.0/0.2/0.4%)  5 op(s), unpriced 3.1%  76 s
+22:12:39   [ 4/ 6] emcts-comma@80000                  advance  78237.4 ns  copy  10044.7 ns  eval   3649.9 ns   (gap 0.1/0.1/0.2% | CV 0.1/0.3/0.3%)  5 op(s), unpriced 2.5%  81 s
+22:12:39 
+22:12:39 [calibrate] warm-up for level 400000: 6 turns (discarded)
+22:17:35   [ 5/ 6] emcts@400000                       advance  71129.3 ns  copy   9933.3 ns  eval   3818.9 ns   (gap 0.0/0.1/0.3% | CV 0.0/0.3/0.4%)  5 op(s), unpriced 2.0%  180 s
+22:20:17   [ 6/ 6] emcts-comma@400000                 advance  63014.8 ns  copy   9420.6 ns  eval   3331.0 ns   (gap 0.0/0.1/0.1% | CV 0.1/0.2/0.1%)  5 op(s), unpriced 2.1%  162 s
+22:20:17 
+22:20:17 [calibrate] bracket: emcts@40000 again, last (warm-up 6 turns, discarded)
+22:21:23   [bracket] emcts@40000                      advance  48935.1 ns  copy   8209.3 ns  eval   2578.1 ns
+22:21:23   measured in 13.8 min
+22:21:23 
+22:21:23 === RESULT: weights relative to one advance of emcts@40000 = 48970.9 ns ===
+22:21:23   profile                              wAdvance      wCopy      wEval   ns/advance
+22:21:23   emcts@40000                            1.0000     0.1681     0.0526      48970.9
+22:21:23   emcts-comma@40000                      1.0393     0.1687     0.0529      50895.3
+22:21:23   emcts@80000                            1.5015     0.2038     0.0741      73531.8
+22:21:23   emcts-comma@80000                      1.5976     0.2051     0.0745      78237.4
+22:21:23   emcts@400000                           1.4525     0.2028     0.0780      71129.3
+22:21:23   emcts-comma@400000                     1.2868     0.1924     0.0680      63014.8
+22:21:23 
+22:21:23 === DOES AN OPERATION COST THE SAME FOR EVERY ARM? ===
+22:21:23      40000  cheapest advance emcts 48970.9 ns, dearest emcts-comma 50895.3 ns: spread 3.9%
+22:21:23      80000  cheapest advance emcts 73531.8 ns, dearest emcts-comma 78237.4 ns: spread 6.4%
+22:21:23     400000  cheapest advance emcts-comma 63014.8 ns, dearest emcts 71129.3 ns: spread 12.9%
+22:21:23 
+22:21:23   The reference arm across levels:
+22:21:23        40000 units:  48970.9 ns/advance (1.00x the reference cell)
+22:21:23        80000 units:  73531.8 ns/advance (1.50x the reference cell)
+22:21:23       400000 units:  71129.3 ns/advance (1.45x the reference cell)
+22:21:23 
+22:21:23 === WHAT ONE GLOBAL WEIGHT SET WOULD MIS-ALLOCATE ===
+22:21:23   Wall-clock 1,000 nominal units buy under the fixed weights 1/0.16/0.077, given each cell's own operation mix.
+22:21:23      40000  48.557 to 50.218 ms: 3.4% unfair (emcts@40000 vs emcts-comma@40000)
+22:21:23      80000  71.336 to 75.215 ms: 5.4% unfair (emcts@80000 vs emcts-comma@80000)
+22:21:23     400000  61.807 to 69.395 ms: 12.3% unfair (emcts-comma@400000 vs emcts@400000)
+22:21:23 
+22:21:23 === AUDIT: HOW MUCH OF EACH TURN THE CURRENCY PRICES ===
+22:21:23   version 1: the forward model is priced; the arms' own operations are timed here and left free
+22:21:23   profile                               turn ms  fwd model    own ops  unaccounted   unpriced
+22:21:23   emcts@40000                            2122.4      96.0%       3.9%         0.1%       4.0%
+22:21:23   emcts-comma@40000                      2204.3      96.3%       3.7%         0.1%       3.7%
+22:21:23   emcts@80000                            6119.5      96.9%       3.0%         0.0%       3.1%
+22:21:23     note: emcts@80000: two fastest emcts.burn times differ by 11.0% (limit 10%); it is 0.00% of the turn, so reported, not gated
+22:21:23   emcts-comma@80000                      6563.6      97.5%       2.5%         0.0%       2.5%
+22:21:23   emcts@400000                          28551.9      98.0%       2.0%         0.0%       2.0%
+22:21:23   emcts-comma@400000                    25508.2      97.9%       2.0%         0.0%       2.1%
+22:21:23   every cell's priced operations account for at least 90% of its turn time
+22:21:23 
+22:21:23 === IS THIS A FAIR BENCHMARK? ===
+22:21:23   [ok]   every cell measured cleanly (6 cells)
+22:21:23   [ok]   weights are plausible in every cell
+22:21:23   [ok]   the reference cell moved -0.1% / -0.3% / +0.1% (advance / copy / eval) between the start and the end of the session: the machine held its speed
+22:21:23   [ok]   machine was idle (load 0.08 per core, this job included)
+22:21:23 
+22:21:23 === CURRENCY DRIFT: THIS MACHINE vs compute_weights.properties ===
+22:21:23   reference advance: x0.7784 the file's (machine speed; cancels under ratio re-denomination)
+22:21:23   per operation, in the file's unit (information: the gate is each cell's turn price, below):
+22:21:23   profile.op                                   stored        now    drift
+22:21:23   emcts@40000.wCopy                            0.1372     0.1682    22.6%
+22:21:23   emcts@40000.wEval                            0.0575     0.0526    -8.4%
+22:21:23   emcts-comma@40000.wAdvance                   1.0564     1.0400    -1.6%
+22:21:23   emcts-comma@40000.wCopy                      0.1380     0.1688    22.3%
+22:21:23   emcts-comma@40000.wEval                      0.0572     0.0530    -7.4%
+22:21:23   emcts@80000.wAdvance                         1.5352     1.5025    -2.1%
+22:21:23   emcts@80000.wCopy                            0.1677     0.2040    21.6%
+22:21:23   emcts@80000.wEval                            0.0754     0.0741    -1.7%
+22:21:23   emcts-comma@80000.wAdvance                   1.6476     1.5987    -3.0%
+22:21:23   emcts-comma@80000.wCopy                      0.1698     0.2053    20.9%
+22:21:23   emcts-comma@80000.wEval                      0.0771     0.0746    -3.3%
+22:21:23   emcts@400000.wAdvance                        1.5474     1.4534    -6.1%
+22:21:23   emcts@400000.wCopy                           0.1688     0.2030    20.2%
+22:21:23   emcts@400000.wEval                           0.0901     0.0780   -13.4%
+22:21:23   emcts-comma@400000.wAdvance                  1.2985     1.2876    -0.8%
+22:21:23   emcts-comma@400000.wCopy                     0.1581     0.1925    21.8%
+22:21:23   emcts-comma@400000.wEval                     0.0719     0.0681    -5.3%
+22:21:23   largest per-operation drift 22.6% (emcts@40000.wCopy), information
+22:21:23   price of each cell's own work, now against stored (gate 10%):
+22:21:23   emcts@40000                                 +1.5%
+22:21:23   emcts-comma@40000                           +0.1%
+22:21:23   emcts@80000                                 -0.5%
+22:21:23   emcts-comma@80000                           -1.3%
+22:21:23   emcts@400000                                -4.6%
+22:21:23   emcts-comma@400000                          +0.6%
+22:21:23   largest drift in a turn's price -4.6% (emcts@400000); gate 10%
+22:21:23 
+22:21:23   VERDICT: PASS - every cell's turn costs what the stored weights say, within the gate: this machine still spends the currency they define.
+22:21:23   (nothing was written; this run only compared)
+22:21:23 CHECK: PASS
+22:21:23 [exit 0] after 0:13:46.473920
+===== exit 0 after 827 s
+
+>>>>> 2026-10-11 22:21:53 $ magat calibrate --check --game tribes --arms emcts,emcts-comma --portfolio /home/jovyan/magat_runs/portfolio/tribes --weights /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties
+22:21:53 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main calibrate --check --game tribes --arms emcts,emcts-comma --portfolio /home/jovyan/magat_runs/portfolio/tribes --weights /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties --default-levels 9500,20000,101500
+22:21:53   -> /home/jovyan/magat_runs/logs/calibrate-check.log
+22:21:54 # magat 0.1.0-m6 calibrate --check
+22:21:54 # data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+22:21:54 ############################################################
+22:21:54 # compute-unit calibration: per arm, per budget level, relative to one reference advance
+22:21:54 # single-threaded; needs an idle machine: this is a timing measurement
+22:21:54 # checking against /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties
+22:21:54 # reference cell emcts@9500   levels 9500,20000,101500   arms [emcts, emcts-comma]
+22:21:54 # reps 3   turns/rep 16,16,16 over levels 9500,20000,101500   warmup 6   gap gate 10%   min ops 20000
+22:21:54 # portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7 (400 positions; a pool of 16 of them)
+22:21:54 # initialization: in-budget (each turn's budget pays for its initial plan)
+22:21:54 # currency version 2: every operation an arm declares is measured and priced
+22:21:54 # every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+22:21:54 ------------------------------------------------------------
+22:21:54 [machine] calibration
+22:21:54 [machine] AMD EPYC 9534 64-Core Processor | 16 logical / 16 physical (SMT x1) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 1 | worker ceiling 15
+22:21:54 ------------------------------------------------------------
+22:21:55 # load average before starting: 0.05 per core   (idle)
+22:21:55 
+22:21:55 [calibrate] warm-up for level 9500: 6 turns (discarded)
+22:22:27   [ 1/ 6] emcts@9500                         advance  57679.4 ns  copy   8772.4 ns  eval   2786.6 ns   (gap 0.4/0.1/0.7% | CV 2.3/3.8/2.0%)  5 op(s), unpriced 0.1%  29 s
+22:23:40   [ 2/ 6] emcts-comma@9500                   advance  73331.7 ns  copy   9607.3 ns  eval   3324.0 ns   (gap 0.0/0.1/0.1% | CV 0.0/0.1/0.5%)  5 op(s), unpriced 0.0%  73 s
+22:23:40 
+22:23:40 [calibrate] warm-up for level 20000: 6 turns (discarded)
+22:24:42   [ 3/ 6] emcts@20000                        advance  54850.8 ns  copy   8685.9 ns  eval   2688.5 ns   (gap 0.0/0.1/0.5% | CV 0.0/0.1/0.3%)  5 op(s), unpriced 0.1%  55 s
+22:26:02   [ 4/ 6] emcts-comma@20000                  advance  64093.8 ns  copy   9184.7 ns  eval   3037.1 ns   (gap 0.1/0.3/0.1% | CV 0.1/0.2/0.2%)  5 op(s), unpriced 0.0%  81 s
+22:26:02 
+22:26:02 [calibrate] warm-up for level 101500: 6 turns (discarded)
+22:30:57   [ 5/ 6] emcts@101500                       advance  52786.9 ns  copy   8510.3 ns  eval   2613.5 ns   (gap 0.1/0.4/0.1% | CV 0.1/0.3/0.1%)  5 op(s), unpriced 0.0%  266 s
+22:35:26   [ 6/ 6] emcts-comma@101500                 advance  53518.0 ns  copy   8583.1 ns  eval   2593.0 ns   (gap 0.1/0.1/1.1% | CV 0.1/0.1/0.7%)  5 op(s), unpriced 0.0%  269 s
+22:35:26 
+22:35:26 [calibrate] bracket: emcts@9500 again, last (warm-up 6 turns, discarded)
+22:35:58   [bracket] emcts@9500                       advance  57698.2 ns  copy   8741.2 ns  eval   2751.6 ns
+22:35:58   measured in 14.1 min
+22:35:58 
+22:35:58 === RESULT: weights relative to one advance of emcts@9500 = 57679.4 ns ===
+22:35:58   profile                              wAdvance      wCopy      wEval   ns/advance
+22:35:58   emcts@9500                             1.0000     0.1521     0.0483      57679.4
+22:35:58   emcts-comma@9500                       1.2714     0.1666     0.0576      73331.7
+22:35:58   emcts@20000                            0.9510     0.1506     0.0466      54850.8
+22:35:58   emcts-comma@20000                      1.1112     0.1592     0.0527      64093.8
+22:35:58   emcts@101500                           0.9152     0.1475     0.0453      52786.9
+22:35:58   emcts-comma@101500                     0.9279     0.1488     0.0450      53518.0
+22:35:58 
+22:35:58 === DOES AN OPERATION COST THE SAME FOR EVERY ARM? ===
+22:35:58       9500  cheapest advance emcts 57679.4 ns, dearest emcts-comma 73331.7 ns: spread 27.1%
+22:35:58      20000  cheapest advance emcts 54850.8 ns, dearest emcts-comma 64093.8 ns: spread 16.9%
+22:35:58     101500  cheapest advance emcts 52786.9 ns, dearest emcts-comma 53518.0 ns: spread 1.4%
+22:35:58 
+22:35:58   The reference arm across levels:
+22:35:58         9500 units:  57679.4 ns/advance (1.00x the reference cell)
+22:35:58        20000 units:  54850.8 ns/advance (0.95x the reference cell)
+22:35:58       101500 units:  52786.9 ns/advance (0.92x the reference cell)
+22:35:58 
+22:35:58 === WHAT ONE GLOBAL WEIGHT SET WOULD MIS-ALLOCATE ===
+22:35:58   Wall-clock 1,000 nominal units buy under the fixed weights 1/0.16/0.077, given each cell's own operation mix.
+22:35:58       9500  56.410 to 70.448 ms: 24.9% unfair (emcts@9500 vs emcts-comma@9500)
+22:35:58      20000  53.927 to 62.248 ms: 15.4% unfair (emcts@20000 vs emcts-comma@20000)
+22:35:58     101500  52.001 to 52.627 ms: 1.2% unfair (emcts@101500 vs emcts-comma@101500)
+22:35:58 
+22:35:58 === AUDIT: HOW MUCH OF EACH TURN THE CURRENCY PRICES ===
+22:35:58   version 2: the forward model and every operation the arm declares are priced
+22:35:58   profile                               turn ms  fwd model    own ops  unaccounted   unpriced
+22:35:58   emcts@9500                              584.9      96.6%       3.2%         0.1%       0.1%
+22:35:58     note: emcts@9500: two fastest emcts.seqkey times differ by 12.9% (limit 10%); it is 0.10% of the turn, so reported, not gated
+22:35:58   emcts-comma@9500                       1513.4      97.1%       2.9%         0.0%       0.0%
+22:35:58     note: emcts-comma@9500: two fastest emcts.burn times differ by 17.4% (limit 10%); it is 0.01% of the turn, so reported, not gated
+22:35:58   emcts@20000                            1133.4      96.2%       3.7%         0.1%       0.1%
+22:35:58   emcts-comma@20000                      1673.3      96.9%       3.1%         0.0%       0.0%
+22:35:58   emcts@101500                           5491.5      96.4%       3.6%         0.0%       0.0%
+22:35:58   emcts-comma@101500                     5547.3      96.7%       3.3%         0.0%       0.0%
+22:35:58   every cell's priced operations account for at least 90% of its turn time
+22:35:58 
+22:35:58 === IS THIS A FAIR BENCHMARK? ===
+22:35:58   [ok]   every cell measured cleanly (6 cells)
+22:35:58   [ok]   weights are plausible in every cell
+22:35:58   [ok]   the reference cell moved +0.0% / -0.4% / -1.3% (advance / copy / eval) between the start and the end of the session: the machine held its speed
+22:35:58   [ok]   machine was idle (load 0.06 per core, this job included)
+22:35:58 
+22:35:58 === CURRENCY DRIFT: THIS MACHINE vs compute_weights.properties ===
+22:35:58   reference advance: x0.9997 the file's (machine speed; cancels under ratio re-denomination)
+22:35:58   per operation, in the file's unit (information: the gate is each cell's turn price, below):
+22:35:58   profile.op                                   stored        now    drift
+22:35:58   emcts@9500.wCopy                             0.1478     0.1521     2.9%
+22:35:58   emcts@9500.wEval                             0.0474     0.0483     1.9%
+22:35:58   emcts@9500.w.emcts.generation                0.2363     0.2357    -0.3%
+22:35:58   emcts@9500.w.emcts.legal                     1.3213     1.2986    -1.7%
+22:35:58   emcts@9500.w.emcts.check                     0.0183     0.0182    -0.6%
+22:35:58   emcts@9500.w.emcts.seqkey                    0.0511     0.0507    -0.9%
+22:35:58   emcts@9500.w.emcts.burn                      0.0832     0.0863     3.8%
+22:35:58   emcts-comma@9500.wAdvance                    1.2701     1.2714     0.1%
+22:35:58   emcts-comma@9500.wCopy                       0.1613     0.1666     3.3%
+22:35:58   emcts-comma@9500.wEval                       0.0561     0.0576     2.8%
+22:35:58   emcts-comma@9500.w.emcts.generation          2.2292     2.2340     0.2%
+22:35:58   emcts-comma@9500.w.emcts.legal               2.1299     2.0896    -1.9%
+22:35:58   emcts-comma@9500.w.emcts.check               0.0218     0.0216    -0.8%
+22:35:58   emcts-comma@9500.w.emcts.seqkey              0.0410     0.0390    -4.8%
+22:35:58   emcts-comma@9500.w.emcts.burn                0.0830     0.0792    -4.6%
+22:35:58   emcts@20000.wAdvance                         0.9502     0.9510     0.1%
+22:35:58   emcts@20000.wCopy                            0.1457     0.1506     3.4%
+22:35:58   emcts@20000.wEval                            0.0454     0.0466     2.6%
+22:35:58   emcts@20000.w.emcts.generation               0.3128     0.3103    -0.8%
+22:35:58   emcts@20000.w.emcts.legal                    1.3179     1.2907    -2.1%
+22:35:58   emcts@20000.w.emcts.check                    0.0183     0.0183    -0.1%
+22:35:58   emcts@20000.w.emcts.seqkey                   0.0289     0.0297     2.5%
+22:35:58   emcts@20000.w.emcts.burn                     0.0363     0.0558    53.5%
+22:35:58   emcts-comma@20000.wAdvance                   1.1085     1.1112     0.2%
+22:35:58   emcts-comma@20000.wCopy                      0.1546     0.1592     3.0%
+22:35:58   emcts-comma@20000.wEval                      0.0513     0.0527     2.6%
+22:35:58   emcts-comma@20000.w.emcts.generation         1.6291     1.6227    -0.4%
+22:35:58   emcts-comma@20000.w.emcts.legal              1.5818     1.5632    -1.2%
+22:35:58   emcts-comma@20000.w.emcts.check              0.0189     0.0188    -0.5%
+22:35:58   emcts-comma@20000.w.emcts.seqkey             0.0322     0.0319    -1.0%
+22:35:58   emcts-comma@20000.w.emcts.burn               0.0403     0.0384    -4.7%
+22:35:58   emcts@101500.wAdvance                        0.9124     0.9152     0.3%
+22:35:58   emcts@101500.wCopy                           0.1434     0.1475     2.9%
+22:35:58   emcts@101500.wEval                           0.0440     0.0453     3.0%
+22:35:58   emcts@101500.w.emcts.generation              0.2674     0.2653    -0.8%
+22:35:58   emcts@101500.w.emcts.legal                   1.2582     1.2396    -1.5%
+22:35:58   emcts@101500.w.emcts.check                   0.0170     0.0171     0.7%
+22:35:58   emcts@101500.w.emcts.seqkey                  0.0298     0.0293    -1.6%
+22:35:58   emcts@101500.w.emcts.burn                    0.0723     0.0703    -2.7%
+22:35:58   emcts-comma@101500.wAdvance                  0.9273     0.9279     0.1%
+22:35:58   emcts-comma@101500.wCopy                     0.1435     0.1488     3.7%
+22:35:58   emcts-comma@101500.wEval                     0.0442     0.0450     1.7%
+22:35:58   emcts-comma@101500.w.emcts.generation        1.5667     1.5311    -2.3%
+22:35:58   emcts-comma@101500.w.emcts.legal             1.2292     1.2123    -1.4%
+22:35:58   emcts-comma@101500.w.emcts.check             0.0163     0.0162    -0.7%
+22:35:58   emcts-comma@101500.w.emcts.seqkey            0.0333     0.0318    -4.7%
+22:35:58   emcts-comma@101500.w.emcts.burn              0.1638     0.1658     1.2%
+22:35:58   largest per-operation drift 53.5% (emcts@20000.w.emcts.burn), information
+22:35:58   price of each cell's own work, now against stored (gate 10%):
+22:35:58   emcts@9500                                  +0.3%
+22:35:58   emcts-comma@9500                            +0.4%
+22:35:58   emcts@20000                                 +0.4%
+22:35:58   emcts-comma@20000                           +0.5%
+22:35:58   emcts@101500                                +0.6%
+22:35:58   emcts-comma@101500                          +0.4%
+22:35:58   largest drift in a turn's price 0.6% (emcts@101500); gate 10%
+22:35:58 
+22:35:58   VERDICT: PASS - every cell's turn costs what the stored weights say, within the gate: this machine still spends the currency they define.
+22:35:58   (nothing was written; this run only compared)
+22:35:58 CHECK: PASS
+22:35:58 [exit 0] after 0:14:04.363230
+===== exit 0 after 845 s

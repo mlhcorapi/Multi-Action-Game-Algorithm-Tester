@@ -1,0 +1,8 @@
+
+>>>>> 2026-10-11 23:46:06 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main check replay --game tribes --leaf /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/results/replay/Comma_Off/80000cu --portfolio /home/jovyan/magat_runs/portfolio/tribes --weights /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/calibration/r7615/compute_weights.properties --turns 20
+# magat 0.1.0-m6 check replay
+# data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+# leaf /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/results/replay/Comma_Off/80000cu (thesis format, 20 turns, written by Comma_Off) -> arm emcts-comma @ 80000
+# weights compute_weights.properties: version 1, 105 profiles (forward model only), reference emcts@40000 (62870.6 ns/advance), global 1.0000/0.1375/0.0567; portfolio ec243fd7fe81...
+REPLAY: PASS (20/20 published turns reproduced field for field)
+===== exit 0 after 0:00:11.710589

@@ -1,0 +1,110 @@
+{
+  "facts": {
+    "time": "2026-10-11 11:25:22",
+    "argv": [
+      "--name",
+      "r7615-time",
+      "--game",
+      "tribes",
+      "--portfolio",
+      "/home/jovyan/magat_runs/portfolio/tribes",
+      "--format",
+      "2",
+      "--batch",
+      "8",
+      "--other-cpus",
+      "4.0",
+      "--wait-quiet",
+      "30",
+      "--soak-minutes",
+      "0",
+      "--levels",
+      "9500,20000,101500",
+      "--section",
+      "1"
+    ],
+    "platform": "linux",
+    "cpu": "AMD EPYC 9534 64-Core Processor",
+    "machine": "Dell Inc. PowerEdge R7615",
+    "python": "3.10.12",
+    "commit": "da8b39b99e7839940f8688e599066ac88a450b77-dirty",
+    "power": {
+      "ac": true,
+      "battery": null,
+      "charging": null,
+      "saver": null
+    },
+    "power_settings": {
+      "governor": "schedutil"
+    },
+    "allowed_cpus": "0-127",
+    "logical_cpus": 128,
+    "measuring_cpus": "24-31,88-95",
+    "measuring_cpus_why": "the quietest of 8 L3 domains (16 logical CPUs, 0.0 CPUs busy when chosen)",
+    "cgroup": {
+      "version": 2,
+      "usage_s": 125.961149,
+      "throttled_s": 0.0,
+      "nr_throttled": 0
+    },
+    "numa_nodes": 1,
+    "other_cpus_now": 0.0059943417122466265,
+    "container_cpus_now": 0.006126799999998411,
+    "network_up": [],
+    "online_only_files": 0,
+    "uptime_hours": 626.7026138888889,
+    "java": [
+      "openjdk version \"11.0.29\" 2025-10-21",
+      "OpenJDK Runtime Environment (build 11.0.29+7-post-Ubuntu-1ubuntu122.04)",
+      "OpenJDK 64-Bit Server VM (build 11.0.29+7-post-Ubuntu-1ubuntu122.04, mixed mode, sharing)"
+    ],
+    "portfolio": "/home/jovyan/magat_runs/portfolio/tribes",
+    "portfolio_identity": "ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7"
+  },
+  "items": [
+    [
+      "info",
+      "clock policy: frequency governor schedutil"
+    ],
+    [
+      "ok",
+      "measuring JVMs will run on CPUs 24-31,88-95: the quietest of 8 L3 domains (16 logical CPUs, 0.0 CPUs busy when chosen)"
+    ],
+    [
+      "info",
+      "container (cgroup v2): CPUs 0-127 of 128, no CPU limit, no memory limit"
+    ],
+    [
+      "info",
+      "1 NUMA node(s); 8 L3 domain(s) of 16 logical CPUs"
+    ],
+    [
+      "ok",
+      "1123 GB of memory available"
+    ],
+    [
+      "warn",
+      "3 other Jupyter kernel(s) are running in this server: make sure none of them runs anything while a section measures (shut down the notebooks you are not using)"
+    ],
+    [
+      "ok",
+      "work on the machine now: 0.0 logical CPUs, all of it this container's: either the machine is quiet or /proc shows only this container, in which case other users' work is invisible from here; a section is suspect above 4 of other work"
+    ],
+    [
+      "info",
+      "the machine has been up for 26.1 days"
+    ],
+    [
+      "ok",
+      "7748 GB free under the data root"
+    ],
+    [
+      "ok",
+      "java: openjdk version \"11.0.29\" 2025-10-21"
+    ],
+    [
+      "warn",
+      "the checkout has uncommitted changes: the currency records the commit as -dirty"
+    ]
+  ]
+}

@@ -1,0 +1,442 @@
+{
+  "plan": {
+    "batch": 8,
+    "reference": "emcts",
+    "sections": [
+      [
+        "emcts-comma",
+        "emcts-bias-e75",
+        "emcts-bias-e50",
+        "emcts-bias-e25",
+        "emcts-bias-e10",
+        "emcts-bias-coarse-e25",
+        "emcts-bias-norem-e25",
+        "emcts-bias-perburn-e25"
+      ],
+      [
+        "emcts-short15",
+        "emcts-short15-bias-e25",
+        "emcts-short5-bias-e25",
+        "emcts-z0-coarse",
+        "emcts-z0-mid",
+        "emcts-z0-fine",
+        "emcts-z0-fine-insfine",
+        "comma-bias-e75"
+      ],
+      [
+        "comma-bias-e50",
+        "comma-bias-e25",
+        "comma-bias-e10",
+        "comma-bias-coarse-e25",
+        "comma-bias-norem-e25",
+        "comma-bias-perburn-e25",
+        "comma-short15",
+        "comma-short15-bias-e25"
+      ],
+      [
+        "comma-short5-bias-e25",
+        "comma-z0-coarse",
+        "comma-z0-mid",
+        "comma-z0-fine",
+        "comma-z0-random",
+        "comma-rand15",
+        "comma-short15-coarse",
+        "comma-bias-fine-e25"
+      ]
+    ]
+  },
+  "first": "20261011-112521",
+  "sessions": [
+    {
+      "section": 1,
+      "attempt": 1,
+      "redo": false,
+      "arms": [
+        "emcts-comma",
+        "emcts-bias-e75",
+        "emcts-bias-e50",
+        "emcts-bias-e25",
+        "emcts-bias-e10",
+        "emcts-bias-coarse-e25",
+        "emcts-bias-norem-e25",
+        "emcts-bias-perburn-e25"
+      ],
+      "label": "section 1",
+      "verdict": "PASS",
+      "minutes": 56.2,
+      "invocation": "20261011-112521",
+      "bracket": [
+        -0.3,
+        -0.4,
+        -0.4
+      ],
+      "failures": [],
+      "other_cpus_mean": 0.02,
+      "other_cpus_worst": 0.02,
+      "load_events": 0,
+      "clock": {
+        "mhz": [
+          1500,
+          3700,
+          3700
+        ],
+        "temp_max_c": 48.25
+      },
+      "reasons": [],
+      "reliability": "PASS"
+    },
+    {
+      "section": 2,
+      "attempt": 1,
+      "redo": false,
+      "arms": [
+        "emcts-short15",
+        "emcts-short15-bias-e25",
+        "emcts-short5-bias-e25",
+        "emcts-z0-coarse",
+        "emcts-z0-mid",
+        "emcts-z0-fine",
+        "emcts-z0-fine-insfine",
+        "comma-bias-e75"
+      ],
+      "label": "section 2",
+      "verdict": "PASS",
+      "minutes": 60.9,
+      "invocation": "20261011-125712",
+      "bracket": [
+        -0.1,
+        -0.1,
+        -1.4
+      ],
+      "speed_vs_file": 1.0037,
+      "failures": [],
+      "other_cpus_mean": 0.02,
+      "other_cpus_worst": 0.02,
+      "load_events": 0,
+      "clock": {
+        "mhz": [
+          1500,
+          3700,
+          3700
+        ],
+        "temp_max_c": 49.375
+      },
+      "reasons": [],
+      "reliability": "PASS"
+    },
+    {
+      "section": 3,
+      "attempt": 1,
+      "redo": false,
+      "arms": [
+        "comma-bias-e50",
+        "comma-bias-e25",
+        "comma-bias-e10",
+        "comma-bias-coarse-e25",
+        "comma-bias-norem-e25",
+        "comma-bias-perburn-e25",
+        "comma-short15",
+        "comma-short15-bias-e25"
+      ],
+      "label": "section 3",
+      "verdict": "PASS",
+      "minutes": 64.1,
+      "invocation": "20261011-140603",
+      "bracket": [
+        -0.1,
+        -0.2,
+        -1.4
+      ],
+      "speed_vs_file": 1.0023,
+      "failures": [],
+      "other_cpus_mean": 0.02,
+      "other_cpus_worst": 0.02,
+      "load_events": 0,
+      "clock": {
+        "mhz": [
+          1480,
+          3700,
+          3700
+        ],
+        "temp_max_c": 49.75
+      },
+      "reasons": [],
+      "reliability": "PASS"
+    },
+    {
+      "section": 4,
+      "attempt": 1,
+      "redo": false,
+      "arms": [
+        "comma-short5-bias-e25",
+        "comma-z0-coarse",
+        "comma-z0-mid",
+        "comma-z0-fine",
+        "comma-z0-random",
+        "comma-rand15",
+        "comma-short15-coarse",
+        "comma-bias-fine-e25"
+      ],
+      "label": "section 4",
+      "verdict": "PASS",
+      "minutes": 60.3,
+      "invocation": "20261011-183813",
+      "bracket": [
+        -0.2,
+        -0.1,
+        -0.3
+      ],
+      "speed_vs_file": 0.9976,
+      "failures": [],
+      "other_cpus_mean": 0.02,
+      "other_cpus_worst": 0.02,
+      "load_events": 0,
+      "clock": {
+        "mhz": [
+          1480,
+          3700,
+          3700
+        ],
+        "temp_max_c": 47.25
+      },
+      "reasons": [],
+      "reliability": "PASS"
+    }
+  ],
+  "checks": {
+    "published": {
+      "check": "published",
+      "verdict": "PASS",
+      "minutes": 13.8,
+      "label": "check published",
+      "invocation": "20261011-220226",
+      "drift": "-4.6% (emcts@400000)",
+      "bracket": [
+        -0.1,
+        -0.3,
+        0.1
+      ],
+      "other_cpus_worst": 0.02,
+      "clock": {
+        "mhz": [
+          1500,
+          3700,
+          3700
+        ],
+        "temp_max_c": 47.875
+      }
+    },
+    "self": {
+      "check": "self",
+      "verdict": "PASS",
+      "minutes": 14.1,
+      "label": "check self",
+      "invocation": "20261011-220226",
+      "drift": "0.6% (emcts@101500)",
+      "bracket": [
+        0.0,
+        -0.4,
+        -1.3
+      ],
+      "other_cpus_worst": 0.02,
+      "clock": {
+        "mhz": [
+          1480,
+          3700,
+          3700
+        ],
+        "temp_max_c": 47.5
+      }
+    }
+  },
+  "invocations": [
+    {
+      "stamp": "20261011-112521",
+      "section": "1",
+      "redo": false,
+      "facts": {
+        "power": {
+          "ac": true,
+          "battery": null,
+          "charging": null,
+          "saver": null
+        },
+        "power_settings": {
+          "governor": "schedutil"
+        },
+        "power_mode": null,
+        "cgroup": {
+          "version": 2,
+          "usage_s": 125.961149,
+          "throttled_s": 0.0,
+          "nr_throttled": 0
+        },
+        "measuring_cpus": "24-31,88-95",
+        "other_cpus_now": 0.0059943417122466265,
+        "uptime_hours": 626.7026138888889,
+        "network_up": [],
+        "commit": "da8b39b99e7839940f8688e599066ac88a450b77-dirty",
+        "java": [
+          "openjdk version \"11.0.29\" 2025-10-21",
+          "OpenJDK Runtime Environment (build 11.0.29+7-post-Ubuntu-1ubuntu122.04)",
+          "OpenJDK 64-Bit Server VM (build 11.0.29+7-post-Ubuntu-1ubuntu122.04, mixed mode, sharing)"
+        ]
+      }
+    },
+    {
+      "stamp": "20261011-125712",
+      "section": "2",
+      "redo": false,
+      "facts": {
+        "power": {
+          "ac": true,
+          "battery": null,
+          "charging": null,
+          "saver": null
+        },
+        "power_settings": {
+          "governor": "schedutil"
+        },
+        "power_mode": null,
+        "cgroup": {
+          "version": 2,
+          "usage_s": 3979.353285,
+          "throttled_s": 0.0,
+          "nr_throttled": 0
+        },
+        "measuring_cpus": "8-15,72-79",
+        "other_cpus_now": 0.02397641177849465,
+        "uptime_hours": 628.2333611111111,
+        "network_up": [],
+        "commit": "da8b39b99e7839940f8688e599066ac88a450b77-dirty",
+        "java": [
+          "openjdk version \"11.0.29\" 2025-10-21",
+          "OpenJDK Runtime Environment (build 11.0.29+7-post-Ubuntu-1ubuntu122.04)",
+          "OpenJDK 64-Bit Server VM (build 11.0.29+7-post-Ubuntu-1ubuntu122.04, mixed mode, sharing)"
+        ]
+      }
+    },
+    {
+      "stamp": "20261011-140603",
+      "section": "3",
+      "redo": false,
+      "facts": {
+        "power": {
+          "ac": true,
+          "battery": null,
+          "charging": null,
+          "saver": null
+        },
+        "power_settings": {
+          "governor": "schedutil"
+        },
+        "power_mode": null,
+        "cgroup": {
+          "version": 2,
+          "usage_s": 8246.344686,
+          "throttled_s": 0.0,
+          "nr_throttled": 0
+        },
+        "measuring_cpus": "0-7,64-71",
+        "other_cpus_now": 0.0059938950320596795,
+        "uptime_hours": 629.3811361111111,
+        "network_up": [],
+        "commit": "da8b39b99e7839940f8688e599066ac88a450b77-dirty",
+        "java": [
+          "openjdk version \"11.0.29\" 2025-10-21",
+          "OpenJDK Runtime Environment (build 11.0.29+7-post-Ubuntu-1ubuntu122.04)",
+          "OpenJDK 64-Bit Server VM (build 11.0.29+7-post-Ubuntu-1ubuntu122.04, mixed mode, sharing)"
+        ]
+      }
+    },
+    {
+      "stamp": "20261011-183813",
+      "section": "4",
+      "redo": false,
+      "facts": {
+        "power": {
+          "ac": true,
+          "battery": null,
+          "charging": null,
+          "saver": null
+        },
+        "power_settings": {
+          "governor": "schedutil"
+        },
+        "power_mode": null,
+        "cgroup": {
+          "version": 2,
+          "usage_s": 12636.683809,
+          "throttled_s": 0.0,
+          "nr_throttled": 0
+        },
+        "measuring_cpus": "24-31,88-95",
+        "other_cpus_now": 0.02197943177721487,
+        "uptime_hours": 633.9171305555556,
+        "network_up": [],
+        "commit": "da8b39b99e7839940f8688e599066ac88a450b77-dirty",
+        "java": [
+          "openjdk version \"11.0.29\" 2025-10-21",
+          "OpenJDK Runtime Environment (build 11.0.29+7-post-Ubuntu-1ubuntu122.04)",
+          "OpenJDK 64-Bit Server VM (build 11.0.29+7-post-Ubuntu-1ubuntu122.04, mixed mode, sharing)"
+        ]
+      }
+    },
+    {
+      "stamp": "20261011-220226",
+      "section": "checks",
+      "redo": false,
+      "facts": {
+        "power": {
+          "ac": true,
+          "battery": null,
+          "charging": null,
+          "saver": null
+        },
+        "power_settings": {
+          "governor": "schedutil"
+        },
+        "power_mode": null,
+        "cgroup": {
+          "version": 2,
+          "usage_s": 16920.193894,
+          "throttled_s": 0.0,
+          "nr_throttled": 0
+        },
+        "measuring_cpus": "0-7,64-71",
+        "other_cpus_now": 0.01798159696385216,
+        "uptime_hours": 637.3206805555556,
+        "network_up": [],
+        "commit": "da8b39b99e7839940f8688e599066ac88a450b77-dirty",
+        "java": [
+          "openjdk version \"11.0.29\" 2025-10-21",
+          "OpenJDK Runtime Environment (build 11.0.29+7-post-Ubuntu-1ubuntu122.04)",
+          "OpenJDK 64-Bit Server VM (build 11.0.29+7-post-Ubuntu-1ubuntu122.04, mixed mode, sharing)"
+        ]
+      }
+    }
+  ],
+  "pace": {
+    "levels": {
+      "9500": 0.62,
+      "20000": 1.12,
+      "101500": 5.4
+    },
+    "positions": {
+      "9500": 16,
+      "20000": 16,
+      "101500": 16
+    },
+    "reps": 3,
+    "warmup": 6,
+    "reference": "emcts@9500"
+  },
+  "policy": {
+    "PERFBOOSTMODE": null,
+    "PROCFREQMAX": null,
+    "PROCFREQMAX1": null,
+    "PROCTHROTTLEMAX": null,
+    "PROCTHROTTLEMAX1": null,
+    "governor": "schedutil"
+  }
+}

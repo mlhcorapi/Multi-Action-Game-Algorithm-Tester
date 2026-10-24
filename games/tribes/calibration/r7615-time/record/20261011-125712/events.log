@@ -1,0 +1,13 @@
+[2026-10-11 12:57:21] [start] tribes-r7615-time: sections [2], checks -; JVMs on CPUs 8-15,72-79 (the quietest of 8 L3 domains (16 logical CPUs, 0.0 CPUs busy when chosen))
+[2026-10-11 12:57:51] [quiet] 0.0 logical CPUs of other work before the stability check: starting
+[2026-10-11 12:59:51] [controls] soak 1: JVM pid 1813, CPUs 8-15,72-79
+[2026-10-11 12:59:51] [stability] estimate 1: 9500: 0.62 s/turn, 20000: 1.13 s/turn, 101500: 5.43 s/turn
+[2026-10-11 13:01:51] [controls] soak 2: JVM pid 1895, CPUs 8-15,72-79
+[2026-10-11 13:01:51] [stability] estimate 2: 9500: 0.62 s/turn, 20000: 1.13 s/turn, 101500: 5.44 s/turn; change 0.2%
+[2026-10-11 13:01:51] [stability] steady after 4 min: two estimates in a row within 3%
+[2026-10-11 13:01:51] [stability] busiest measuring core during the last estimate: 1500-3700 MHz (median 3700), up to 49 C
+[2026-10-11 13:01:51] [plan] about 0.9 h of sections and 0.0 h of checks at this pace; expected to finish around 13:55 (up to 25% later if the arms run slower than the reference)
+[2026-10-11 13:01:51] [plan] leave the machine alone from here: nothing else should run until it finishes
+[2026-10-11 13:01:51] [section] section 2 starts: 8 arm(s)
+[2026-10-11 14:02:48] [controls] section 2: JVM pid 1991, CPUs 8-15,72-79
+[2026-10-11 14:02:48] [section] section 2: PASS in 60.9 min; bracket -0.1/-0.1/-1.4%; speed x1.004 the first session's

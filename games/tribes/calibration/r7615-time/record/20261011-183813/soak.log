@@ -1,0 +1,66 @@
+
+>>>>> 2026-10-11 18:38:53 $ magat calibrate --estimate --game tribes --format 2 --arms emcts --levels 9500,20000,101500 --portfolio /home/jovyan/magat_runs/portfolio/tribes
+18:38:53 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main calibrate --estimate --game tribes --format 2 --arms emcts --levels 9500,20000,101500 --portfolio /home/jovyan/magat_runs/portfolio/tribes
+18:38:53   -> /home/jovyan/magat_runs/logs/calibrate.log
+18:38:53 # magat 0.1.0-m6 calibrate
+18:38:53 # data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+18:38:54 ############################################################
+18:38:54 # compute-unit calibration: per arm, per budget level, relative to one reference advance
+18:38:54 # single-threaded; needs an idle machine: this is a timing measurement
+18:38:54 # new currency in null
+18:38:54 # reference cell emcts@9500   levels 9500,20000,101500   arms [emcts]
+18:38:54 # reps 3   turns/rep 16,16,16 over levels 9500,20000,101500   warmup 6   gap gate 10%   min ops 20000
+18:38:54 # portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7 (400 positions; a pool of 16 of them)
+18:38:54 # initialization: in-budget (each turn's budget pays for its initial plan)
+18:38:54 # currency version 2: every operation an arm declares is measured and priced
+18:38:54 # every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+18:38:54 ------------------------------------------------------------
+18:38:54 [machine] calibration
+18:38:54 [machine] AMD EPYC 9534 64-Core Processor | 16 logical / 16 physical (SMT x1) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 1 | worker ceiling 15
+18:38:54 ------------------------------------------------------------
+18:39:05   [estimate] emcts @ 9500: 0.62 s per turn over the level's 16 positions
+18:39:23   [estimate] emcts @ 20000: 1.14 s per turn over the level's 16 positions
+18:40:53   [estimate] emcts @ 101500: 5.49 s per turn over the level's 16 positions
+18:40:53 
+18:40:53 === ESTIMATE: WHAT THIS SESSION WOULD TAKE ON THIS MACHINE ===
+18:40:53      level  cells    turns   s per turn    minutes
+18:40:53       9500      1      110         0.62        1.1
+18:40:53      20000      1       55         1.14        1.0
+18:40:53     101500      1       55         5.49        5.0
+18:40:53   3 cells, 220 turns: about 0.1 h at the reference arm's pace, up to 0.2 h if every arm took 1.25x its time per turn (measured in 2.0 min; nothing was written)
+18:40:53 ESTIMATE: 0.1 h
+18:40:53 [exit 0] after 0:02:00.324037
+===== exit 0 after 120 s
+
+>>>>> 2026-10-11 18:40:53 $ magat calibrate --estimate --game tribes --format 2 --arms emcts --levels 9500,20000,101500 --portfolio /home/jovyan/magat_runs/portfolio/tribes
+18:40:54 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main calibrate --estimate --game tribes --format 2 --arms emcts --levels 9500,20000,101500 --portfolio /home/jovyan/magat_runs/portfolio/tribes
+18:40:54   -> /home/jovyan/magat_runs/logs/calibrate.log
+18:40:54 # magat 0.1.0-m6 calibrate
+18:40:54 # data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+18:40:55 ############################################################
+18:40:55 # compute-unit calibration: per arm, per budget level, relative to one reference advance
+18:40:55 # single-threaded; needs an idle machine: this is a timing measurement
+18:40:55 # new currency in null
+18:40:55 # reference cell emcts@9500   levels 9500,20000,101500   arms [emcts]
+18:40:55 # reps 3   turns/rep 16,16,16 over levels 9500,20000,101500   warmup 6   gap gate 10%   min ops 20000
+18:40:55 # portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7 (400 positions; a pool of 16 of them)
+18:40:55 # initialization: in-budget (each turn's budget pays for its initial plan)
+18:40:55 # currency version 2: every operation an arm declares is measured and priced
+18:40:55 # every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+18:40:55 ------------------------------------------------------------
+18:40:55 [machine] calibration
+18:40:55 [machine] AMD EPYC 9534 64-Core Processor | 16 logical / 16 physical (SMT x1) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 1 | worker ceiling 15
+18:40:55 ------------------------------------------------------------
+18:41:05   [estimate] emcts @ 9500: 0.62 s per turn over the level's 16 positions
+18:41:24   [estimate] emcts @ 20000: 1.13 s per turn over the level's 16 positions
+18:42:53   [estimate] emcts @ 101500: 5.45 s per turn over the level's 16 positions
+18:42:53 
+18:42:53 === ESTIMATE: WHAT THIS SESSION WOULD TAKE ON THIS MACHINE ===
+18:42:53      level  cells    turns   s per turn    minutes
+18:42:53       9500      1      110         0.62        1.1
+18:42:53      20000      1       55         1.13        1.0
+18:42:53     101500      1       55         5.45        5.0
+18:42:53   3 cells, 220 turns: about 0.1 h at the reference arm's pace, up to 0.1 h if every arm took 1.25x its time per turn (measured in 2.0 min; nothing was written)
+18:42:53 ESTIMATE: 0.1 h
+18:42:53 [exit 0] after 0:01:59.521951
+===== exit 0 after 120 s

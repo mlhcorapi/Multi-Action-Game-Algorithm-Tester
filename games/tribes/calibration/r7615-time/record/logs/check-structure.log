@@ -1,0 +1,32 @@
+
+>>>>> 2026-10-11 23:44:47 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main check structure --game tribes --spec /home/jovyan/Multi-Action-Game-Algorithm-Tester/experiments/tribes/structure.json --portfolio /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1
+# magat 0.1.0-m6 check structure
+# data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+# spec /home/jovyan/Multi-Action-Game-Algorithm-Tester/experiments/tribes/structure.json, portfolio ec243fd7fe81...; every turn priced with the fixed capture weights
+  [ok]   legacy-k3 == comma-k3
+  [ok]   legacy-k5 == comma-k5
+  [ok]   legacy-k10 == comma-k10
+  [ok]   legacy-k1 == drift-k1
+  [ok]   comma-k5 == emcts-comma
+  [ok]   qdelta-defaults == emcts
+  [ok]   qdelta-defaults-comma == emcts-comma
+  [ok]   plus-k3 != comma-k3
+  [ok]   plus-k5 != comma-k5
+  [ok]   emcts != emcts-comma
+  [ok]   emcts-bias-e25 != emcts
+  [ok]   comma-bias-e25 != emcts-comma
+  [ok]   comma-bias-coarse-e25 != comma-bias-e25
+  [ok]   comma-bias-norem-e25 != comma-bias-e25
+  [ok]   comma-bias-perburn-e25 != comma-bias-e25
+  [ok]   comma-short15 != emcts-comma
+  [ok]   comma-short15 != comma-rand15
+  [ok]   comma-short15-coarse != comma-short15
+  [ok]   comma-z0-coarse != comma-z0-random
+  [ok]   comma-z0-coarse != comma-z0-mid
+  [ok]   comma-z0-mid != comma-z0-fine
+  [ok]   legacy-k3 maxBranching 3 (expect exactly 3)
+  [ok]   legacy-k5 maxBranching 5 (expect exactly 5)
+  [ok]   plus-k5 maxBranching 10 (expect more than 5)
+  [ok]   emcts maxBranching 10 (expect at least 2)
+STRUCTURE: PASS
+===== exit 0 after 0:00:33.649590

@@ -1,0 +1,60 @@
+
+>>>>> 2026-10-11 23:42:22 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main check contract --game tribes --scenarios 8 --portfolio /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1
+# magat 0.1.0-m6 check contract
+# data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+# game: tribes  {engine=GAIGResearch/Tribes fork, engine.commit=828b13051d02fc55c6e95a3997d3757337883660, heuristic=SIMPLE, removeFishing=true, turnTimeLimited=false, fullObservability=true}
+# portfolio: /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1  (400 scenarios, identity ec243fd7fe81...)
+# positions: 8
+        L4: 1845 cross-state actions tried, 492 judged legal (informational)
+  [ok] L1   copy isolates the original
+  [ok] L2   reseeded copies are deterministic
+  [ok] L3   legal actions are non-empty and legal
+  [ok] L4   isLegal never throws on stale actions
+  [ok] L5   the end-turn action ends the turn
+  [ok] L6   serialize/deserialize round-trips
+  [ok] L7   action keys are unique within a state
+  [ok] L8   granularities nest
+  [ok] L9   evaluate is deterministic and finite
+  [ok] L10  the meter counts every operation
+CONTRACT: PASS
+===== exit 0 after 0:00:01.321483
+
+>>>>> 2026-10-24 14:48:52 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main check contract --game tribes --scenarios 8 --portfolio /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1
+# magat 0.1.0-m6 check contract
+# data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+# game: tribes  {engine=GAIGResearch/Tribes fork, engine.commit=828b13051d02fc55c6e95a3997d3757337883660, heuristic=SIMPLE, removeFishing=true, turnTimeLimited=false, fullObservability=true}
+# portfolio: /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1  (400 scenarios, identity ec243fd7fe81...)
+# positions: 8
+        L4: 1845 cross-state actions tried, 492 judged legal (informational)
+  [ok] L1   copy isolates the original
+  [ok] L2   reseeded copies are deterministic
+  [ok] L3   legal actions are non-empty and legal
+  [ok] L4   isLegal never throws on stale actions
+  [ok] L5   the end-turn action ends the turn
+  [ok] L6   serialize/deserialize round-trips
+  [ok] L7   action keys are unique within a state
+  [ok] L8   granularities nest
+  [ok] L9   evaluate is deterministic and finite
+  [ok] L10  the meter counts every operation
+CONTRACT: PASS
+===== exit 0 after 0:00:02.683988
+
+>>>>> 2026-10-24 14:51:52 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main check contract --game tribes --scenarios 8 --portfolio /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1
+# magat 0.1.0-m6 check contract
+# data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+# game: tribes  {engine=GAIGResearch/Tribes fork, engine.commit=828b13051d02fc55c6e95a3997d3757337883660, heuristic=SIMPLE, removeFishing=true, turnTimeLimited=false, fullObservability=true}
+# portfolio: /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1  (400 scenarios, identity ec243fd7fe81...)
+# positions: 8
+        L4: 1845 cross-state actions tried, 492 judged legal (informational)
+  [ok] L1   copy isolates the original
+  [ok] L2   reseeded copies are deterministic
+  [ok] L3   legal actions are non-empty and legal
+  [ok] L4   isLegal never throws on stale actions
+  [ok] L5   the end-turn action ends the turn
+  [ok] L6   serialize/deserialize round-trips
+  [ok] L7   action keys are unique within a state
+  [ok] L8   granularities nest
+  [ok] L9   evaluate is deterministic and finite
+  [ok] L10  the meter counts every operation
+CONTRACT: PASS
+===== exit 0 after 0:00:01.293172

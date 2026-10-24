@@ -1,0 +1,280 @@
+
+>>>>> 2026-10-11 12:57:12 $ magat weights --weights /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties --game tribes --arms emcts,emcts,emcts-comma,emcts-bias-e75,emcts-bias-e50,emcts-bias-e25,emcts-bias-e10,emcts-bias-coarse-e25,emcts-bias-norem-e25,emcts-bias-perburn-e25,emcts-short15,emcts-short15-bias-e25,emcts-short5-bias-e25,emcts-z0-coarse,emcts-z0-mid,emcts-z0-fine,emcts-z0-fine-insfine,comma-bias-e75,comma-bias-e50,comma-bias-e25,comma-bias-e10,comma-bias-coarse-e25,comma-bias-norem-e25,comma-bias-perburn-e25,comma-short15,comma-short15-bias-e25,comma-short5-bias-e25,comma-z0-coarse,comma-z0-mid,comma-z0-fine,comma-z0-random,comma-rand15,comma-short15-coarse,comma-bias-fine-e25 --levels 9500,20000,101500
+12:57:13 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main weights --weights /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties --game tribes --arms emcts,emcts,emcts-comma,emcts-bias-e75,emcts-bias-e50,emcts-bias-e25,emcts-bias-e10,emcts-bias-coarse-e25,emcts-bias-norem-e25,emcts-bias-perburn-e25,emcts-short15,emcts-short15-bias-e25,emcts-short5-bias-e25,emcts-z0-coarse,emcts-z0-mid,emcts-z0-fine,emcts-z0-fine-insfine,comma-bias-e75,comma-bias-e50,comma-bias-e25,comma-bias-e10,comma-bias-coarse-e25,comma-bias-norem-e25,comma-bias-perburn-e25,comma-short15,comma-short15-bias-e25,comma-short5-bias-e25,comma-z0-coarse,comma-z0-mid,comma-z0-fine,comma-z0-random,comma-rand15,comma-short15-coarse,comma-bias-fine-e25 --levels 9500,20000,101500
+12:57:13   -> /home/jovyan/magat_runs/logs/weights.log
+12:57:13 # compute_weights.properties: version 2, 27 profiles, up to 8 algorithm operation(s) each, reference emcts@9500 (57696.0 ns/advance), global 1.0000/0.1478/0.0474
+12:57:13 # game tribes, turnsPerRep 16,16,16, portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7
+12:57:13 # 33 arm(s) x 3 level(s): 27 of 99 profiles priced, every declared operation checked
+12:57:13   missing: emcts-short15@9500
+12:57:13   missing: emcts-short15@20000
+12:57:13   missing: emcts-short15@101500
+12:57:13   missing: emcts-short15-bias-e25@9500
+12:57:13   missing: emcts-short15-bias-e25@20000
+12:57:13   missing: emcts-short15-bias-e25@101500
+12:57:13   missing: emcts-short5-bias-e25@9500
+12:57:13   missing: emcts-short5-bias-e25@20000
+12:57:13   missing: emcts-short5-bias-e25@101500
+12:57:13   missing: emcts-z0-coarse@9500
+12:57:13   missing: emcts-z0-coarse@20000
+12:57:13   missing: emcts-z0-coarse@101500
+12:57:13   missing: emcts-z0-mid@9500
+12:57:13   missing: emcts-z0-mid@20000
+12:57:13   missing: emcts-z0-mid@101500
+12:57:13   missing: emcts-z0-fine@9500
+12:57:13   missing: emcts-z0-fine@20000
+12:57:13   missing: emcts-z0-fine@101500
+12:57:13   missing: emcts-z0-fine-insfine@9500
+12:57:13   missing: emcts-z0-fine-insfine@20000
+12:57:13   missing: emcts-z0-fine-insfine@101500
+12:57:13   missing: comma-bias-e75@9500
+12:57:13   missing: comma-bias-e75@20000
+12:57:13   missing: comma-bias-e75@101500
+12:57:13   missing: comma-bias-e50@9500
+12:57:13   missing: comma-bias-e50@20000
+12:57:13   missing: comma-bias-e50@101500
+12:57:13   missing: comma-bias-e25@9500
+12:57:13   missing: comma-bias-e25@20000
+12:57:13   missing: comma-bias-e25@101500
+12:57:13   missing: comma-bias-e10@9500
+12:57:13   missing: comma-bias-e10@20000
+12:57:13   missing: comma-bias-e10@101500
+12:57:13   missing: comma-bias-coarse-e25@9500
+12:57:13   missing: comma-bias-coarse-e25@20000
+12:57:13   missing: comma-bias-coarse-e25@101500
+12:57:13   missing: comma-bias-norem-e25@9500
+12:57:13   missing: comma-bias-norem-e25@20000
+12:57:13   missing: comma-bias-norem-e25@101500
+12:57:13   missing: comma-bias-perburn-e25@9500
+12:57:13   missing: comma-bias-perburn-e25@20000
+12:57:13   missing: comma-bias-perburn-e25@101500
+12:57:13   missing: comma-short15@9500
+12:57:13   missing: comma-short15@20000
+12:57:13   missing: comma-short15@101500
+12:57:13   missing: comma-short15-bias-e25@9500
+12:57:13   missing: comma-short15-bias-e25@20000
+12:57:13   missing: comma-short15-bias-e25@101500
+12:57:13   missing: comma-short5-bias-e25@9500
+12:57:13   missing: comma-short5-bias-e25@20000
+12:57:13   missing: comma-short5-bias-e25@101500
+12:57:13   missing: comma-z0-coarse@9500
+12:57:13   missing: comma-z0-coarse@20000
+12:57:13   missing: comma-z0-coarse@101500
+12:57:13   missing: comma-z0-mid@9500
+12:57:13   missing: comma-z0-mid@20000
+12:57:13   missing: comma-z0-mid@101500
+12:57:13   missing: comma-z0-fine@9500
+12:57:13   missing: comma-z0-fine@20000
+12:57:13   missing: comma-z0-fine@101500
+12:57:13   missing: comma-z0-random@9500
+12:57:13   missing: comma-z0-random@20000
+12:57:13   missing: comma-z0-random@101500
+12:57:13   missing: comma-rand15@9500
+12:57:13   missing: comma-rand15@20000
+12:57:13   missing: comma-rand15@101500
+12:57:13   missing: comma-short15-coarse@9500
+12:57:13   missing: comma-short15-coarse@20000
+12:57:13   missing: comma-short15-coarse@101500
+12:57:13   missing: comma-bias-fine-e25@9500
+12:57:13   missing: comma-bias-fine-e25@20000
+12:57:13   missing: comma-bias-fine-e25@101500
+12:57:13 WEIGHTS: 72 MISSING
+12:57:13 [exit 1] after 0:00:00.225708
+===== exit 1 after 0 s
+
+>>>>> 2026-10-11 13:01:51 $ magat weights --weights /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties --game tribes --arms emcts,emcts,emcts-comma,emcts-bias-e75,emcts-bias-e50,emcts-bias-e25,emcts-bias-e10,emcts-bias-coarse-e25,emcts-bias-norem-e25,emcts-bias-perburn-e25,emcts-short15,emcts-short15-bias-e25,emcts-short5-bias-e25,emcts-z0-coarse,emcts-z0-mid,emcts-z0-fine,emcts-z0-fine-insfine,comma-bias-e75,comma-bias-e50,comma-bias-e25,comma-bias-e10,comma-bias-coarse-e25,comma-bias-norem-e25,comma-bias-perburn-e25,comma-short15,comma-short15-bias-e25,comma-short5-bias-e25,comma-z0-coarse,comma-z0-mid,comma-z0-fine,comma-z0-random,comma-rand15,comma-short15-coarse,comma-bias-fine-e25 --levels 9500,20000,101500
+13:01:51 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main weights --weights /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties --game tribes --arms emcts,emcts,emcts-comma,emcts-bias-e75,emcts-bias-e50,emcts-bias-e25,emcts-bias-e10,emcts-bias-coarse-e25,emcts-bias-norem-e25,emcts-bias-perburn-e25,emcts-short15,emcts-short15-bias-e25,emcts-short5-bias-e25,emcts-z0-coarse,emcts-z0-mid,emcts-z0-fine,emcts-z0-fine-insfine,comma-bias-e75,comma-bias-e50,comma-bias-e25,comma-bias-e10,comma-bias-coarse-e25,comma-bias-norem-e25,comma-bias-perburn-e25,comma-short15,comma-short15-bias-e25,comma-short5-bias-e25,comma-z0-coarse,comma-z0-mid,comma-z0-fine,comma-z0-random,comma-rand15,comma-short15-coarse,comma-bias-fine-e25 --levels 9500,20000,101500
+13:01:51   -> /home/jovyan/magat_runs/logs/weights.log
+13:01:51 # compute_weights.properties: version 2, 27 profiles, up to 8 algorithm operation(s) each, reference emcts@9500 (57696.0 ns/advance), global 1.0000/0.1478/0.0474
+13:01:51 # game tribes, turnsPerRep 16,16,16, portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7
+13:01:51 # 33 arm(s) x 3 level(s): 27 of 99 profiles priced, every declared operation checked
+13:01:51   missing: emcts-short15@9500
+13:01:51   missing: emcts-short15@20000
+13:01:51   missing: emcts-short15@101500
+13:01:51   missing: emcts-short15-bias-e25@9500
+13:01:51   missing: emcts-short15-bias-e25@20000
+13:01:51   missing: emcts-short15-bias-e25@101500
+13:01:51   missing: emcts-short5-bias-e25@9500
+13:01:51   missing: emcts-short5-bias-e25@20000
+13:01:51   missing: emcts-short5-bias-e25@101500
+13:01:51   missing: emcts-z0-coarse@9500
+13:01:51   missing: emcts-z0-coarse@20000
+13:01:51   missing: emcts-z0-coarse@101500
+13:01:51   missing: emcts-z0-mid@9500
+13:01:51   missing: emcts-z0-mid@20000
+13:01:51   missing: emcts-z0-mid@101500
+13:01:51   missing: emcts-z0-fine@9500
+13:01:51   missing: emcts-z0-fine@20000
+13:01:51   missing: emcts-z0-fine@101500
+13:01:51   missing: emcts-z0-fine-insfine@9500
+13:01:51   missing: emcts-z0-fine-insfine@20000
+13:01:51   missing: emcts-z0-fine-insfine@101500
+13:01:51   missing: comma-bias-e75@9500
+13:01:51   missing: comma-bias-e75@20000
+13:01:51   missing: comma-bias-e75@101500
+13:01:51   missing: comma-bias-e50@9500
+13:01:51   missing: comma-bias-e50@20000
+13:01:51   missing: comma-bias-e50@101500
+13:01:51   missing: comma-bias-e25@9500
+13:01:51   missing: comma-bias-e25@20000
+13:01:51   missing: comma-bias-e25@101500
+13:01:51   missing: comma-bias-e10@9500
+13:01:51   missing: comma-bias-e10@20000
+13:01:51   missing: comma-bias-e10@101500
+13:01:51   missing: comma-bias-coarse-e25@9500
+13:01:51   missing: comma-bias-coarse-e25@20000
+13:01:51   missing: comma-bias-coarse-e25@101500
+13:01:51   missing: comma-bias-norem-e25@9500
+13:01:51   missing: comma-bias-norem-e25@20000
+13:01:51   missing: comma-bias-norem-e25@101500
+13:01:51   missing: comma-bias-perburn-e25@9500
+13:01:51   missing: comma-bias-perburn-e25@20000
+13:01:51   missing: comma-bias-perburn-e25@101500
+13:01:51   missing: comma-short15@9500
+13:01:51   missing: comma-short15@20000
+13:01:51   missing: comma-short15@101500
+13:01:51   missing: comma-short15-bias-e25@9500
+13:01:51   missing: comma-short15-bias-e25@20000
+13:01:51   missing: comma-short15-bias-e25@101500
+13:01:51   missing: comma-short5-bias-e25@9500
+13:01:51   missing: comma-short5-bias-e25@20000
+13:01:51   missing: comma-short5-bias-e25@101500
+13:01:51   missing: comma-z0-coarse@9500
+13:01:51   missing: comma-z0-coarse@20000
+13:01:51   missing: comma-z0-coarse@101500
+13:01:51   missing: comma-z0-mid@9500
+13:01:51   missing: comma-z0-mid@20000
+13:01:51   missing: comma-z0-mid@101500
+13:01:51   missing: comma-z0-fine@9500
+13:01:51   missing: comma-z0-fine@20000
+13:01:51   missing: comma-z0-fine@101500
+13:01:51   missing: comma-z0-random@9500
+13:01:51   missing: comma-z0-random@20000
+13:01:51   missing: comma-z0-random@101500
+13:01:51   missing: comma-rand15@9500
+13:01:51   missing: comma-rand15@20000
+13:01:51   missing: comma-rand15@101500
+13:01:51   missing: comma-short15-coarse@9500
+13:01:51   missing: comma-short15-coarse@20000
+13:01:51   missing: comma-short15-coarse@101500
+13:01:51   missing: comma-bias-fine-e25@9500
+13:01:51   missing: comma-bias-fine-e25@20000
+13:01:51   missing: comma-bias-fine-e25@101500
+13:01:51 WEIGHTS: 72 MISSING
+13:01:51 [exit 1] after 0:00:00.229433
+===== exit 1 after 1 s
+
+>>>>> 2026-10-11 14:02:48 $ magat weights --weights /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties --game tribes --arms emcts,emcts,emcts-comma,emcts-bias-e75,emcts-bias-e50,emcts-bias-e25,emcts-bias-e10,emcts-bias-coarse-e25,emcts-bias-norem-e25,emcts-bias-perburn-e25,emcts-short15,emcts-short15-bias-e25,emcts-short5-bias-e25,emcts-z0-coarse,emcts-z0-mid,emcts-z0-fine,emcts-z0-fine-insfine,comma-bias-e75,comma-bias-e50,comma-bias-e25,comma-bias-e10,comma-bias-coarse-e25,comma-bias-norem-e25,comma-bias-perburn-e25,comma-short15,comma-short15-bias-e25,comma-short5-bias-e25,comma-z0-coarse,comma-z0-mid,comma-z0-fine,comma-z0-random,comma-rand15,comma-short15-coarse,comma-bias-fine-e25 --levels 9500,20000,101500
+14:02:49 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main weights --weights /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties --game tribes --arms emcts,emcts,emcts-comma,emcts-bias-e75,emcts-bias-e50,emcts-bias-e25,emcts-bias-e10,emcts-bias-coarse-e25,emcts-bias-norem-e25,emcts-bias-perburn-e25,emcts-short15,emcts-short15-bias-e25,emcts-short5-bias-e25,emcts-z0-coarse,emcts-z0-mid,emcts-z0-fine,emcts-z0-fine-insfine,comma-bias-e75,comma-bias-e50,comma-bias-e25,comma-bias-e10,comma-bias-coarse-e25,comma-bias-norem-e25,comma-bias-perburn-e25,comma-short15,comma-short15-bias-e25,comma-short5-bias-e25,comma-z0-coarse,comma-z0-mid,comma-z0-fine,comma-z0-random,comma-rand15,comma-short15-coarse,comma-bias-fine-e25 --levels 9500,20000,101500
+14:02:49   -> /home/jovyan/magat_runs/logs/weights.log
+14:02:49 # compute_weights.properties: version 2, 51 profiles, up to 9 algorithm operation(s) each, reference emcts@9500 (57696.0 ns/advance), global 1.0000/0.1478/0.0474
+14:02:49 # game tribes, turnsPerRep 16,16,16, portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7
+14:02:49 # 33 arm(s) x 3 level(s): 51 of 99 profiles priced, every declared operation checked
+14:02:49   missing: comma-bias-e50@9500
+14:02:49   missing: comma-bias-e50@20000
+14:02:49   missing: comma-bias-e50@101500
+14:02:49   missing: comma-bias-e25@9500
+14:02:49   missing: comma-bias-e25@20000
+14:02:49   missing: comma-bias-e25@101500
+14:02:49   missing: comma-bias-e10@9500
+14:02:49   missing: comma-bias-e10@20000
+14:02:49   missing: comma-bias-e10@101500
+14:02:49   missing: comma-bias-coarse-e25@9500
+14:02:49   missing: comma-bias-coarse-e25@20000
+14:02:49   missing: comma-bias-coarse-e25@101500
+14:02:49   missing: comma-bias-norem-e25@9500
+14:02:49   missing: comma-bias-norem-e25@20000
+14:02:49   missing: comma-bias-norem-e25@101500
+14:02:49   missing: comma-bias-perburn-e25@9500
+14:02:49   missing: comma-bias-perburn-e25@20000
+14:02:49   missing: comma-bias-perburn-e25@101500
+14:02:49   missing: comma-short15@9500
+14:02:49   missing: comma-short15@20000
+14:02:49   missing: comma-short15@101500
+14:02:49   missing: comma-short15-bias-e25@9500
+14:02:49   missing: comma-short15-bias-e25@20000
+14:02:49   missing: comma-short15-bias-e25@101500
+14:02:49   missing: comma-short5-bias-e25@9500
+14:02:49   missing: comma-short5-bias-e25@20000
+14:02:49   missing: comma-short5-bias-e25@101500
+14:02:49   missing: comma-z0-coarse@9500
+14:02:49   missing: comma-z0-coarse@20000
+14:02:49   missing: comma-z0-coarse@101500
+14:02:49   missing: comma-z0-mid@9500
+14:02:49   missing: comma-z0-mid@20000
+14:02:49   missing: comma-z0-mid@101500
+14:02:49   missing: comma-z0-fine@9500
+14:02:49   missing: comma-z0-fine@20000
+14:02:49   missing: comma-z0-fine@101500
+14:02:49   missing: comma-z0-random@9500
+14:02:49   missing: comma-z0-random@20000
+14:02:49   missing: comma-z0-random@101500
+14:02:49   missing: comma-rand15@9500
+14:02:49   missing: comma-rand15@20000
+14:02:49   missing: comma-rand15@101500
+14:02:49   missing: comma-short15-coarse@9500
+14:02:49   missing: comma-short15-coarse@20000
+14:02:49   missing: comma-short15-coarse@101500
+14:02:49   missing: comma-bias-fine-e25@9500
+14:02:49   missing: comma-bias-fine-e25@20000
+14:02:49   missing: comma-bias-fine-e25@101500
+14:02:49 WEIGHTS: 48 MISSING
+14:02:49 [exit 1] after 0:00:00.237892
+===== exit 1 after 1 s
+
+>>>>> 2026-10-11 14:02:49 $ magat weights --weights /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties --game tribes --arms emcts,emcts,emcts-comma,emcts-bias-e75,emcts-bias-e50,emcts-bias-e25,emcts-bias-e10,emcts-bias-coarse-e25,emcts-bias-norem-e25,emcts-bias-perburn-e25,emcts-short15,emcts-short15-bias-e25,emcts-short5-bias-e25,emcts-z0-coarse,emcts-z0-mid,emcts-z0-fine,emcts-z0-fine-insfine,comma-bias-e75,comma-bias-e50,comma-bias-e25,comma-bias-e10,comma-bias-coarse-e25,comma-bias-norem-e25,comma-bias-perburn-e25,comma-short15,comma-short15-bias-e25,comma-short5-bias-e25,comma-z0-coarse,comma-z0-mid,comma-z0-fine,comma-z0-random,comma-rand15,comma-short15-coarse,comma-bias-fine-e25 --levels 9500,20000,101500
+14:02:49 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main weights --weights /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties --game tribes --arms emcts,emcts,emcts-comma,emcts-bias-e75,emcts-bias-e50,emcts-bias-e25,emcts-bias-e10,emcts-bias-coarse-e25,emcts-bias-norem-e25,emcts-bias-perburn-e25,emcts-short15,emcts-short15-bias-e25,emcts-short5-bias-e25,emcts-z0-coarse,emcts-z0-mid,emcts-z0-fine,emcts-z0-fine-insfine,comma-bias-e75,comma-bias-e50,comma-bias-e25,comma-bias-e10,comma-bias-coarse-e25,comma-bias-norem-e25,comma-bias-perburn-e25,comma-short15,comma-short15-bias-e25,comma-short5-bias-e25,comma-z0-coarse,comma-z0-mid,comma-z0-fine,comma-z0-random,comma-rand15,comma-short15-coarse,comma-bias-fine-e25 --levels 9500,20000,101500
+14:02:49   -> /home/jovyan/magat_runs/logs/weights.log
+14:02:49 # compute_weights.properties: version 2, 51 profiles, up to 9 algorithm operation(s) each, reference emcts@9500 (57696.0 ns/advance), global 1.0000/0.1478/0.0474
+14:02:49 # game tribes, turnsPerRep 16,16,16, portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7
+14:02:50 # 33 arm(s) x 3 level(s): 51 of 99 profiles priced, every declared operation checked
+14:02:50   missing: comma-bias-e50@9500
+14:02:50   missing: comma-bias-e50@20000
+14:02:50   missing: comma-bias-e50@101500
+14:02:50   missing: comma-bias-e25@9500
+14:02:50   missing: comma-bias-e25@20000
+14:02:50   missing: comma-bias-e25@101500
+14:02:50   missing: comma-bias-e10@9500
+14:02:50   missing: comma-bias-e10@20000
+14:02:50   missing: comma-bias-e10@101500
+14:02:50   missing: comma-bias-coarse-e25@9500
+14:02:50   missing: comma-bias-coarse-e25@20000
+14:02:50   missing: comma-bias-coarse-e25@101500
+14:02:50   missing: comma-bias-norem-e25@9500
+14:02:50   missing: comma-bias-norem-e25@20000
+14:02:50   missing: comma-bias-norem-e25@101500
+14:02:50   missing: comma-bias-perburn-e25@9500
+14:02:50   missing: comma-bias-perburn-e25@20000
+14:02:50   missing: comma-bias-perburn-e25@101500
+14:02:50   missing: comma-short15@9500
+14:02:50   missing: comma-short15@20000
+14:02:50   missing: comma-short15@101500
+14:02:50   missing: comma-short15-bias-e25@9500
+14:02:50   missing: comma-short15-bias-e25@20000
+14:02:50   missing: comma-short15-bias-e25@101500
+14:02:50   missing: comma-short5-bias-e25@9500
+14:02:50   missing: comma-short5-bias-e25@20000
+14:02:50   missing: comma-short5-bias-e25@101500
+14:02:50   missing: comma-z0-coarse@9500
+14:02:50   missing: comma-z0-coarse@20000
+14:02:50   missing: comma-z0-coarse@101500
+14:02:50   missing: comma-z0-mid@9500
+14:02:50   missing: comma-z0-mid@20000
+14:02:50   missing: comma-z0-mid@101500
+14:02:50   missing: comma-z0-fine@9500
+14:02:50   missing: comma-z0-fine@20000
+14:02:50   missing: comma-z0-fine@101500
+14:02:50   missing: comma-z0-random@9500
+14:02:50   missing: comma-z0-random@20000
+14:02:50   missing: comma-z0-random@101500
+14:02:50   missing: comma-rand15@9500
+14:02:50   missing: comma-rand15@20000
+14:02:50   missing: comma-rand15@101500
+14:02:50   missing: comma-short15-coarse@9500
+14:02:50   missing: comma-short15-coarse@20000
+14:02:50   missing: comma-short15-coarse@101500
+14:02:50   missing: comma-bias-fine-e25@9500
+14:02:50   missing: comma-bias-fine-e25@20000
+14:02:50   missing: comma-bias-fine-e25@101500
+14:02:50 WEIGHTS: 48 MISSING
+14:02:50 [exit 1] after 0:00:00.215605
+===== exit 1 after 0 s

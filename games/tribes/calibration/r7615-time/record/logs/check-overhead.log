@@ -1,0 +1,24 @@
+
+>>>>> 2026-10-11 22:35:59 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main check overhead --game tribes --portfolio /home/jovyan/magat_runs/portfolio/tribes --weights /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties --budget 20000 --reps 4
+# magat 0.1.0-m6 check overhead
+# data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+# emcts@20000, 8 positions (the calibrator's pool), 4 repetitions, single-threaded; idle machine wanted
+  op         decorator ns      engine ns   overhead
+  advance         46775.5        46738.7      0.08%
+  copy             7994.1         7941.2      0.67%
+  eval             2530.8         2492.3      1.54%
+  effect on a currency calibrated through the decorator rather than the engine's hooks: wCopy +0.59%, wEval +1.46%
+  dormant engine counter: 3.30 ns per operation = 0.0071% of an advance
+OVERHEAD: MEASURED
+===== exit 0 after 0:01:12.709215
+
+>>>>> 2026-10-11 23:45:21 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main check overhead --audit --game tribes --portfolio /home/jovyan/magat_runs/portfolio/tribes --arms @reference --budget 20000 --weights /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/calibration/r7615/compute_weights.properties
+# magat 0.1.0-m6 check overhead --audit
+# data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+# 3 arm(s) @ 20000, 4 positions (the calibrator's pool), 2 repetitions, single-threaded; warn above 10%, fail above 25% unaccounted
+  arm                             turn ms  fwd model    own ops  unaccounted   largest own operations
+  emcts                            1540.3      95.8%       4.0%         0.1%   emcts.legal 3.2%, emcts.generation 0.6%, emcts.check 0.2%
+  emcts-comma                      1885.8      97.0%       2.9%         0.1%   emcts.legal 2.4%, emcts.generation 0.2%, emcts.check 0.1%
+  comma-z0-coarse                  1723.1      89.0%      10.9%         0.1%   emcts.legal 9.7%, emcts.generation 0.5%, emcts.check 0.3%
+OVERHEAD AUDIT: PASS
+===== exit 0 after 0:00:44.464640

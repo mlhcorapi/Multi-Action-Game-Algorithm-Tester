@@ -1,0 +1,16 @@
+
+>>>>> 2026-10-11 23:46:18 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main probe support --game tribes --arm comma-bias-e25 --scenarios 20 --weights /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties --out /home/jovyan/magat_runs/calibration/tribes-r7615-time --portfolio /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1
+# magat 0.1.0-m6 probe support
+# data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+# initialization in-budget, as compute_weights.properties was measured
+# comma-bias-e25, the first 20 scenarios, visit 0; criterion: >= 80% of biased insertions after 4 warm-up burns chose a class with >= 3 observations
+  Budget  Turns  MutationsPerTurn  DistinctKeys  MedianObsPerKey  PicksAfterWarmup  SupportedPicks  SupportedFraction  Verdict
+  9500  20  107.3  14.3  6.2  1330  1208  0.9083  PASS
+  20000  20  178.0  15.1  7.0  2234  2111  0.9449  PASS
+  101500  20  1141.5  19.9  24.0  14356  14292  0.9955  PASS
+      9500: 90.8% of 1330 biased picks after the warm-up rested on supported classes -> a CONTRAST level
+     20000: 94.5% of 2234 biased picks after the warm-up rested on supported classes -> a CONTRAST level
+    101500: 99.6% of 14356 biased picks after the warm-up rested on supported classes -> a CONTRAST level
+# -> /home/jovyan/magat_runs/calibration/tribes-r7615-time/support_probe_comma-bias-e25.csv
+SUPPORT: PASS (every level is a contrast level)
+===== exit 0 after 0:00:26.820090

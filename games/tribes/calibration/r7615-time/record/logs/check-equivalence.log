@@ -1,0 +1,249 @@
+
+>>>>> 2026-10-11 23:42:23 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main check equivalence --game tribes --scenarios 8 --visits 2 --budgets 8000,40000 --portfolio /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1 --weights /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/calibration/r7615/compute_weights.properties
+# magat 0.1.0-m6 check equivalence
+# data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+# weights: compute_weights.properties: version 1, 105 profiles (forward model only), reference emcts@40000 (62870.6 ns/advance), global 1.0000/0.1375/0.0567
+# portfolio: /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1  (400 scenarios, identity ec243fd7fe81...)
+# arms [emcts, emcts-comma, emcts-bias-e75, emcts-bias-e50, emcts-bias-e25, emcts-bias-e10, emcts-bias-coarse-e25, emcts-bias-norem-e25, emcts-bias-perburn-e25, emcts-short15, emcts-short15-bias-e25, emcts-short5-bias-e25, emcts-z0-coarse, emcts-z0-mid, emcts-z0-fine, emcts-z0-fine-insfine, comma-bias-e75, comma-bias-e50, comma-bias-e25, comma-bias-e10, comma-bias-coarse-e25, comma-bias-norem-e25, comma-bias-perburn-e25, comma-short15, comma-short15-bias-e25, comma-short5-bias-e25, comma-z0-coarse, comma-z0-mid, comma-z0-fine, comma-z0-random, comma-rand15, comma-short15-coarse, comma-bias-fine-e25], 8 scenarios x 2 visits, budgets [8000, 40000], 127 threads
+  note: emcts@8000 is not priced; both sides use emcts@40000's weights
+# equivalence: emcts vs thesis ExperimentalEMCTSAgent(PLUS, k=1)
+  32 cells, 0 failed
+  (4.2 s)
+  note: emcts-comma@8000 is not priced; both sides use emcts-comma@40000's weights
+# equivalence: emcts-comma vs thesis ExperimentalEMCTSAgent(COMMA, k=5)
+  32 cells, 0 failed
+  (5.2 s)
+  note: emcts-bias-e75@8000 is not priced; both sides use emcts-bias-e75@40000's weights
+# equivalence: emcts-bias-e75 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.75, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.4 s)
+  note: emcts-bias-e50@8000 is not priced; both sides use emcts-bias-e50@40000's weights
+# equivalence: emcts-bias-e50 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.50, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.5 s)
+  note: emcts-bias-e25@8000 is not priced; both sides use emcts-bias-e25@40000's weights
+# equivalence: emcts-bias-e25 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.9 s)
+  note: emcts-bias-e10@8000 is not priced; both sides use emcts-bias-e10@40000's weights
+# equivalence: emcts-bias-e10 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.10, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.5 s)
+  note: emcts-bias-coarse-e25@8000 is not priced; both sides use emcts-bias-coarse-e25@40000's weights
+# equivalence: emcts-bias-coarse-e25 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert COARSE, repair FULL by COARSE, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.5 s)
+  note: emcts-bias-norem-e25@8000 is not priced; both sides use emcts-bias-norem-e25@40000's weights
+# equivalence: emcts-bias-norem-e25 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert MID, repair FULL by MID, removal credit off, continuous updates)
+  32 cells, 0 failed
+  (3.7 s)
+  note: emcts-bias-perburn-e25@8000 is not priced; both sides use emcts-bias-perburn-e25@40000's weights
+# equivalence: emcts-bias-perburn-e25 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert MID, repair FULL by MID, removal credit on, per-burn updates)
+  32 cells, 0 failed
+  (4.3 s)
+  note: emcts-short15@8000 is not priced; both sides use emcts-short15@40000's weights
+# equivalence: emcts-short15 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 1.00, insert MID, repair SHORTLIST_K by MID (K=15), removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.8 s)
+  note: emcts-short15-bias-e25@8000 is not priced; both sides use emcts-short15-bias-e25@40000's weights
+# equivalence: emcts-short15-bias-e25 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert MID, repair SHORTLIST_K by MID (K=15), removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.4 s)
+  note: emcts-short5-bias-e25@8000 is not priced; both sides use emcts-short5-bias-e25@40000's weights
+# equivalence: emcts-short5-bias-e25 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert MID, repair SHORTLIST_K by MID (K=5), removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.1 s)
+  note: emcts-z0-coarse@8000 is not priced; both sides use emcts-z0-coarse@40000's weights
+# equivalence: emcts-z0-coarse vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert COARSE, repair ZERO_EVAL by COARSE, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.8 s)
+  note: emcts-z0-mid@8000 is not priced; both sides use emcts-z0-mid@40000's weights
+# equivalence: emcts-z0-mid vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert COARSE, repair ZERO_EVAL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (5.2 s)
+  note: emcts-z0-fine@8000 is not priced; both sides use emcts-z0-fine@40000's weights
+# equivalence: emcts-z0-fine vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert COARSE, repair ZERO_EVAL by FINE, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (5.1 s)
+  note: emcts-z0-fine-insfine@8000 is not priced; both sides use emcts-z0-fine-insfine@40000's weights
+# equivalence: emcts-z0-fine-insfine vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert FINE, repair ZERO_EVAL by FINE, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.4 s)
+  note: comma-bias-e75@8000 is not priced; both sides use comma-bias-e75@40000's weights
+# equivalence: comma-bias-e75 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.75, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (5.2 s)
+  note: comma-bias-e50@8000 is not priced; both sides use comma-bias-e50@40000's weights
+# equivalence: comma-bias-e50 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.50, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.9 s)
+  note: comma-bias-e25@8000 is not priced; both sides use comma-bias-e25@40000's weights
+# equivalence: comma-bias-e25 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.25, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.9 s)
+  note: comma-bias-e10@8000 is not priced; both sides use comma-bias-e10@40000's weights
+# equivalence: comma-bias-e10 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.10, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.8 s)
+  note: comma-bias-coarse-e25@8000 is not priced; both sides use comma-bias-coarse-e25@40000's weights
+# equivalence: comma-bias-coarse-e25 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.25, insert COARSE, repair FULL by COARSE, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.9 s)
+  note: comma-bias-norem-e25@8000 is not priced; both sides use comma-bias-norem-e25@40000's weights
+# equivalence: comma-bias-norem-e25 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.25, insert MID, repair FULL by MID, removal credit off, continuous updates)
+  32 cells, 0 failed
+  (4.6 s)
+  note: comma-bias-perburn-e25@8000 is not priced; both sides use comma-bias-perburn-e25@40000's weights
+# equivalence: comma-bias-perburn-e25 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.25, insert MID, repair FULL by MID, removal credit on, per-burn updates)
+  32 cells, 0 failed
+  (4.8 s)
+  note: comma-short15@8000 is not priced; both sides use comma-short15@40000's weights
+# equivalence: comma-short15 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 1.00, insert MID, repair SHORTLIST_K by MID (K=15), removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.6 s)
+  note: comma-short15-bias-e25@8000 is not priced; both sides use comma-short15-bias-e25@40000's weights
+# equivalence: comma-short15-bias-e25 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.25, insert MID, repair SHORTLIST_K by MID (K=15), removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.2 s)
+  note: comma-short5-bias-e25@8000 is not priced; both sides use comma-short5-bias-e25@40000's weights
+# equivalence: comma-short5-bias-e25 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.25, insert MID, repair SHORTLIST_K by MID (K=5), removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.3 s)
+  note: comma-z0-coarse@8000 is not priced; both sides use comma-z0-coarse@40000's weights
+# equivalence: comma-z0-coarse vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 1.00, insert MID, repair ZERO_EVAL by COARSE, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.3 s)
+  note: comma-z0-mid@8000 is not priced; both sides use comma-z0-mid@40000's weights
+# equivalence: comma-z0-mid vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 1.00, insert MID, repair ZERO_EVAL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.4 s)
+  note: comma-z0-fine@8000 is not priced; both sides use comma-z0-fine@40000's weights
+# equivalence: comma-z0-fine vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 1.00, insert MID, repair ZERO_EVAL by FINE, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.9 s)
+  note: comma-z0-random@8000 is not priced; both sides use comma-z0-random@40000's weights
+# equivalence: comma-z0-random vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 1.00, insert MID, repair ZERO_EVAL_RANDOM by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.9 s)
+  note: comma-rand15@8000 is not priced; both sides use comma-rand15@40000's weights
+# equivalence: comma-rand15 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 1.00, insert MID, repair SHORTLIST_RANDOM by MID (K=15), removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.8 s)
+  note: comma-short15-coarse@8000 is not priced; both sides use comma-short15-coarse@40000's weights
+# equivalence: comma-short15-coarse vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 1.00, insert MID, repair SHORTLIST_K by COARSE (K=15), removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.8 s)
+  note: comma-bias-fine-e25@8000 is not priced; both sides use comma-bias-fine-e25@40000's weights
+# equivalence: comma-bias-fine-e25 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.25, insert FINE, repair FULL by FINE, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (5.3 s)
+EQUIVALENCE: PASS
+===== exit 0 after 0:02:23.533931
+
+>>>>> 2026-10-24 14:48:55 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main check equivalence --game tribes --scenarios 8 --visits 2 --budgets 8000,40000 --portfolio /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1 --weights /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/calibration/r7615/compute_weights.properties
+# magat 0.1.0-m6 check equivalence
+# data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+# weights: compute_weights.properties: version 1, 105 profiles (forward model only), reference emcts@40000 (62870.6 ns/advance), global 1.0000/0.1375/0.0567
+# portfolio: /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1  (400 scenarios, identity ec243fd7fe81...)
+# arms [emcts, emcts-comma, emcts-bias-e75, emcts-bias-e50, emcts-bias-e25, emcts-bias-e10, emcts-bias-coarse-e25, emcts-bias-norem-e25, emcts-bias-perburn-e25, emcts-short15, emcts-short15-bias-e25, emcts-short5-bias-e25, emcts-z0-coarse, emcts-z0-mid, emcts-z0-fine, emcts-z0-fine-insfine, comma-bias-e75, comma-bias-e50, comma-bias-e25, comma-bias-e10, comma-bias-coarse-e25, comma-bias-norem-e25, comma-bias-perburn-e25, comma-short15, comma-short15-bias-e25, comma-short5-bias-e25, comma-z0-coarse, comma-z0-mid, comma-z0-fine, comma-z0-random, comma-rand15, comma-short15-coarse, comma-bias-fine-e25], 8 scenarios x 2 visits, budgets [8000, 40000], 127 threads
+  note: emcts@8000 is not priced; both sides use emcts@40000's weights
+# equivalence: emcts vs thesis ExperimentalEMCTSAgent(PLUS, k=1)
+  32 cells, 0 failed
+  (4.3 s)
+  note: emcts-comma@8000 is not priced; both sides use emcts-comma@40000's weights
+# equivalence: emcts-comma vs thesis ExperimentalEMCTSAgent(COMMA, k=5)
+  32 cells, 0 failed
+  (4.8 s)
+  note: emcts-bias-e75@8000 is not priced; both sides use emcts-bias-e75@40000's weights
+# equivalence: emcts-bias-e75 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.75, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.4 s)
+  note: emcts-bias-e50@8000 is not priced; both sides use emcts-bias-e50@40000's weights
+# equivalence: emcts-bias-e50 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.50, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.5 s)
+  note: emcts-bias-e25@8000 is not priced; both sides use emcts-bias-e25@40000's weights
+# equivalence: emcts-bias-e25 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.9 s)
+  note: emcts-bias-e10@8000 is not priced; both sides use emcts-bias-e10@40000's weights
+# equivalence: emcts-bias-e10 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.10, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.5 s)
+  note: emcts-bias-coarse-e25@8000 is not priced; both sides use emcts-bias-coarse-e25@40000's weights
+# equivalence: emcts-bias-coarse-e25 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert COARSE, repair FULL by COARSE, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.5 s)
+  note: emcts-bias-norem-e25@8000 is not priced; both sides use emcts-bias-norem-e25@40000's weights
+# equivalence: emcts-bias-norem-e25 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert MID, repair FULL by MID, removal credit off, continuous updates)
+  32 cells, 0 failed
+  (3.6 s)
+  note: emcts-bias-perburn-e25@8000 is not priced; both sides use emcts-bias-perburn-e25@40000's weights
+# equivalence: emcts-bias-perburn-e25 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert MID, repair FULL by MID, removal credit on, per-burn updates)
+  32 cells, 0 failed
+  (3.9 s)
+  note: emcts-short15@8000 is not priced; both sides use emcts-short15@40000's weights
+# equivalence: emcts-short15 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 1.00, insert MID, repair SHORTLIST_K by MID (K=15), removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.7 s)
+  note: emcts-short15-bias-e25@8000 is not priced; both sides use emcts-short15-bias-e25@40000's weights
+# equivalence: emcts-short15-bias-e25 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert MID, repair SHORTLIST_K by MID (K=15), removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.9 s)
+  note: emcts-short5-bias-e25@8000 is not priced; both sides use emcts-short5-bias-e25@40000's weights
+# equivalence: emcts-short5-bias-e25 vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert MID, repair SHORTLIST_K by MID (K=5), removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.2 s)
+  note: emcts-z0-coarse@8000 is not priced; both sides use emcts-z0-coarse@40000's weights
+# equivalence: emcts-z0-coarse vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert COARSE, repair ZERO_EVAL by COARSE, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.8 s)
+  note: emcts-z0-mid@8000 is not priced; both sides use emcts-z0-mid@40000's weights
+# equivalence: emcts-z0-mid vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert COARSE, repair ZERO_EVAL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (5.1 s)
+  note: emcts-z0-fine@8000 is not priced; both sides use emcts-z0-fine@40000's weights
+# equivalence: emcts-z0-fine vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert COARSE, repair ZERO_EVAL by FINE, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (5.1 s)
+  note: emcts-z0-fine-insfine@8000 is not priced; both sides use emcts-z0-fine-insfine@40000's weights
+# equivalence: emcts-z0-fine-insfine vs thesis Stage1BiasedAgent(PLUS k=1, epsilon 0.25, insert FINE, repair ZERO_EVAL by FINE, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.4 s)
+  note: comma-bias-e75@8000 is not priced; both sides use comma-bias-e75@40000's weights
+# equivalence: comma-bias-e75 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.75, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (5.2 s)
+  note: comma-bias-e50@8000 is not priced; both sides use comma-bias-e50@40000's weights
+# equivalence: comma-bias-e50 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.50, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.8 s)
+  note: comma-bias-e25@8000 is not priced; both sides use comma-bias-e25@40000's weights
+# equivalence: comma-bias-e25 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.25, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.8 s)
+  note: comma-bias-e10@8000 is not priced; both sides use comma-bias-e10@40000's weights
+# equivalence: comma-bias-e10 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.10, insert MID, repair FULL by MID, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.9 s)
+  note: comma-bias-coarse-e25@8000 is not priced; both sides use comma-bias-coarse-e25@40000's weights
+# equivalence: comma-bias-coarse-e25 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.25, insert COARSE, repair FULL by COARSE, removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.9 s)
+  note: comma-bias-norem-e25@8000 is not priced; both sides use comma-bias-norem-e25@40000's weights
+# equivalence: comma-bias-norem-e25 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.25, insert MID, repair FULL by MID, removal credit off, continuous updates)
+  32 cells, 0 failed
+  (4.5 s)
+  note: comma-bias-perburn-e25@8000 is not priced; both sides use comma-bias-perburn-e25@40000's weights
+# equivalence: comma-bias-perburn-e25 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.25, insert MID, repair FULL by MID, removal credit on, per-burn updates)
+  32 cells, 0 failed
+  (4.8 s)
+  note: comma-short15@8000 is not priced; both sides use comma-short15@40000's weights
+# equivalence: comma-short15 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 1.00, insert MID, repair SHORTLIST_K by MID (K=15), removal credit on, continuous updates)
+  32 cells, 0 failed
+  (3.5 s)
+  note: comma-short15-bias-e25@8000 is not priced; both sides use comma-short15-bias-e25@40000's weights
+# equivalence: comma-short15-bias-e25 vs thesis Stage1BiasedAgent(COMMA k=5, epsilon 0.25, insert MID, repair SHORTLIST_K by MID (K=15), removal credit on, continuous updates)
+  32 cells, 0 failed
+  (4.2 s)
+  note: comma-short5-bias-e25@8000 is not priced; both sides use comma-short5-bias-e25@40000's weights

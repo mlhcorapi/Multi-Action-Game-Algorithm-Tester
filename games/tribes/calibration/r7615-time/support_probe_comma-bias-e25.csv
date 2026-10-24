@@ -1,0 +1,4 @@
+Budget,Turns,MutationsPerTurn,DistinctKeys,MedianObsPerKey,PicksAfterWarmup,SupportedPicks,SupportedFraction,Verdict
+9500,20,107.3,14.3,6.2,1330,1208,0.9083,PASS
+20000,20,178.0,15.1,7.0,2234,2111,0.9449,PASS
+101500,20,1141.5,19.9,24.0,14356,14292,0.9955,PASS

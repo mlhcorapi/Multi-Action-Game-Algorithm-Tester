@@ -1,0 +1,155 @@
+
+>>>>> 2026-10-11 13:01:51 $ magat calibrate --game tribes --out /home/jovyan/magat_runs/calibration/tribes-r7615-time --arms emcts-short15,emcts-short15-bias-e25,emcts-short5-bias-e25,emcts-z0-coarse,emcts-z0-mid,emcts-z0-fine,emcts-z0-fine-insfine,comma-bias-e75 --format 2 --levels 9500,20000,101500 --portfolio /home/jovyan/magat_runs/portfolio/tribes
+13:01:51 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main calibrate --game tribes --out /home/jovyan/magat_runs/calibration/tribes-r7615-time --arms emcts-short15,emcts-short15-bias-e25,emcts-short5-bias-e25,emcts-z0-coarse,emcts-z0-mid,emcts-z0-fine,emcts-z0-fine-insfine,comma-bias-e75 --format 2 --levels 9500,20000,101500 --portfolio /home/jovyan/magat_runs/portfolio/tribes
+13:01:51   -> /home/jovyan/magat_runs/logs/calibrate.log
+13:01:52 # magat 0.1.0-m6 calibrate
+13:01:52 # data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+13:01:52 ############################################################
+13:01:52 # compute-unit calibration: per arm, per budget level, relative to one reference advance
+13:01:52 # single-threaded; needs an idle machine: this is a timing measurement
+13:01:52 # extending /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties
+13:01:52 # reference cell emcts@9500   levels 9500,20000,101500   arms [emcts-short15, emcts-short15-bias-e25, emcts-short5-bias-e25, emcts-z0-coarse, emcts-z0-mid, emcts-z0-fine, emcts-z0-fine-insfine, comma-bias-e75]
+13:01:52 # reps 3   turns/rep 16,16,16 over levels 9500,20000,101500   warmup 6   gap gate 10%   min ops 20000
+13:01:52 # portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7 (400 positions; a pool of 16 of them)
+13:01:52 # initialization: in-budget (each turn's budget pays for its initial plan)
+13:01:52 # currency version 2: every operation an arm declares is measured and priced
+13:01:52 # every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+13:01:52 # will write 24 profile(s): [emcts-short15@9500, emcts-short15-bias-e25@9500, emcts-short5-bias-e25@9500, emcts-z0-coarse@9500, emcts-z0-mid@9500, emcts-z0-fine@9500, emcts-z0-fine-insfine@9500, comma-bias-e75@9500, emcts-short15@20000, emcts-short15-bias-e25@20000, emcts-short5-bias-e25@20000, emcts-z0-coarse@20000, emcts-z0-mid@20000, emcts-z0-fine@20000, emcts-z0-fine-insfine@20000, comma-bias-e75@20000, emcts-short15@101500, emcts-short15-bias-e25@101500, emcts-short5-bias-e25@101500, emcts-z0-coarse@101500, emcts-z0-mid@101500, emcts-z0-fine@101500, emcts-z0-fine-insfine@101500, comma-bias-e75@101500]
+13:01:52 ------------------------------------------------------------
+13:01:52 [machine] calibration
+13:01:53 [machine] AMD EPYC 9534 64-Core Processor | 16 logical / 16 physical (SMT x1) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 1 | worker ceiling 15
+13:01:53 ------------------------------------------------------------
+13:01:53 # load average before starting: 0.07 per core   (idle)
+13:01:53 
+13:01:53 [calibrate] warm-up for level 9500: 6 turns (discarded)
+13:02:25   [ 1/27] emcts@9500                         advance  57906.9 ns  copy   8454.5 ns  eval   2864.0 ns   (gap 0.1/0.4/0.2% | CV 1.9/4.5/1.9%)  5 op(s), unpriced 0.1%  29 s
+13:02:53   [ 2/27] emcts-short15@9500                 advance  56761.4 ns  copy   8474.8 ns  eval   2829.5 ns   (gap 0.2/0.6/0.4% | CV 0.3/0.4/0.4%)  9 op(s), unpriced 0.1%  28 s
+13:03:20   [ 3/27] emcts-short15-bias-e25@9500        advance  56145.5 ns  copy   8568.5 ns  eval   2907.3 ns   (gap 0.1/0.2/0.3% | CV 0.1/0.2/0.7%)  9 op(s), unpriced 0.1%  27 s
+13:03:50   [ 4/27] emcts-short5-bias-e25@9500         advance  58012.0 ns  copy   9031.1 ns  eval   3231.9 ns   (gap 0.3/0.3/0.2% | CV 0.2/0.2/0.1%)  9 op(s), unpriced 0.1%  29 s
+13:04:19   [ 5/27] emcts-z0-coarse@9500               advance  56624.3 ns  copy   9479.1 ns  eval   3592.5 ns   (gap 0.1/0.3/1.0% | CV 0.2/0.3/1.0%)  9 op(s), unpriced 0.1%  30 s
+13:04:49   [ 6/27] emcts-z0-mid@9500                  advance  56772.0 ns  copy   9479.9 ns  eval   3625.4 ns   (gap 0.2/0.0/0.0% | CV 0.1/0.5/0.3%)  9 op(s), unpriced 0.1%  30 s
+13:05:19   [ 7/27] emcts-z0-fine@9500                 advance  57004.2 ns  copy   9694.1 ns  eval   3702.4 ns   (gap 0.1/0.2/0.8% | CV 0.1/0.2/0.5%)  9 op(s), unpriced 0.1%  30 s
+13:05:48   [ 8/27] emcts-z0-fine-insfine@9500         advance  56664.0 ns  copy   9716.6 ns  eval   3746.7 ns   (gap 0.3/0.1/0.6% | CV 0.3/0.4/0.7%)  9 op(s), unpriced 0.1%  29 s
+13:07:03   [ 9/27] comma-bias-e75@9500                advance  74204.6 ns  copy   9437.1 ns  eval   3419.8 ns   (gap 0.1/0.0/0.7% | CV 0.1/0.1/0.5%)  8 op(s), unpriced 0.0%  75 s
+13:07:03 
+13:07:03 [calibrate] warm-up for level 20000: 6 turns (discarded)
+13:08:04   [10/27] emcts@20000                        advance  54805.2 ns  copy   8371.2 ns  eval   2715.8 ns   (gap 0.1/0.2/0.4% | CV 0.1/0.2/0.3%)  5 op(s), unpriced 0.0%  55 s
+13:09:03   [11/27] emcts-short15@20000                advance  56780.3 ns  copy   8226.1 ns  eval   2517.6 ns   (gap 0.1/0.7/0.0% | CV 0.1/0.4/0.0%)  9 op(s), unpriced 0.0%  59 s
+13:10:04   [12/27] emcts-short15-bias-e25@20000       advance  56846.8 ns  copy   8474.0 ns  eval   2664.3 ns   (gap 0.0/0.7/0.4% | CV 0.1/0.7/0.3%)  9 op(s), unpriced 0.0%  61 s
+13:11:03   [13/27] emcts-short5-bias-e25@20000        advance  55446.5 ns  copy   8823.4 ns  eval   2951.4 ns   (gap 0.0/0.0/0.1% | CV 0.1/0.2/0.1%)  9 op(s), unpriced 0.0%  60 s
+13:12:07   [14/27] emcts-z0-coarse@20000              advance  57265.2 ns  copy   9581.4 ns  eval   3514.9 ns   (gap 0.0/0.2/0.4% | CV 0.1/0.1/0.3%)  9 op(s), unpriced 0.0%  64 s
+13:13:11   [15/27] emcts-z0-mid@20000                 advance  55373.2 ns  copy   9398.7 ns  eval   3409.0 ns   (gap 0.2/0.6/0.2% | CV 0.1/0.8/0.1%)  9 op(s), unpriced 0.0%  64 s
+13:14:13   [16/27] emcts-z0-fine@20000                advance  54958.9 ns  copy   9390.0 ns  eval   3432.9 ns   (gap 0.0/0.6/0.5% | CV 0.1/0.5/0.4%)  9 op(s), unpriced 0.0%  62 s
+13:15:15   [17/27] emcts-z0-fine-insfine@20000        advance  57184.8 ns  copy   9673.1 ns  eval   3534.4 ns   (gap 0.0/0.1/0.3% | CV 0.1/0.1/0.3%)  9 op(s), unpriced 0.0%  62 s
+13:16:40   [18/27] comma-bias-e75@20000               advance  64914.1 ns  copy   9034.8 ns  eval   3125.5 ns   (gap 2.8/1.4/0.1% | CV 1.9/1.1/0.2%)  8 op(s), unpriced 0.0%  85 s
+13:16:40 
+13:16:40 [calibrate] warm-up for level 101500: 6 turns (discarded)
+13:21:34   [19/27] emcts@101500                       advance  52630.2 ns  copy   8223.4 ns  eval   2602.4 ns   (gap 0.2/0.1/0.4% | CV 0.2/0.3/0.9%)  5 op(s), unpriced 0.0%  265 s
+13:26:20   [20/27] emcts-short15@101500               advance  53316.0 ns  copy   8132.9 ns  eval   2371.6 ns   (gap 0.0/0.2/0.1% | CV 0.0/0.3/0.3%)  9 op(s), unpriced 0.0%  287 s
+13:31:21   [21/27] emcts-short15-bias-e25@101500      advance  55131.7 ns  copy   8385.8 ns  eval   2472.6 ns   (gap 0.2/1.0/1.7% | CV 0.1/0.6/1.0%)  9 op(s), unpriced 0.0%  301 s
+13:36:24   [22/27] emcts-short5-bias-e25@101500       advance  53417.5 ns  copy   8783.7 ns  eval   2614.8 ns   (gap 0.0/0.2/1.0% | CV 0.2/0.3/0.8%)  9 op(s), unpriced 0.0%  303 s
+13:42:09   [23/27] emcts-z0-coarse@101500             advance  56283.4 ns  copy   9316.7 ns  eval   2630.9 ns   (gap 0.1/0.6/0.4% | CV 0.1/1.6/5.4%)  9 op(s), unpriced 0.0%  345 s
+13:47:16   [24/27] emcts-z0-mid@101500                advance  50963.5 ns  copy   9326.7 ns  eval   2663.7 ns   (gap 0.1/0.7/0.2% | CV 0.1/0.5/0.1%)  9 op(s), unpriced 0.0%  307 s
+13:52:36   [25/27] emcts-z0-fine@101500               advance  53863.8 ns  copy   9195.7 ns  eval   2746.1 ns   (gap 0.0/0.6/0.5% | CV 0.1/2.4/2.4%)  9 op(s), unpriced 0.0%  320 s
+13:57:42   [26/27] emcts-z0-fine-insfine@101500       advance  54475.9 ns  copy   9855.4 ns  eval   2954.9 ns   (gap 0.0/0.1/0.2% | CV 0.1/0.1/0.5%)  9 op(s), unpriced 0.0%  305 s
+14:02:16   [27/27] comma-bias-e75@101500              advance  54789.0 ns  copy   8316.6 ns  eval   2656.0 ns   (gap 0.0/0.2/0.3% | CV 0.0/0.4/0.3%)  8 op(s), unpriced 0.0%  275 s
+14:02:16 
+14:02:16 [calibrate] bracket: emcts@9500 again, last (warm-up 6 turns, discarded)
+14:02:48   [bracket] emcts@9500                       advance  57824.8 ns  copy   8446.7 ns  eval   2823.2 ns
+14:02:48   measured in 60.9 min
+14:02:48 
+14:02:48 === RESULT: weights relative to one advance of emcts@9500 = 57906.9 ns ===
+14:02:48   profile                              wAdvance      wCopy      wEval   ns/advance
+14:02:48   emcts@9500                             1.0000     0.1460     0.0495      57906.9
+14:02:48   emcts-short15@9500                     0.9802     0.1464     0.0489      56761.4
+14:02:48   emcts-short15-bias-e25@9500            0.9696     0.1480     0.0502      56145.5
+14:02:48   emcts-short5-bias-e25@9500             1.0018     0.1560     0.0558      58012.0
+14:02:48   emcts-z0-coarse@9500                   0.9779     0.1637     0.0620      56624.3
+14:02:48   emcts-z0-mid@9500                      0.9804     0.1637     0.0626      56772.0
+14:02:48   emcts-z0-fine@9500                     0.9844     0.1674     0.0639      57004.2
+14:02:48   emcts-z0-fine-insfine@9500             0.9785     0.1678     0.0647      56664.0
+14:02:48   comma-bias-e75@9500                    1.2814     0.1630     0.0591      74204.6
+14:02:48   emcts@20000                            0.9464     0.1446     0.0469      54805.2
+14:02:48   emcts-short15@20000                    0.9805     0.1421     0.0435      56780.3
+14:02:48   emcts-short15-bias-e25@20000           0.9817     0.1463     0.0460      56846.8
+14:02:48   emcts-short5-bias-e25@20000            0.9575     0.1524     0.0510      55446.5
+14:02:48   emcts-z0-coarse@20000                  0.9889     0.1655     0.0607      57265.2
+14:02:48   emcts-z0-mid@20000                     0.9562     0.1623     0.0589      55373.2
+14:02:48   emcts-z0-fine@20000                    0.9491     0.1622     0.0593      54958.9
+14:02:48   emcts-z0-fine-insfine@20000            0.9875     0.1670     0.0610      57184.8
+14:02:48   comma-bias-e75@20000                   1.1210     0.1560     0.0540      64914.1
+14:02:48   emcts@101500                           0.9089     0.1420     0.0449      52630.2
+14:02:48   emcts-short15@101500                   0.9207     0.1404     0.0410      53316.0
+14:02:48   emcts-short15-bias-e25@101500          0.9521     0.1448     0.0427      55131.7
+14:02:48   emcts-short5-bias-e25@101500           0.9225     0.1517     0.0452      53417.5
+14:02:48   emcts-z0-coarse@101500                 0.9720     0.1609     0.0454      56283.4
+14:02:48   emcts-z0-mid@101500                    0.8801     0.1611     0.0460      50963.5
+14:02:48   emcts-z0-fine@101500                   0.9302     0.1588     0.0474      53863.8
+14:02:48   emcts-z0-fine-insfine@101500           0.9408     0.1702     0.0510      54475.9
+14:02:48   comma-bias-e75@101500                  0.9462     0.1436     0.0459      54789.0
+14:02:48 
+14:02:48 === DOES AN OPERATION COST THE SAME FOR EVERY ARM? ===
+14:02:48       9500  cheapest advance emcts-short15-bias-e25 56145.5 ns, dearest comma-bias-e75 74204.6 ns: spread 32.2%
+14:02:48      20000  cheapest advance emcts 54805.2 ns, dearest comma-bias-e75 64914.1 ns: spread 18.4%
+14:02:48     101500  cheapest advance emcts-z0-mid 50963.5 ns, dearest emcts-z0-coarse 56283.4 ns: spread 10.4%
+14:02:48 
+14:02:48   The reference arm across levels:
+14:02:48         9500 units:  57906.9 ns/advance (1.00x the reference cell)
+14:02:48        20000 units:  54805.2 ns/advance (0.95x the reference cell)
+14:02:48       101500 units:  52630.2 ns/advance (0.91x the reference cell)
+14:02:48 
+14:02:48 === WHAT ONE GLOBAL WEIGHT SET WOULD MIS-ALLOCATE ===
+14:02:48   Wall-clock 1,000 nominal units buy under the fixed weights 1/0.16/0.077, given each cell's own operation mix.
+14:02:48       9500  55.401 to 71.150 ms: 28.4% unfair (emcts-short15-bias-e25@9500 vs comma-bias-e75@9500)
+14:02:48      20000  53.718 to 62.933 ms: 17.2% unfair (emcts@20000 vs comma-bias-e75@20000)
+14:02:48     101500  51.050 to 56.224 ms: 10.1% unfair (emcts-z0-mid@101500 vs emcts-z0-coarse@101500)
+14:02:48 
+14:02:48 === AUDIT: HOW MUCH OF EACH TURN THE CURRENCY PRICES ===
+14:02:48   version 2: the forward model and every operation the arm declares are priced
+14:02:48   profile                               turn ms  fwd model    own ops  unaccounted   unpriced
+14:02:48   emcts@9500                              585.9      96.6%       3.3%         0.1%       0.1%
+14:02:48     note: emcts@9500: two fastest emcts.seqkey times differ by 10.4% (limit 10%); it is 0.10% of the turn, so reported, not gated
+14:02:48   emcts-short15@9500                      571.1      93.2%       6.7%         0.1%       0.1%
+14:02:48   emcts-short15-bias-e25@9500             565.1      93.3%       6.6%         0.1%       0.1%
+14:02:48     note: emcts-short15-bias-e25@9500: two fastest emcts.burn times differ by 23.3% (limit 10%); it is 0.01% of the turn, so reported, not gated
+14:02:48   emcts-short5-bias-e25@9500              604.4      90.5%       9.4%         0.1%       0.1%
+14:02:48     note: emcts-short5-bias-e25@9500: two fastest emcts.burn times differ by 13.6% (limit 10%); it is 0.01% of the turn, so reported, not gated
+14:02:48   emcts-z0-coarse@9500                    614.0      87.6%      12.3%         0.1%       0.1%
+14:02:48   emcts-z0-mid@9500                       617.4      87.4%      12.5%         0.1%       0.1%
+14:02:48   emcts-z0-fine@9500                      613.4      88.4%      11.5%         0.1%       0.1%
+14:02:48   emcts-z0-fine-insfine@9500              593.0      91.0%       8.9%         0.1%       0.1%
+14:02:48   comma-bias-e75@9500                    1558.9      97.2%       2.8%         0.0%       0.0%
+14:02:48   emcts@20000                            1129.3      96.2%       3.8%         0.0%       0.0%
+14:02:48   emcts-short15@20000                    1221.3      91.5%       8.5%         0.0%       0.0%
+14:02:48   emcts-short15-bias-e25@20000           1254.9      89.4%      10.5%         0.0%       0.0%
+14:02:48   emcts-short5-bias-e25@20000            1231.6      89.6%      10.3%         0.0%       0.0%
+14:02:48   emcts-z0-coarse@20000                  1317.2      86.9%      13.0%         0.0%       0.0%
+14:02:48   emcts-z0-mid@20000                     1315.5      84.3%      15.7%         0.0%       0.0%
+14:02:48   emcts-z0-fine@20000                    1287.6      85.4%      14.5%         0.0%       0.0%
+14:02:48   emcts-z0-fine-insfine@20000            1281.0      89.3%      10.6%         0.0%       0.0%
+14:02:48   comma-bias-e75@20000                   1726.4      96.7%       3.3%         0.0%       0.0%
+14:02:48   emcts@101500                           5466.3      96.3%       3.7%         0.0%       0.0%
+14:02:48   emcts-short15@101500                   5924.7      90.1%       9.9%         0.0%       0.0%
+14:02:48   emcts-short15-bias-e25@101500          6213.3      89.0%      11.0%         0.0%       0.0%
+14:02:48   emcts-short5-bias-e25@101500           6258.8      86.3%      13.6%         0.0%       0.0%
+14:02:48   emcts-z0-coarse@101500                 7136.3      80.0%      19.9%         0.0%       0.0%
+14:02:48   emcts-z0-mid@101500                    6336.8      81.8%      18.2%         0.0%       0.0%
+14:02:48   emcts-z0-fine@101500                   6620.8      82.6%      17.4%         0.0%       0.0%
+14:02:48   emcts-z0-fine-insfine@101500           6305.3      87.8%      12.2%         0.0%       0.0%
+14:02:48   comma-bias-e75@101500                  5676.3      96.4%       3.6%         0.0%       0.0%
+14:02:48   every cell's priced operations account for at least 90% of its turn time
+14:02:48 
+14:02:48 === IS THIS A FAIR BENCHMARK? ===
+14:02:48   [ok]   every cell measured cleanly (27 cells)
+14:02:48   [ok]   weights are plausible in every cell
+14:02:48   [ok]   the reference cell moved -0.1% / -0.1% / -1.4% (advance / copy / eval) between the start and the end of the session: the machine held its speed
+14:02:48   [ok]   machine was idle (load 0.06 per core, this job included)
+14:02:48 
+14:02:48   [merge] kept the currency of compute_weights.properties; wrote 24 profile(s) re-denominated x1.000000 (this session's reference advance is x1.0037 the file's: machine speed, which cancels)
+14:02:48 
+14:02:48   VERDICT: PASS - calibration is trustworthy.
+14:02:48   Weights  -> /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties
+14:02:48   Measured -> /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_profiles.csv
+14:02:48 CALIBRATION: PASS /home/jovyan/magat_runs/calibration/tribes-r7615-time/compute_weights.properties
+14:02:48 [exit 0] after 1:00:56.769054
+===== exit 0 after 3657 s

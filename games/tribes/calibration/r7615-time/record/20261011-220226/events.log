@@ -1,0 +1,15 @@
+[2026-10-11 22:02:35] [start] tribes-r7615-time: sections -, checks ['published', 'self']; JVMs on CPUs 0-7,64-71 (the quietest of 8 L3 domains (16 logical CPUs, 0.0 CPUs busy when chosen))
+[2026-10-11 22:03:06] [quiet] 0.0 logical CPUs of other work before the stability check: starting
+[2026-10-11 22:05:06] [controls] soak 1: JVM pid 4893, CPUs 0-7,64-71
+[2026-10-11 22:05:06] [stability] estimate 1: 9500: 0.62 s/turn, 20000: 1.13 s/turn, 101500: 5.47 s/turn
+[2026-10-11 22:07:05] [controls] soak 2: JVM pid 4959, CPUs 0-7,64-71
+[2026-10-11 22:07:05] [stability] estimate 2: 9500: 0.62 s/turn, 20000: 1.12 s/turn, 101500: 5.40 s/turn; change 1.3%
+[2026-10-11 22:07:05] [stability] steady after 4 min: two estimates in a row within 3%
+[2026-10-11 22:07:05] [stability] busiest measuring core during the last estimate: 1479-3700 MHz (median 3700), up to 48 C
+[2026-10-11 22:07:05] [plan] about 0.0 h of sections and 0.4 h of checks at this pace; expected to finish around 22:32 (up to 25% later if the arms run slower than the reference)
+[2026-10-11 22:07:36] [quiet] 0.0 logical CPUs of other work before check published: starting
+[2026-10-11 22:21:23] [controls] check published: JVM pid 5057, CPUs 0-7,64-71
+[2026-10-11 22:21:23] [check] published: PASS, largest turn-price drift -4.6% (emcts@400000)
+[2026-10-11 22:21:53] [quiet] 0.0 logical CPUs of other work before check self: starting
+[2026-10-11 22:35:58] [controls] check self: JVM pid 5206, CPUs 0-7,64-71
+[2026-10-11 22:35:58] [check] self: PASS, largest turn-price drift 0.6% (emcts@101500)

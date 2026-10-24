@@ -1,0 +1,118 @@
+
+>>>>> 2026-10-09 12:59:44 $ java -Xmx841g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=f08c437701bad5b81fe9dd7df1e8855d0ce9c578-dirty -Dmagat.engine.commit=b9d27afe62d61cee2e51a0622d22fc9a32c87437 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main threads --game tribes --portfolio /home/jovyan/magat_runs/portfolio/tribes --out /home/jovyan/magat_runs/calibration/tribes-r7615-v2
+# magat 0.1.0-m6 threads
+# data root: /home/jovyan/magat_runs   engine: b9d27afe62d61cee2e51a0622d22fc9a32c87437
+------------------------------------------------------------
+[machine] thread sweep
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 861184 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+
+=== budget 40000 ===
+  ladder [8, 16, 23, 31, 39, 47, 54, 62]   (ceiling 62 = 64 physical cores - 2 reserved; SMT siblings never used)
+  pilot: 8 turns on 8 threads in 4.5s => 4.55s per turn per thread
+  workload: 40 positions (fixed), ~5 turns/thread/segment => ~45s per point; budget 8 min
+   threads   t/thr    turns  elapsedMs    turns/min    sustained   2ndHalf    speedup  efficiency   peakHeapMB
+         8       5       80      26629        180.3        184.1     -4.3%       8.00        100%        14692
+        16      10      320      51182        375.1        386.3     -5.9%      16.79        105%        35070
+        23      10      480      53555        537.8        548.8     -4.1%      23.85        104%        53974
+        31      10      640      54153        709.1        716.1     -2.0%      31.12        100%        64814
+        39      10      800      59345        808.8        808.5      0.1%      35.13         90%        64834
+        47       9      880      62677        842.4        851.2     -2.1%      36.99         79%        77872
+        54       8      880      61315        861.1        860.8      0.1%      37.41         69%        77910
+        62       7      880      60105        878.5        877.6      0.2%      38.14         62%        78043
+  knee: 54 threads (smallest within 3% of the 877.6 turns/min sustained peak)
+  -> 54 threads at 40000   (/home/jovyan/magat_runs/calibration/tribes-r7615-v2/threads.json)
+
+=== budget 80000 ===
+  ladder [8, 16, 23, 31, 39, 47, 54, 62]   (ceiling 62 = 64 physical cores - 2 reserved; SMT siblings never used)
+  pilot: 8 turns on 8 threads in 9.0s => 9.02s per turn per thread
+  workload: 24 positions (fixed), ~3 turns/thread/segment => ~54s per point; budget 9 min
+   threads   t/thr    turns  elapsedMs    turns/min    sustained   2ndHalf    speedup  efficiency   peakHeapMB
+         8       3       48      47676         60.4         60.1      1.2%       8.00        100%        18193
+        16       3       96      52571        109.6        113.8     -7.7%      15.16         95%        45180
+        23       3      144      53287        162.1        166.6     -5.5%      22.19         96%        66335
+        31       3      192      52970        217.5        219.8     -2.2%      29.28         94%        79485
+        39       3      240      55698        258.5        258.7     -0.1%      34.46         88%        79691
+        47       3      288      61018        283.2        286.7     -2.4%      38.19         81%        95979
+        54       3      336      67129        300.3        300.2      0.1%      39.98         74%        96022
+        62       3      384      73676        312.7        312.6      0.1%      41.65         67%        96399
+  knee: 62 threads (smallest within 3% of the 312.6 turns/min sustained peak)
+  -> 62 threads at 80000   (/home/jovyan/magat_runs/calibration/tribes-r7615-v2/threads.json)
+
+=== budget 400000 ===
+  ladder [8, 16, 23, 31, 39, 47, 54, 62]   (ceiling 62 = 64 physical cores - 2 reserved; SMT siblings never used)
+  pilot: 8 turns on 8 threads in 33.9s => 33.91s per turn per thread
+  workload: 24 positions (fixed), ~3 turns/thread/segment => ~203s per point; budget 35 min
+   threads   t/thr    turns  elapsedMs    turns/min    sustained   2ndHalf    speedup  efficiency   peakHeapMB
+         8       3       48     225532         12.8         12.8     -1.0%       8.00        100%        46261
+        16       3       96     243887         23.6         24.0     -3.2%      14.96         94%        97286
+        23       3      144     290127         29.8         35.4    -37.7%      22.07         96%       117492
+        31       3      192     249440         46.2         46.7     -2.1%      29.10         94%       159495
+        39       3      240     265557         54.2         54.5     -0.9%      33.96         87%       181698
+        47       3      288     287054         60.2         60.4     -0.6%      37.65         80%       207818
+        54       3      336     319154         63.2         63.4     -0.9%      39.56         73%       235350
+        62       3      384     350575         65.7         65.8     -0.4%      41.05         66%       267868
+  knee: 62 threads (smallest within 3% of the 65.8 turns/min sustained peak)
+  -> 62 threads at 400000   (/home/jovyan/magat_runs/calibration/tribes-r7615-v2/threads.json)
+THREADS: 40000=54 80000=62 400000=62
+===== exit 0 after 0:54:40.760576
+
+>>>>> 2026-10-10 18:56:50 $ java -Xmx17408m -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=da8b39b99e7839940f8688e599066ac88a450b77-dirty -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main threads --game tribes --portfolio /home/jovyan/magat_runs/portfolio/tribes --out /home/jovyan/magat_runs/calibration/tribes-r7615-time --levels 9500,20000,101500
+# magat 0.1.0-m6 threads
+# data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+------------------------------------------------------------
+[machine] thread sweep
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 17408 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+
+=== budget 9500 ===
+  ladder [8, 16, 23, 31, 39, 47, 54, 62]   (ceiling 62 = 64 physical cores - 2 reserved; SMT siblings never used)
+  pilot: 8 turns on 8 threads in 0.8s => 0.82s per turn per thread
+  workload: 64 positions (fixed), ~30 turns/thread/segment => ~49s per point; budget 9 min
+   threads   t/thr    turns  elapsedMs    turns/min    sustained   2ndHalf    speedup  efficiency   peakHeapMB
+         8      30      512      35001        877.7        892.7     -3.4%       8.00        100%         2038
+        16      46     1536      52854       1743.7       1749.3     -0.6%      15.68         98%         3069
+        23      46     2176      52339       2494.5       2519.6     -2.0%      22.58         98%         4019
+        31      46     2944      53423       3306.4       3327.2     -1.3%      29.82         96%         5099
+        39      45     3584      54190       3968.3       3980.2     -0.6%      35.67         91%         5772
+        47      43     4096      54408       4517.0       4541.0     -1.1%      40.69         87%         7054
+        54      40     4352      53181       4910.0       4939.8     -1.2%      44.27         82%         8045
+        62      38     4736      53701       5291.5       5306.0     -0.5%      47.55         77%         9192
+  knee: 62 threads (smallest within 3% of the 5306.0 turns/min sustained peak)
+  -> 62 threads at 9500   (/home/jovyan/magat_runs/calibration/tribes-r7615-time/threads.json)
+
+=== budget 20000 ===
+  ladder [8, 16, 23, 31, 39, 47, 54, 62]   (ceiling 62 = 64 physical cores - 2 reserved; SMT siblings never used)
+  pilot: 8 turns on 8 threads in 1.5s => 1.54s per turn per thread
+  workload: 64 positions (fixed), ~16 turns/thread/segment => ~49s per point; budget 9 min
+   threads   t/thr    turns  elapsedMs    turns/min    sustained   2ndHalf    speedup  efficiency   peakHeapMB
+         8      16      256      33240        462.1        462.7     -0.3%       8.00        100%         2085
+        16      24      768      49556        929.9        936.1     -1.3%      16.19        101%         3656
+        23      24     1152      52315       1321.2       1329.1     -1.2%      22.98        100%         5089
+        31      24     1536      52423       1758.0       1762.9     -0.6%      30.48         98%         6461
+        39      24     1920      54334       2120.2       2127.0     -0.6%      36.77         94%         8325
+        47      23     2176      54223       2407.8       2421.6     -1.1%      41.87         89%        10589
+        54      21     2304      53148       2601.0       2609.3     -0.6%      45.11         84%        12741
+        62      20     2560      54832       2801.3       2799.3      0.1%      48.40         78%        14050
+  knee: 62 threads (smallest within 3% of the 2799.3 turns/min sustained peak)
+  -> 62 threads at 20000   (/home/jovyan/magat_runs/calibration/tribes-r7615-time/threads.json)
+
+=== budget 101500 ===
+  ladder [8, 16, 23, 31, 39, 47, 54, 62]   (ceiling 62 = 64 physical cores - 2 reserved; SMT siblings never used)
+  pilot: 8 turns on 8 threads in 6.9s => 6.90s per turn per thread
+  workload: 32 positions (fixed), ~4 turns/thread/segment => ~55s per point; budget 10 min
+   threads   t/thr    turns  elapsedMs    turns/min    sustained   2ndHalf    speedup  efficiency   peakHeapMB
+         8       4       64      37137        103.4        103.3      0.2%       8.00        100%         3830
+        16       5      192      59284        194.3        194.4     -0.1%      15.06         94%         8497
+        23       5      256      55926        274.6        275.9     -0.9%      21.36         93%        10885
+        31       5      320      52486        365.8        370.8     -2.7%      28.71         93%        14148
+        39       5      448      60706        442.8        444.1     -0.6%      34.39         88%        14904
+        47       5      512      61385        500.4        501.1     -0.3%      38.80         83%        15118
+        54       4      448      50369        533.7        530.5      1.2%      41.08         76%        15509
+        62       4      512      54769        560.9        558.9      0.7%      43.27         70%        14595
+  knee: 62 threads (smallest within 3% of the 558.9 turns/min sustained peak)
+  -> 62 threads at 101500   (/home/jovyan/magat_runs/calibration/tribes-r7615-time/threads.json)
+THREADS: 9500=62 20000=62 101500=62
+===== exit 0 after 0:21:13.277136
