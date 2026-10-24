@@ -17,7 +17,7 @@ public class ContractCheckTest {
         ContractCheck.Report r = ContractCheck.run(game, positions);
         r.print();
         assertTrue("laws failed: " + r.failures(), r.allPassed());
-        assertEquals(10, r.verdicts.size());
+        assertEquals(9, r.verdicts.size());
     }
 
     @Test

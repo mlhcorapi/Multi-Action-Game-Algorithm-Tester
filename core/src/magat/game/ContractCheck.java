@@ -14,7 +14,7 @@ import java.util.Set;
  * The contract laws, as runnable checks over captured positions. Every law is total: a throw inside
  * a law is a failure of that law, not of the check.
  *
- * <p>Runs on the un-metered game for L1–L9 and wraps it itself for L10, so the meter's state never
+ * <p>Runs on the un-metered game for L1–L8 and wraps it itself for L9, so the meter's state never
  * leaks into a law that is not about the meter.
  */
 public final class ContractCheck {
@@ -90,9 +90,8 @@ public final class ContractCheck {
         r.verdicts.add(law("L5", "the end-turn action ends the turn", () -> l5(game, positions)));
         r.verdicts.add(law("L6", "serialize/deserialize round-trips", () -> l6(game, positions)));
         r.verdicts.add(law("L7", "action keys are unique within a state", () -> l7(game, positions)));
-        r.verdicts.add(law("L8", "granularities nest", () -> l8(game, positions)));
-        r.verdicts.add(law("L9", "evaluate is deterministic and finite", () -> l9(game, positions)));
-        r.verdicts.add(law("L10", "the meter counts every operation", () -> l10(game, positions)));
+        r.verdicts.add(law("L8", "evaluate is deterministic and finite", () -> l8(game, positions)));
+        r.verdicts.add(law("L9", "the meter counts every operation", () -> l9(game, positions)));
         return r;
     }
 
@@ -219,26 +218,6 @@ public final class ContractCheck {
     }
 
     private static <S, A> String l8(Game<S, A> g, List<Scenario<S>> ps) {
-        // Within a state: action identities are unique per state (L7), not across independent games,
-        // where actor ids collide.
-        for (Scenario<S> sc : ps) {
-            Map<String, String> fineToMid = new HashMap<>(), midToCoarse = new HashMap<>();
-            S s = g.copy(sc.state);
-            for (A a : g.legalActions(s)) {
-                String f = g.actionClass(s, a, Granularity.FINE);
-                String m = g.actionClass(s, a, Granularity.MID);
-                String c = g.actionClass(s, a, Granularity.COARSE);
-                if (f == null || m == null || c == null) return sc + ": null action class";
-                String pm = fineToMid.put(f, m);
-                if (pm != null && !pm.equals(m)) return sc + ": FINE " + f + " maps to two MID classes";
-                String pc = midToCoarse.put(m, c);
-                if (pc != null && !pc.equals(c)) return sc + ": MID " + m + " maps to two COARSE classes";
-            }
-        }
-        return null;
-    }
-
-    private static <S, A> String l9(Game<S, A> g, List<Scenario<S>> ps) {
         for (Scenario<S> sc : ps) {
             S s = g.copy(sc.state);
             int player = g.activePlayer(s);
@@ -251,7 +230,7 @@ public final class ContractCheck {
         return null;
     }
 
-    private static <S, A> String l10(Game<S, A> g, List<Scenario<S>> ps) {
+    private static <S, A> String l9(Game<S, A> g, List<Scenario<S>> ps) {
         MeteredGame<S, A> m = MeteredGame.of(g);
         EngineCounters engine = (g instanceof EngineCounters) ? (EngineCounters) g : null;
         Scenario<S> sc = ps.get(0);

@@ -3,10 +3,7 @@ package magat.games.tribes;
 import core.Constants;
 import core.Types;
 import core.actions.Action;
-import core.actions.cityactions.Build;
 import core.actions.cityactions.CityAction;
-import core.actions.cityactions.Spawn;
-import core.actions.tribeactions.ResearchTech;
 import core.actions.unitactions.UnitAction;
 import core.actors.Actor;
 import core.actors.City;
@@ -16,7 +13,6 @@ import core.game.ComputeMeter;
 import core.game.GameState;
 import magat.game.EngineCounters;
 import magat.game.Game;
-import magat.game.Granularity;
 import magat.game.ScenarioSource;
 import players.heuristics.TribesSimpleHeuristic;
 
@@ -181,40 +177,6 @@ public final class TribesGame implements Game<TribesState, Action>, EngineCounte
     @Override
     public String actionKey(Action action) {
         return action.toString();
-    }
-
-    @Override
-    public String actionClass(TribesState state, Action a, Granularity level) {
-        switch (level) {
-            case COARSE:
-                return a.getActionType().name();
-            case MID: {
-                String q = qualifier(state.raw(), a);
-                return q == null ? a.getActionType().name() : a.getActionType().name() + ":" + q;
-            }
-            case FINE:
-            default:
-                return a.toString();
-        }
-    }
-
-    /** The MID qualifier of {@code Stage1BiasedAgent.qualifierOf}: unit type, building, spawned unit, or tech. */
-    private static String qualifier(GameState gs, Action a) {
-        try {
-            if (a instanceof UnitAction) {
-                Actor act = gs.getActor(((UnitAction) a).getUnitId());
-                return (act instanceof Unit) ? ((Unit) act).getType().name() : null;
-            } else if (a instanceof Build) {
-                return ((Build) a).getBuildingType().name();
-            } else if (a instanceof Spawn) {
-                return ((Spawn) a).getUnitType().name();
-            } else if (a instanceof ResearchTech) {
-                return ((ResearchTech) a).getTech().name();
-            }
-            return null;
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     /** The engine's own unfiltered action count, as the published manifest defines it. */

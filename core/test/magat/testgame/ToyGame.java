@@ -2,7 +2,6 @@ package magat.testgame;
 
 import magat.game.Capture;
 import magat.game.Game;
-import magat.game.Granularity;
 import magat.game.Scenario;
 import magat.game.ScenarioSource;
 
@@ -113,16 +112,6 @@ public final class ToyGame implements Game<ToyGame.State, ToyGame.Move> {
     @Override public boolean endsTurn(Move m) { return m.isEnd(); }
     @Override public Move endTurnAction(State s) { return isTerminal(s) ? null : END; }
     @Override public String actionKey(Move m) { return m.toString(); }
-
-    @Override
-    public String actionClass(State s, Move m, Granularity level) {
-        if (m.isEnd()) return "END";
-        switch (level) {
-            case COARSE: return "ADD";
-            case MID: return "ADD:" + m.idx;
-            default: return m.toString();
-        }
-    }
 
     @Override public int branchingFactor(State s) { return legalActions(s).size(); }
     @Override public void reseed(State s, long seed) { s.rng = new Random(seed); }

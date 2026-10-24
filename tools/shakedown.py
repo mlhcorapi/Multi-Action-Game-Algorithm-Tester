@@ -72,7 +72,7 @@ def main(argv) -> int:
           [PY, ROOT / "magat.py", "test"], "OK (")
 
     step("3. Contract laws on published positions")
-    check("L1-L10 pass", [PY, ROOT / "magat.py", "check", "contract", "--game", game, "--scenarios", "4"], "CONTRACT: PASS")
+    check("L1-L9 pass", [PY, ROOT / "magat.py", "check", "contract", "--game", game, "--scenarios", "4"], "CONTRACT: PASS")
 
     step("4. Gates and probes: equivalence, overhead, audit")
     check("emcts reproduces the engine's agent at 8k on 2 positions",
