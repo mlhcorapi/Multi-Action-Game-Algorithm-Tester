@@ -18,6 +18,13 @@ public interface Oracle<S> {
     Signature plan(Scenario<S> scenario, long seed, long budgetUnits, double[] weights);
 
     /**
+     * Whether the reference implementation pays its initialization from the budget: the gate plays the port by
+     * the same rule, so the two stop at the same point. The engine's EMCTS bounds its search alone and pays its
+     * greedy initialization outside the budget; its TBETS charges its seeding to the budget.
+     */
+    TurnBudget.Initialization initialization();
+
+    /**
      * Initialization copies the reference implementation makes that have no effect on anything it
      * computes, and which the port therefore does not make. The gate expects exactly this many more
      * initialization copies on the oracle's side.

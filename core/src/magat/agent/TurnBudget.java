@@ -12,9 +12,9 @@ import magat.meter.Meter;
  * thinking time. An agent with no initialization phase never calls {@code beginSearch()}, and the whole
  * turn counts.
  *
- * <p>One exception, {@link Initialization#OUTSIDE_BUDGET}: the engine's reference agents bound their search
- * alone and pay their initialization outside it, so the equivalence gate plays a port by that rule to
- * compare it with its original turn for turn. Nothing else uses it.
+ * <p>One exception, {@link Initialization#OUTSIDE_BUDGET}: the engine's EMCTS bounds its search alone and pays
+ * its initialization outside it, so the equivalence gate plays its port by that rule to compare the two turn
+ * for turn ({@link Oracle#initialization}). Nothing else uses it.
  *
  * <p>{@link #ceiling} is the phase rule of the EMCTS family, kept exactly: the per-phase slice is the
  * integer division {@code search units / phases}, so the last ceiling can sit slightly below the budget and
@@ -22,7 +22,7 @@ import magat.meter.Meter;
  */
 public final class TurnBudget {
 
-    /** Whether a turn's initialization is paid from its budget: always, except inside the equivalence gate. */
+    /** Whether a turn's initialization is paid from its budget: always, except in the gate of an original that does not. */
     public enum Initialization {
         IN_BUDGET("in-budget"),
         OUTSIDE_BUDGET("outside-budget");

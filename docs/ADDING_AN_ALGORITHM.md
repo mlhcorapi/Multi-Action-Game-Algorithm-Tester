@@ -194,7 +194,9 @@ port against the original rather than trusting it:
    - the initialization spend;
    - the counters.
 
-   Register it in the game module's `oracles()`.
+   It also says whether the original pays its initialization from the budget (`initialization()`): the
+   gate plays the port by the same rule, so the two stop at the same point. Register it in the game
+   module's `oracles()`.
 2. Run the oracle gate:
 
    ```bash

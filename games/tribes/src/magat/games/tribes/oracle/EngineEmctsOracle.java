@@ -6,6 +6,7 @@ import core.game.ComputeMeter;
 import core.game.GameState;
 import magat.agent.Oracle;
 import magat.agent.Signature;
+import magat.agent.TurnBudget;
 import magat.game.Scenario;
 import magat.games.tribes.TribesState;
 import players.ExperimentalEMCTS.ExperimentalEMCTSAgent;
@@ -34,6 +35,12 @@ public final class EngineEmctsOracle implements Oracle<TribesState> {
     @Override
     public String describe() {
         return "engine ExperimentalEMCTSAgent(PLUS, k=1)";
+    }
+
+    /** The engine's EMCTS bounds its search alone: its greedy initialization is paid outside the budget. */
+    @Override
+    public TurnBudget.Initialization initialization() {
+        return TurnBudget.Initialization.OUTSIDE_BUDGET;
     }
 
     @Override
