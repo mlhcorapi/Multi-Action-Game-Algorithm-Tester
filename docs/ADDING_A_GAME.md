@@ -95,8 +95,13 @@ them:
 ```java
 AgentRegistry<S, A> r = new AgentRegistry<>();
 r.register(RandomAgent.factory());     // the floor
+r.register(Mcts.factory());
 r.register(EmctsFactory.plain());      // emcts: the reference arm, whose advance defines the unit
+r.register(Oep.factory());
+r.register(Tbets.factory());
 ```
+
+Name the four `@reference` in the module's `armSets()`.
 
 **Oracles** are only for arms ported from an existing implementation (see
 [`ADDING_AN_ALGORITHM.md`](ADDING_AN_ALGORITHM.md)).
@@ -135,7 +140,7 @@ be measured, however good its engine.
    `games/<game>/calibration/<machine>/` with an `ORIGIN.md`.
 3. **The gates.** `check audit` on the reference arms, `check equivalence` for every ported arm, and
    `check replay` once a result is published.
-4. **The experiments.** A reference ladder spec in `experiments/<game>/`. The notebook generator
+4. **The experiments.** A reference spec in `experiments/<game>/`. The notebook generator
    (`tools/make_notebook.py`) makes one cell per spec in `experiments/tribes/` with
    `experiment_cells("tribes")`; add `experiment_cells("<game>")` to its `CELLS` the same way.
 

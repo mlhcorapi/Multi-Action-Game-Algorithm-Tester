@@ -1,0 +1,32 @@
+{
+  "name": "reference",
+  "game": "tribes",
+  "description": "The four reference algorithms and the random floor at the published levels (games/tribes/levels.json: 500, 1000 and 5000 ms of a whole turn on the R7615), on the whole portfolio: the field every new arm is compared against.",
+  "portfolio": "tribes/v1",
+  "split": "all",
+  "baseline": "emcts",
+  "levels": [
+    { "budget": 20000, "visits": 8 },
+    { "budget": 9500, "visits": 8 },
+    { "budget": 101500, "visits": 6 }
+  ],
+  "arms": [
+    { "id": "random" },
+    { "id": "mcts" },
+    { "id": "emcts" },
+    { "id": "oep" },
+    { "id": "tbets" }
+  ],
+  "contrasts": [
+    { "a": "mcts", "b": "random", "label": "MCTS over the floor" },
+    { "a": "emcts", "b": "random", "label": "EMCTS over the floor" },
+    { "a": "oep", "b": "random", "label": "OEP over the floor" },
+    { "a": "tbets", "b": "random", "label": "TBETS over the floor" },
+    { "a": "emcts", "b": "mcts", "label": "EMCTS against MCTS" },
+    { "a": "oep", "b": "mcts", "label": "OEP against MCTS" },
+    { "a": "tbets", "b": "mcts", "label": "TBETS against MCTS" },
+    { "a": "oep", "b": "emcts", "label": "OEP against EMCTS" },
+    { "a": "tbets", "b": "emcts", "label": "TBETS against EMCTS" },
+    { "a": "tbets", "b": "oep", "label": "TBETS against OEP" }
+  ]
+}

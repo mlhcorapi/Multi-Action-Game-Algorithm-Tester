@@ -20,12 +20,12 @@ import static org.junit.Assert.*;
 
 /**
  * The published levels (games/tribes/levels.json, measured on the R7615 by calibrate-time) are 500, 1000 and
- * 5000 ms of a whole emcts turn within the tolerance, and the reference ladder runs at exactly those levels.
+ * 5000 ms of a whole emcts turn within the tolerance, and the reference experiment runs at exactly those levels.
  */
 public class PublishedLevelsTest {
 
     private static final Path LEVELS = Paths.get("games", "tribes", "levels.json");
-    private static final Path LADDER = Paths.get("experiments", "tribes", "reference-ladder.json");
+    private static final Path REFERENCE = Paths.get("experiments", "tribes", "reference.json");
     private static final Path RECORD = Paths.get("games", "tribes", "levels-record");
     private static final long[] UNITS = {9_500L, 20_000L, 101_500L};
     private static final int[] TIMES = {500, 1000, 5000};
@@ -74,13 +74,15 @@ public class PublishedLevelsTest {
     }
 
     @Test
-    public void theReferenceLadderRunsAtThePublishedLevels() throws Exception {
-        Experiment x = Experiment.load(LADDER);
+    public void theReferenceExperimentRunsAtThePublishedLevels() throws Exception {
+        Experiment x = Experiment.load(REFERENCE);
         List<Long> budgets = new ArrayList<>();
         for (Experiment.Level l : x.levels) budgets.add(l.budget);
         budgets.sort(null);
         List<Long> published = new ArrayList<>();
         for (JsonValue v : levels().get("levels").asArray()) published.add(v.asObject().getLong("units", 0));
         assertEquals(published, budgets);
+        assertTrue("the reference algorithms and the random floor, on the whole portfolio",
+                x.armIds().containsAll(TribesAgents.REFERENCE) && x.armIds().contains("random") && "all".equals(x.split));
     }
 }
