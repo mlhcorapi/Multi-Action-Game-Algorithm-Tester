@@ -93,6 +93,17 @@ class SyntheticTree(unittest.TestCase):
         self.assertAlmostEqual(g.TimeMultiplier, 200.0 / 250.0, places=9)
         self.assertAlmostEqual(g.ArmTimeRatio, 250.0 / 100.0, places=9)
 
+    def test_the_budget_multiplier_compares_values_not_search_gains(self):
+        # An arm that starts from a plan of its own, 300 below the baseline's, and ends where the baseline ends at
+        # 2,000 units: worth twice its budget, though its search gain is 300 above the baseline's there.
+        t = self.t.copy()
+        good = t.arm == "good"
+        t.loc[good, "initial"] = t.loc[good, "initial"] - 300
+        t["gain"] = t["final"] - t["initial"]
+        r = self.row(measures.budget_multiplier(t, "base", n=50), Arm="good", Budget=1000)
+        self.assertAlmostEqual(r.Multiplier, 2.0, places=9)
+        self.assertEqual(r.Flag, "inside")
+
     def test_no_multiplier_without_two_baseline_levels(self):
         one = self.t[~((self.t.arm == "base") & (self.t.budget == 4000))]
         self.assertTrue(measures.budget_multiplier(one, "base", n=50).empty)

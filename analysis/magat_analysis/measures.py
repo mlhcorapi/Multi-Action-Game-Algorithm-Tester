@@ -104,7 +104,7 @@ def contrasts(t, pairs, split="", n=N_BOOT) -> pd.DataFrame:
 
 # --------------------------------------------------------------------------- budget multiplier
 def locate(M: np.ndarray, A: np.ndarray):
-    """Where each arm gain A sits on its baseline curve M (rows: resamples, columns: budget levels).
+    """Where each arm value A sits on its baseline curve M (rows: resamples, columns: budget levels).
 
     Returns the segment index i (the adjacent pair of levels interpolated between; the end segments
     extrapolate past either end of the ladder), the fraction along it, and whether the curve rises at
@@ -127,12 +127,14 @@ def along(X: np.ndarray, i: np.ndarray, frac: np.ndarray) -> np.ndarray:
 def budget_multiplier(t, baseline, split="", n=N_BOOT) -> pd.DataFrame:
     """The equivalent budget multiplier: how much budget the baseline would need to match the arm.
 
-    Search gain (final - initial) on the (scenario, visit) cells where the baseline ran at every one
-    of its levels and the arm ran, none of them terminal. The baseline's mean gain per level is
-    interpolated log-linearly in budget between adjacent levels; the arm's mean gain is solved for the
-    baseline budget that reaches it; the multiplier is that budget over the arm's own. The interval
-    resamples scenarios. A crossing past the top of the ladder is `extrapolated` (a lower bound under
-    diminishing returns), one below the bottom `outside`.
+    The plan's value (`final`) on the (scenario, visit) cells where the baseline ran at every one of its
+    levels and the arm ran, none of them terminal. The baseline's mean value per level is interpolated
+    log-linearly in budget between adjacent levels; the arm's mean value is solved for the baseline
+    budget that reaches it; the multiplier is that budget over the arm's own. Values and not search gains
+    (final - initial): an arm's `initial` is its own starting plan, so a gain does not compare across
+    arms, while a value on the same cells does, and gives the gain's answer for an arm that starts as the
+    baseline does. The interval resamples scenarios. A crossing past the top of the ladder is
+    `extrapolated` (a lower bound under diminishing returns), one below the bottom `outside`.
 
     Its wall-clock twin solves the same crossing on the baseline's mean plan time per level, log-linear
     in milliseconds, and divides by the arm's own mean plan time: how much more of the baseline's time
@@ -145,14 +147,14 @@ def budget_multiplier(t, baseline, split="", n=N_BOOT) -> pd.DataFrame:
     rows = []
     for budget in sorted(t.budget.unique()):
         for arm in arms_at(t, budget, baseline):
-            j = t[(t.arm == arm) & (t.budget == budget) & ~t.term][KEYS + ["gain", "plan_ms"]]
-            j = j.rename(columns={"gain": "ga", "plan_ms": "ta"})
+            j = t[(t.arm == arm) & (t.budget == budget) & ~t.term][KEYS + ["final", "plan_ms"]]
+            j = j.rename(columns={"final": "va", "plan_ms": "ta"})
             for k, b in enumerate(levels):
-                x = t[(t.arm == baseline) & (t.budget == b) & ~t.term][KEYS + ["gain", "plan_ms"]]
-                j = j.merge(x.rename(columns={"gain": f"g{k}", "plan_ms": f"t{k}"}), on=KEYS)
+                x = t[(t.arm == baseline) & (t.budget == b) & ~t.term][KEYS + ["final", "plan_ms"]]
+                j = j.merge(x.rename(columns={"final": f"v{k}", "plan_ms": f"t{k}"}), on=KEYS)
             if j.empty:
                 continue
-            cols = [f"g{k}" for k in range(L)] + ["ga"] + [f"t{k}" for k in range(L)] + ["ta"]
+            cols = [f"v{k}" for k in range(L)] + ["va"] + [f"t{k}" for k in range(L)] + ["ta"]
             sums, counts, _ = cluster_table(j, cols)
             point = (sums.sum(axis=0) / counts.sum())[None, :]
             boot = resampled_means(sums, counts, n, rng_for("multiplier", split, budget, arm, baseline))
@@ -175,8 +177,8 @@ def budget_multiplier(t, baseline, split="", n=N_BOOT) -> pd.DataFrame:
             same = levels.index(budget) if budget in levels else None
             rows.append(dict(
                 Budget=int(budget), Arm=arm, Baseline=baseline, Cells=int(counts.sum()), Scenarios=len(counts),
-                ArmGain=float(A[0]),
-                BaseGains=";".join(f"{lv}:{g:.4f}" for lv, g in zip(levels, M[0])),
+                ArmFinal=float(A[0]),
+                BaseFinals=";".join(f"{lv}:{g:.4f}" for lv, g in zip(levels, M[0])),
                 Multiplier=float(mult[0]), Lo=lo, Hi=hi, EquivBudget=float(mult[0] * budget), Flag=flag,
                 BootUndefined=float(np.mean(~np.isfinite(out["boot"][0]))),
                 ArmMs=float(ta[0]),
