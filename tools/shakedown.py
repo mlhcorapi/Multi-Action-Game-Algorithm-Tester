@@ -153,6 +153,13 @@ def main(argv) -> int:
           then=lambda: "profile.emcts@4000.w.advance" in priced.read_text(encoding="utf-8")
           and "- Verdict: COMPLETE" in (controlled / "record" / "SUMMARY.md").read_text(encoding="utf-8"))
     check("a currency that prices every arm is not measured again", cc, "nothing to measure")
+    older = data / "shakedown" / f"controlled-{game}-older"
+    shutil.rmtree(older, ignore_errors=True)
+    older.mkdir(parents=True)
+    (older / "compute_weights.properties").write_text(
+        priced.read_text(encoding="utf-8") + "profile.retired-arm@2000.w.advance = 1.0\n", encoding="utf-8")
+    check("a currency an older MAGAT wrote, pricing an arm no longer registered, is named in the preflight",
+          [*cc[:cc.index("--out") + 1], older, *cc[cc.index("--out") + 2:], "--preflight"], "does not register (retired-arm)")
     kept = {}
     check("--checks checks it again and writes nothing", [*cc, "--checks"], "check    self:",
           then=lambda: priced.read_text(encoding="utf-8") == kept.setdefault("w", priced.read_text(encoding="utf-8")))
