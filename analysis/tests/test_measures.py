@@ -48,6 +48,15 @@ class SyntheticTree(unittest.TestCase):
         self.assertEqual([p.name for p in load.find_splits(self.tmp / "run")], ["dev", "holdout"])
         self.assertEqual(load.find_splits(self.tmp / "run" / "holdout"), [self.tmp / "run" / "holdout"])
 
+    def test_the_provenance_names_every_commit_that_played_turns(self):
+        def written_by(leaves):
+            sp = load.Split(self.sp.path, "dev", dict(magat=dict(commit="aaaa", notebook="modified")), leaves, self.t)
+            return load.provenance(sp, None)["magat_commit"]
+        self.assertEqual(written_by([dict(commit="aaaa"), dict(commit="aaaa")]), "aaaa (notebook modified)")
+        self.assertEqual(written_by([dict(arm="older leaf")]), "aaaa (notebook modified)", "leaves from before commits were recorded")
+        self.assertEqual(written_by([dict(commit="aaaa"), dict(commit="bbbb", earlierCommits=["aaaa"])]),
+                         "aaaa (notebook modified); its turns were played by aaaa, bbbb")
+
     def test_the_contrasts_come_from_the_spec(self):
         pairs = load.comparisons(load.load_spec(self.spec))
         self.assertEqual([(p["a"], p["b"], p["label"]) for p in pairs], [("great", "good", "great over good")])

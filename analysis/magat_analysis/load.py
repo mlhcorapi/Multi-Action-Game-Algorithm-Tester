@@ -255,6 +255,10 @@ def provenance(split: Split, spec) -> dict:
     m = r.get("magat") or {}
     # -dirty marks code changes only; a notebook saved with its outputs is named apart.
     commit = (m.get("commit") or m.get("version") or "unknown") + (f" (notebook {m['notebook']})" if m.get("notebook") else "")
+    # The commits that played the turns, as the leaves record them, when they are not only the tree's own.
+    played = sorted({c for leaf in split.leaves for c in [leaf.get("commit"), *(leaf.get("earlierCommits") or [])] if c})
+    if played and played != [m.get("commit")]:
+        commit += "; its turns were played by " + ", ".join(played)
     out = dict(
         split=split.name,
         path=shown(split.path),
