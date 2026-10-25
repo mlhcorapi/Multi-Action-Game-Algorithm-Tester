@@ -12,6 +12,7 @@ import magat.agents.emcts.EmctsFactory;
 import magat.agents.random.RandomAgent;
 import magat.game.Game;
 import magat.game.GameModule;
+import magat.machine.MachineProfile;
 import magat.meter.Meter;
 import magat.meter.Weights;
 import magat.portfolio.Portfolio;
@@ -27,6 +28,7 @@ import org.junit.Test;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -167,6 +169,19 @@ public class GridRunnerTest {
         assertNull("no measured time, no share", GridRunner.audit(w, 4000, 0, 2));
         // the random floor declares nothing and keeps the plain layout
         assertFalse(read(Leaf.dir(out.resolve("dev"), "random", 300).resolve(Leaf.TURNS)).contains("op_"));
+    }
+
+    @Test
+    public void theAuditKnowsTheCalibratingMachineByItsCpuModel() throws Exception {
+        // A calibration pins its JVMs to a few cores, so its file counts fewer than a run on the same machine sees.
+        String model = MachineProfile.get().cpuModel();
+        assertEquals("AMD EPYC 9534 64-Core Processor", MachineProfile.modelOf("AMD EPYC 9534 64-Core Processor | 16 physical / 16 logical"));
+        Path pinned = weightsV2(work, "pinned.properties", 0.5, "emcts");
+        Files.write(pinned, ("machine = " + model + " | 2 physical / 2 logical\n").getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND);
+        assertTrue(GridRunner.audit(Weights.load(pinned), 4000, 5, 2).getBoolean("sameMachine", false));
+        Path other = weightsV2(work, "other.properties", 0.5, "emcts");
+        Files.write(other, "machine = Another CPU | 2 physical / 2 logical\n".getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND);
+        assertFalse(GridRunner.audit(Weights.load(other), 4000, 5, 2).getBoolean("sameMachine", true));
     }
 
     @Test

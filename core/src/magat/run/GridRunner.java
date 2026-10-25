@@ -306,10 +306,11 @@ public final class GridRunner {
         double refNs = weights.referenceAdvanceNanos();
         if (!(refNs > 0) || measuredMillis <= 0) return null;
         double predictedMs = units * refNs / 1e6;
+        // By CPU model: a calibration pins its JVMs to a few cores, so the file's description counts those.
         String machine = weights.header().get("machine");
         return new JsonObject().add("unpricedShare", 1 - predictedMs / measuredMillis).add("predictedMs", predictedMs)
                 .add("measuredMs", measuredMillis).add("threads", threads)
-                .add("sameMachine", machine != null && machine.equals(MachineProfile.get().describe()))
+                .add("sameMachine", machine != null && MachineProfile.modelOf(machine).equals(MachineProfile.get().cpuModel()))
                 .add("basis", "(units + initialization units) x referenceAdvanceNanos " + refNs + " ns, against the turns' plan milliseconds");
     }
 

@@ -151,6 +151,15 @@ public final class MachineProfile {
         return cpuModel + " | " + physicalCores + " physical" + (coresDetected ? "" : " (assumed)") + " / " + logicalCpus + " logical";
     }
 
+    /**
+     * The CPU model a {@link #describe()} or {@link #summary()} line names. The core counts after it are the
+     * ones the JVM was allowed, so they differ between a pinned calibration and a run on the same machine.
+     */
+    public static String modelOf(String described) {
+        int bar = described.indexOf(" | ");
+        return (bar < 0 ? described : described.substring(0, bar)).trim();
+    }
+
     public void printBanner(String job) {
         System.out.println("------------------------------------------------------------");
         System.out.println("[machine] " + job);
