@@ -52,6 +52,11 @@ turn: a node is a position partway through it, reached by the actions on the pat
 - **A leaf** is a node where the game is over, the turn has passed, the turn has no action left but
   the end of turn, or the plan is 20 actions long. Once every node has been expanded, the search stops.
 - **The turn played** is the most-visited path from the root, then the end of turn.
+- **On Tribes that plan is short.** A position has about 270 legal actions, and UCB1 tries every action
+  of a node before it descends below it, so on the R7615's first run the tree reached a depth of 3 at
+  9,500 units and 4 at 101,500. The turn played was 4 to 5 actions long, its end of turn included,
+  where every other arm, `random` too, played 16 to 18. That breadth over a whole turn is the difficulty
+  OEP and EMCTS were designed for, and it is most of why `mcts` trails them.
 - **Memory.** A new node's position is evaluated and dropped; the first time the search expands that
   node, the position is rebuilt from its parent's (a copy and an advance), so a chance event in its
   action may come out differently from the one evaluated. A tree holds a position only for the nodes
