@@ -1,0 +1,15 @@
+arm=random;budget=20000;split=all
+arm=mcts;budget=20000;split=all
+arm=emcts;budget=20000;split=all
+arm=oep;budget=20000;split=all
+arm=tbets;budget=20000;split=all
+arm=random;budget=9500;split=all
+arm=mcts;budget=9500;split=all
+arm=emcts;budget=9500;split=all
+arm=oep;budget=9500;split=all
+arm=tbets;budget=9500;split=all
+arm=random;budget=101500;split=all
+arm=mcts;budget=101500;split=all
+arm=emcts;budget=101500;split=all
+arm=oep;budget=101500;split=all
+arm=tbets;budget=101500;split=all
