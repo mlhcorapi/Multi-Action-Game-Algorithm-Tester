@@ -233,9 +233,13 @@ preflight, one cell that measures the currency and checks it, and one that confi
 is priced and bundles the record. The measuring cell skips itself once the currency prices every
 reference arm at every level. Over a currency that lacks an arm, such as one measured before that arm was
 registered, it prices the missing arms and merges them in by ratio, and the preflight cell says so
-first; to measure a whole new currency in one session instead, give `CURRENCY_NAME` a new name. A session
-cut short wrote nothing, and running the cell again measures it again. The plan prints the expected
-finishing time after the stability check.
+first; to measure a whole new currency in one session instead, give `CURRENCY_NAME` a new name. A
+currency an older MAGAT wrote, one that prices arms this MAGAT no longer registers, should be replaced,
+not extended, and the preflight warns about one: move its whole folder
+(`<data>/calibration/<game>-<name>`, its `record/` with it) aside, or give `CURRENCY_NAME` a new name.
+Move the runs priced in it aside as well, since the runner will not continue a leaf in another currency.
+A session cut short wrote nothing, and running the cell again measures it again. The plan prints the
+expected finishing time after the stability check.
 
 ### What you cannot change
 

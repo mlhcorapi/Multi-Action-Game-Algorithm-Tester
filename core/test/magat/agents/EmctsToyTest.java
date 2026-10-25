@@ -55,6 +55,38 @@ public class EmctsToyTest {
         assertTrue("so the search in the budget is the shorter by the initialization", in.units < out.units);
     }
 
+    /** A turn by the engine's accounting, which only the equivalence gate uses. */
+    private TurnRecord byTheEnginesRule(long budget) {
+        magat.agent.TurnBudget.setInitialization(magat.agent.TurnBudget.Initialization.OUTSIDE_BUDGET);
+        try {
+            return Episode.run(game, positions.get(0), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), budget);
+        } finally {
+            magat.agent.TurnBudget.setInitialization(magat.agent.TurnBudget.Initialization.IN_BUDGET);
+        }
+    }
+
+    @Test
+    public void aTurnStopsWhenItsBudgetIsSpentWhereTheEnginesRuleGoesOn() {
+        // Here the greedy initialization takes 5 steps, about 37 units, and a generation about 13. A turn may pass
+        // its budget by the candidate it was trying (a copy, an advance and an evaluation, 1.24 units) and the
+        // root's evaluation, no more.
+        final double over = 1.5;
+        TurnRecord whole = byTheEnginesRule(2_000);
+        for (long budget : new long[]{5, 20, 40, 66, 136}) {
+            TurnRecord in = Episode.run(game, positions.get(0), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), budget);
+            double turn = in.units + in.initUnits;
+            assertTrue(budget + ": the turn stops once its budget is spent (" + turn + ")", turn < budget + over);
+            TurnRecord engine = byTheEnginesRule(budget);
+            assertEquals("the engine's rule never cuts its initialization short", whole.initUnits, engine.initUnits, 1e-9);
+            assertEquals("and gives each of its 20 burns a child, past the budget", 20, engine.curve.size());
+        }
+        TurnRecord small = Episode.run(game, positions.get(0), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 10);
+        assertTrue("a budget below the initialization cuts it short", small.initUnits < whole.initUnits);
+        assertEquals("and leaves the search nothing: no generation", 0.0, small.units, 0.0);
+        assertTrue("and no burn", small.curve.isEmpty());
+        assertTrue("the plan it has is played, its end of turn included", small.sequenceLength >= 2);
+    }
+
     @Test
     public void searchRunsWithinBudgetAndImproves() {
         TurnRecord r = Episode.run(game, positions.get(0), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 2_000);

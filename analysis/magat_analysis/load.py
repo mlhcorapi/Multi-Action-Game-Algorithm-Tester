@@ -198,6 +198,16 @@ def comparisons(*specs) -> list:
     return out
 
 
+# --------------------------------------------------------------------------- the published levels
+def levels(game) -> dict:
+    """A game's published levels (games/<game>/levels.json): `ms`, each level's units to the time it was set to,
+    and `machine`, the CPU model it was timed on. Empty when the game publishes none."""
+    p = ROOT / "games" / str(game) / "levels.json"
+    j = read_json(p) if p.is_file() else {}
+    ms = {int(lv["units"]): float(lv["time_ms"]) for lv in j.get("levels", []) if "units" in lv and "time_ms" in lv}
+    return dict(ms=ms, machine=str(j.get("machine", "")).split(" | ")[0], arm=j.get("reference_arm", ""))
+
+
 # --------------------------------------------------------------------------- weights files
 FORWARD_MODEL = ("advance", "copy", "eval")
 
@@ -245,6 +255,10 @@ def provenance(split: Split, spec) -> dict:
     m = r.get("magat") or {}
     # -dirty marks code changes only; a notebook saved with its outputs is named apart.
     commit = (m.get("commit") or m.get("version") or "unknown") + (f" (notebook {m['notebook']})" if m.get("notebook") else "")
+    # The commits that played the turns, as the leaves record them, when they are not only the tree's own.
+    played = sorted({c for leaf in split.leaves for c in [leaf.get("commit"), *(leaf.get("earlierCommits") or [])] if c})
+    if played and played != [m.get("commit")]:
+        commit += "; its turns were played by " + ", ".join(played)
     out = dict(
         split=split.name,
         path=shown(split.path),

@@ -103,9 +103,10 @@ real time limit would give arms different amounts of work on the same position.
 
 A turn's spend is everything it does, its initialization included (a greedy initial plan, a seeded
 population). An initialization outside the budget would let turns run over their level and would give an
-algorithm with a costly one that work free. The calibration and `check time` report each cell's mean
-spend against its level and flag anything above 1.10×. The one exception is the equivalence gate (below),
-which plays a port by its original's rule.
+algorithm with a costly one that work free. Every arm stops when its budget is spent, passing it by at
+most the small unit of work under way, so a smaller budget means less thinking all the way down. The
+calibration and `check time` report each cell's mean spend against its level and flag anything above
+1.10×. The one exception is the equivalence gate (below), which plays a port by its original's rule.
 
 ## 6. Calibrating a machine
 

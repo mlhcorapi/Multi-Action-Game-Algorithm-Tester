@@ -1,5 +1,8 @@
 package magat.run;
 
+import com.eclipsesource.json.Json;
+import com.eclipsesource.json.JsonArray;
+import com.eclipsesource.json.JsonObject;
 import magat.agent.AgentFactory;
 import magat.agent.AgentRegistry;
 import magat.agent.Oracle;
@@ -9,6 +12,7 @@ import magat.agents.emcts.EmctsFactory;
 import magat.agents.random.RandomAgent;
 import magat.game.Game;
 import magat.game.GameModule;
+import magat.machine.MachineProfile;
 import magat.meter.Meter;
 import magat.meter.Weights;
 import magat.portfolio.Portfolio;
@@ -24,6 +28,7 @@ import org.junit.Test;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -167,6 +172,19 @@ public class GridRunnerTest {
     }
 
     @Test
+    public void theAuditKnowsTheCalibratingMachineByItsCpuModel() throws Exception {
+        // A calibration pins its JVMs to a few cores, so its file counts fewer than a run on the same machine sees.
+        String model = MachineProfile.get().cpuModel();
+        assertEquals("AMD EPYC 9534 64-Core Processor", MachineProfile.modelOf("AMD EPYC 9534 64-Core Processor | 16 physical / 16 logical"));
+        Path pinned = weightsV2(work, "pinned.properties", 0.5, "emcts");
+        Files.write(pinned, ("machine = " + model + " | 2 physical / 2 logical\n").getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND);
+        assertTrue(GridRunner.audit(Weights.load(pinned), 4000, 5, 2).getBoolean("sameMachine", false));
+        Path other = weightsV2(work, "other.properties", 0.5, "emcts");
+        Files.write(other, "machine = Another CPU | 2 physical / 2 logical\n".getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND);
+        assertFalse(GridRunner.audit(Weights.load(other), 4000, 5, 2).getBoolean("sameMachine", true));
+    }
+
+    @Test
     public void runsTheGridAndAResumeSkipsEveryFinishedLeaf() throws Exception {
         Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-alt"));
         Experiment x = Experiment.load(spec(SPEC));
@@ -211,6 +229,45 @@ public class GridRunnerTest {
         assertEquals(full.size(), resumed.size());
         assertEquals("the same turns, whatever order they finished in (wall-clock columns aside)",
                 withoutClock(full), withoutClock(resumed));
+    }
+
+    @Test
+    public void eachInvocationAndEachLeafRecordTheCommitThatPlayedIt() throws Exception {
+        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-alt"));
+        Experiment x = Experiment.load(spec(SPEC));
+        String was = System.getProperty("magat.git.commit");
+        try {
+            System.setProperty("magat.git.commit", "aaaa");
+            GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, options(Split.Half.DEV));
+            // A stop mid-leaf, then a resume from another commit.
+            Path root = out.resolve("dev"), leaf = Leaf.dir(root, "emcts", 600), turns = leaf.resolve(Leaf.TURNS);
+            List<String> full = Files.readAllLines(turns);
+            Files.write(turns, (String.join("\n", full.subList(0, full.size() - 2)) + "\n").getBytes(StandardCharsets.UTF_8));
+            List<String> ck = new ArrayList<>(Files.readAllLines(root.resolve(GridRunner.CHECKPOINT)));
+            ck.remove(GridRunner.checkpointKey("emcts", 600, Split.Half.DEV));
+            Files.write(root.resolve(GridRunner.CHECKPOINT), (String.join("\n", ck) + "\n").getBytes(StandardCharsets.UTF_8));
+            System.setProperty("magat.git.commit", "bbbb");
+            Stdout.Captured<Integer> resumed = Stdout.capture(() ->
+                    GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, options(Split.Half.DEV)));
+            assertEquals(GridRunner.OK, (int) resumed.value);
+            assertTrue(resumed.out, resumed.out.contains("this tree was started by MAGAT aaaa; this invocation is bbbb"));
+            assertTrue(resumed.out, resumed.out.contains("emcts@600: its " + (full.size() - 3) + " turn(s) so far were played by MAGAT aaaa"));
+
+            JsonObject run = Json.parse(read(root.resolve(Provenance.FILE))).asObject();
+            assertEquals("the tree keeps the commit that started it", "aaaa", run.get("magat").asObject().getString("commit", null));
+            JsonArray invocations = run.get("invocations").asArray();
+            assertEquals("aaaa", invocations.get(0).asObject().getString("commit", null));
+            assertEquals("bbbb", invocations.get(1).asObject().getString("commit", null));
+            JsonObject resumedLeaf = Json.parse(read(leaf.resolve(Leaf.META))).asObject();
+            assertEquals("bbbb", resumedLeaf.getString("commit", null));
+            assertEquals("aaaa", resumedLeaf.get("earlierCommits").asArray().get(0).asString());
+            JsonObject untouched = Json.parse(read(Leaf.dir(root, "emcts-alt", 600).resolve(Leaf.META))).asObject();
+            assertEquals("a finished leaf keeps the commit that played it", "aaaa", untouched.getString("commit", null));
+            assertNull(untouched.get("earlierCommits"));
+        } finally {
+            if (was == null) System.clearProperty("magat.git.commit");
+            else System.setProperty("magat.git.commit", was);
+        }
     }
 
     /** The rows with plan_ms and init_ms blanked: everything a replayed turn must reproduce exactly. */

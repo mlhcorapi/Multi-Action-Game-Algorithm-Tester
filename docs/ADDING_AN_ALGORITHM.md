@@ -122,7 +122,9 @@ What each part does:
   with no initialization never calls it, and then the whole turn counts.
 - **`budget.exhausted()`** is the stop rule: units spent, at this arm's prices, reach the budget. Every
   `copy`, `advance` and `evaluate` through `game` is counted by the meter, which the agent never touches
-  for the forward model.
+  for the forward model. A turn passes its budget by the work it finishes after the check, so check
+  between small units of work; where one unit can cost a great deal, check inside it and abandon it, as
+  `emcts` does in its greedy repair ([`ALGORITHMS.md`](ALGORITHMS.md)).
 - **`new Random(seed)` is the only randomness.** The seed is the same for every arm on the same
   `(scenario, visit)`, which makes the comparison paired.
 - **`TurnRecord`** carries the values, the raw counts and `Meter.units()`, the wall-clock, the

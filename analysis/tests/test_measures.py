@@ -48,6 +48,15 @@ class SyntheticTree(unittest.TestCase):
         self.assertEqual([p.name for p in load.find_splits(self.tmp / "run")], ["dev", "holdout"])
         self.assertEqual(load.find_splits(self.tmp / "run" / "holdout"), [self.tmp / "run" / "holdout"])
 
+    def test_the_provenance_names_every_commit_that_played_turns(self):
+        def written_by(leaves):
+            sp = load.Split(self.sp.path, "dev", dict(magat=dict(commit="aaaa", notebook="modified")), leaves, self.t)
+            return load.provenance(sp, None)["magat_commit"]
+        self.assertEqual(written_by([dict(commit="aaaa"), dict(commit="aaaa")]), "aaaa (notebook modified)")
+        self.assertEqual(written_by([dict(arm="older leaf")]), "aaaa (notebook modified)", "leaves from before commits were recorded")
+        self.assertEqual(written_by([dict(commit="aaaa"), dict(commit="bbbb", earlierCommits=["aaaa"])]),
+                         "aaaa (notebook modified); its turns were played by aaaa, bbbb")
+
     def test_the_contrasts_come_from_the_spec(self):
         pairs = load.comparisons(load.load_spec(self.spec))
         self.assertEqual([(p["a"], p["b"], p["label"]) for p in pairs], [("great", "good", "great over good")])
@@ -63,6 +72,8 @@ class SyntheticTree(unittest.TestCase):
         al = self.row(h, Budget=1000, Arm="good", Stratum="all")
         self.assertEqual(al.Pairs, syn.S * syn.V)
         self.assertGreater(al.MeanDiff, 1e7, "the all-rows stratum keeps the terminal pair")
+        self.assertEqual((al.TermArm, al.TermBase), (1, 0), "the pair that ended the game is counted, in both strata")
+        self.assertEqual((nt.TermArm, nt.TermBase), (1, 0))
         self.assertIn("MeanDiff_single", h.columns)
         self.assertIn("MeanDiff_dual", h.columns)
         weak = self.row(h, Budget=4000, Arm="weak", Stratum="all")
@@ -129,6 +140,31 @@ class SyntheticTree(unittest.TestCase):
         self.assertEqual(gr.ClampedShare, 1.0, "500 ms is past the baseline's 400")
         self.assertAlmostEqual(gr.WallDiff, 50 * LN2, places=9)
         self.assertEqual(gr.Verdict, "wins both")
+        # noisy's one terminal pair (-2e9) puts zero inside its interval over all pairs; both sides of the verdict
+        # leave that pair out.
+        no = self.row(w, Arm="noisy", Budget=1000)
+        self.assertLess(self.row(h, Budget=1000, Arm="noisy", Stratum="all").Lo, 0)
+        self.assertAlmostEqual(no.UnitsDiff, self.row(h, Budget=1000, Arm="noisy", Stratum="no-terminal").MeanDiff, places=9)
+        self.assertEqual(no.Verdict, "wins both")
+
+    # ------------------------------------------------------------------ spend, time and plans
+    def test_spend_seconds_plan_length_and_the_runs_audit(self):
+        leaves = [dict(arm="good", budget=1000, profile="good@1000", threads=8, audit=dict(unpricedShare=0.2)),
+                  dict(arm="noisy", budget=1000, profile="global (arm is not priced)", threads=8, audit=dict(unpricedShare=0.9))]
+        sp = measures.spend(self.t, leaves, {1000: 500.0})
+        g = self.row(sp, Arm="good", Budget=1000)
+        w = syn.WEIGHTS["good@1000"]
+        units = [(1000 + s) * w[0] + (400 + v) * w[1] + 300 * w[2] + 10.75 for s in range(1, syn.S + 1) for v in range(syn.V)]
+        self.assertAlmostEqual(g.Spend, np.mean(units) / 1000, places=9, msg="its initialization included")
+        self.assertAlmostEqual(g.SpendMax, max(units) / 1000, places=9)
+        self.assertEqual(g.OverShare, 1.0)
+        self.assertEqual((g.MeanMillis, g.LevelMillis, g.PlanLength), (250.0, 500.0, 20.0))
+        self.assertAlmostEqual(g.TerminalShare, 1 / (syn.S * syn.V), places=9)
+        self.assertEqual((g.AuditUnpriced, g.Threads), (0.2, 8.0))
+        self.assertTrue(math.isnan(self.row(sp, Arm="noisy", Budget=1000).AuditUnpriced), "an arm that is not priced has no audit")
+        self.assertTrue(math.isnan(self.row(sp, Arm="weak", Budget=4000).LevelMillis), "4,000 is not a published level here")
+        self.assertEqual(load.levels("tribes")["ms"][9500], 500.0, "the published Tribes levels")
+        self.assertEqual(load.levels("toy")["ms"], {})
 
     # ------------------------------------------------------------------ contrasts and the design
     def test_contrasts_from_the_spec(self):
@@ -228,9 +264,13 @@ class SyntheticTree(unittest.TestCase):
             self.assertIn("currency", df.columns, name)
         summary = (out / "SUMMARY.md").read_text(encoding="utf-8")
         for heading in ("## Provenance", "## Headline (holdout)", "## Budget multiplier (dev)", "## Contrasts",
-                        "## Design", "## Re-priced", "## Scope notes"):
+                        "## Spend, time and plans (dev)", "## Design", "## Re-priced", "## Scope notes"):
             self.assertIn(heading, summary)
+        self.assertIn("| 1000 | good | 36 | **1.27x** | 100% | 0.25 | - | 20.0 | 2.8% | - |", summary)
+        self.assertIn("more than 1.10x their level: good@1000 (1.27x)", summary)
         self.assertLess(summary.index("## Headline (dev)"), summary.index("## Headline (holdout)"))
+        good = next(line for line in summary.splitlines() if line.startswith("| good | 35 |"))
+        self.assertIn("| 1 / 0 |", good, "the headline leads with the 35 pairs where neither plan ends the game, and counts the 36th")
         self.assertTrue((out / "report.json").is_file())
 
         twin = self.tmp / "twin"

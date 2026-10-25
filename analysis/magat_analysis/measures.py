@@ -13,6 +13,7 @@ reached a terminal state, worth about +/-2e9).
     variance           what a scenario and a visit each buy (the design)
     reprice            each turn's work priced in another machine's currency, re-scored
     across             the same experiment on two machines: each one's means, multipliers and seconds
+    spend              what each leaf's turns spent and took: spend, seconds, plan length, the run's audit
 """
 import numpy as np
 import pandas as pd
@@ -56,13 +57,15 @@ def stratum(j: pd.DataFrame, s: str) -> pd.DataFrame:
 def headline(t, baseline, split="", n=N_BOOT) -> pd.DataFrame:
     """The paired difference against the baseline, per budget and arm, with win/loss/tie counts,
     per-source intervals (a pooled mean can hide where an effect lives), and Cohen's d on the paired
-    differences."""
+    differences. `TermArm` and `TermBase` count the pairs, of all of them, in which the arm's plan and
+    the baseline's ended the game: the no-terminal stratum leaves those pairs out, so they are counted."""
     rows = []
     for budget in sorted(t.budget.unique()):
         if not ((t.arm == baseline) & (t.budget == budget)).any():
             continue
         for arm in arms_at(t, budget, baseline):
             j = paired(t, arm, baseline, budget)
+            term_arm, term_base = int(j["term"].sum()), int(j["term_b"].sum())
             for s in STRATA:
                 d = stratum(j, s)
                 if d.empty:
@@ -74,7 +77,7 @@ def headline(t, baseline, split="", n=N_BOOT) -> pd.DataFrame:
                 row = dict(Budget=int(budget), Arm=arm, Baseline=baseline, Stratum=s, Pairs=len(d), Scenarios=k,
                            MeanDiff=m, Lo=lo, Hi=hi, D=cohens_d(d["diff"]), RelDiff=rm, RelLo=rlo, RelHi=rhi,
                            Wins=wins, Losses=losses, Ties=len(d) - wins - losses,
-                           WinRate=wins / max(1, wins + losses))
+                           WinRate=wins / max(1, wins + losses), TermArm=term_arm, TermBase=term_base)
                 for src in sorted(d["source"].dropna().unique()):
                     sm, slo, shi, _ = cluster_boot_ci(d[d["source"] == src], "diff", n=n, key=key + (src,))
                     row[f"MeanDiff_{src}"], row[f"Lo_{src}"], row[f"Hi_{src}"] = sm, slo, shi
@@ -229,12 +232,14 @@ def wallclock(t, baseline, head: pd.DataFrame, split="", n=N_BOOT) -> pd.DataFra
 
     The currency is calibrated idle and single-threaded, so under other conditions a unit budget can buy
     one arm more time than another. Needs the baseline at >= 2 budgets. An arm that wins in units but not
-    here is unresolved: a bookkeeping artefact until shown otherwise."""
+    here is unresolved: a bookkeeping artefact until shown otherwise. Both sides of the verdict leave out
+    the pairs where a plan ended the game: the re-scoring cannot interpolate a sentinel, and the units side
+    is taken from the headline's no-terminal stratum to match."""
     w = rescore(t, baseline, "plan_ms", split, n, key="wallclock")
     if w.empty:
         return w
     w = w.rename(columns={"Diff": "WallDiff", "Lo": "WallLo", "Hi": "WallHi", "MeanSpend": "MeanArmMillis"})
-    h = head[head.Stratum == "all"].set_index(["Budget", "Arm"]) if not head.empty else pd.DataFrame()
+    h = head[head.Stratum == "no-terminal"].set_index(["Budget", "Arm"]) if not head.empty else pd.DataFrame()
     verdicts, units = [], []
     for r in w.itertuples(index=False):
         key = (r.Budget, r.Arm)
@@ -363,4 +368,34 @@ def variance(t, baseline, split="") -> pd.DataFrame:
 def terminal_rates(t) -> pd.DataFrame:
     rows = [dict(Budget=int(b), Arm=a, Turns=len(g), TerminalShare=float(g["term"].mean()))
             for (b, a), g in t.groupby(["budget", "arm"])]
+    return frame(rows, ["Budget", "Arm"])
+
+
+# --------------------------------------------------------------------------- spend, time and plans
+SPEND_FLAG = 1.10       # a cell whose mean turn spends more than this times its level, as the calibration flags it
+
+
+def spend(t, leaves, level_ms=None) -> pd.DataFrame:
+    """What each leaf's turns spent and how long they took, per budget and arm: the mean turn's units, its
+    initialization included, over the budget (`Spend`) and the share of turns above SPEND_FLAG; the mean
+    turn's wall-clock and, where the game publishes its levels as times, the time the level was set to;
+    the mean plan's length, its end of turn included; the share of plans that end the game; and the run's
+    audit as the leaf recorded it (`_leaf.json`): the share of plan time the prices leave unaccounted for, on
+    the threads the leaf ran on. An arm that is not priced has no audit."""
+    meta = {(int(m.get("budget", -1)), str(m.get("arm"))): m for m in leaves}
+    level_ms = level_ms or {}
+    rows = []
+    for (budget, arm), g in t.groupby(["budget", "arm"]):
+        units = g["units"] + (g["init_units"].fillna(0) if "init_units" in g else 0)
+        ratio = units / float(budget)
+        m = meta.get((int(budget), arm), {})
+        priced = not str(m.get("profile", "")).startswith("global")
+        audit = (m.get("audit") or {}) if priced else {}
+        rows.append(dict(Budget=int(budget), Arm=arm, Turns=len(g), Spend=float(ratio.mean()), SpendMax=float(ratio.max()),
+                         OverShare=float((ratio > SPEND_FLAG).mean()), MeanMillis=float(g["plan_ms"].mean()),
+                         LevelMillis=float(level_ms.get(int(budget), np.nan)),
+                         PlanLength=float(g["seq_len"].mean()) if "seq_len" in g else np.nan,
+                         TerminalShare=float(g["term"].mean()),
+                         AuditUnpriced=float(audit.get("unpricedShare", np.nan)),
+                         Threads=float(m["threads"]) if m.get("threads") is not None else np.nan))
     return frame(rows, ["Budget", "Arm"])

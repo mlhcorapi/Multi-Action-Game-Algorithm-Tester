@@ -1640,6 +1640,22 @@ def main(argv) -> int:
                       f"the clock policy differs from the session that wrote this currency ({changed}). A currency measured "
                       "under two clock policies is two currencies, and a check under another policy reports the change as "
                       "drift: restore the policy, or calibrate under another --name"))
+    # A currency that prices arms this MAGAT does not register was written by an older one: extending it would mix two
+    # codes' measurements in one file.
+    if weights.is_file():
+        registered = {x for x, _ in listed}
+        if a.arms:
+            _, every = quiet_runner.launch(["arms", "--game", a.game], "arms", "build", False)
+            registered = {m.group(1) for line in every for m in [ARM_LINE.match(line)] if m}
+        text = weights.read_text(encoding="utf-8", errors="replace")
+        unknown = sorted({m.group(1) for m in re.finditer(r"^profile\.([^@\s]+)@", text, re.M)} - registered)
+        if unknown:
+            measured = re.search(r"^measured\s*=\s*(.+)$", text, re.M)
+            items.append(("warn", f"this currency prices {len(unknown)} arm(s) this MAGAT does not register ("
+                          + ", ".join(unknown[:3]) + (", ..." if len(unknown) > 3 else "") + "): an older MAGAT wrote it"
+                          + (f", measured {measured.group(1).strip()}" if measured else "") + ". Extending it would mix that "
+                          f"code's measurements with this one's: for a fresh currency, move the folder {out} aside, or "
+                          "calibrate under another --name"))
     (record / "preflight.json").write_text(json.dumps({"facts": facts, "items": items}, indent=2, default=str), encoding="utf-8")
     refusals = [t for lvl, t in items if lvl == "refuse"]
     shown = items if a.preflight else [(lvl, t) for lvl, t in items if lvl in ("warn", "refuse")]

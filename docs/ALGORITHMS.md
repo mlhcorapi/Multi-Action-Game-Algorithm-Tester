@@ -24,8 +24,10 @@ What they share:
 - **The end of turn is held back.** The three searches that draw actions at random draw it only when
   nothing else is legal, so a random draw cannot end a turn on its first step. `mcts` leaves it out of
   its tree and adds it to the plan it plays.
-- **The initialization is paid from the budget,** and in `mcts`, `oep` and `tbets` it stops when the
-  budget runs out. The equivalence gate alone plays a port as its original pays it (below).
+- **The initialization is paid from the budget, and every search stops when its budget is spent.** `mcts`,
+  `oep` and `tbets` check the budget between iterations, turns and seeded turns, so a turn passes it by
+  the few units of the one under way; `emcts` checks inside a generation too (below). The equivalence
+  gate alone plays a port as its original pays it (below).
 
 `initial` means a different thing in each arm (the table above), so a search gain, `final − initial`,
 is comparable between turns of one arm, not between arms. The paired difference compares `final`.
@@ -50,6 +52,11 @@ turn: a node is a position partway through it, reached by the actions on the pat
 - **A leaf** is a node where the game is over, the turn has passed, the turn has no action left but
   the end of turn, or the plan is 20 actions long. Once every node has been expanded, the search stops.
 - **The turn played** is the most-visited path from the root, then the end of turn.
+- **On Tribes that plan is short.** A position has about 270 legal actions, and UCB1 tries every action
+  of a node before it descends below it, so on the R7615's first run the tree reached a depth of 3 at
+  9,500 units and 4 at 101,500. The turn played was 4 to 5 actions long, its end of turn included,
+  where every other arm, `random` too, played 16 to 18. That breadth over a whole turn is the difficulty
+  OEP and EMCTS were designed for, and it is most of why `mcts` trails them.
 - **Memory.** A new node's position is evaluated and dropped; the first time the search expands that
   node, the position is rebuilt from its parent's (a copy and an advance), so a chance event in its
   action may come out differently from the one evaluated. A tree holds a position only for the nodes
@@ -77,21 +84,28 @@ Baier and Cowling's evolutionary MCTS (2018), in the variant of the engine fork'
 - **A bridge burn** at each of the 20 slice boundaries commits the root to the child on the
   incumbent's path and prunes every other branch.
 - **The turn played** is the best plan ever scored.
+- **It stops when the budget is spent.** It checks the budget before every candidate a greedy step
+  tries, in the initial plan and in a repair, and before every action a generation replays or keeps. The
+  step or generation the budget runs out in is abandoned, and the turn plays the best plan scored by
+  then, so a turn passes its budget by one action's trial at most. Finishing it instead would cost
+  thousands of units on a large Tribes position: a repair tries every legal action, about 270, for each
+  action it replaces.
 
 | Parameter | Default | |
 |---|---|---|
 | `phases` | 21 | slices of the budget; 20 bridge burns |
 | `nodeSize` | 20 | the initial plan's length, its end of turn included |
 
-Operations: `emcts.generation`, `emcts.legal`, `emcts.check`, `emcts.seqkey` and `emcts.burn`. Its
-greedy initialization is never cut short: on Tribes it takes about 2,000 of the 9,500 units of the
-smallest level ([`CURRENCY.md`](CURRENCY.md)). Code: `core/src/magat/agents/emcts/`.
+Operations: `emcts.generation`, `emcts.legal`, `emcts.check`, `emcts.seqkey` and `emcts.burn`. On Tribes
+its greedy initialization takes about 2,000 of the 9,500 units of the smallest level, and up to 8,600 on
+the largest positions ([`CURRENCY.md`](CURRENCY.md)). Code: `core/src/magat/agents/emcts/`.
 
-**Gated** against the engine's agent, whose greedy initialization is paid outside the budget, so its
-gate plays the port by that rule: `check equivalence --arms emcts`, 32 cells, 0 failed (and 128 on 64
-positions). The port makes the engine's two copies of the state that the engine never reads, because
-each draws from the state's random generator: without them, the copies after them meet other chance
-events.
+**Gated** against the engine's agent, whose greedy initialization is paid outside the budget and never
+cut short, and whose search gives every bridge burn a child, past the budget if need be. Its gate plays
+the port by those rules: `check equivalence --arms emcts`, 32 cells, 0 failed (and 256 on 64 positions).
+By those rules a 9,500-unit Tribes turn spent 1.035× its budget on average, and up to 1.99×. The port
+makes the engine's two copies of the state that the engine never reads, because each draws from the
+state's random generator: without them, the copies after them meet other chance events.
 
 ## `oep`: Online Evolutionary Planning
 

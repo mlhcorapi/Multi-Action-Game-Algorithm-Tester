@@ -67,17 +67,20 @@ The runner checks every level for it and stops, and the analyzer checks again on
 | 4 | The spec's contrasts | `contrasts.csv` | the paired comparisons the experiment names |
 | 5 | The design: scenarios against visits | `variance.csv` | how precise the run is, and what more visits would buy |
 | 6 | Terminal plans | `terminals.csv` | how often a plan ends the game, which the headline reports apart |
-| 7 | Re-pricing in another currency | `repriced.csv`, `repriced_spend.csv` | the same work, priced on another machine |
-| 8 | Across machines | `across.csv` | the same experiment on two machines, side by side |
-| 9 | Full-game win rate | not in v0.1 | an optional external yardstick, never the primary |
+| 7 | Spend, time and plans | `spend.csv` | did each turn spend its level, how long did it take, how long are the plans |
+| 8 | Re-pricing in another currency | `repriced.csv`, `repriced_spend.csv` | the same work, priced on another machine |
+| 9 | Across machines | `across.csv` | the same experiment on two machines, side by side |
+| 10 | Full-game win rate | not in v0.1 | an optional external yardstick, never the primary |
 
 How they are computed:
 
 1. **The paired difference.** `final` of A minus `final` of B on each `(scenario, visit)`. The bootstrap
    resamples scenarios (all of a scenario's visits together), so the interval is honest about the
-   clustering. Each row is reported in two strata, all turns and turns where neither plan is terminal,
-   because a terminal plan carries a sentinel value. Win/loss/tie counts and per-source means go beside
-   it. The raw difference is a heuristic delta, never a result on its own: it is always read beside the
+   clustering. A plan that ends the game scores a sentinel (about ±2×10⁹ in Tribes), so one missed win
+   would swamp any mean: the headline, the contrasts and the design are taken on the pairs where neither
+   plan ends the game, and the plans that do are counted beside them (`TermArm`, `TermBase`). The tables
+   keep both strata, all pairs and no-terminal. Win/loss/tie counts and per-source means go beside it.
+   The raw difference is a heuristic delta, never a result on its own: it is always read beside the
    budget multiplier.
 2. **The budget multiplier.** The baseline's mean `final` at every level it ran, interpolated
    log-linearly in budget. For each arm and level the analyzer solves for the baseline budget that
@@ -89,13 +92,23 @@ How they are computed:
    position, a greedy plan, the best of a random population), so a gain does not compare across arms.
 3. **The wall-clock re-score.** The arm is re-scored on the baseline's value-versus-`plan_ms` curve at
    its own wall-clock. The verdict is one of *wins both*, *units only* (unresolved: a units-only win
-   may be a pricing artefact), *wall-clock only* or *none*. Wall-clock is co-primary: every headline is
-   given in units and in seconds.
+   may be a pricing artefact), *wall-clock only* or *none*, both sides on the pairs where neither plan
+   ends the game. Wall-clock is co-primary: every headline is given in units and in seconds. Its seconds
+   are the run's own: a run on many threads shares the machine's caches and memory between its turns,
+   which slows them, and slows a memory-hungry arm more than the others (point 6).
 4. **Contrasts** come from the spec (`contrasts`), not from a list in the code.
 5. **The design.** The share of the paired difference's variance that sits between scenarios (the
    ICC), the standard error the scenario count allows with unlimited visits, and how far the run sits
    above it. For a fixed number of turns, more scenarios beat more visits.
-6. **Across machines** (`--compare`). Two runs of one experiment, each on its own machine and in its
+6. **Spend, time and plans.** Per arm and level: the mean turn's units, its initialization included,
+   over the level, flagged above 1.10× as the calibration flags a cell; the mean seconds per turn, beside
+   the time the level was set to (`games/<game>/levels.json`: the reference arm's turn, single-threaded,
+   on the reference machine); the mean plan's length; the share of plans that end the game; and the run's
+   audit from each leaf, the share of plan time the prices leave unaccounted for, on the leaf's threads.
+   On one idle thread a calibrated cell leaves well under 1%, so a large share on many threads is
+   contention. On the R7615's first run, at 62 threads, `emcts` took 1.34× to 1.43× its levels' seconds,
+   in line with the 70% to 78% efficiency its thread sweep measured at 62 threads.
+7. **Across machines** (`--compare`). Two runs of one experiment, each on its own machine and in its
    own currency. On the cells both ran, neither turn terminal: each machine's mean with its interval,
    and the paired difference, which is what the two currencies did to where the searches stopped (the
    chance events are the same). The budget multipliers are dimensionless and should agree; the seconds
@@ -116,8 +129,8 @@ units and in seconds.
 ## 7. Everything is recorded
 
 Every row carries the raw operation counts, the wall-clock and the arm's telemetry. Every leaf
-records its prices, and every run records:
-- the commit;
+records its prices and the commit that played its turns, and every run records:
+- the commit that started it, and each invocation's own;
 - the engine commit;
 - the game configuration;
 - the portfolio identity;

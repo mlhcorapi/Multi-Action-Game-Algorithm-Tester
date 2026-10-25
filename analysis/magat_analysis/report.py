@@ -1,7 +1,8 @@
 """`magat analyze`: a run tree in, tables + SUMMARY.md + report.json out.
 
 SUMMARY.md order: provenance; the headline in units and seconds, with the budget multiplier and d beside
-it; the multiplier in full; the spec's contrasts; the design (variance); re-pricing; scope notes.
+it; the multiplier in full; the spec's contrasts; spend, time and plans; the design (variance); re-pricing;
+across machines; scope notes.
 report.json holds the same numbers for machines. Every table carries the split it came from and the
 currency it is denominated in.
 """
@@ -14,13 +15,13 @@ import pandas as pd
 from . import __version__, load, measures
 from .stats import N_BOOT
 
-TABLES = ("headline", "budget_multiplier", "wallclock", "contrasts", "variance", "terminals")
+TABLES = ("headline", "budget_multiplier", "wallclock", "contrasts", "variance", "terminals", "spend")
 EXIT_OK, EXIT_INPUT, EXIT_IDENTICAL = 0, 2, 5
 # The header a table is written with when it has no rows (a single-level baseline, no contrasts), so that
 # every table is a CSV with columns whatever the run held.
 EMPTY = {
     "headline": "Split Budget Arm Baseline Stratum Pairs Scenarios MeanDiff Lo Hi D RelDiff RelLo RelHi Wins Losses Ties "
-                "WinRate currency",
+                "WinRate TermArm TermBase currency",
     "budget_multiplier": "Split Budget Arm Baseline Cells Scenarios ArmFinal BaseFinals Multiplier Lo Hi EquivBudget Flag "
                          "BootUndefined ArmMs BaseMs ArmTimeRatio TimeMultiplier TimeLo TimeHi currency",
     "wallclock": "Split Budget Arm Baseline Pairs UnitsDiff Scenarios WallDiff WallLo WallHi ClampedShare MeanArmMillis "
@@ -29,6 +30,8 @@ EMPTY = {
     "variance": "Split Budget Arm Stratum Pairs Clusters MeanVisits SigmaB2 SigmaW2 ICC SE SEFloor ExcessOverFloorPct "
                 "VisitsWithin5Pct EquivClustersAtV1 TurnsUsed TurnsEquiv currency",
     "terminals": "Split Budget Arm Turns TerminalShare currency",
+    "spend": "Split Budget Arm Turns Spend SpendMax OverShare MeanMillis LevelMillis PlanLength TerminalShare AuditUnpriced "
+             "Threads currency",
     "repriced": "Split Budget Arm Baseline Pairs Scenarios RepricedDiff Lo Hi ClampedShare MeanRepricedUnits currency",
     "repriced_spend": "Split Budget Arm Turns MeanUnits MeanRepricedUnits Ratio currency",
     "across": "Split Budget Arm Pairs Scenarios MeanA LoA HiA MeanB LoB HiB Diff DiffLo DiffHi MultA MultALo MultAHi "
@@ -76,6 +79,7 @@ def analyse_split(sp: load.Split, baseline: str, pairs: list, n: int, weights=No
     out["contrasts"] = measures.contrasts(t, pairs, sp.name, n)
     out["variance"] = measures.variance(t, baseline, sp.name)
     out["terminals"] = measures.terminal_rates(t)
+    out["spend"] = measures.spend(t, sp.leaves, load.levels((sp.run.get("game") or {}).get("id"))["ms"])
     if weights is not None:
         out["repriced"], out["repriced_spend"], notes = measures.reprice(t, sp.leaves, weights, baseline, sp.name, n)
         sp.notes.extend(notes)
@@ -240,6 +244,8 @@ def render(splits, specs, baseline, results, prov, weights, n, prov_b=None, othe
     for s in splits:
         L += contrast_section(s.name, results[s.name])
     for s in splits:
+        L += spend_section(s.name, results[s.name], load.levels(prov[s.name]["game"]))
+    for s in splits:
         L += variance_section(s.name, results[s.name])
     if weights is not None:
         for s in splits:
@@ -266,10 +272,12 @@ def headline_section(split, R, baseline) -> list:
     if h.empty:
         return [f"## Headline ({split})", "", f"Nothing paired against `{baseline}` here.", ""]
     L = [f"## Headline ({split}): units and seconds", "",
-         "Units: the paired difference against the baseline; its no-terminal sensitivity beside it. Seconds: the",
-         "arm re-scored against the baseline at the wall-clock it actually spent; a units-only win is unresolved.",
+         "Units: the paired difference against the baseline, on the pairs where neither plan ends the game. A plan",
+         "that ends it scores a sentinel (about +/-2e9) that would swamp any mean, so those pairs are counted apart",
+         "(`Ends the game`: the arm's plans / the baseline's) and the mean over all pairs stands beside it. Seconds:",
+         "the arm re-scored against the baseline at the wall-clock it actually spent; a units-only win is unresolved.",
          "The budget multiplier is the readable size; `MeanDiff` itself is the raw heuristic delta, never a",
-         "result on its own. d is on the no-terminal pairs.", ""]
+         "result on its own.", ""]
     wc = R["wallclock"].set_index(["Budget", "Arm"]) if not R["wallclock"].empty else None
     bm = R["budget_multiplier"].set_index(["Budget", "Arm"]) if not R["budget_multiplier"].empty else None
     for budget in sorted(h.Budget.unique()):
@@ -277,10 +285,10 @@ def headline_section(split, R, baseline) -> list:
         for x in by(h, Budget=budget, Stratum="all").itertuples(index=False):
             k = (budget, x.Arm)
             nt = by(h, Budget=budget, Arm=x.Arm, Stratum="no-terminal")
-            ntm = nt.MeanDiff.iloc[0] if not nt.empty else np.nan
-            d = nt.D.iloc[0] if not nt.empty else np.nan
-            srcs = ", ".join(f"{c[len('MeanDiff_'):]} {f(getattr(x, c))}" for c in h.columns
-                             if c.startswith("MeanDiff_") and np.isfinite(getattr(x, c, np.nan)))
+            y = nt.iloc[0] if not nt.empty else None
+            srcs = "-" if y is None else ", ".join(f"{c[len('MeanDiff_'):]} {f(y[c])}" for c in h.columns
+                                                   if c.startswith("MeanDiff_") and np.isfinite(y.get(c, np.nan)))
+            ends = f"{x.TermArm} / {x.TermBase}" if x.TermArm or x.TermBase else "-"
             wall, verdict = "-", "-"
             if wc is not None and k in wc.index:
                 w = wc.loc[k]
@@ -290,10 +298,11 @@ def headline_section(split, R, baseline) -> list:
             if bm is not None and k in bm.index:
                 b = bm.loc[k]
                 mm = mult(b.Multiplier, b.Lo, b.Hi) + ("" if b.Flag == "inside" else f" ({b.Flag})")
-            rows.append([x.Arm, x.Pairs, ci(x.MeanDiff, x.Lo, x.Hi), f(ntm), srcs, wall, verdict, mm, f(d, ".2f")])
+            rows.append([x.Arm, 0 if y is None else y.Pairs, "-" if y is None else ci(y.MeanDiff, y.Lo, y.Hi),
+                         f(x.MeanDiff), ends, srcs, wall, verdict, mm, f(np.nan if y is None else y.D, ".2f")])
         L += [f"### {budget:,} units", ""]
-        L += table(["Arm", "Pairs", "MeanDiff [CI]", "No-terminal", "By source", "Wall-clock [CI]", "Verdict",
-                    "Budget multiplier", "d"], rows)
+        L += table(["Arm", "Pairs", "MeanDiff [CI]", "All pairs", "Ends the game", "By source", "Wall-clock [CI]",
+                    "Verdict", "Budget multiplier", "d"], rows)
     return L
 
 
@@ -328,18 +337,50 @@ def contrast_section(split, R) -> list:
     c = R["contrasts"]
     if c.empty:
         return []
-    L = [f"## Contrasts ({split})", "", "The spec's own paired comparisons, arm A minus arm B.", ""]
-    rows = [[x.Budget, f"{x.A} - {x.B}", x.Label, x.Pairs, ci(x.MeanDiff, x.Lo, x.Hi),
-             f(by(c, Budget=x.Budget, A=x.A, B=x.B, Stratum="no-terminal").MeanDiff.max()), f"{x.WinRate:.3f}"]
-            for x in by(c, Stratum="all").itertuples(index=False)]
-    return L + table(["Budget", "A - B", "Label", "Pairs", "MeanDiff [CI]", "No-terminal", "WinRate"], rows)
+    L = [f"## Contrasts ({split})", "", "The spec's own paired comparisons, arm A minus arm B, on the pairs where neither",
+         "plan ends the game; the mean over all pairs beside it.", ""]
+    rows = []
+    for x in by(c, Stratum="all").itertuples(index=False):
+        nt = by(c, Budget=x.Budget, A=x.A, B=x.B, Stratum="no-terminal")
+        y = nt.iloc[0] if not nt.empty else None
+        rows.append([x.Budget, f"{x.A} - {x.B}", x.Label, 0 if y is None else y.Pairs,
+                     "-" if y is None else ci(y.MeanDiff, y.Lo, y.Hi), f(x.MeanDiff),
+                     "-" if y is None else f"{y.WinRate:.3f}"])
+    return L + table(["Budget", "A - B", "Label", "Pairs", "MeanDiff [CI]", "All pairs", "WinRate"], rows)
+
+
+def spend_section(split, R, levels) -> list:
+    sp = R.get("spend")
+    if sp is None or sp.empty:
+        return []
+    L = [f"## Spend, time and plans ({split})", "",
+         f"`Spend` is the mean turn's units, its initialization included, over the level: bold above "
+         f"{measures.SPEND_FLAG:.2f}x, as the calibration flags a cell, with the share of turns above it beside it.",
+         "`Seconds` is the mean turn's wall-clock"
+         + (f"; `Level` is the time the level was set to, the {levels['arm']} turn's mean, single-threaded on "
+            f"{levels['machine']} (`levels.json`)" if levels.get("ms") else "") + ". `Unaccounted` is the run's audit: the share",
+         "of the plan time that the currency's prices do not account for, on the threads the leaf ran on. On many",
+         "threads it holds contention as well, and turns take longer than their level, unevenly across arms: the",
+         "calibration's own audit, on one idle thread, is the clean measure. `Actions` is the mean plan's length, its",
+         "end of turn included; `Ends the game` the share of plans that do.", ""]
+    rows = []
+    for x in sp.itertuples(index=False):
+        s = f"{x.Spend:.2f}x"
+        rows.append([x.Budget, x.Arm, x.Turns, f"**{s}**" if x.Spend > measures.SPEND_FLAG else s, f"{x.OverShare:.0%}",
+                     f(x.MeanMillis / 1000.0, ".2f"), f(x.LevelMillis / 1000.0, ".2f"), f(x.PlanLength, ".1f"),
+                     f"{x.TerminalShare:.1%}",
+                     "-" if not np.isfinite(x.AuditUnpriced) else f"{x.AuditUnpriced:.0%}"
+                     + ("" if not np.isfinite(x.Threads) else f" on {int(x.Threads)}")])
+    return L + table(["Budget", "Arm", "Turns", "Spend", f"Over {measures.SPEND_FLAG:.2f}x", "Seconds", "Level",
+                      "Actions", "Ends the game", "Unaccounted (threads)"], rows)
 
 
 def variance_section(split, R) -> list:
-    v = by(R["variance"], Stratum="all")
+    v = by(R["variance"], Stratum="no-terminal")
     if v.empty:
         return []
     L = [f"## Design ({split}): scenarios versus visits", "",
+         "On the pairs where neither plan ends the game, as the headline is.",
          "ICC is the share of the paired difference's variance that sits between scenarios. The floor is the",
          "standard error this scenario count can reach with unlimited visits; `Excess` is how far the design",
          "actually run sits above it; `=Scen@1v` is the number of scenarios at one visit each that would match",
@@ -411,11 +452,17 @@ def scope_section(splits, results, weights) -> list:
             L.append(f"- {s.name}: wall-clock rows with over a quarter of pairs clamped to the baseline's time range: "
                      + ", ".join(f"{x.Arm}@{x.Budget} ({x.ClampedShare:.0%})" for x in hi.itertuples(index=False))
                      + ". A clamped pair is compared with the baseline's nearest level, not interpolated.")
+        sp = R.get("spend")
+        if sp is not None and not sp.empty and (sp.Spend > measures.SPEND_FLAG).any():
+            hi = sp[sp.Spend > measures.SPEND_FLAG]
+            L.append(f"- {s.name}: cells whose mean turn spends more than {measures.SPEND_FLAG:.2f}x their level: "
+                     + ", ".join(f"{x.Arm}@{x.Budget} ({x.Spend:.2f}x)" for x in hi.itertuples(index=False))
+                     + ". Their arms take more than their budget, which favours them in units.")
         tr = R["terminals"]
         if not tr.empty and (tr.TerminalShare > 0).any():
             L.append(f"- {s.name}: terminal turns: up to {tr.TerminalShare.max():.1%} of a leaf "
-                     f"({int((tr.TerminalShare > 0).sum())} of {len(tr)} leaves have any); every headline is shown "
-                     "with and without them.")
+                     f"({int((tr.TerminalShare > 0).sum())} of {len(tr)} leaves have any). The headline, the "
+                     "contrasts and the design leave their pairs out and count them; the tables keep both strata.")
         for note in s.notes:
             L.append(f"- {s.name}: {note}")
     if weights is None:
