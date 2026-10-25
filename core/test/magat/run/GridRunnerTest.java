@@ -172,6 +172,22 @@ public class GridRunnerTest {
     }
 
     @Test
+    public void theAuditWarnsOnOneThreadAndInformsOnMany() {
+        JsonObject one = new JsonObject().add("unpricedShare", 0.163).add("predictedMs", 837.0).add("measuredMs", 1000L)
+                .add("threads", 1).add("sameMachine", true);
+        String warned = GridRunner.auditLine("oep@101500", one, 0.10);
+        assertTrue(warned, warned.contains("16.3% of oep@101500's plan time is not accounted for") && warned.contains("threshold 10%"));
+        assertNull("below the threshold, nothing", GridRunner.auditLine("oep@101500", one.set("unpricedShare", 0.05), 0.10));
+        // On 62 threads the turns slow each other: the time ratio, as information, whatever the share.
+        JsonObject many = new JsonObject().add("unpricedShare", 0.174).add("predictedMs", 826.0).add("measuredMs", 1000L)
+                .add("threads", 62).add("sameMachine", true);
+        String informed = GridRunner.auditLine("emcts@9500", many, 0.10);
+        assertTrue(informed, informed.startsWith("[run] audit: emcts@9500 took 1.21x the time its priced work predicts, on 62 threads"));
+        assertFalse(informed, informed.contains("threshold") || informed.contains("another machine"));
+        assertTrue(GridRunner.auditLine("emcts@9500", many.set("sameMachine", false), 0.10).contains("calibrated on another machine"));
+    }
+
+    @Test
     public void theAuditKnowsTheCalibratingMachineByItsCpuModel() throws Exception {
         // A calibration pins its JVMs to a few cores, so its file counts fewer than a run on the same machine sees.
         String model = MachineProfile.get().cpuModel();
