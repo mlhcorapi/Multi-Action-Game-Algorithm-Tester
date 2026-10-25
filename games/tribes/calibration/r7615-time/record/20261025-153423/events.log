@@ -1,0 +1,16 @@
+[2026-10-25 15:34:32] [start] tribes-r7615-time: one session pricing 4 arm(s): emcts, mcts, oep, tbets; then the check against this machine's own new currency; JVMs on CPUs 8-15,72-79 (the quietest of 8 L3 domains (16 logical CPUs, 0.0 CPUs busy when chosen))
+[2026-10-25 15:35:03] [quiet] 0.0 logical CPUs of other work before the stability check: starting
+[2026-10-25 15:37:03] [controls] soak 1: JVM pid 18518, CPUs 8-15,72-79
+[2026-10-25 15:37:03] [stability] estimate 1: 9500: 0.57 s/turn, 20000: 1.12 s/turn, 101500: 5.46 s/turn
+[2026-10-25 15:39:02] [controls] soak 2: JVM pid 18583, CPUs 8-15,72-79
+[2026-10-25 15:39:02] [stability] estimate 2: 9500: 0.57 s/turn, 20000: 1.11 s/turn, 101500: 5.44 s/turn; change 0.9%
+[2026-10-25 15:39:02] [stability] steady after 4 min: two estimates in a row within 3%
+[2026-10-25 15:39:02] [stability] busiest measuring core during the last estimate: 3700-3700 MHz (median 3700), up to 47 C
+[2026-10-25 15:39:02] [plan] about 0.4 h for the session and 0.1 h for the checks at this pace; expected to finish around 16:10 (up to 25% later if the arms run slower than the reference)
+[2026-10-25 15:39:02] [plan] leave the machine alone from here: nothing else should run until it finishes
+[2026-10-25 15:39:02] [session] session starts: emcts, mcts, oep, tbets; the calibrator's output goes to /home/jovyan/magat_runs/calibration/tribes-r7615-time/record/20261025-153423/session.log
+[2026-10-25 16:13:05] [controls] session: JVM pid 18650, CPUs 8-15,72-79
+[2026-10-25 16:13:05] [session] session: PASS in 34.1 min; bracket -0.1/-0.0/-1.7%
+[2026-10-25 16:13:36] [quiet] 0.2 logical CPUs of other work before check self: starting
+[2026-10-25 16:20:32] [controls] check self: JVM pid 18964, CPUs 8-15,72-79
+[2026-10-25 16:20:32] [check] self: PASS, largest turn-price drift -0.6% (emcts@101500)

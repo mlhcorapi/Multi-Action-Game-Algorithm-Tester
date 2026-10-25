@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "game": "tribes",
+  "arm": "emcts",
+  "portfolio": "ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7",
+  "machine": "AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 17408 MB | reserve 2 | worker ceiling 62",
+  "measured": "Sun Oct 25 15:33:30 CET 2026",
+  "levels": {
+    "9500": {
+      "threads": 62,
+      "estimate": false
+    },
+    "20000": {
+      "threads": 62,
+      "estimate": false
+    },
+    "101500": {
+      "threads": 62,
+      "estimate": false
+    }
+  }
+}

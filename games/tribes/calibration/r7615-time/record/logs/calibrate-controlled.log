@@ -1,0 +1,71 @@
+
+>>>>> 2026-10-25 15:33:49 $ /usr/bin/python /home/jovyan/Multi-Action-Game-Algorithm-Tester/tools/calibrate_controlled.py --name r7615-time --game tribes --portfolio /home/jovyan/magat_runs/portfolio/tribes --other-cpus 4.0 --wait-quiet 30 --soak-minutes 0 --levels 9500,20000,101500 --preflight
+############################################################
+# MAGAT controlled calibration   tribes-r7615-time
+# currency  /home/jovyan/magat_runs/calibration/tribes-r7615-time
+# record    /home/jovyan/magat_runs/calibration/tribes-r7615-time/record/20261025-153349
+############################################################
+
+=== PREFLIGHT ===
+  [info  ] clock policy: frequency governor schedutil
+  [ok    ] measuring JVMs will run on CPUs 0-7,64-71: the quietest of 8 L3 domains (16 logical CPUs, 0.0 CPUs busy when chosen)
+  [info  ] container (cgroup v2): CPUs 0-127 of 128, no CPU limit, no memory limit
+  [info  ] 1 NUMA node(s); 8 L3 domain(s) of 16 logical CPUs
+  [ok    ] 1123 GB of memory available
+  [ok    ] work on the machine now: 0.0 logical CPUs, all of it this container's: either the machine is quiet or /proc shows only this container, in which case other users' work is invisible from here; the session is suspect above 4 of other work
+  [info  ] the machine has been up for 5.5 days
+  [ok    ] 7401 GB free under the data root
+  [ok    ] java: openjdk version "11.0.29" 2025-10-21
+  [info  ] a notebook differs from the commit (saved with its outputs, most likely): the commit is recorded clean, with "notebook modified" beside it
+
+PREFLIGHT: READY
+It would measure one session pricing 4 arm(s): emcts, mcts, oep, tbets; then the check against this machine's own new currency.
+===== exit 0 after 0:00:09.799476
+
+>>>>> 2026-10-25 15:34:23 $ /usr/bin/python /home/jovyan/Multi-Action-Game-Algorithm-Tester/tools/calibrate_controlled.py --name r7615-time --game tribes --portfolio /home/jovyan/magat_runs/portfolio/tribes --other-cpus 4.0 --wait-quiet 30 --soak-minutes 0 --levels 9500,20000,101500
+############################################################
+# MAGAT controlled calibration   tribes-r7615-time
+# currency  /home/jovyan/magat_runs/calibration/tribes-r7615-time
+# record    /home/jovyan/magat_runs/calibration/tribes-r7615-time/record/20261025-153423
+############################################################
+[2026-10-25 15:34:32] [start] tribes-r7615-time: one session pricing 4 arm(s): emcts, mcts, oep, tbets; then the check against this machine's own new currency; JVMs on CPUs 8-15,72-79 (the quietest of 8 L3 domains (16 logical CPUs, 0.0 CPUs busy when chosen))
+[2026-10-25 15:35:03] [quiet] 0.0 logical CPUs of other work before the stability check: starting
+
+=== STABILITY: estimates back to back until the machine holds its speed ===
+[2026-10-25 15:37:03] [stability] estimate 1: 9500: 0.57 s/turn, 20000: 1.12 s/turn, 101500: 5.46 s/turn
+[2026-10-25 15:39:02] [stability] estimate 2: 9500: 0.57 s/turn, 20000: 1.11 s/turn, 101500: 5.44 s/turn; change 0.9%
+[2026-10-25 15:39:02] [stability] steady after 4 min: two estimates in a row within 3%
+[2026-10-25 15:39:02] [stability] busiest measuring core during the last estimate: 3700-3700 MHz (median 3700), up to 47 C
+[2026-10-25 15:39:02] [plan] about 0.4 h for the session and 0.1 h for the checks at this pace; expected to finish around 16:10 (up to 25% later if the arms run slower than the reference)
+[2026-10-25 15:39:02] [plan] leave the machine alone from here: nothing else should run until it finishes
+
+=== THE SESSION: emcts, mcts, oep, tbets ===
+[2026-10-25 15:39:02] [session] session starts: emcts, mcts, oep, tbets; the calibrator's output goes to /home/jovyan/magat_runs/calibration/tribes-r7615-time/record/20261025-153423/session.log
+  cell 1/12  emcts@9500  spend 1.00x  26 s
+  cell 2/12  mcts@9500  spend 1.00x  44 s
+  cell 3/12  oep@9500  spend 1.00x  45 s
+  cell 4/12  tbets@9500  spend 1.00x  46 s
+  cell 5/12  emcts@20000  spend 1.00x  54 s
+  cell 6/12  mcts@20000  spend 1.00x  90 s
+  cell 7/12  oep@20000  spend 1.00x  80 s
+  cell 8/12  tbets@20000  spend 1.00x  93 s
+  cell 9/12  emcts@101500  spend 1.00x  264 s
+  cell 10/12  mcts@101500  spend 1.00x  451 s
+  cell 11/12  oep@101500  spend 1.00x  320 s
+  cell 12/12  tbets@101500  spend 1.00x  460 s
+  bracket  emcts@9500 again
+[2026-10-25 16:13:05] [session] session: PASS in 34.1 min; bracket -0.1/-0.0/-1.7%
+[2026-10-25 16:13:36] [quiet] 0.2 logical CPUs of other work before check self: starting
+
+=== CHECK AGAINST THE NEW CURRENCY (writes nothing) ===
+[2026-10-25 16:20:32] [check] self: PASS, largest turn-price drift -0.6% (emcts@101500)
+
+=== RESULT ===
+  session  PASS in 34.1 min: emcts, mcts, oep, tbets; bracket -0.1%/-0.0%/-1.7%
+  spend    every cell's mean turn is within 1.10x of its level
+  check    self: PASS, largest turn-price drift -0.6% (emcts@101500)
+  check    published: not run, no currency is published for this game yet
+  summary  /home/jovyan/magat_runs/calibration/tribes-r7615-time/record/SUMMARY.md
+  bundle   /home/jovyan/magat_runs/bundles/calibration-tribes-r7615-time.zip
+CONTROLLED CALIBRATION: COMPLETE
+===== exit 0 after 0:46:09.218683

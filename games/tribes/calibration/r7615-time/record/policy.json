@@ -1,0 +1,11 @@
+{
+  "policy": {
+    "PERFBOOSTMODE": null,
+    "PROCFREQMAX": null,
+    "PROCFREQMAX1": null,
+    "PROCTHROTTLEMAX": null,
+    "PROCTHROTTLEMAX1": null,
+    "governor": "schedutil"
+  },
+  "session": "20261025-153423"
+}
