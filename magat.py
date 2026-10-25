@@ -133,11 +133,12 @@ ENGINE_PROPS = {
 }
 
 # Published artefacts per game: the defaults the CLI is pointed at when a flag is not given. A game's
-# published currency ("weights") is the reference machine's, once it is published.
+# published currency ("weights") is the reference machine's.
 PUBLISHED = {
     "tribes": {
         "portfolio": GAMES / "tribes" / "portfolio" / "v1",
         "levels": GAMES / "tribes" / "levels.json",
+        "weights": GAMES / "tribes" / "calibration" / "r7615-time" / "compute_weights.properties",
     }
 }
 

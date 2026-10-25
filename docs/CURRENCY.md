@@ -194,11 +194,13 @@ turns re-priced in B's currency.
 
 ## Published currencies
 
-Tribes' currency, measured on the R7615 at the published levels, will be published in
-`games/tribes/calibration/<name>/`, with an `ORIGIN.md` giving its provenance. Until then, every
-command that spends a currency takes `--weights`, and `calibrate-controlled` makes one for your
-machine. A new calibration is published beside the others under its own name, never over one, and
-results quote the currency they were priced in.
+Tribes' currency, measured on the R7615 at the published levels, is published in
+`games/tribes/calibration/r7615-time/`, with an `ORIGIN.md` giving its provenance, and the reference
+experiment's run in it in `games/tribes/results/reference/r7615/`. A command that spends a currency uses
+it when `--weights` is not given. To measure your machine, `calibrate-controlled` makes a currency for it,
+and you pass that one: under the R7615's currency your machine plays the R7615's turns exactly, which
+`check replay` uses. A new calibration is published beside the others under its own name, never over
+one, and results quote the currency they were priced in.
 
 **A currency describes the costs of the engine it was measured on.** A budget is a count, so a result
 reproduces exactly on any engine commit with the same outputs, but its prices describe the engine it

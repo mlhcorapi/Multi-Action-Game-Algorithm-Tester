@@ -57,7 +57,9 @@ python magat.py run --experiment experiments/tribes/reference.json --weights <yo
 python magat.py analyze --run $HOME/magat_runs/tribes/runs/reference --out $HOME/magat_runs/tribes/results/reference
 ```
 
-Your currency is `$HOME/magat_runs/calibration/tribes-<your-machine>/compute_weights.properties`.
+Your currency is `$HOME/magat_runs/calibration/tribes-<your-machine>/compute_weights.properties`. Without
+`--weights`, a run spends the published currency, the R7615's, and your machine plays the R7615's turns
+exactly: a replay of the reference machine, not a measurement of yours.
 
 **3. Compare with published results.** Every published row carries its raw operation counts, so:
 - **replay**: `check replay` re-plans the published turns on your machine and compares them field for
@@ -179,8 +181,9 @@ flags. Every command works the same in bash and in PowerShell.
 - a published portfolio of 400 positions, and published levels;
 - four reference algorithms, `mcts`, `emcts`, `oep` and `tbets`, and `random`, the floor. `emcts` and
   `tbets` are ports of the engine's own agents, gated field for field against them;
-- no published currency yet: until the R7615's comes with the reference results, calibrate your own
-  machine, and every command that spends a currency takes `--weights`.
+- a published currency, the reference machine's (`games/tribes/calibration/r7615-time/`), and the
+  reference experiment's run on it (`games/tribes/results/reference/r7615/`), to compare your machine
+  with.
 
 MAGAT grew out of an earlier study; what v0.1 set aside, and where it lives, is in
 [`docs/ARCHIVE.md`](docs/ARCHIVE.md).

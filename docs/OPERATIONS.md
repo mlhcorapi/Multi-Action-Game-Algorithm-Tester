@@ -39,8 +39,9 @@ wrap it). It:
 | `notebook build \| selftest` | regenerate the notebook; self-test its setup cells from three directories |
 
 Commands that need a portfolio default to the game's published one (`games/<game>/portfolio/v1`), and
-commands that take levels default to its published levels (`games/<game>/levels.json`). No currency is
-published yet, so a command that spends one takes `--weights`. Every command prints a banner naming the
+commands that take levels default to its published levels (`games/<game>/levels.json`), and commands that
+spend a currency default to its published one (for Tribes, the R7615's `r7615-time`): pass `--weights` to
+spend your own machine's. Every command prints a banner naming the
 data root, the weights file in force and the portfolio identity, because those three are what every
 past mistake turned on.
 

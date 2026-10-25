@@ -322,6 +322,10 @@ What to do about what it finds:
 - **The self-check failed.** The machine changed speed during the run. Look at the clocks and the
   bracket. Usually this calls for a tighter clock policy (laptop) or quieter hours (server), and a fresh
   currency under a new `--name`.
+- **The check against the published currency failed.** Not a fault, and the calibration still
+  completes: another machine prices some operations differently relative to an advance, which is why
+  each machine measures its own. The drift table says by how much. Run with your own currency; the
+  published one is the reference machine's.
 
 ## Publishing it
 
