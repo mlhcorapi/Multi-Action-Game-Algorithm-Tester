@@ -63,6 +63,8 @@ class SyntheticTree(unittest.TestCase):
         al = self.row(h, Budget=1000, Arm="good", Stratum="all")
         self.assertEqual(al.Pairs, syn.S * syn.V)
         self.assertGreater(al.MeanDiff, 1e7, "the all-rows stratum keeps the terminal pair")
+        self.assertEqual((al.TermArm, al.TermBase), (1, 0), "the pair that ended the game is counted, in both strata")
+        self.assertEqual((nt.TermArm, nt.TermBase), (1, 0))
         self.assertIn("MeanDiff_single", h.columns)
         self.assertIn("MeanDiff_dual", h.columns)
         weak = self.row(h, Budget=4000, Arm="weak", Stratum="all")
@@ -129,6 +131,12 @@ class SyntheticTree(unittest.TestCase):
         self.assertEqual(gr.ClampedShare, 1.0, "500 ms is past the baseline's 400")
         self.assertAlmostEqual(gr.WallDiff, 50 * LN2, places=9)
         self.assertEqual(gr.Verdict, "wins both")
+        # noisy's one terminal pair (-2e9) puts zero inside its interval over all pairs; both sides of the verdict
+        # leave that pair out.
+        no = self.row(w, Arm="noisy", Budget=1000)
+        self.assertLess(self.row(h, Budget=1000, Arm="noisy", Stratum="all").Lo, 0)
+        self.assertAlmostEqual(no.UnitsDiff, self.row(h, Budget=1000, Arm="noisy", Stratum="no-terminal").MeanDiff, places=9)
+        self.assertEqual(no.Verdict, "wins both")
 
     # ------------------------------------------------------------------ contrasts and the design
     def test_contrasts_from_the_spec(self):
@@ -231,6 +239,8 @@ class SyntheticTree(unittest.TestCase):
                         "## Design", "## Re-priced", "## Scope notes"):
             self.assertIn(heading, summary)
         self.assertLess(summary.index("## Headline (dev)"), summary.index("## Headline (holdout)"))
+        good = next(line for line in summary.splitlines() if line.startswith("| good | 35 |"))
+        self.assertIn("| 1 / 0 |", good, "the headline leads with the 35 pairs where neither plan ends the game, and counts the 36th")
         self.assertTrue((out / "report.json").is_file())
 
         twin = self.tmp / "twin"
