@@ -23,12 +23,21 @@ import java.util.Random;
  * burn promotes the root child on the incumbent's path and prunes every other branch. The answer is the
  * best plan ever scored, which survives pruning.
  *
+ * <p>It stops when its budget is spent, its initialization included. It checks the budget before every
+ * candidate a greedy step tries (in the initial plan and in a repair), before every action a generation
+ * replays or keeps, and before a child is scored; the step or the generation the budget runs out in is
+ * abandoned, and the turn plays the best plan scored by then. A turn passes its budget by at most the one
+ * action it was trying. A generation can cost thousands of units on a large position, so finishing it would
+ * let a turn run far past a small budget.
+ *
  * <p>This is a line-for-line port of the engine fork's {@code ExperimentalEMCTSAgent} with (1+1)
  * selection: every forward-model call and every random draw happens in the same order, which the
- * equivalence gate asserts against that class. That class makes two initialization copies it never
- * reads (its {@code old_gs} copy and the copy handed to the root's evaluation), and the port makes them
- * too: each draws from the state's random generator, and without them every later copy would be seeded
- * otherwise and could meet another chance event.
+ * equivalence gate asserts against that class under that class's accounting
+ * ({@link TurnBudget.Initialization#OUTSIDE_BUDGET}, which only the gate uses): its initialization is
+ * outside the budget and never cut short, and every bridge burn gets a child, past the budget if need be.
+ * That class makes two initialization copies it never reads (its {@code old_gs} copy and the copy handed
+ * to the root's evaluation), and the port makes them too: each draws from the state's random generator,
+ * and without them every later copy would be seeded otherwise and could meet another chance event.
  *
  * <p><b>Its own operations</b>, recorded through the meter beside the forward model's:
  * {@code emcts.generation}, one child's own work (building and repairing its plan, selection), timed
@@ -53,6 +62,8 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
 
     private Game<S, A> game;
     private int player;
+    /** The budget the turn stops at; null under the engine's rule, which the equivalence gate plays. */
+    private TurnBudget stopAt;
 
     private Node<S, A> root;
     private Node<S, A> bestNode;
@@ -87,6 +98,11 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
         mutBestGainSum = 0.0;
         TurnRecord.Builder record = TurnRecord.builder();
 
+        // The stop rule: the turn stops when its budget is spent (spent()). The engine's agent never cuts its
+        // initialization short and gives every bridge burn a child, past the budget if need be; the equivalence
+        // gate plays the port by the engine's accounting (OUTSIDE_BUDGET), and so by that rule.
+        stopAt = budget.initializationPolicy() == TurnBudget.Initialization.IN_BUDGET ? budget : null;
+
         // Greedy 1-ply initialization, on its own copy; the search gets what it leaves of the budget. The
         // engine's agent copies the state once before it (its old_gs) and once for the root's evaluation, which
         // re-scores the root from the root's own state; the port makes both, for the draws they take.
@@ -111,11 +127,13 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
                 boolean ceilingReached = Meter.units() >= ceiling;
                 boolean needChildForBurn = (phase < phases - 1) && root.children().isEmpty();
                 if (ceilingReached && !needChildForBurn) break;
+                if (spent()) break;                              // no child past the budget, not even for a burn
                 if ((numIters - phaseStartIters) >= maxItersPerPhase) break;
 
                 numIters++;
                 try (Meter.Span g = GENERATION.span()) {
                     Node<S, A> child = expandOnce(incumbent, state);
+                    if (child == null) break;                    // the budget ran out in it: abandoned
                     if (child.value() > incumbent.value()) incumbent = child;
                 }
             }
@@ -165,9 +183,15 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
 
     // ------------------------------------------------------------------ one child
 
-    /** One child: mutate-and-repair the expanded node, evaluate, fold into the telemetry. */
+    /** Whether the turn's budget is spent (the stop rule in the class comment); never under the engine's rule. */
+    private boolean spent() {
+        return stopAt != null && stopAt.exhausted();
+    }
+
+    /** One child: mutate-and-repair the expanded node, evaluate, fold into the telemetry; null when the budget ran out in it. */
     private Node<S, A> expandOnce(Node<S, A> toMutate, S state) {
         Node<S, A> child = mutate(toMutate, game.copy(state));
+        if (child == null) return null;
         mutEvents++;
         mutRepairKept += lastRepairKept;
         mutRepairReplaced += lastRepairReplaced;
@@ -295,12 +319,15 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
 
     // ------------------------------------------------------------------ operators
 
-    /** The greedy 1-ply initial plan; the state given is consumed and kept by the root node. */
+    /**
+     * The greedy 1-ply initial plan; the state given is consumed and kept by the root node. When the budget
+     * runs out, the step under way is abandoned and the plan ends the turn where it is.
+     */
     private Node<S, A> initialPlan(S state) {
         ArrayList<A> individual = new ArrayList<>();
 
         while (!game.isTerminal(state) && game.activePlayer(state) == player
-                && individual.size() < (params.nodeSize - 1)) {
+                && individual.size() < (params.nodeSize - 1) && !spent()) {
             List<A> available = legalActions(state);
             if (available.isEmpty()) break;
 
@@ -309,6 +336,10 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
             int numTies = 0;
             for (A candidate : available) {
                 if (game.endsTurn(candidate) && available.size() > 1) continue;
+                if (spent()) {
+                    bestAction = null;
+                    break;
+                }
                 S test = game.copy(state);
                 advance(test, candidate);
                 double score = game.evaluate(test, player);
@@ -358,6 +389,7 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
         int moveToMutate = seq.isEmpty() ? 0 : rnd.nextInt(seq.size());
         ArrayList<A> newSeq = new ArrayList<>();
         for (int i = 0; i < moveToMutate; i++) {
+            if (spent()) return null;
             advance(state, seq.get(i));
             newSeq.add(seq.get(i));
         }
@@ -368,6 +400,7 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
         for (int i = moveToMutate + 1; i < seq.size(); i++) newSeq.add(seq.get(i));
 
         newSeq = truncateAtEndTurn(repair(newSeq, clone));
+        if (spent()) return null;                       // the budget ran out: the child is never scored or kept
         Node<S, A> newNode = new Node<>(newSeq, node);
         node.addChild(newNode);
         int nChildren = node.children().size();
@@ -387,6 +420,7 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
 
         for (int i = 0; i < child.size(); i++) {
             if (game.activePlayer(state) != player) return repaired;
+            if (spent()) return repaired;               // and mutate abandons the child
             try {
                 boolean done = isLegal(state, child.get(i));
                 if (!done) {
@@ -422,13 +456,14 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
         return repaired;
     }
 
-    /** The legal action with the best 1-ply value, ties broken by a reservoir draw. */
+    /** The legal action with the best 1-ply value, ties broken by a reservoir draw; null when the budget runs out first. */
     private A greedyReplacement(S state) {
         List<A> available = legalActions(state);
         A bestAction = null;
         double bestScore = Double.NEGATIVE_INFINITY;
         int numTies = 0;
         for (A candidate : available) {
+            if (spent()) return null;                   // the repair stops, and mutate abandons the child
             S test = game.copy(state);
             advance(test, candidate);
             double score = game.evaluate(test, player);

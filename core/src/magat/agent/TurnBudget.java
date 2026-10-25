@@ -8,13 +8,15 @@ import magat.meter.Meter;
  * <p>The budget is the whole turn. An agent with an initialization phase (EMCTS's greedy initial plan)
  * calls {@link #beginSearch()} once at that boundary, which snapshots the initialization's spend for the
  * record and zeroes the meter; the search then gets what the initialization left. A turn spends its
- * budget (at least its initialization, which is never cut short), and a level's units are the turn's
- * thinking time. An agent with no initialization phase never calls {@code beginSearch()}, and the whole
- * turn counts.
+ * budget and stops: an agent checks {@link #exhausted()} between its units of work (an iteration, a
+ * generation, a step of its initialization) and finishes the one under way, so a level's units are the
+ * turn's thinking time. An agent with no initialization phase never calls {@code beginSearch()}, and the
+ * whole turn counts.
  *
  * <p>One exception, {@link Initialization#OUTSIDE_BUDGET}: the engine's EMCTS bounds its search alone and pays
- * its initialization outside it, so the equivalence gate plays its port by that rule to compare the two turn
- * for turn ({@link Oracle#initialization}). Nothing else uses it.
+ * its initialization outside it, never cut short, and it gives every bridge burn a child past the budget if
+ * need be, so the equivalence gate plays its port by that accounting to compare the two turn for turn
+ * ({@link Oracle#initialization}). Nothing else uses it.
  *
  * <p>{@link #ceiling} is the phase rule of the EMCTS family, kept exactly: the per-phase slice is the
  * integer division {@code search units / phases}, so the last ceiling can sit slightly below the budget and
