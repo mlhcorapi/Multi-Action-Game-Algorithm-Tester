@@ -5,7 +5,8 @@ folder, and the repository's parent, as JupyterHub launches it) and assert every
 same repository and a data root outside it.
 
 Runs in well under a second and is part of the pre-commit hook. Also checks that the notebooks are
-the ones tools/make_notebook.py generates.
+the ones tools/make_notebook.py generates, and runs the run notebook's calibration cells, with the
+launcher stubbed, on no currency, one that lacks a reference arm and one that prices them all.
 """
 import json
 import os
@@ -36,6 +37,8 @@ def main() -> int:
     for nb in NOTEBOOKS:
         print(f"{nb.relative_to(ROOT).as_posix()}:")
         failures += selftest(nb)
+    print(f"{NOTEBOOKS[0].relative_to(ROOT).as_posix()}, the calibration cells:")
+    failures += calibration_cells(NOTEBOOKS[0])
     print(f"notebook selftest: {failures} failure(s)")
     return failures
 
@@ -73,6 +76,50 @@ def selftest(NB: pathlib.Path) -> int:
     if len(roots) != 1 or next(iter(roots)) != ROOT:
         print(f"  [FAIL] launches resolved different repositories: {roots}")
         failures += 1
+    return failures
+
+
+def calibration_cells(NB: pathlib.Path) -> int:
+    """The preflight and measuring cells measure a currency that is missing or lacks a reference arm, and skip
+    one that prices them all. The launcher is a stub that answers the coverage check (`magat weights`)."""
+    nb = json.loads(NB.read_text(encoding="utf-8"))
+    cells = ["".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code"
+             and set(c.get("metadata", {}).get("tags", [])) in ({"calibrate"}, {"calibrate", "measure"})]
+    if len(cells) != 2:
+        print(f"  [FAIL] expected the preflight and the measuring cell, found {len(cells)} cells")
+        return 1
+    failures = 0
+    with tempfile.TemporaryDirectory(prefix="magat-selftest-") as tmp:
+        weights = pathlib.Path(tmp) / "compute_weights.properties"
+        for case, covered, should_measure in (("no currency", None, True),
+                                              ("a currency that lacks a reference arm", 1, True),
+                                              ("a currency that prices every reference arm", 0, False)):
+            if covered is None:
+                weights.unlink(missing_ok=True)
+            else:
+                weights.write_text("# a stub currency\n", encoding="utf-8")
+            calls, printed = [], []
+
+            def magat(*args, check=True):
+                calls.append(args)
+                return covered if args[0] == "weights" else 0
+
+            ns = {"magat": magat, "summary": lambda *a, **k: None, "print": lambda *a, **k: printed.append(" ".join(map(str, a))),
+                  "CALIBRATION": weights.parent, "CURRENCY_NAME": "selftest", "GAME": "tribes", "PORTFOLIO": weights.parent,
+                  "LEVELS": "9500,20000,101500"}
+            try:
+                for src in cells:
+                    exec(compile(src, "<calibration-cell>", "exec"), ns)
+            except Exception as e:
+                print(f"  [FAIL] {case}: {e}")
+                failures += 1
+                continue
+            measured = any(a[0] == "calibrate-controlled" and "--preflight" not in a for a in calls)
+            noted = any("does not price every reference arm" in p for p in printed)
+            ok = measured == should_measure and noted == (covered == 1)
+            print(f"  [{'ok' if ok else 'FAIL'}] {case}: {'measured' if measured else 'skipped'}"
+                  + (", and the preflight cell says so first" if noted else ""))
+            failures += int(not ok)
     return failures
 
 

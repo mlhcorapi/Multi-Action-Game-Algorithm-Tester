@@ -190,14 +190,26 @@ CAL_SOAK_MINUTES = 0    # a server needs no warming up: the stability check is t
 WEIGHTS = CALIBRATION / "compute_weights.properties"     # the currency every run below spends
 CAL_ARGS = ["--name", CURRENCY_NAME, "--game", GAME, "--portfolio", PORTFOLIO, "--other-cpus", CAL_OTHER_CPUS,
             "--wait-quiet", CAL_WAIT_QUIET, "--soak-minutes", CAL_SOAK_MINUTES, "--levels", LEVELS]
+
+def priced():
+    """Whether the currency prices every reference arm at every level: the check of the last calibration cell."""
+    return WEIGHTS.is_file() and magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", "@reference",
+                                       "--levels", LEVELS, check=False) == 0
+
+incomplete = WEIGHTS.is_file() and not priced()
 magat("calibrate-controlled", *CAL_ARGS, "--preflight")
+if incomplete:
+    print(f"\n*** {WEIGHTS} exists but does not price every reference arm: the next cell prices the missing ones in "
+          "one session and merges them into it by ratio. To measure a whole new currency in one session instead, "
+          "give CURRENCY_NAME a new name in the first cell and run the cells from there again.")
 '''
 
 MEASURE_CELL = r'''
-# The session, then the checks. Skips itself once the currency exists; a session that did not finish wrote
-# nothing, so running the cell again measures it again.
-if WEIGHTS.is_file():
-    print(f"[skip] {WEIGHTS} exists")
+# The session, then the checks. Skips itself once the currency prices every reference arm at every level. Over
+# a currency that lacks one, calibrate-controlled prices what is missing and merges it in by ratio. A session
+# that did not finish wrote nothing, so running the cell again measures it again.
+if priced():
+    print(f"[skip] {WEIGHTS} prices every reference arm at every level")
 else:
     rc = magat("calibrate-controlled", *CAL_ARGS, check=False)
     if rc == 5:
@@ -375,7 +387,9 @@ two estimates agree. Then it measures, and gives a verdict:
 - **FAIL**: nothing was written. It is retried once, and running the cell again measures it again.
 
 Then it checks the new currency against itself (did the machine hold its speed?), and against the
-published currency once there is one. The measuring cell skips itself once the currency exists. Keep
+published currency once there is one. The measuring cell skips itself once the currency prices every
+reference arm at every level. Over a currency that lacks an arm, measured before that arm was registered,
+it prices just the missing arms and merges them in by ratio; the preflight cell says so first. Keep
 this tab open while it runs, and start nothing else in this server. The screen shows the verdict;
 `record/SUMMARY.md` in the currency's folder has the rest, and the last cell bundles it all.
 """),

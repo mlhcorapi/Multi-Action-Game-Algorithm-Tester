@@ -42,7 +42,8 @@ this page says what it was holding back.
 | Trap | What it cost | What prevents it now |
 |---|---|---|
 | A Jupyter kernel's working directory is the notebook's folder | paths that worked in a terminal broke in the notebook | the setup cell finds the repository; `notebook selftest` runs it from three directories |
-| A notebook cell for a calibration section the plan does not have | the cell exited 2 and read as a failed calibration, where nothing had failed | one cell measures the whole currency, and skips itself once the currency exists |
+| A notebook cell for a calibration section the plan does not have | the cell exited 2 and read as a failed calibration, where nothing had failed | one cell measures the whole currency |
+| A measuring cell that skipped itself because a currency file existed | on the R7615, a currency measured before v0.1, which priced `emcts` but not `mcts`, `oep` or `tbets`, was taken for complete, and the coverage check after it failed | the cell skips only once the currency prices every reference arm at every level, and otherwise lets `calibrate-controlled` price what is missing; `notebook selftest` runs the cells on no currency, an incomplete one and a complete one |
 | Output inside the clone | a re-clone or a merge touched results | the data root is outside the clone by default; the launcher refuses one inside it |
 | The consumer did not read what the producer wrote | a weights pointer that was never wired, so a run spent the compiled defaults | no default weights path; `--weights` passed to every JVM; an unpriced profile is a hard error |
 | A leaf priced in two currencies | a development cell continued after a merge changed its price | the per-leaf currency lock; `--retire-leaf` is the only way through |

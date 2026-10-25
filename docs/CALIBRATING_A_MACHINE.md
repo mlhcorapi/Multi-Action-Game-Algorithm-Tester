@@ -230,7 +230,10 @@ sensor; read them as a trend.
 
 The notebook's calibration stage is the server's path. It has one cell with the parameters and the
 preflight, one cell that measures the currency and checks it, and one that confirms every reference arm
-is priced and bundles the record. The measuring cell skips itself once the currency exists. A session
+is priced and bundles the record. The measuring cell skips itself once the currency prices every
+reference arm at every level. Over a currency that lacks an arm, such as one measured before that arm was
+registered, it prices the missing arms and merges them in by ratio, and the preflight cell says so
+first; to measure a whole new currency in one session instead, give `CURRENCY_NAME` a new name. A session
 cut short wrote nothing, and running the cell again measures it again. The plan prints the expected
 finishing time after the stability check.
 
