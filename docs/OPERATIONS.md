@@ -114,7 +114,7 @@ An experiment is a JSON spec in `experiments/<game>/`. A spec names:
 - every key is one it knows (an unknown key is a warning: a typo?).
 
 ```bash
-python magat.py run --experiment experiments/tribes/reference.json --weights <your weights> --out ~/magat_runs/tribes/runs/reference
+python magat.py run --experiment experiments/tribes/reference.json --weights <your weights> --out $HOME/magat_runs/tribes/runs/reference
 ```
 
 - **Resume by re-running the same command.** Each leaf is checkpointed per turn; a torn write is
@@ -146,7 +146,7 @@ python magat.py run --experiment experiments/tribes/reference.json --weights <yo
 ## Analysis
 
 ```bash
-python magat.py analyze --run ~/magat_runs/tribes/runs/<experiment> --out ~/magat_runs/tribes/results/<experiment>
+python magat.py analyze --run $HOME/magat_runs/tribes/runs/<experiment> --out $HOME/magat_runs/tribes/results/<experiment>
 ```
 
 `--run` takes a split directory or a run directory; each split a run directory holds (`dev/`,
