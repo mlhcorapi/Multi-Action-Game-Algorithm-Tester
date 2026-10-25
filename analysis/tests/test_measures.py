@@ -57,6 +57,14 @@ class SyntheticTree(unittest.TestCase):
         self.assertEqual(written_by([dict(commit="aaaa"), dict(commit="bbbb", earlierCommits=["aaaa"])]),
                          "aaaa (notebook modified); its turns were played by aaaa, bbbb")
 
+    def test_a_published_tree_finds_its_spec_in_this_repository_by_hash(self):
+        spec = load.ROOT / "experiments" / "tribes" / "reference.json"
+        def found(sha):
+            run = dict(game=dict(id="tribes"), experiment=dict(name="reference", path="/home/elsewhere/reference.json", sha256=sha))
+            return load.spec_of(load.Split(self.sp.path, "all", run, [], self.t))
+        self.assertEqual(found(load.sha256(spec))["name"], "reference", "the recorded path is gone; the same bytes are here")
+        self.assertIsNone(found("0" * 64), "a spec of that name with other bytes is not the one the run ran")
+
     def test_the_contrasts_come_from_the_spec(self):
         pairs = load.comparisons(load.load_spec(self.spec))
         self.assertEqual([(p["a"], p["b"], p["label"]) for p in pairs], [("great", "good", "great over good")])

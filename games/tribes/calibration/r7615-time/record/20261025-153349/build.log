@@ -1,0 +1,11 @@
+
+>>>>> 2026-10-25 15:33:49 $ magat arms --game tribes
+15:33:50 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=d5e1f98ff6daae102bd2376cb941c3eff8b78c2f -Dmagat.git.notebook=modified -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main arms --game tribes
+15:33:50   -> /home/jovyan/magat_runs/logs/arms.log
+15:33:50   random                   uniformly random legal actions; the floor   [not priced]
+15:33:50   mcts                     whole-turn UCT without rollouts: UCB1 (C = sqrt 2) on normalised means, one expansion per iteration evaluated by the heuristic, the most-visited path then the end of turn
+15:33:50   emcts                    plain EMCTS: greedy 1-ply initialization, 21 phases / 20 burns, (1+1) incumbent selection, exhaustive greedy repair   [oracle: engine ExperimentalEMCTSAgent(PLUS, k=1)]   [reference]
+15:33:50   oep                      online evolutionary planning: 50 whole turns, the worse half killed each generation, uniform crossover, one offspring in ten mutated, illegal actions replaced at random
+15:33:50   tbets                    turn-based evolutionary tree search, the engine's TBETS at its defaults: 20 seeded turns, evolved by tournament mutation and crossover, one ply, no rollouts   [oracle: engine TBETSAgent (1 ply, no rollouts, no bias, seeding charged)]
+15:33:50 [exit 0] after 0:00:00.206693
+===== exit 0 after 1 s

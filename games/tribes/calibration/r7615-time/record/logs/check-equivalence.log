@@ -1,0 +1,15 @@
+
+>>>>> 2026-10-25 16:22:13 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=/home/jovyan/magat_runs -Dmagat.git.commit=d5e1f98ff6daae102bd2376cb941c3eff8b78c2f -Dmagat.git.notebook=modified -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar magat.cli.Main check equivalence --game tribes --scenarios 8 --visits 2 --budgets 8000,40000 --portfolio /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1
+# magat 0.1.0-m6 check equivalence
+# data root: /home/jovyan/magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+# weights: the fixed measurement weights
+# portfolio: /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/portfolio/v1  (400 scenarios, identity ec243fd7fe81...)
+# arms [emcts, tbets], 8 scenarios x 2 visits, budgets [8000, 40000], 127 threads
+# equivalence: emcts vs engine ExperimentalEMCTSAgent(PLUS, k=1)
+  32 cells, 0 failed
+  (4.5 s)
+# equivalence: tbets vs engine TBETSAgent (1 ply, no rollouts, no bias, seeding charged)
+  32 cells, 0 failed
+  (5.3 s)
+EQUIVALENCE: PASS
+===== exit 0 after 0:00:11.040509

@@ -7,6 +7,7 @@ import magat.agent.Seeds;
 import magat.agent.Signature;
 import magat.agent.TurnBudget;
 import magat.agents.emcts.EmctsFactory;
+import magat.agents.random.RandomAgent;
 import magat.game.Scenario;
 import magat.meter.Meter;
 import magat.meter.Weights;
@@ -123,7 +124,7 @@ public class ProbeToyTest {
         Path work = Files.createTempDirectory("magat-replay3");
         Weights w = Weights.load(magat.run.GridRunnerTest.weightsV2(work, "w2.properties", 0.5, "emcts", "emcts-alt"));
         Path spec = Files.write(work.resolve("s.json"), ("{\"name\":\"r\",\"game\":\"toy\",\"baseline\":\"emcts\","
-                + "\"levels\":[{\"budget\":300,\"visits\":2}],\"arms\":[\"emcts\",\"emcts-alt\"]}").getBytes(StandardCharsets.UTF_8));
+                + "\"levels\":[{\"budget\":300,\"visits\":2}],\"arms\":[\"emcts\",\"emcts-alt\",\"random\"]}").getBytes(StandardCharsets.UTF_8));
         GridRunner.Options o = new GridRunner.Options();
         o.split = Split.Half.ALL;
         o.out = work.resolve("run");
@@ -134,6 +135,10 @@ public class ProbeToyTest {
         Meter.install(w);
         ReplayCheck.Result ok = ReplayCheck.run(game, p, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 300, leaf, 100, 2);
         assertTrue(ok.failures.toString(), ok.pass());
+        // The random floor is not priced: the runner plays it under the currency's global weights, and so does the replay.
+        ReplayCheck.Result floor = ReplayCheck.run(game, p, RandomAgent.<ToyGame.State, ToyGame.Move>factory(), 300,
+                ReplayCheck.read(magat.run.Leaf.dir(o.out.resolve("all"), "random", 300)), 100, 2);
+        assertTrue(floor.failures.toString(), floor.pass());
     }
 
     @Test

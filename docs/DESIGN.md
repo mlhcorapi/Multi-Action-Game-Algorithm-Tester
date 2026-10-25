@@ -247,8 +247,6 @@ Engine code is never copied into MAGAT.
 ## 13. What v0.1 leaves out
 
 - **Full-game win rates**, as an external yardstick beside the turn measures.
-- **A published currency.** The R7615's comes with the reference results; until then, every command that
-  spends a currency takes `--weights`.
 - **The earlier study's algorithms and tooling** (33 EMCTS variants and their analysis), archived with
   the tag `ab-emcts-archive` ([`ARCHIVE.md`](ARCHIVE.md)).
 

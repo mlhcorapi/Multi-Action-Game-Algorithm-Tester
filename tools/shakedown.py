@@ -81,6 +81,11 @@ def main(argv) -> int:
     check("audit: each arm's declared operations and forward model account for its turn (toy size)",
           [PY, ROOT / "magat.py", "check", "audit", "--game", game, "--arms", "@reference",
            "--budget", "4000", "--turns", "2", "--reps", "1", "--warmup", "1"], "AUDIT: PASS")
+    # The reference machine's published run: this machine plays its turns field for field, in its published currency.
+    for published in sorted((ROOT / "games" / game / "results" / "reference").glob("*/all"))[:1]:
+        for leaf in sorted(published.glob("*/9500cu")):
+            check(f"replay: 2 of the published {published.parent.name} turns of {leaf.parent.name}@9500 re-plan here field for field",
+                  [PY, ROOT / "magat.py", "check", "replay", "--game", game, "--leaf", leaf, "--turns", "2"], "REPLAY: PASS")
 
     step("5. Portfolio: toy build, freeze, verify against the published portfolio")
     data = pathlib.Path(os.environ.get("MAGAT_DATA") or (pathlib.Path.home() / "magat_runs")).resolve()
@@ -186,10 +191,8 @@ def main(argv) -> int:
     check("the currency lock refuses a leaf whose price changed",
           [PY, ROOT / "magat.py", "run", "--experiment", spec, "--portfolio", toy_dir, "--weights", repriced,
            "--out", run_root, "--threads", "2", "--toy", "--split", "dev"], "currency lock", codes=(4,))
-    # The reference experiment runs at the published levels (games/<game>/levels.json), which no published currency
-    # prices yet; its structure is checked until one does.
-    check("the shipped spec reference validates (structure; no currency at the published levels yet)",
-          [PY, ROOT / "magat.py", "experiment", "validate", "--no-weights", "--experiment",
+    check("the shipped spec reference validates against the published currency",
+          [PY, ROOT / "magat.py", "experiment", "validate", "--experiment",
            ROOT / "experiments" / game / "reference.json"], "VALIDATION: PASS")
     check("bundle zips a run tree", [PY, ROOT / "magat.py", "bundle", "--name", "shakedown-run", "--paths", run_root], "BUNDLE:")
 

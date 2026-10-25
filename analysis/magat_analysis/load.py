@@ -177,10 +177,15 @@ def load_spec(path) -> dict:
 
 
 def spec_of(split: Split):
-    """The spec recorded in the tree's provenance, when the file is still where it was."""
+    """The spec recorded in the tree's provenance: the file where it was, else this repository's spec of the same
+    game and name, when its hash is the one recorded (a run published from another machine's clone)."""
     e = split.run.get("experiment") or {}
     if e.get("path") and resolve(e["path"]).is_file():
         return load_spec(e["path"])
+    game, name = (split.run.get("game") or {}).get("id"), e.get("name")
+    here = ROOT / "experiments" / str(game) / f"{name}.json"
+    if game and name and here.is_file() and e.get("sha256") and sha256(here) == e["sha256"]:
+        return load_spec(here)
     return None
 
 

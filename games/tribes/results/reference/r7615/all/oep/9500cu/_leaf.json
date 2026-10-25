@@ -1,0 +1,41 @@
+{
+  "arm": "oep",
+  "budget": 9500,
+  "profile": "oep@9500",
+  "weights": [
+    0.979066,
+    0.215961,
+    0.042207
+  ],
+  "currencyVersion": 2,
+  "prices": {
+    "advance": 0.979066,
+    "copy": 0.215961,
+    "eval": 0.042207,
+    "oep.genome": 0.146938832,
+    "oep.legal": 2.072650185,
+    "oep.check": 0.017317907,
+    "oep.generation": 0.217989149
+  },
+  "threads": 62,
+  "host": "f836d975ceda",
+  "commit": "d5e1f98ff6daae102bd2376cb941c3eff8b78c2f",
+  "notebook": "modified",
+  "started": "2026-10-25T15:30:03.311356Z",
+  "turnsTotal": 3200,
+  "turnsDoneAtStart": 0,
+  "status": "complete",
+  "finished": "2026-10-25T15:30:35.626112Z",
+  "turnsDone": 3200,
+  "failures": 0,
+  "seconds": 32.312,
+  "governor": "concurrency 62/62 (low-water 62, 0 throttle event(s)); oldgen 14% after GC, GC share 0.3%",
+  "audit": {
+    "unpricedShare": 0.15178246931450223,
+    "predictedMs": 1685061.3125020338,
+    "measuredMs": 1986591,
+    "threads": 62,
+    "sameMachine": true,
+    "basis": "(units + initialization units) x referenceAdvanceNanos 55340.764 ns, against the turns' plan milliseconds"
+  }
+}

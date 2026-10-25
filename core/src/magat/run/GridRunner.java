@@ -80,7 +80,7 @@ public final class GridRunner {
         public Set<String> retire = new LinkedHashSet<>();
         public boolean toy;
         public List<String> args = new ArrayList<>();
-        /** The audit's warning: a leaf whose priced work accounts for less than (1 - this) of its plan time. */
+        /** The audit's warning, on one thread: a leaf whose priced work accounts for less than (1 - this) of its plan time. */
         public double auditWarn = 0.10;
     }
 
@@ -279,16 +279,12 @@ public final class GridRunner {
         meta.set("finished", Instant.now().toString()).set("turnsDone", rows).set("failures", failures.get())
             .set("seconds", (System.currentTimeMillis() - t0) / 1000.0).set("governor", governor.status())
             .set("status", complete ? "complete" : "incomplete");
-        JsonObject audit = audit(weights, pricedUnits.sum(), planMillis.sum(), threads);
+        // An arm that is not priced spends nothing its units account for, so it has nothing to audit.
+        JsonObject audit = arm.priced() ? audit(weights, pricedUnits.sum(), planMillis.sum(), threads) : null;
         if (audit != null) {
             meta.set("audit", audit);
-            double share = audit.getDouble("unpricedShare", 0);
-            if (share > auditWarn)
-                System.out.println(String.format(Locale.ROOT, "[run] audit: %.1f%% of %s@%d's plan time is not accounted for by the work its "
-                        + "currency prices (threshold %.0f%%)%s", 100 * share, arm.id(), level.budget, 100 * auditWarn,
-                        audit.getBoolean("sameMachine", false) ? (threads > 1 ? "; measured on " + threads + " threads, and contention "
-                                + "inflates it: the calibration's idle audit is the clean measure" : "")
-                                : "; the weights were calibrated on another machine, so the share includes the speed difference"));
+            String line = auditLine(arm.id() + "@" + level.budget, audit, auditWarn);
+            if (line != null) System.out.println(line);
         }
         writeMeta(dir, meta);
         if (failures.get() > 0) System.out.println("[run] " + failures.get() + " turn(s) of " + arm.id() + "@" + level.budget + " failed; the leaf is not complete");
@@ -312,6 +308,26 @@ public final class GridRunner {
                 .add("measuredMs", measuredMillis).add("threads", threads)
                 .add("sameMachine", machine != null && MachineProfile.modelOf(machine).equals(MachineProfile.get().cpuModel()))
                 .add("basis", "(units + initialization units) x referenceAdvanceNanos " + refNs + " ns, against the turns' plan milliseconds");
+    }
+
+    /**
+     * What the run says of a leaf's audit, or null. On one thread a share above {@code warn} is a warning: work the
+     * currency does not price. On many threads the turns share the machine's caches, memory and clock, which
+     * slows each one, so the share holds that contention too: one line of information, the time the turns took
+     * against the time their priced work predicts.
+     */
+    static String auditLine(String cell, JsonObject audit, double warn) {
+        double share = audit.getDouble("unpricedShare", 0);
+        int threads = audit.getInt("threads", 1);
+        boolean same = audit.getBoolean("sameMachine", false);
+        String elsewhere = same ? "" : "; the currency was calibrated on another machine, so this holds the speed difference too";
+        if (threads > 1)
+            return String.format(Locale.ROOT, "[run] audit: %s took %.2fx the time its priced work predicts, on %d threads: the turns "
+                    + "running at once slow each other, so the calibration's idle audit is the clean measure%s", cell,
+                    audit.getDouble("measuredMs", 0) / audit.getDouble("predictedMs", 1), threads, elsewhere);
+        if (share <= warn) return null;
+        return String.format(Locale.ROOT, "[run] audit: %.1f%% of %s's plan time is not accounted for by the work its currency prices "
+                + "(threshold %.0f%%)%s", 100 * share, cell, 100 * warn, elsewhere);
     }
 
     /** The prices a leaf runs under: its profile's every operation, or the global ones for an arm that is not priced. */

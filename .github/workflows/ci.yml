@@ -37,6 +37,11 @@ jobs:
         run: python magat.py check equivalence --game tribes --arms emcts,tbets --scenarios 2 --visits 1 --budgets 8000
       - name: Audit (each arm's declared operations and forward model account for its turn)
         run: python magat.py check audit --game tribes --arms @reference --budget 4000 --turns 2 --reps 1 --warmup 1
+      - name: The R7615's published turns replay here field for field (2 per arm at 9,500, in the published currency)
+        run: |
+          for arm in emcts mcts oep tbets random; do
+            python magat.py check replay --game tribes --leaf games/tribes/results/reference/r7615/all/$arm/9500cu --turns 2
+          done
       - name: Published portfolio verifies (bins, identity, split rule)
         run: python magat.py portfolio verify --game tribes
       - name: Toy portfolio build, freeze, and verify against the published rows
@@ -64,10 +69,8 @@ jobs:
           grep -q "profile.emcts@4000.w.advance" "$RUNNER_TEMP/controlled/compute_weights.properties"
           grep -q "^- Verdict: COMPLETE" "$RUNNER_TEMP/controlled/record/SUMMARY.md"
           python magat.py calibrate-controlled $CC | grep -q "nothing to measure"
-      - name: The shipped experiment spec validates
-        run: |
-          # The reference experiment runs at the published levels, which no published currency prices yet.
-          python magat.py experiment validate --no-weights --experiment experiments/tribes/reference.json
+      - name: The shipped experiment spec validates against the published currency
+        run: python magat.py experiment validate --experiment experiments/tribes/reference.json
       - name: Toy run on dev and holdout, and a resume that skips every leaf
         run: |
           RUN="python magat.py run --experiment experiments/tribes/shakedown.json --portfolio $RUNNER_TEMP/toy --weights $RUNNER_TEMP/calib/compute_weights.properties --out $RUNNER_TEMP/run --threads 2 --toy"

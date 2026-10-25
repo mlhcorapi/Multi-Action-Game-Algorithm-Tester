@@ -1,0 +1,1146 @@
+
+>>>>> 2026-10-25 15:07:22 $ java -Xmx4g -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/test-classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar org.junit.runner.JUnitCore magat.agent.SeedsAndBudgetTest magat.agents.EmctsToyTest magat.agents.FirstAgentTest magat.agents.MctsToyTest magat.agents.OepToyTest magat.agents.OperationsToyTest magat.agents.TbetsToyTest magat.calibrate.CalibratorToyTest magat.calibrate.CurrencyTest magat.calibrate.ThreadSweepTest magat.game.ContractCheckTest magat.games.tribes.PublishedLevelsTest magat.machine.MachineProfileTest magat.meter.MeterTest magat.meter.WeightsTest magat.portfolio.ManifestTest magat.portfolio.PortfolioBuilderTest magat.portfolio.PortfolioTest magat.portfolio.SplitTest magat.probe.ProbeToyTest magat.run.GridRunnerTest magat.run.ValidatorTest
+JUnit version 4.13.2
+..................................[portfolio] game toy, targets toy=10, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 5 -> 10/10 valid  (played 6, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 10/10 through attempt 5 (played 6, replayed 0) in 0.0s
+[portfolio] complete: 10 scenarios in 0.0s, identity cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 -> /tmp/magat-calib-portfolio4452827616939642628
+.[portfolio] game toy, targets toy=10, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 5 -> 10/10 valid  (played 6, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 10/10 through attempt 5 (played 6, replayed 0) in 0.0s
+[portfolio] complete: 10 scenarios in 0.0s, identity cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 -> /tmp/magat-calib-portfolio3597834109837748053
+.[portfolio] game toy, targets toy=10, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 5 -> 10/10 valid  (played 6, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 10/10 through attempt 5 (played 6, replayed 0) in 0.0s
+[portfolio] complete: 10 scenarios in 0.0s, identity cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 -> /tmp/magat-calib-portfolio11556046721424314383
+############################################################
+# compute-unit calibration: per arm, per budget level, relative to one reference advance
+# single-threaded; needs an idle machine: this is a timing measurement
+# TOY: sample-size and stability gates are reported, not enforced; the file is marked toy
+# new currency in /tmp/magat-calib1943544663475100162/compute_weights.properties
+# reference cell emcts@300   levels 300,600   arms [emcts]
+# reps 2   turns/rep 2,2 over levels 300,600   warmup 1   gap gate 10%   min ops 20000 (reported, not enforced)
+# portfolio cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 (10 positions; a pool of 2 of them)
+# every operation an arm declares is measured and priced
+# every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+------------------------------------------------------------
+[machine] calibration
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+# load average before starting: 0.01 per core   (idle)
+
+[calibrate] warm-up for level 300: 1 turns (discarded)
+  [ 1/ 2] emcts@300                          advance     30.0 ns  copy    175.9 ns  eval     26.7 ns   (gap 0.3/24.1/0.4% | CV 0.2/15.2/0.3%)  5 op(s), unpriced 23.4%, spend 0.98x  0 s   <-- only 1108 advances (need 20000)
+
+[calibrate] warm-up for level 600: 1 turns (discarded)
+  [ 2/ 2] emcts@600                          advance     29.7 ns  copy    117.0 ns  eval     26.6 ns   (gap 0.2/22.4/1.3% | CV 0.1/14.2/0.9%)  5 op(s), unpriced 18.5%, spend 0.99x  0 s   <-- only 2238 advances (need 20000)
+
+[calibrate] bracket: emcts@300 again, last (warm-up 1 turns, discarded)
+  [bracket] emcts@300                        advance     29.7 ns  copy     43.2 ns  eval     25.5 ns
+  measured in 0.0 min
+
+=== RESULT: weights relative to one advance of emcts@300 = 30.0 ns ===
+  profile                              wAdvance      wCopy      wEval   ns/advance
+  emcts@300                              1.0000     5.8668     0.8899         30.0
+  emcts@600                              0.9904     3.9013     0.8862         29.7
+
+=== DOES AN OPERATION COST THE SAME FOR EVERY ARM? ===
+       300  cheapest advance emcts 30.0 ns, dearest emcts 30.0 ns: spread 0.0%
+       600  cheapest advance emcts 29.7 ns, dearest emcts 29.7 ns: spread 0.0%
+
+  The reference arm across levels:
+         300 units:     30.0 ns/advance (1.00x the reference cell)
+         600 units:     29.7 ns/advance (0.99x the reference cell)
+
+=== WHAT ONE GLOBAL WEIGHT SET WOULD MIS-ALLOCATE ===
+  Wall-clock 1,000 nominal units buy under the fixed weights 1/0.16/0.077, given each cell's own operation mix.
+       300  0.087 to 0.087 ms: 0.0% unfair (emcts@300 vs emcts@300)
+       600  0.064 to 0.064 ms: 0.0% unfair (emcts@600 vs emcts@600)
+
+=== AUDIT: HOW MUCH OF EACH TURN THE CURRENCY PRICES ===
+  profile                               turn ms  fwd model    own ops  unaccounted   unpriced
+  emcts@300                                 0.1      18.2%      58.5%        23.4%      23.4%
+  emcts@600                                 0.2      17.0%      64.5%        18.5%      18.5%
+  [warn] emcts@300: 23.4% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+  [warn] emcts@600: 18.5% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+
+=== SPEND: EACH CELL'S MEAN TURN AGAINST ITS LEVEL (flagged above 1.10x) ===
+  emcts@300                            0.98x
+  emcts@600                            0.99x
+SPEND: every cell's mean turn is within 1.10x of its level
+
+=== IS THIS A FAIR BENCHMARK? ===
+  [ok]   TOY: 2 of 2 cells failed their own checks (reported, not enforced)
+  [ok]   weights are plausible in every cell
+  [ok]   TOY: the reference cell moved -0.8% / -75.4% / -4.4% (advance / copy / eval) between the start and the end of the session (reported, not enforced)
+  [ok]   machine was idle (load 0.01 per core, this job included)
+
+  VERDICT: PASS (TOY)
+  Weights  -> /tmp/magat-calib1943544663475100162/compute_weights.properties
+  Measured -> /tmp/magat-calib1943544663475100162/compute_profiles.csv
+[portfolio] game toy, targets toy=6, 1 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 3 -> 6/6 valid  (played 4, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 6/6 through attempt 3 (played 4, replayed 0) in 0.0s
+[portfolio] complete: 6 scenarios in 0.0s, identity 1503ea735dc4a7b97f6dbd1419bc4e99a744a4b6a9cfb3c49f2056267fbb8d9a -> /tmp/magat-calib-portfolio211064778836776992341
+.[portfolio] game toy, targets toy=10, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 5 -> 10/10 valid  (played 6, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 10/10 through attempt 5 (played 6, replayed 0) in 0.0s
+[portfolio] complete: 10 scenarios in 0.0s, identity cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 -> /tmp/magat-calib-portfolio2178224753669066881
+.[portfolio] game toy, targets toy=10, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 5 -> 10/10 valid  (played 6, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 10/10 through attempt 5 (played 6, replayed 0) in 0.0s
+[portfolio] complete: 10 scenarios in 0.0s, identity cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 -> /tmp/magat-calib-portfolio7591174484916263147
+############################################################
+# compute-unit calibration: per arm, per budget level, relative to one reference advance
+# single-threaded; needs an idle machine: this is a timing measurement
+# TOY: sample-size and stability gates are reported, not enforced; the file is marked toy
+# new currency in /tmp/magat-calib18405663040526610655/compute_weights.properties
+# reference cell emcts@300   levels 300,600   arms [emcts]
+# reps 2   turns/rep 2,2 over levels 300,600   warmup 1   gap gate 10%   min ops 20000 (reported, not enforced)
+# portfolio cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 (10 positions; a pool of 2 of them)
+# every operation an arm declares is measured and priced
+# every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+------------------------------------------------------------
+[machine] calibration
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+# load average before starting: 0.01 per core   (idle)
+
+[calibrate] warm-up for level 300: 1 turns (discarded)
+  [ 1/ 2] emcts@300                          advance     29.6 ns  copy     45.1 ns  eval     25.4 ns   (gap 1.2/3.6/0.4% | CV 0.8/2.5/0.3%)  5 op(s), unpriced 29.0%, spend 0.98x  0 s   <-- only 1108 advances (need 20000)
+
+[calibrate] warm-up for level 600: 1 turns (discarded)
+  [ 2/ 2] emcts@600                          advance     29.7 ns  copy     44.4 ns  eval     25.6 ns   (gap 0.9/10.3/1.9% | CV 0.6/6.9/1.4%)  5 op(s), unpriced 21.4%, spend 0.99x  0 s   <-- only 2238 advances (need 20000)
+
+[calibrate] bracket: emcts@300 again, last (warm-up 1 turns, discarded)
+  [bracket] emcts@300                        advance     29.8 ns  copy     45.1 ns  eval     25.1 ns
+  measured in 0.0 min
+
+=== RESULT: weights relative to one advance of emcts@300 = 29.6 ns ===
+  profile                              wAdvance      wCopy      wEval   ns/advance
+  emcts@300                              1.0000     1.5238     0.8580         29.6
+  emcts@600                              1.0038     1.4998     0.8668         29.7
+
+=== DOES AN OPERATION COST THE SAME FOR EVERY ARM? ===
+       300  cheapest advance emcts 29.6 ns, dearest emcts 29.6 ns: spread 0.0%
+       600  cheapest advance emcts 29.7 ns, dearest emcts 29.7 ns: spread 0.0%
+
+  The reference arm across levels:
+         300 units:     29.6 ns/advance (1.00x the reference cell)
+         600 units:     29.7 ns/advance (1.00x the reference cell)
+
+=== WHAT ONE GLOBAL WEIGHT SET WOULD MIS-ALLOCATE ===
+  Wall-clock 1,000 nominal units buy under the fixed weights 1/0.16/0.077, given each cell's own operation mix.
+       300  0.046 to 0.046 ms: 0.0% unfair (emcts@300 vs emcts@300)
+       600  0.044 to 0.044 ms: 0.0% unfair (emcts@600 vs emcts@600)
+
+=== AUDIT: HOW MUCH OF EACH TURN THE CURRENCY PRICES ===
+  profile                               turn ms  fwd model    own ops  unaccounted   unpriced
+  emcts@300                                 0.1      13.6%      57.4%        29.0%      29.0%
+  emcts@600                                 0.2      14.8%      63.8%        21.4%      21.4%
+  [warn] emcts@300: 29.0% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+  [warn] emcts@600: 21.4% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+
+=== SPEND: EACH CELL'S MEAN TURN AGAINST ITS LEVEL (flagged above 1.10x) ===
+  emcts@300                            0.98x
+  emcts@600                            0.99x
+SPEND: every cell's mean turn is within 1.10x of its level
+
+=== IS THIS A FAIR BENCHMARK? ===
+  [ok]   TOY: 2 of 2 cells failed their own checks (reported, not enforced)
+  [ok]   weights are plausible in every cell
+  [ok]   the reference cell moved +0.7% / +0.0% / -1.3% (advance / copy / eval) between the start and the end of the session: the machine held its speed
+  [ok]   machine was idle (load 0.01 per core, this job included)
+
+  VERDICT: PASS (TOY)
+  Weights  -> /tmp/magat-calib18405663040526610655/compute_weights.properties
+  Measured -> /tmp/magat-calib18405663040526610655/compute_profiles.csv
+############################################################
+# compute-unit calibration: per arm, per budget level, relative to one reference advance
+# single-threaded; needs an idle machine: this is a timing measurement
+# TOY: sample-size and stability gates are reported, not enforced; the file is marked toy
+# extending /tmp/magat-calib18405663040526610655/compute_weights.properties
+# reference cell emcts@300   levels 300,600   arms [emcts-alt]
+# reps 2   turns/rep 2,2 over levels 300,600   warmup 1   gap gate 10%   min ops 20000 (reported, not enforced)
+# portfolio cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 (10 positions; a pool of 2 of them)
+# every operation an arm declares is measured and priced
+# every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+# will write 2 profile(s): [emcts-alt@300, emcts-alt@600]
+------------------------------------------------------------
+[machine] calibration
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+# load average before starting: 0.01 per core   (idle)
+
+[calibrate] warm-up for level 300: 1 turns (discarded)
+  [ 1/ 4] emcts@300                          advance     29.9 ns  copy     54.2 ns  eval     25.1 ns   (gap 0.8/9.4/3.5% | CV 0.6/6.3/2.4%)  5 op(s), unpriced 29.2%, spend 0.98x  0 s   <-- only 1108 advances (need 20000)
+  [ 2/ 4] emcts-alt@300                      advance     29.5 ns  copy     45.4 ns  eval     24.6 ns   (gap 1.0/143.3/6.8% | CV 0.7/59.0/4.6%)  5 op(s), unpriced 32.2%, spend 0.99x  0 s   <-- only 1118 advances (need 20000)
+
+[calibrate] warm-up for level 600: 1 turns (discarded)
+  [ 3/ 4] emcts@600                          advance     29.9 ns  copy     45.6 ns  eval     25.3 ns   (gap 14.9/32.0/1.4% | CV 9.8/19.5/1.0%)  5 op(s), unpriced 19.8%, spend 0.99x  0 s   <-- only 2238 advances (need 20000)
+  [ 4/ 4] emcts-alt@600                      advance     31.5 ns  copy     99.2 ns  eval     24.3 ns   (gap 0.4/1.9/1.1% | CV 0.3/1.4/0.8%)  5 op(s), unpriced 15.2%, spend 0.99x  0 s   <-- only 2256 advances (need 20000)
+
+[calibrate] bracket: emcts@300 again, last (warm-up 1 turns, discarded)
+  [bracket] emcts@300                        advance     30.2 ns  copy     46.9 ns  eval     24.7 ns
+  measured in 0.0 min
+
+=== RESULT: weights relative to one advance of emcts@300 = 29.9 ns ===
+  profile                              wAdvance      wCopy      wEval   ns/advance
+  emcts@300                              1.0000     1.8098     0.8372         29.9
+  emcts-alt@300                          0.9863     1.5183     0.8205         29.5
+  emcts@600                              0.9999     1.5228     0.8447         29.9
+  emcts-alt@600                          1.0516     3.3136     0.8111         31.5
+
+=== DOES AN OPERATION COST THE SAME FOR EVERY ARM? ===
+       300  cheapest advance emcts-alt 29.5 ns, dearest emcts 29.9 ns: spread 1.4%
+       600  cheapest advance emcts 29.9 ns, dearest emcts-alt 31.5 ns: spread 5.2%
+
+  The reference arm across levels:
+         300 units:     29.9 ns/advance (1.00x the reference cell)
+         600 units:     29.9 ns/advance (1.00x the reference cell)
+
+=== WHAT ONE GLOBAL WEIGHT SET WOULD MIS-ALLOCATE ===
+  Wall-clock 1,000 nominal units buy under the fixed weights 1/0.16/0.077, given each cell's own operation mix.
+       300  0.045 to 0.049 ms: 7.8% unfair (emcts-alt@300 vs emcts@300)
+       600  0.044 to 0.061 ms: 37.5% unfair (emcts@600 vs emcts-alt@600)
+
+=== AUDIT: HOW MUCH OF EACH TURN THE CURRENCY PRICES ===
+  profile                               turn ms  fwd model    own ops  unaccounted   unpriced
+  emcts@300                                 0.1      14.2%      56.6%        29.2%      29.2%
+  emcts-alt@300                             0.1      13.7%      54.1%        32.2%      32.2%
+  emcts@600                                 0.2      15.0%      65.2%        19.8%      19.8%
+  emcts-alt@600                             0.2      16.1%      68.8%        15.2%      15.2%
+  [warn] emcts@300: 29.2% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+  [warn] emcts-alt@300: 32.2% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+  [warn] emcts@600: 19.8% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+  [warn] emcts-alt@600: 15.2% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+
+=== SPEND: EACH CELL'S MEAN TURN AGAINST ITS LEVEL (flagged above 1.10x) ===
+  emcts@300                            0.98x
+  emcts-alt@300                        0.99x
+  emcts@600                            0.99x
+  emcts-alt@600                        0.99x
+SPEND: every cell's mean turn is within 1.10x of its level
+
+=== IS THIS A FAIR BENCHMARK? ===
+  [ok]   TOY: 4 of 4 cells failed their own checks (reported, not enforced)
+  [ok]   weights are plausible in every cell
+  [ok]   TOY: the reference cell moved +0.8% / -13.5% / -1.3% (advance / copy / eval) between the start and the end of the session (reported, not enforced)
+  [ok]   machine was idle (load 0.01 per core, this job included)
+
+  [merge] kept the currency of compute_weights.properties; wrote 2 profile(s) re-denominated x1.000000 (this session's reference advance is x1.0116 the file's: machine speed, which cancels)
+
+  VERDICT: PASS (TOY)
+  Weights  -> /tmp/magat-calib18405663040526610655/compute_weights.properties
+  Measured -> /tmp/magat-calib18405663040526610655/compute_profiles.csv
+############################################################
+# compute-unit calibration: per arm, per budget level, relative to one reference advance
+# single-threaded; needs an idle machine: this is a timing measurement
+# TOY: sample-size and stability gates are reported, not enforced; the file is marked toy
+# extending /tmp/magat-calib18405663040526610655/compute_weights.properties
+# reference cell emcts@300   levels 300,600   arms [emcts-alt]
+# reps 2   turns/rep 2,2 over levels 300,600   warmup 1   gap gate 10%   min ops 20000 (reported, not enforced)
+# portfolio cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 (10 positions; a pool of 2 of them)
+# every operation an arm declares is measured and priced
+# every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+# will write 2 profile(s): [emcts-alt@300, emcts-alt@600]
+------------------------------------------------------------
+[machine] calibration
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+# load average before starting: 0.01 per core   (idle)
+
+[calibrate] warm-up for level 300: 1 turns (discarded)
+  [ 1/ 4] emcts@300                          advance     57.3 ns  copy     89.5 ns  eval     49.1 ns   (gap 0.7/58.0/0.4% | CV 0.5/31.8/0.3%)  5 op(s), unpriced 24.0%, spend 0.98x  0 s   <-- only 1108 advances (need 20000)
+  [ 2/ 4] emcts-alt@300                      advance     57.5 ns  copy     81.7 ns  eval     48.8 ns   (gap 0.5/7.2/1.0% | CV 0.3/4.9/0.7%)  5 op(s), unpriced 23.4%, spend 0.99x  0 s   <-- only 1118 advances (need 20000)
+
+[calibrate] warm-up for level 600: 1 turns (discarded)
+  [ 3/ 4] emcts@600                          advance     57.6 ns  copy     93.9 ns  eval     49.1 ns   (gap 2.1/8.5/0.5% | CV 1.5/5.8/0.3%)  5 op(s), unpriced 17.2%, spend 0.99x  0 s   <-- only 2238 advances (need 20000)
+  [ 4/ 4] emcts-alt@600                      advance     57.8 ns  copy     97.7 ns  eval     49.0 ns   (gap 1.4/39.5/0.6% | CV 1.0/23.3/0.4%)  5 op(s), unpriced 13.3%, spend 0.99x  0 s   <-- only 2256 advances (need 20000)
+
+[calibrate] bracket: emcts@300 again, last (warm-up 1 turns, discarded)
+  [bracket] emcts@300                        advance     58.1 ns  copy     90.1 ns  eval     49.0 ns
+  measured in 0.0 min
+
+=== RESULT: weights relative to one advance of emcts@300 = 57.3 ns ===
+  profile                              wAdvance      wCopy      wEval   ns/advance
+  emcts@300                              1.0000     1.5609     0.8566         57.3
+  emcts-alt@300                          1.0026     1.4250     0.8502         57.5
+  emcts@600                              1.0048     1.6370     0.8566         57.6
+  emcts-alt@600                          1.0081     1.7029     0.8547         57.8
+
+=== DOES AN OPERATION COST THE SAME FOR EVERY ARM? ===
+       300  cheapest advance emcts 57.3 ns, dearest emcts-alt 57.5 ns: spread 0.3%
+       600  cheapest advance emcts 57.6 ns, dearest emcts-alt 57.8 ns: spread 0.3%
+
+  The reference arm across levels:
+         300 units:     57.3 ns/advance (1.00x the reference cell)
+         600 units:     57.6 ns/advance (1.00x the reference cell)
+
+=== WHAT ONE GLOBAL WEIGHT SET WOULD MIS-ALLOCATE ===
+  Wall-clock 1,000 nominal units buy under the fixed weights 1/0.16/0.077, given each cell's own operation mix.
+       300  0.086 to 0.089 ms: 3.5% unfair (emcts-alt@300 vs emcts@300)
+       600  0.087 to 0.088 ms: 1.6% unfair (emcts@600 vs emcts-alt@600)
+
+=== AUDIT: HOW MUCH OF EACH TURN THE CURRENCY PRICES ===
+  profile                               turn ms  fwd model    own ops  unaccounted   unpriced
+  emcts@300                                 0.2      16.7%      59.3%        24.0%      24.0%
+  emcts-alt@300                             0.2      17.3%      59.3%        23.4%      23.4%
+  emcts@600                                 0.3      17.1%      65.7%        17.2%      17.2%
+  emcts-alt@600                             0.3      16.4%      70.3%        13.3%      13.3%
+  [warn] emcts@300: 24.0% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+  [warn] emcts-alt@300: 23.4% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+  [warn] emcts@600: 17.2% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+  [warn] emcts-alt@600: 13.3% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+
+=== SPEND: EACH CELL'S MEAN TURN AGAINST ITS LEVEL (flagged above 1.10x) ===
+  emcts@300                            0.98x
+  emcts-alt@300                        0.99x
+  emcts@600                            0.99x
+  emcts-alt@600                        0.99x
+SPEND: every cell's mean turn is within 1.10x of its level
+
+=== IS THIS A FAIR BENCHMARK? ===
+  [ok]   TOY: 4 of 4 cells failed their own checks (reported, not enforced)
+  [ok]   weights are plausible in every cell
+  [ok]   the reference cell moved +1.3% / +0.7% / -0.2% (advance / copy / eval) between the start and the end of the session: the machine held its speed
+  [ok]   machine was idle (load 0.01 per core, this job included)
+
+  [merge] kept the currency of compute_weights.properties; wrote 2 profile(s) re-denominated x1.000000 (this session's reference advance is x1.9384 the file's: machine speed, which cancels)
+
+  VERDICT: PASS (TOY)
+  Weights  -> /tmp/magat-calib18405663040526610655/compute_weights.properties
+  Measured -> /tmp/magat-calib18405663040526610655/compute_profiles.csv
+.[portfolio] game toy, targets toy=10, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 5 -> 10/10 valid  (played 6, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 10/10 through attempt 5 (played 6, replayed 0) in 0.0s
+[portfolio] complete: 10 scenarios in 0.0s, identity cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 -> /tmp/magat-calib-portfolio14350977315224727763
+############################################################
+# compute-unit calibration: per arm, per budget level, relative to one reference advance
+# single-threaded; needs an idle machine: this is a timing measurement
+# TOY: sample-size and stability gates are reported, not enforced; the file is marked toy
+# new currency in /tmp/magat-calib-estimate6172582140386547752/compute_weights.properties
+# reference cell emcts@300   levels 300,600   arms [emcts, emcts-alt]
+# reps 2   turns/rep 2,2 over levels 300,600   warmup 1   gap gate 10%   min ops 20000 (reported, not enforced)
+# portfolio cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 (10 positions; a pool of 2 of them)
+# every operation an arm declares is measured and priced
+# every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+------------------------------------------------------------
+[machine] calibration
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+  [estimate] emcts @ 300: 0.00 s per turn over the level's 2 positions
+  [estimate] emcts @ 600: 0.00 s per turn over the level's 2 positions
+
+=== ESTIMATE: WHAT THIS SESSION WOULD TAKE ON THIS MACHINE ===
+     level  cells    turns   s per turn    minutes
+       300      2       17         0.00        0.0
+       600      2       11         0.00        0.0
+  4 cells, 28 turns: about 0.0 h at the reference arm's pace, up to 0.0 h if every arm took 1.25x its time per turn (measured in 0.0 min; nothing was written)
+ESTIMATE: 0.0 h
+.[portfolio] game toy, targets toy=10, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 5 -> 10/10 valid  (played 6, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 10/10 through attempt 5 (played 6, replayed 0) in 0.0s
+[portfolio] complete: 10 scenarios in 0.0s, identity cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 -> /tmp/magat-calib-portfolio17271416377917740277
+############################################################
+# compute-unit calibration: per arm, per budget level, relative to one reference advance
+# single-threaded; needs an idle machine: this is a timing measurement
+# TOY: sample-size and stability gates are reported, not enforced; the file is marked toy
+# new currency in /tmp/magat-calib-turns8361039418500679562/compute_weights.properties
+# reference cell emcts@300   levels 300,600   arms [emcts]
+# reps 2   turns/rep 2,2 over levels 300,600   warmup 1   gap gate 10%   min ops 20000 (reported, not enforced)
+# portfolio cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 (10 positions; a pool of 2 of them)
+# every operation an arm declares is measured and priced
+# every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+------------------------------------------------------------
+[machine] calibration
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+# load average before starting: 0.01 per core   (idle)
+
+[calibrate] warm-up for level 300: 1 turns (discarded)
+  [ 1/ 2] emcts@300                          advance     59.3 ns  copy     88.6 ns  eval     50.1 ns   (gap 0.8/1.8/1.2% | CV 0.5/1.3/0.8%)  5 op(s), unpriced 19.8%, spend 0.98x  0 s   <-- only 1108 advances (need 20000)
+
+[calibrate] warm-up for level 600: 1 turns (discarded)
+  [ 2/ 2] emcts@600                          advance     73.1 ns  copy    112.5 ns  eval     62.1 ns   (gap 1.3/24.2/0.4% | CV 0.9/15.3/0.3%)  5 op(s), unpriced 13.1%, spend 0.99x  0 s   <-- only 2238 advances (need 20000)
+
+[calibrate] bracket: emcts@300 again, last (warm-up 1 turns, discarded)
+  [bracket] emcts@300                        advance     73.4 ns  copy    103.1 ns  eval     61.5 ns
+  measured in 0.0 min
+
+=== RESULT: weights relative to one advance of emcts@300 = 59.3 ns ===
+  profile                              wAdvance      wCopy      wEval   ns/advance
+  emcts@300                              1.0000     1.4936     0.8447         59.3
+  emcts@600                              1.2322     1.8973     1.0466         73.1
+
+=== DOES AN OPERATION COST THE SAME FOR EVERY ARM? ===
+       300  cheapest advance emcts 59.3 ns, dearest emcts 59.3 ns: spread 0.0%
+       600  cheapest advance emcts 73.1 ns, dearest emcts 73.1 ns: spread 0.0%
+
+  The reference arm across levels:
+         300 units:     59.3 ns/advance (1.00x the reference cell)
+         600 units:     73.1 ns/advance (1.23x the reference cell)
+
+=== WHAT ONE GLOBAL WEIGHT SET WOULD MIS-ALLOCATE ===
+  Wall-clock 1,000 nominal units buy under the fixed weights 1/0.16/0.077, given each cell's own operation mix.
+       300  0.091 to 0.091 ms: 0.0% unfair (emcts@300 vs emcts@300)
+       600  0.108 to 0.108 ms: 0.0% unfair (emcts@600 vs emcts@600)
+
+=== AUDIT: HOW MUCH OF EACH TURN THE CURRENCY PRICES ===
+  profile                               turn ms  fwd model    own ops  unaccounted   unpriced
+  emcts@300                                 0.1      19.8%      60.5%        19.8%      19.8%
+  emcts@600                                 0.3      19.1%      67.8%        13.1%      13.1%
+  [warn] emcts@300: 19.8% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+  [warn] emcts@600: 13.1% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+
+=== SPEND: EACH CELL'S MEAN TURN AGAINST ITS LEVEL (flagged above 1.10x) ===
+  emcts@300                            0.98x
+  emcts@600                            0.99x
+SPEND: every cell's mean turn is within 1.10x of its level
+
+=== IS THIS A FAIR BENCHMARK? ===
+  [ok]   TOY: 2 of 2 cells failed their own checks (reported, not enforced)
+  [ok]   weights are plausible in every cell
+  [ok]   TOY: the reference cell moved +23.7% / +16.4% / +22.9% (advance / copy / eval) between the start and the end of the session (reported, not enforced)
+  [ok]   machine was idle (load 0.01 per core, this job included)
+
+  VERDICT: PASS (TOY)
+  Weights  -> /tmp/magat-calib-turns8361039418500679562/compute_weights.properties
+  Measured -> /tmp/magat-calib-turns8361039418500679562/compute_profiles.csv
+############################################################
+# compute-unit calibration: per arm, per budget level, relative to one reference advance
+# single-threaded; needs an idle machine: this is a timing measurement
+# TOY: sample-size and stability gates are reported, not enforced; the file is marked toy
+# extending /tmp/magat-calib-turns8361039418500679562/compute_weights.properties
+# reference cell emcts@300   levels 300,600   arms [emcts-alt]
+# reps 2   turns/rep 2,2 over levels 300,600   warmup 1   gap gate 10%   min ops 20000 (reported, not enforced)
+# portfolio cb7f9edf21d46af51b433dafe9681071669ec020c22715c00469ed264d5490d8 (10 positions; a pool of 2 of them)
+# every operation an arm declares is measured and priced
+# every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+# will write 2 profile(s): [emcts-alt@300, emcts-alt@600]
+------------------------------------------------------------
+[machine] calibration
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+# load average before starting: 0.01 per core   (idle)
+
+[calibrate] warm-up for level 300: 1 turns (discarded)
+  [ 1/ 4] emcts@300                          advance     73.2 ns  copy    109.0 ns  eval     62.3 ns   (gap 0.4/1.7/0.0% | CV 0.3/1.2/0.0%)  5 op(s), unpriced 19.6%, spend 0.98x  0 s   <-- only 1108 advances (need 20000)
+  [ 2/ 4] emcts-alt@300                      advance     72.5 ns  copy    101.1 ns  eval     62.0 ns   (gap 0.6/2.6/0.7% | CV 0.4/1.8/0.5%)  5 op(s), unpriced 19.9%, spend 0.99x  0 s   <-- only 1118 advances (need 20000)
+
+[calibrate] warm-up for level 600: 1 turns (discarded)
+  [ 3/ 4] emcts@600                          advance     73.2 ns  copy    106.0 ns  eval     61.6 ns   (gap 0.7/14.1/0.3% | CV 0.5/9.3/0.2%)  5 op(s), unpriced 12.1%, spend 0.99x  0 s   <-- only 2238 advances (need 20000)
+  [ 4/ 4] emcts-alt@600                      advance     73.2 ns  copy    110.0 ns  eval     61.5 ns   (gap 0.2/2.9/0.3% | CV 0.1/2.0/0.2%)  5 op(s), unpriced 11.2%, spend 0.99x  0 s   <-- only 2256 advances (need 20000)
+
+[calibrate] bracket: emcts@300 again, last (warm-up 1 turns, discarded)
+  [bracket] emcts@300                        advance     73.1 ns  copy    101.6 ns  eval     61.6 ns
+  measured in 0.0 min
+
+=== RESULT: weights relative to one advance of emcts@300 = 73.2 ns ===
+  profile                              wAdvance      wCopy      wEval   ns/advance
+  emcts@300                              1.0000     1.4891     0.8508         73.2
+  emcts-alt@300                          0.9903     1.3805     0.8466         72.5
+  emcts@600                              0.9996     1.4469     0.8408         73.2
+  emcts-alt@600                          0.9992     1.5016     0.8401         73.2
+
+=== DOES AN OPERATION COST THE SAME FOR EVERY ARM? ===
+       300  cheapest advance emcts-alt 72.5 ns, dearest emcts 73.2 ns: spread 1.0%
+       600  cheapest advance emcts-alt 73.2 ns, dearest emcts 73.2 ns: spread 0.0%
+
+  The reference arm across levels:
+         300 units:     73.2 ns/advance (1.00x the reference cell)
+         600 units:     73.2 ns/advance (1.00x the reference cell)
+
+=== WHAT ONE GLOBAL WEIGHT SET WOULD MIS-ALLOCATE ===
+  Wall-clock 1,000 nominal units buy under the fixed weights 1/0.16/0.077, given each cell's own operation mix.
+       300  0.108 to 0.112 ms: 3.7% unfair (emcts-alt@300 vs emcts@300)
+       600  0.106 to 0.108 ms: 1.2% unfair (emcts@600 vs emcts-alt@600)
+
+=== AUDIT: HOW MUCH OF EACH TURN THE CURRENCY PRICES ===
+  profile                               turn ms  fwd model    own ops  unaccounted   unpriced
+  emcts@300                                 0.2      19.0%      61.4%        19.6%      19.6%
+  emcts-alt@300                             0.2      20.1%      60.0%        19.9%      19.9%
+  emcts@600                                 0.3      19.6%      68.3%        12.1%      12.1%
+  emcts-alt@600                             0.3      20.7%      68.1%        11.2%      11.2%
+  [warn] emcts@300: 19.6% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+  [warn] emcts-alt@300: 19.9% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+  [warn] emcts@600: 12.1% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+  [warn] emcts-alt@600: 11.2% of its turn time is not priced (threshold 10%): the arm does work it does not declare; a unit budget buys it more wall-clock than the reference
+
+=== SPEND: EACH CELL'S MEAN TURN AGAINST ITS LEVEL (flagged above 1.10x) ===
+  emcts@300                            0.98x
+  emcts-alt@300                        0.99x
+  emcts@600                            0.99x
+  emcts-alt@600                        0.99x
+SPEND: every cell's mean turn is within 1.10x of its level
+
+=== IS THIS A FAIR BENCHMARK? ===
+  [ok]   TOY: 4 of 4 cells failed their own checks (reported, not enforced)
+  [ok]   weights are plausible in every cell
+  [ok]   the reference cell moved -0.1% / -6.8% / -1.1% (advance / copy / eval) between the start and the end of the session: the machine held its speed
+  [ok]   machine was idle (load 0.01 per core, this job included)
+
+  [merge] kept the currency of compute_weights.properties; wrote 2 profile(s) re-denominated x1.000000 (this session's reference advance is x1.2349 the file's: machine speed, which cancels)
+
+  VERDICT: PASS (TOY)
+  Weights  -> /tmp/magat-calib-turns8361039418500679562/compute_weights.properties
+  Measured -> /tmp/magat-calib-turns8361039418500679562/compute_profiles.csv
+............[portfolio] game toy, targets toy=8, 1 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 4 -> 8/8 valid  (played 5, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 8/8 through attempt 4 (played 5, replayed 0) in 0.0s
+[portfolio] complete: 8 scenarios in 0.0s, identity de7524d20ae682a48111e4869885dc1077656166e68ca5c2bb58e64574591cc3 -> /tmp/magat-sweep-portfolio4548407234433253439
+------------------------------------------------------------
+[machine] thread sweep
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+
+=== budget 200 ===
+  ladder [1, 2]   (ceiling 62 = 64 physical cores - 2 reserved; SMT siblings never used)
+  pilot: 8 turns on 1 threads in 0.0s => 0.00s per turn per thread
+  workload: 8 positions (fixed), ~64 turns/thread/segment => ~0s per point; budget 8 min
+   threads   t/thr    turns  elapsedMs    turns/min    sustained   2ndHalf    speedup  efficiency   peakHeapMB
+         1      64      128          9     853333.3     768000.0     20.0%       1.00        100%            5   (2nd half slower)
+         2      64      256         11    1396363.6    1280000.0     16.7%       1.67         83%            8   (2nd half slower)
+  knee: 2 threads (smallest within 3% of the 1280000.0 turns/min sustained peak)
+  -> 2 threads at 200   (/tmp/magat-sweep1569475799754607065/threads.json)
+.[portfolio] game toy, targets toy=4, 1 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 2 -> 4/4 valid  (played 3, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 4/4 through attempt 2 (played 3, replayed 0) in 0.0s
+[portfolio] complete: 4 scenarios in 0.0s, identity e4a48685a10b74fbdbf2095a937b7ea55cefe6b4f22551c0f0d887f7edcd738d -> /tmp/magat-sweep-portfolio8839350125366770822
+.        L4: 42 cross-state actions tried, 42 judged legal (informational)
+  [ok] L1   copy isolates the original
+  [ok] L2   reseeded copies are deterministic
+  [ok] L3   legal actions are non-empty and legal
+  [ok] L4   isLegal never throws on stale actions
+  [ok] L5   the end-turn action ends the turn
+  [ok] L6   serialize/deserialize round-trips
+  [ok] L7   action keys are unique within a state
+  [ok] L8   evaluate is deterministic and finite
+  [ok] L9   the meter counts every operation
+........................[portfolio] game toy, targets alpha=7 beta=5, 1 thread(s), fresh build
+[portfolio]   source alpha: scrambled toy, salt 1
+[portfolio]   source beta: scrambled toy, salt 2
+[portfolio] alpha: through attempt 5 -> 7/7 valid  (played 5, replayed 0, in flight 0, yield 1.60/attempt)
+[portfolio] beta: through attempt 4 -> 5/5 valid  (played 5, replayed 0, in flight 1, yield 1.50/attempt)
+[portfolio]   alpha: 7/7 through attempt 5 (played 5, replayed 0) in 0.0s
+[portfolio]   beta: 5/5 through attempt 4 (played 5, replayed 0) in 0.0s
+[portfolio] complete: 12 scenarios in 0.1s, identity 07d3e32df069d374363cf602ed319fb2188e57f07d0fe6f5527d92fafcaaa8b5 -> /tmp/magat-build128851771798537479
+[portfolio] game toy, targets alpha=7 beta=5, 4 thread(s), fresh build
+[portfolio]   source alpha: scrambled toy, salt 1
+[portfolio]   source beta: scrambled toy, salt 2
+[portfolio] alpha: through attempt 5 -> 7/7 valid  (played 7, replayed 0, in flight 2, yield 1.60/attempt)
+[portfolio] beta: through attempt 4 -> 5/5 valid  (played 7, replayed 0, in flight 3, yield 1.50/attempt)
+[portfolio]   alpha: 7/7 through attempt 5 (played 7, replayed 0) in 0.0s
+[portfolio]   beta: 5/5 through attempt 4 (played 7, replayed 0) in 0.0s
+[portfolio] complete: 12 scenarios in 0.0s, identity 07d3e32df069d374363cf602ed319fb2188e57f07d0fe6f5527d92fafcaaa8b5 -> /tmp/magat-build417201030818085510218
+.[portfolio] game toy, targets alpha=4 beta=2, 2 thread(s), fresh build
+[portfolio]   source alpha: scrambled toy, salt 1
+[portfolio]   source beta: scrambled toy, salt 2
+[portfolio] alpha: through attempt 2 -> 4/4 valid  (played 3, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio] beta: through attempt 1 -> 2/2 valid  (played 2, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   alpha: 4/4 through attempt 2 (played 3, replayed 0) in 0.0s
+[portfolio]   beta: 2/2 through attempt 1 (played 2, replayed 0) in 0.0s
+[portfolio] complete: 6 scenarios in 0.0s, identity 30f87f7fab723b1f5060614e5a13423c80d423aa670d1c639bc140ad4d2cc00c -> /tmp/magat-frozen255988361464312392
+.[portfolio] game toy, targets alpha=3 beta=2, 1 thread(s), fresh build
+[portfolio]   source alpha: scrambled toy, salt 1
+[portfolio]   source beta: scrambled toy, salt 2
+[portfolio] alpha: through attempt 2 -> 3/3 valid  (played 2, replayed 0, in flight 0, yield 2.00/attempt)
+[portfolio] game toy, targets alpha=5 beta=2, 1 thread(s), RESUMING (3 source game(s) already played)
+[portfolio]   source alpha: scrambled toy, salt 1
+[portfolio]   source beta: scrambled toy, salt 2
+[portfolio] alpha: through attempt 4 -> 5/5 valid  (played 3, replayed 2, in flight 1, yield 1.50/attempt)
+[portfolio] beta: through attempt 1 -> 2/2 valid  (played 1, replayed 1, in flight 1, yield 2.00/attempt)
+[portfolio]   alpha: 5/5 through attempt 4 (played 3, replayed 2) in 0.0s
+[portfolio]   beta: 2/2 through attempt 1 (played 1, replayed 1) in 0.0s
+[portfolio] complete: 7 scenarios in 0.0s, identity 7e66b56ebf70325d5699b3cf86f97e6be3fb8815b8aae5e8ccdeb677b54d2183 -> /tmp/magat-grow1955307944564343983
+[portfolio] game toy, targets alpha=3 beta=2, 1 thread(s), fresh build
+[portfolio]   source alpha: scrambled toy, salt 1
+[portfolio]   source beta: scrambled toy, salt 2
+[portfolio] alpha: through attempt 2 -> 3/3 valid  (played 2, replayed 0, in flight 0, yield 2.00/attempt)
+[portfolio] the build journal was written for a different game, configuration or source definition - discarding it.
+[portfolio] game toy, targets alpha=3 beta=2, 1 thread(s), fresh build
+[portfolio]   source alpha: scrambled toy, salt 5
+[portfolio]   source beta: scrambled toy, salt 2
+[portfolio] alpha: through attempt 2 -> 3/3 valid  (played 2, replayed 0, in flight 0, yield 2.00/attempt)
+[portfolio] beta: through attempt 1 -> 2/2 valid  (played 2, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   alpha: 3/3 through attempt 2 (played 2, replayed 0) in 0.0s
+[portfolio]   beta: 2/2 through attempt 1 (played 2, replayed 0) in 0.0s
+[portfolio] complete: 5 scenarios in 0.0s, identity d55ff1521eb5daed2b83d1b7e9e2964c75c86ad7acbe31fc09f593df6ff09c13 -> /tmp/magat-changed16527438620053987493
+.[portfolio] game toy, targets alpha=4 beta=2, 2 thread(s), fresh build
+[portfolio]   source alpha: scrambled toy, salt 1
+[portfolio]   source beta: scrambled toy, salt 2
+[portfolio] alpha: through attempt 2 -> 4/4 valid  (played 3, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio] beta: through attempt 1 -> 2/2 valid  (played 2, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   alpha: 4/4 through attempt 2 (played 3, replayed 0) in 0.0s
+[portfolio]   beta: 2/2 through attempt 1 (played 2, replayed 0) in 0.0s
+[portfolio] complete: 6 scenarios in 0.0s, identity 30f87f7fab723b1f5060614e5a13423c80d423aa670d1c639bc140ad4d2cc00c -> /tmp/magat-build7935090387251392667
+[portfolio] already complete (alpha=4 beta=2, 6 scenarios, identity 30f87f7fab72...) - nothing to build. Delete _portfolio_complete.txt to force a rebuild.
+.[portfolio] game toy, targets alpha=9 beta=3, 3 thread(s), fresh build
+[portfolio]   source alpha: scrambled toy, salt 1
+[portfolio]   source beta: scrambled toy, salt 2
+[portfolio] alpha: through attempt 6 -> 9/9 valid  (played 9, replayed 0, in flight 3, yield 1.67/attempt)
+[portfolio] beta: through attempt 3 -> 3/3 valid  (played 4, replayed 0, in flight 1, yield 1.33/attempt)
+[portfolio]   alpha: 9/9 through attempt 6 (played 9, replayed 0) in 0.0s
+[portfolio]   beta: 3/3 through attempt 3 (played 4, replayed 0) in 0.0s
+[portfolio] complete: 12 scenarios in 0.0s, identity 0815215c1a5e70efc24a570891adf1997e658a4aec0209644743bcaf637eea06 -> /tmp/magat-fresh1910678866966730146
+[portfolio] game toy, targets alpha=9 beta=3, 3 thread(s), fresh build
+[portfolio]   source alpha: scrambled toy, salt 1
+[portfolio]   source beta: scrambled toy, salt 2
+[portfolio] journal: 1 incomplete record(s) ignored (interrupted mid-write); those attempts will be replayed.
+[portfolio] game toy, targets alpha=9 beta=3, 3 thread(s), RESUMING (7 source game(s) already played)
+[portfolio]   source alpha: scrambled toy, salt 1
+[portfolio]   source beta: scrambled toy, salt 2
+[portfolio] alpha: through attempt 6 -> 9/9 valid  (played 2, replayed 7, in flight 3, yield 1.67/attempt)
+[portfolio] beta: through attempt 3 -> 3/3 valid  (played 4, replayed 0, in flight 1, yield 1.33/attempt)
+[portfolio]   alpha: 9/9 through attempt 6 (played 2, replayed 7) in 0.0s
+[portfolio]   beta: 3/3 through attempt 3 (played 4, replayed 0) in 0.0s
+[portfolio] complete: 12 scenarios in 0.0s, identity 0815215c1a5e70efc24a570891adf1997e658a4aec0209644743bcaf637eea06 -> /tmp/magat-resume11429786956888483495
+..........[portfolio] game toy, targets toy=6, 1 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 3 -> 6/6 valid  (played 4, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 6/6 through attempt 3 (played 4, replayed 0) in 0.0s
+[portfolio] complete: 6 scenarios in 0.0s, identity 1503ea735dc4a7b97f6dbd1419bc4e99a744a4b6a9cfb3c49f2056267fbb8d9a -> /tmp/magat-replay2-portfolio1896411390653198945
+# experiment r (/tmp/magat-replay29035131301129653157/s.json, sha256 9fb9b6abe8ba...)
+  [warn]  the baseline emcts runs at 1 level(s); budget multipliers need its value-versus-budget curve at two or more
+############################################################
+# run r   split all   6 scenarios   -> /tmp/magat-replay29035131301129653157/run/all
+# weights w2.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     300:  2 arm(s) x 6 scenarios x 2 visit(s) on 2 thread(s)
+# 24 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run r
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] RUN emcts @ 300: 12 turns (0 already done) on 2 thread(s)
+    emcts@300: 12/12   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=300;split=all
+[run] RUN emcts-alt @ 300: 12 turns (0 already done) on 2 thread(s)
+    emcts-alt@300: 12/12   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=300;split=all
+RUN: COMPLETE
+.[portfolio] game toy, targets toy=6, 1 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 3 -> 6/6 valid  (played 4, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 6/6 through attempt 3 (played 4, replayed 0) in 0.0s
+[portfolio] complete: 6 scenarios in 0.0s, identity 1503ea735dc4a7b97f6dbd1419bc4e99a744a4b6a9cfb3c49f2056267fbb8d9a -> /tmp/magat-replay-portfolio2368321973808219060
+# experiment r (/tmp/magat-replay17547192425978301718/s.json, sha256 08fda4ce10b2...)
+  [warn]  the baseline emcts runs at 1 level(s); budget multipliers need its value-versus-budget curve at two or more
+############################################################
+# run r   split all   6 scenarios   -> /tmp/magat-replay17547192425978301718/run/all
+# weights w.properties: 2 profiles, up to 5 algorithm operation(s) each, reference emcts@400 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     400:  2 arm(s) x 6 scenarios x 2 visit(s) on 2 thread(s)
+# 24 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run r
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] RUN emcts @ 400: 12 turns (0 already done) on 2 thread(s)
+    emcts@400: 12/12   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=400;split=all
+[run] RUN emcts-alt @ 400: 12 turns (0 already done) on 2 thread(s)
+    emcts-alt@400: 12/12   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=400;split=all
+RUN: COMPLETE
+.  emcts@300                         294  0.98x      4       0.1       0.1        0-0           0-0          0.0       0.27  -100.0%
+  emcts-alt@300                     296  0.99x      4       0.1       0.1        0-0           0-0          0.0       0.26  -100.0%
+  emcts@600                         586  0.98x      4       0.1       0.1        0-0           0-0          0.0       0.21  -100.0%
+  emcts-alt@600                     600  1.00x      4       0.1       0.1        0-0           0-0          0.0       0.18  -100.0%
+.[portfolio] game toy, targets toy=6, 1 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 3 -> 6/6 valid  (played 4, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 6/6 through attempt 3 (played 4, replayed 0) in 0.0s
+[portfolio] complete: 6 scenarios in 0.0s, identity 1503ea735dc4a7b97f6dbd1419bc4e99a744a4b6a9cfb3c49f2056267fbb8d9a -> /tmp/magat-replay3-portfolio7154584322942338833
+# experiment r (/tmp/magat-replay314445605743649925376/s.json, sha256 9fb9b6abe8ba...)
+  [warn]  the baseline emcts runs at 1 level(s); budget multipliers need its value-versus-budget curve at two or more
+############################################################
+# run r   split all   6 scenarios   -> /tmp/magat-replay314445605743649925376/run/all
+# weights w2.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     300:  2 arm(s) x 6 scenarios x 2 visit(s) on 2 thread(s)
+# 24 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run r
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] RUN emcts @ 300: 12 turns (0 already done) on 2 thread(s)
+    emcts@300: 12/12   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=300;split=all
+[run] RUN emcts-alt @ 300: 12 turns (0 already done) on 2 thread(s)
+    emcts-alt@300: 12/12   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=300;split=all
+RUN: COMPLETE
+...[portfolio] game toy, targets toy=8, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 4 -> 8/8 valid  (played 5, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 8/8 through attempt 4 (played 5, replayed 0) in 0.0s
+[portfolio] complete: 8 scenarios in 0.0s, identity de7524d20ae682a48111e4869885dc1077656166e68ca5c2bb58e64574591cc3 -> /tmp/magat-run-portfolio2442299844056946741
+# experiment toy (/tmp/magat-run-work16944446665413200521/spec-469528354653432.json, sha256 89cc6c17c0f8...)
+############################################################
+# run toy   split dev   4 scenarios   -> /tmp/magat-run-out578858227623061181/dev
+# weights w1.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     600:  3 arm(s) x 4 scenarios x 2 visit(s) on 2 thread(s)
+#   level     300:  3 arm(s) x 4 scenarios x 1 visit(s) on 2 thread(s)
+# 36 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run toy
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] RUN emcts @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=600;split=dev
+[run] RUN emcts-alt @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts-alt@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=600;split=dev
+[run] RUN random @ 600: 8 turns (0 already done) on 2 thread(s)
+    random@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=600;split=dev
+[run] RUN emcts @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=300;split=dev
+[run] RUN emcts-alt @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts-alt@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=300;split=dev
+[run] RUN random @ 300: 4 turns (0 already done) on 2 thread(s)
+    random@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=300;split=dev
+RUN: COMPLETE
+# experiment toy (/tmp/magat-run-work16944446665413200521/spec-469528354653432.json, sha256 89cc6c17c0f8...)
+# the weights file differs from the one this tree was started with (58d94c5c1507... -> bc53d029a655...); 1 leaf/leaves would change price: [emcts-alt@300]
+[run] RETIRED emcts-alt@300: 4 turn(s) discarded; it will be re-run
+############################################################
+# run toy   split dev   4 scenarios   -> /tmp/magat-run-out578858227623061181/dev
+# weights w2.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     600:  3 arm(s) x 4 scenarios x 2 visit(s) on 2 thread(s)
+#   level     300:  3 arm(s) x 4 scenarios x 1 visit(s) on 2 thread(s)
+# 36 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run toy
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] SKIP (done) arm=emcts;budget=600;split=dev
+[run] SKIP (done) arm=emcts-alt;budget=600;split=dev
+[run] SKIP (done) arm=random;budget=600;split=dev
+[run] SKIP (done) arm=emcts;budget=300;split=dev
+[run] RUN emcts-alt @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts-alt@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=300;split=dev
+[run] SKIP (done) arm=random;budget=300;split=dev
+RUN: COMPLETE
+# experiment toy (/tmp/magat-run-work16944446665413200521/spec-469528354653432.json, sha256 89cc6c17c0f8...)
+# the weights file differs from the one this tree was started with (bc53d029a655... -> e43d462a6de7...); 0 leaf/leaves would change price: []
+############################################################
+# run toy   split dev   4 scenarios   -> /tmp/magat-run-out578858227623061181/dev
+# weights w3.properties: 6 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     600:  3 arm(s) x 4 scenarios x 2 visit(s) on 2 thread(s)
+#   level     300:  3 arm(s) x 4 scenarios x 1 visit(s) on 2 thread(s)
+# 36 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run toy
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] SKIP (done) arm=emcts;budget=600;split=dev
+[run] SKIP (done) arm=emcts-alt;budget=600;split=dev
+[run] SKIP (done) arm=random;budget=600;split=dev
+[run] SKIP (done) arm=emcts;budget=300;split=dev
+[run] SKIP (done) arm=emcts-alt;budget=300;split=dev
+[run] SKIP (done) arm=random;budget=300;split=dev
+RUN: COMPLETE
+.[portfolio] game toy, targets toy=8, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 4 -> 8/8 valid  (played 5, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 8/8 through attempt 4 (played 5, replayed 0) in 0.0s
+[portfolio] complete: 8 scenarios in 0.0s, identity de7524d20ae682a48111e4869885dc1077656166e68ca5c2bb58e64574591cc3 -> /tmp/magat-run-portfolio8888854349514029042
+.[portfolio] game toy, targets toy=8, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 4 -> 8/8 valid  (played 5, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 8/8 through attempt 4 (played 5, replayed 0) in 0.0s
+[portfolio] complete: 8 scenarios in 0.0s, identity de7524d20ae682a48111e4869885dc1077656166e68ca5c2bb58e64574591cc3 -> /tmp/magat-run-portfolio2434105730187016602
+# experiment toy (/tmp/magat-run-work8812555618272716661/spec-469528411055764.json, sha256 89cc6c17c0f8...)
+############################################################
+# run toy   split dev   4 scenarios   -> /tmp/magat-run-out10187735856984530199/dev
+# weights w.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     600:  3 arm(s) x 4 scenarios x 2 visit(s) on 2 thread(s)
+#   level     300:  3 arm(s) x 4 scenarios x 1 visit(s) on 2 thread(s)
+# 36 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run toy
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] RUN emcts @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=600;split=dev
+[run] RUN emcts-alt @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts-alt@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=600;split=dev
+[run] RUN random @ 600: 8 turns (0 already done) on 2 thread(s)
+    random@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=600;split=dev
+[run] RUN emcts @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=300;split=dev
+[run] RUN emcts-alt @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts-alt@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=300;split=dev
+[run] RUN random @ 300: 4 turns (0 already done) on 2 thread(s)
+    random@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=300;split=dev
+RUN: COMPLETE
+[portfolio] game toy, targets toy=6, 1 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 3 -> 6/6 valid  (played 4, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 6/6 through attempt 3 (played 4, replayed 0) in 0.0s
+[portfolio] complete: 6 scenarios in 0.0s, identity 1503ea735dc4a7b97f6dbd1419bc4e99a744a4b6a9cfb3c49f2056267fbb8d9a -> /tmp/magat-run-portfolio212191873738179211139
+.[portfolio] game toy, targets toy=8, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 4 -> 8/8 valid  (played 5, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 8/8 through attempt 4 (played 5, replayed 0) in 0.0s
+[portfolio] complete: 8 scenarios in 0.0s, identity de7524d20ae682a48111e4869885dc1077656166e68ca5c2bb58e64574591cc3 -> /tmp/magat-run-portfolio4590411968077619309
+.[portfolio] game toy, targets toy=8, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 4 -> 8/8 valid  (played 5, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 8/8 through attempt 4 (played 5, replayed 0) in 0.0s
+[portfolio] complete: 8 scenarios in 0.0s, identity de7524d20ae682a48111e4869885dc1077656166e68ca5c2bb58e64574591cc3 -> /tmp/magat-run-portfolio13986615322422472659
+# experiment toy (/tmp/magat-run-work13683416227345011912/spec-469528459630782.json, sha256 89cc6c17c0f8...)
+############################################################
+# run toy   split dev   4 scenarios   -> /tmp/magat-run-out1814172135397294986/dev
+# weights w.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     600:  3 arm(s) x 4 scenarios x 2 visit(s) on 2 thread(s)
+#   level     300:  3 arm(s) x 4 scenarios x 1 visit(s) on 2 thread(s)
+# 36 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run toy
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] RUN emcts @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=600;split=dev
+[run] RUN emcts-alt @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts-alt@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=600;split=dev
+[run] RUN random @ 600: 8 turns (0 already done) on 2 thread(s)
+    random@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=600;split=dev
+[run] RUN emcts @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=300;split=dev
+[run] RUN emcts-alt @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts-alt@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=300;split=dev
+[run] RUN random @ 300: 4 turns (0 already done) on 2 thread(s)
+    random@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=300;split=dev
+RUN: COMPLETE
+# experiment toy (/tmp/magat-run-work13683416227345011912/spec-469528459630782.json, sha256 89cc6c17c0f8...)
+############################################################
+# run toy   split dev   4 scenarios   -> /tmp/magat-run-out1814172135397294986/dev
+# weights w.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     600:  3 arm(s) x 4 scenarios x 2 visit(s) on 2 thread(s)
+#   level     300:  3 arm(s) x 4 scenarios x 1 visit(s) on 2 thread(s)
+# 36 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run toy
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] SKIP (done) arm=emcts;budget=600;split=dev
+[run] SKIP (done) arm=emcts-alt;budget=600;split=dev
+[run] SKIP (done) arm=random;budget=600;split=dev
+[run] SKIP (done) arm=emcts;budget=300;split=dev
+[run] SKIP (done) arm=emcts-alt;budget=300;split=dev
+[run] SKIP (done) arm=random;budget=300;split=dev
+RUN: COMPLETE
+.[portfolio] game toy, targets toy=8, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 4 -> 8/8 valid  (played 5, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 8/8 through attempt 4 (played 5, replayed 0) in 0.0s
+[portfolio] complete: 8 scenarios in 0.0s, identity de7524d20ae682a48111e4869885dc1077656166e68ca5c2bb58e64574591cc3 -> /tmp/magat-run-portfolio6279008043274143450
+# experiment toy (/tmp/magat-run-work12767730868622861060/spec-469528485063832.json, sha256 89cc6c17c0f8...)
+############################################################
+# run toy   split holdout   4 scenarios   -> /tmp/magat-run-out18365474774135989253/holdout
+# weights w.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     600:  3 arm(s) x 4 scenarios x 2 visit(s) on 2 thread(s)
+#   level     300:  3 arm(s) x 4 scenarios x 1 visit(s) on 2 thread(s)
+# 36 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run toy
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] RUN emcts @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=600;split=holdout
+[run] RUN emcts-alt @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts-alt@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=600;split=holdout
+[run] RUN random @ 600: 8 turns (0 already done) on 2 thread(s)
+    random@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=600;split=holdout
+[run] RUN emcts @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=300;split=holdout
+[run] RUN emcts-alt @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts-alt@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=300;split=holdout
+[run] RUN random @ 300: 4 turns (0 already done) on 2 thread(s)
+    random@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=300;split=holdout
+RUN: COMPLETE
+# experiment toy (/tmp/magat-run-work12767730868622861060/spec-469528485063832.json, sha256 89cc6c17c0f8...)
+############################################################
+# run toy   split holdout   4 scenarios   -> /tmp/magat-run-out18365474774135989253/holdout
+# weights w.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     600:  3 arm(s) x 4 scenarios x 2 visit(s) on 2 thread(s)
+#   level     300:  3 arm(s) x 4 scenarios x 1 visit(s) on 2 thread(s)
+# 36 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run toy
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] SKIP (done) arm=emcts;budget=600;split=holdout
+[run] SKIP (done) arm=emcts-alt;budget=600;split=holdout
+[run] SKIP (done) arm=random;budget=600;split=holdout
+[run] SKIP (done) arm=emcts;budget=300;split=holdout
+[run] SKIP (done) arm=emcts-alt;budget=300;split=holdout
+[run] SKIP (done) arm=random;budget=300;split=holdout
+RUN: COMPLETE
+# experiment toy (/tmp/magat-run-work12767730868622861060/spec-469528485063832.json, sha256 89cc6c17c0f8...)
+############################################################
+# run toy   split dev   4 scenarios   -> /tmp/magat-run-out18365474774135989253/dev
+# weights w.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     600:  3 arm(s) x 4 scenarios x 2 visit(s) on 2 thread(s)
+#   level     300:  3 arm(s) x 4 scenarios x 1 visit(s) on 2 thread(s)
+# 36 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run toy
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] RUN emcts @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=600;split=dev
+[run] RUN emcts-alt @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts-alt@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=600;split=dev
+[run] RUN random @ 600: 8 turns (0 already done) on 2 thread(s)
+    random@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=600;split=dev
+[run] RUN emcts @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=300;split=dev
+[run] RUN emcts-alt @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts-alt@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] audit: 60.5% of emcts-alt@300's plan time is not accounted for by the work its currency prices (threshold 10%); the weights were calibrated on another machine, so the share includes the speed difference
+[run] DONE arm=emcts-alt;budget=300;split=dev
+[run] RUN random @ 300: 4 turns (0 already done) on 2 thread(s)
+    random@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=300;split=dev
+RUN: COMPLETE
+.[portfolio] game toy, targets toy=8, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 4 -> 8/8 valid  (played 5, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 8/8 through attempt 4 (played 5, replayed 0) in 0.0s
+[portfolio] complete: 8 scenarios in 0.0s, identity de7524d20ae682a48111e4869885dc1077656166e68ca5c2bb58e64574591cc3 -> /tmp/magat-run-portfolio8982600401478799603
+# experiment toy (/tmp/magat-run-work15318309281326164303/spec-469528520603505.json, sha256 89cc6c17c0f8...)
+############################################################
+# run toy   split dev   4 scenarios   -> /tmp/magat-run-out995002390990683166/dev
+# weights w.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     600:  3 arm(s) x 4 scenarios x 2 visit(s) on 2 thread(s)
+#   level     300:  3 arm(s) x 4 scenarios x 1 visit(s) on 2 thread(s)
+# 36 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run toy
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] RUN emcts @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=600;split=dev
+[run] RUN emcts-alt @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts-alt@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=600;split=dev
+[run] RUN random @ 600: 8 turns (0 already done) on 2 thread(s)
+    random@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=600;split=dev
+[run] RUN emcts @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=300;split=dev
+[run] RUN emcts-alt @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts-alt@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=300;split=dev
+[run] RUN random @ 300: 4 turns (0 already done) on 2 thread(s)
+    random@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=300;split=dev
+RUN: COMPLETE
+# experiment toy (/tmp/magat-run-work15318309281326164303/spec-469528520603505.json, sha256 89cc6c17c0f8...)
+############################################################
+# run toy   split dev   4 scenarios   -> /tmp/magat-run-out995002390990683166/dev
+# weights w.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     600:  3 arm(s) x 4 scenarios x 2 visit(s) on 2 thread(s)
+#   level     300:  3 arm(s) x 4 scenarios x 1 visit(s) on 2 thread(s)
+# 36 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run toy
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] RUN emcts @ 600: 3 turns (5 already done) on 2 thread(s)
+    emcts@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=600;split=dev
+[run] SKIP (done) arm=emcts-alt;budget=600;split=dev
+[run] SKIP (done) arm=random;budget=600;split=dev
+[run] SKIP (done) arm=emcts;budget=300;split=dev
+[run] SKIP (done) arm=emcts-alt;budget=300;split=dev
+[run] SKIP (done) arm=random;budget=300;split=dev
+RUN: COMPLETE
+.[portfolio] game toy, targets toy=8, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 4 -> 8/8 valid  (played 5, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 8/8 through attempt 4 (played 5, replayed 0) in 0.0s
+[portfolio] complete: 8 scenarios in 0.0s, identity de7524d20ae682a48111e4869885dc1077656166e68ca5c2bb58e64574591cc3 -> /tmp/magat-run-portfolio17821267843652463830
+.[portfolio] game toy, targets toy=8, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 4 -> 8/8 valid  (played 5, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 8/8 through attempt 4 (played 5, replayed 0) in 0.0s
+[portfolio] complete: 8 scenarios in 0.0s, identity de7524d20ae682a48111e4869885dc1077656166e68ca5c2bb58e64574591cc3 -> /tmp/magat-run-portfolio3655211961691014918
+# experiment toy (/tmp/magat-run-work6665610074535654706/spec-469528549458516.json, sha256 89cc6c17c0f8...)
+############################################################
+# run toy   split dev   4 scenarios   -> /tmp/magat-run-out8202592961331982176/dev
+# weights w2.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     600:  3 arm(s) x 4 scenarios x 2 visit(s) on 2 thread(s)
+#   level     300:  3 arm(s) x 4 scenarios x 1 visit(s) on 2 thread(s)
+# 36 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run toy
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] RUN emcts @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=600;split=dev
+[run] RUN emcts-alt @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts-alt@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=600;split=dev
+[run] RUN random @ 600: 8 turns (0 already done) on 2 thread(s)
+    random@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=600;split=dev
+[run] RUN emcts @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=300;split=dev
+[run] RUN emcts-alt @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts-alt@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=300;split=dev
+[run] RUN random @ 300: 4 turns (0 already done) on 2 thread(s)
+    random@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=300;split=dev
+RUN: COMPLETE
+.[portfolio] game toy, targets toy=8, 2 thread(s), fresh build
+[portfolio]   source toy: toy: seed attempt, random play seeded attempt*31, captures at turns 1 and 2
+[portfolio] toy: through attempt 4 -> 8/8 valid  (played 5, replayed 0, in flight 1, yield 2.00/attempt)
+[portfolio]   toy: 8/8 through attempt 4 (played 5, replayed 0) in 0.0s
+[portfolio] complete: 8 scenarios in 0.0s, identity de7524d20ae682a48111e4869885dc1077656166e68ca5c2bb58e64574591cc3 -> /tmp/magat-run-portfolio719117195885881090
+# experiment toy (/tmp/magat-run-work7238176576732636513/spec-469528569672044.json, sha256 89cc6c17c0f8...)
+############################################################
+# run toy   split dev   4 scenarios   -> /tmp/magat-run-out6483433199739595986/dev
+# weights w.properties: 4 profiles, up to 5 algorithm operation(s) each, reference emcts@300 (1000.0 ns/advance), global 1.0000/0.1600/0.0770
+#   level     600:  3 arm(s) x 4 scenarios x 2 visit(s) on 2 thread(s)
+#   level     300:  3 arm(s) x 4 scenarios x 1 visit(s) on 2 thread(s)
+# 36 turns; estimate 0.0 h (budget x 1000 ns per reference advance x machine factor 1.00; nothing decides on it)
+------------------------------------------------------------
+[machine] run toy
+[machine] AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 2 | worker ceiling 62
+[machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+------------------------------------------------------------
+[run] RUN emcts @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=600;split=dev
+[run] RUN emcts-alt @ 600: 8 turns (0 already done) on 2 thread(s)
+    emcts-alt@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=600;split=dev
+[run] RUN random @ 600: 8 turns (0 already done) on 2 thread(s)
+    random@600: 8/8   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=600;split=dev
+[run] RUN emcts @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts;budget=300;split=dev
+[run] RUN emcts-alt @ 300: 4 turns (0 already done) on 2 thread(s)
+    emcts-alt@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=emcts-alt;budget=300;split=dev
+[run] RUN random @ 300: 4 turns (0 already done) on 2 thread(s)
+    random@300: 4/4   [concurrency 2/2 (low-water 2, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%]
+[run] DONE arm=random;budget=300;split=dev
+RUN: COMPLETE
+....
+Time: 3.264
+
+OK (111 tests)
+
+===== exit 0 after 0:00:03.507223
+
+>>>>> 2026-10-25 15:07:25 $ java -Xmx4g -cp /home/jovyan/Multi-Action-Game-Algorithm-Tester/build/test-classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/build/classes:/home/jovyan/Multi-Action-Game-Algorithm-Tester/core/lib/minimal-json-0.9.5.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/hamcrest-core-1.3.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/json.jar:/home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/engine/lib/junit-4.13.2.jar org.junit.runner.JUnitCore EmctsTest MoveGenerationEquivalenceTest StaleActorIdTest
+JUnit version 4.13.2
+..MoveGenerationEquivalenceTest: 1458 states, 4902 units' destinations, 19468 paths, 2916 cities' build actions (1118 actions of 8 building types [ALTAR_OF_PEACE, FARM, FORGE, LUMBER_HUT, MINE, MOUNTAIN_TEMPLE, TEMPLE, WINDMILL]), every tile's unit
+...
+Time: 8.033
+
+OK (5 tests)
+
+===== exit 0 after 0:00:08.349422
+
+>>>>> 2026-10-25 15:07:34 $ /usr/bin/python -m unittest discover -s /home/jovyan/Multi-Action-Game-Algorithm-Tester/analysis/tests -t /home/jovyan/Multi-Action-Game-Algorithm-Tester/analysis -v
+test_each_machines_mean_their_difference_both_multipliers_the_seconds_and_a_in_bs_currency (tests.test_measures.AcrossMachines) ... ok
+test_runs_on_different_portfolios_do_not_pair (tests.test_measures.AcrossMachines) ... ok
+test_the_report_finds_bs_currency_or_says_it_did_not (tests.test_measures.AcrossMachines) ... ok
+test_a_falling_baseline_curve_is_not_inverted (tests.test_measures.SyntheticTree) ... ok
+test_a_file_of_another_version_is_refused (tests.test_measures.SyntheticTree) ... ok
+test_a_leaf_reprices_with_its_operations (tests.test_measures.SyntheticTree) ... ok
+test_a_split_or_its_run_directory (tests.test_measures.SyntheticTree) ... ok
+test_an_unpriced_leaf_and_a_leaf_without_counts_are_named (tests.test_measures.SyntheticTree) ... ok
+test_analyze_writes_every_table_and_refuses_identical_arms (tests.test_measures.SyntheticTree) ... ok
+test_cohens_d_is_the_paired_mean_over_its_sample_deviation (tests.test_measures.SyntheticTree) ... ok
+test_contrasts_from_the_spec (tests.test_measures.SyntheticTree) ... ok
+test_currencies_that_price_different_work_are_not_mixed (tests.test_measures.SyntheticTree) ... ok
+test_headline_in_both_strata (tests.test_measures.SyntheticTree) ... ok
+test_no_baseline_is_bad_input (tests.test_measures.SyntheticTree) ... ok
+test_no_multiplier_without_two_baseline_levels (tests.test_measures.SyntheticTree) ... ok
+test_repricing_under_the_runs_own_weights_reproduces_its_units (tests.test_measures.SyntheticTree) ... ok
+test_spend_seconds_plan_length_and_the_runs_audit (tests.test_measures.SyntheticTree) ... ok
+test_the_bootstrap_is_deterministic_per_row (tests.test_measures.SyntheticTree) ... ok
+test_the_budget_multiplier_compares_values_not_search_gains (tests.test_measures.SyntheticTree) ... ok
+test_the_budget_multiplier_inside_past_and_below_the_ladder (tests.test_measures.SyntheticTree) ... ok
+test_the_contrasts_come_from_the_spec (tests.test_measures.SyntheticTree) ... ok
+test_the_provenance_names_every_commit_that_played_turns (tests.test_measures.SyntheticTree) ... ok
+test_the_terminal_flag_and_its_magnitude_fallback (tests.test_measures.SyntheticTree) ... ok
+test_the_wall_clock_table_rescores_at_the_arms_own_time (tests.test_measures.SyntheticTree) ... ok
+test_variance_components_separate_scenarios_from_visits (tests.test_measures.SyntheticTree) ... ok
+
+----------------------------------------------------------------------
+Ran 25 tests in 1.979s
+
+OK
+===== exit 0 after 0:00:02.352020
