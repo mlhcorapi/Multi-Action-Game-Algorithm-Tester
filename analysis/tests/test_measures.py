@@ -138,6 +138,25 @@ class SyntheticTree(unittest.TestCase):
         self.assertAlmostEqual(no.UnitsDiff, self.row(h, Budget=1000, Arm="noisy", Stratum="no-terminal").MeanDiff, places=9)
         self.assertEqual(no.Verdict, "wins both")
 
+    # ------------------------------------------------------------------ spend, time and plans
+    def test_spend_seconds_plan_length_and_the_runs_audit(self):
+        leaves = [dict(arm="good", budget=1000, profile="good@1000", threads=8, audit=dict(unpricedShare=0.2)),
+                  dict(arm="noisy", budget=1000, profile="global (arm is not priced)", threads=8, audit=dict(unpricedShare=0.9))]
+        sp = measures.spend(self.t, leaves, {1000: 500.0})
+        g = self.row(sp, Arm="good", Budget=1000)
+        w = syn.WEIGHTS["good@1000"]
+        units = [(1000 + s) * w[0] + (400 + v) * w[1] + 300 * w[2] + 10.75 for s in range(1, syn.S + 1) for v in range(syn.V)]
+        self.assertAlmostEqual(g.Spend, np.mean(units) / 1000, places=9, msg="its initialization included")
+        self.assertAlmostEqual(g.SpendMax, max(units) / 1000, places=9)
+        self.assertEqual(g.OverShare, 1.0)
+        self.assertEqual((g.MeanMillis, g.LevelMillis, g.PlanLength), (250.0, 500.0, 20.0))
+        self.assertAlmostEqual(g.TerminalShare, 1 / (syn.S * syn.V), places=9)
+        self.assertEqual((g.AuditUnpriced, g.Threads), (0.2, 8.0))
+        self.assertTrue(math.isnan(self.row(sp, Arm="noisy", Budget=1000).AuditUnpriced), "an arm that is not priced has no audit")
+        self.assertTrue(math.isnan(self.row(sp, Arm="weak", Budget=4000).LevelMillis), "4,000 is not a published level here")
+        self.assertEqual(load.levels("tribes")["ms"][9500], 500.0, "the published Tribes levels")
+        self.assertEqual(load.levels("toy")["ms"], {})
+
     # ------------------------------------------------------------------ contrasts and the design
     def test_contrasts_from_the_spec(self):
         c = measures.contrasts(self.t, load.comparisons(load.load_spec(self.spec)), "dev", n=200)
@@ -236,8 +255,10 @@ class SyntheticTree(unittest.TestCase):
             self.assertIn("currency", df.columns, name)
         summary = (out / "SUMMARY.md").read_text(encoding="utf-8")
         for heading in ("## Provenance", "## Headline (holdout)", "## Budget multiplier (dev)", "## Contrasts",
-                        "## Design", "## Re-priced", "## Scope notes"):
+                        "## Spend, time and plans (dev)", "## Design", "## Re-priced", "## Scope notes"):
             self.assertIn(heading, summary)
+        self.assertIn("| 1000 | good | 36 | **1.27x** | 100% | 0.25 | - | 20.0 | 2.8% | - |", summary)
+        self.assertIn("more than 1.10x their level: good@1000 (1.27x)", summary)
         self.assertLess(summary.index("## Headline (dev)"), summary.index("## Headline (holdout)"))
         good = next(line for line in summary.splitlines() if line.startswith("| good | 35 |"))
         self.assertIn("| 1 / 0 |", good, "the headline leads with the 35 pairs where neither plan ends the game, and counts the 36th")

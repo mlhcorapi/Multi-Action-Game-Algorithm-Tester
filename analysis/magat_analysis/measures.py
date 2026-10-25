@@ -13,6 +13,7 @@ reached a terminal state, worth about +/-2e9).
     variance           what a scenario and a visit each buy (the design)
     reprice            each turn's work priced in another machine's currency, re-scored
     across             the same experiment on two machines: each one's means, multipliers and seconds
+    spend              what each leaf's turns spent and took: spend, seconds, plan length, the run's audit
 """
 import numpy as np
 import pandas as pd
@@ -367,4 +368,34 @@ def variance(t, baseline, split="") -> pd.DataFrame:
 def terminal_rates(t) -> pd.DataFrame:
     rows = [dict(Budget=int(b), Arm=a, Turns=len(g), TerminalShare=float(g["term"].mean()))
             for (b, a), g in t.groupby(["budget", "arm"])]
+    return frame(rows, ["Budget", "Arm"])
+
+
+# --------------------------------------------------------------------------- spend, time and plans
+SPEND_FLAG = 1.10       # a cell whose mean turn spends more than this times its level, as the calibration flags it
+
+
+def spend(t, leaves, level_ms=None) -> pd.DataFrame:
+    """What each leaf's turns spent and how long they took, per budget and arm: the mean turn's units, its
+    initialization included, over the budget (`Spend`) and the share of turns above SPEND_FLAG; the mean
+    turn's wall-clock and, where the game publishes its levels as times, the time the level was set to;
+    the mean plan's length, its end of turn included; the share of plans that end the game; and the run's
+    audit as the leaf recorded it (`_leaf.json`): the share of plan time the prices leave unaccounted for, on
+    the threads the leaf ran on. An arm that is not priced has no audit."""
+    meta = {(int(m.get("budget", -1)), str(m.get("arm"))): m for m in leaves}
+    level_ms = level_ms or {}
+    rows = []
+    for (budget, arm), g in t.groupby(["budget", "arm"]):
+        units = g["units"] + (g["init_units"].fillna(0) if "init_units" in g else 0)
+        ratio = units / float(budget)
+        m = meta.get((int(budget), arm), {})
+        priced = not str(m.get("profile", "")).startswith("global")
+        audit = (m.get("audit") or {}) if priced else {}
+        rows.append(dict(Budget=int(budget), Arm=arm, Turns=len(g), Spend=float(ratio.mean()), SpendMax=float(ratio.max()),
+                         OverShare=float((ratio > SPEND_FLAG).mean()), MeanMillis=float(g["plan_ms"].mean()),
+                         LevelMillis=float(level_ms.get(int(budget), np.nan)),
+                         PlanLength=float(g["seq_len"].mean()) if "seq_len" in g else np.nan,
+                         TerminalShare=float(g["term"].mean()),
+                         AuditUnpriced=float(audit.get("unpricedShare", np.nan)),
+                         Threads=float(m["threads"]) if m.get("threads") is not None else np.nan))
     return frame(rows, ["Budget", "Arm"])
