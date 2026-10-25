@@ -108,7 +108,7 @@ How they are computed:
    On one idle thread a calibrated cell leaves well under 1%, so a large share on many threads is
    contention. On the R7615's first run, at 62 threads, `emcts` took 1.34× to 1.43× its levels' seconds,
    in line with the 70% to 78% efficiency its thread sweep measured at 62 threads. Contention changes
-   the seconds, never the turns: the R7615's second run, replayed one machine away on a laptop, reproduced
+   the seconds, never the turns: 520 turns of the R7615's second run, replayed on a laptop, reproduced
    field for field (`check replay`).
 7. **Across machines** (`--compare`). Two runs of one experiment, each on its own machine and in its
    own currency. On the cells both ran, neither turn terminal: each machine's mean with its interval,
