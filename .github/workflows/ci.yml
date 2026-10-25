@@ -80,7 +80,7 @@ jobs:
       - name: Analyze the toy run, re-priced in its own currency, and beside itself as another machine's
         run: |
           python magat.py analyze --run "$RUNNER_TEMP/run" --reprice "$RUNNER_TEMP/calib/compute_weights.properties" --out "$RUNNER_TEMP/analysis"
-          for t in headline budget_multiplier wallclock contrasts variance repriced; do
+          for t in headline budget_multiplier wallclock contrasts variance spend repriced; do
             test -s "$RUNNER_TEMP/analysis/tables/$t.csv"
           done
           python magat.py analyze --run "$RUNNER_TEMP/run" --compare "$RUNNER_TEMP/run" --out "$RUNNER_TEMP/compare"
