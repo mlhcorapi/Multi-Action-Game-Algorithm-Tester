@@ -130,7 +130,11 @@ python magat.py run --experiment experiments/tribes/reference.json --weights <yo
 - **The portfolio and configuration lock.** A tree is bound to one portfolio identity and one game
   configuration.
 - **The identical-output assertion.** Two arms whose rows agree on every turn stop the run.
-- **The audit.** Above `--audit-warn` (10%) of a leaf's plan time unpriced, the run says so.
+- **The audit.** Each priced leaf records the time its turns took against the time its priced work
+  predicts. On one thread the run warns above `--audit-warn` (10%) of the plan time unpriced. On many
+  threads the turns slow each other, so it prints the ratio as information (`took 1.21x the time its
+  priced work predicts, on 62 threads`); the calibration's idle audit is the clean measure. An arm that
+  is not priced, the random floor, is not audited.
 
 **Exit codes of `run`.**
 
