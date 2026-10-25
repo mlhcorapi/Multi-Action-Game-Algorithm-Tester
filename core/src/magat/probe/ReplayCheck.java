@@ -5,6 +5,8 @@ import magat.agent.Episode;
 import magat.agent.TurnRecord;
 import magat.game.Game;
 import magat.game.Scenario;
+import magat.meter.Meter;
+import magat.meter.Weights;
 import magat.portfolio.Portfolio;
 
 import java.io.IOException;
@@ -118,6 +120,17 @@ public final class ReplayCheck {
         return m;
     }
 
+    /**
+     * One turn as the runner played it: under the arm's profile at this budget, or, for an arm that is not priced
+     * (the random floor), under the installed currency's global weights.
+     */
+    static <S, A> TurnRecord play(Game<S, A> game, Scenario<S> sc, int visit, AgentFactory<S, A> arm, long budget) {
+        if (arm.priced()) return Episode.run(game, sc, visit, arm, budget);
+        Weights w = Meter.installed();
+        if (w == null) throw new IllegalStateException("no currency is installed to replay " + arm.id() + ", which is not priced, under");
+        return Episode.run(game, sc, visit, arm, budget, w.global(), "global");
+    }
+
     public static <S, A> Result run(Game<S, A> game, Portfolio<S> portfolio, AgentFactory<S, A> arm, long budget, Leaf leaf,
                                     int k, int threads) throws Exception {
         List<Row> pick = new ArrayList<>();
@@ -136,7 +149,7 @@ public final class ReplayCheck {
                     continue;
                 }
                 submitted.add(row);
-                fs.add(pool.submit(() -> compare(row, fieldsOf(Episode.run(game, sc, row.visit, arm, budget)))));
+                fs.add(pool.submit(() -> compare(row, fieldsOf(play(game, sc, row.visit, arm, budget)))));
             }
             for (int i = 0; i < fs.size(); i++) {
                 List<String> d = fs.get(i).get();
