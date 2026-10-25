@@ -12,6 +12,7 @@ only, so nobody changes the levels by running the main notebook from top to bott
 """
 import json
 import pathlib
+import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -527,18 +528,56 @@ def build() -> dict:
 NOTEBOOKS = [(OUT, CELLS), (OUT_LEVELS, LEVELS_CELLS)]
 
 
+def cell_content(nb: dict) -> list:
+    """What the generator makes of each cell: its type, source and tags. Jupyter adds the rest when it runs one."""
+    return [(c["cell_type"], "".join(c["source"]), c.get("metadata", {}).get("tags", [])) for c in nb["cells"]]
+
+
+def has_run(nb: dict) -> bool:
+    """Whether Jupyter has run the notebook and saved it: a generated one has no outputs and no execution counts."""
+    return any(c.get("outputs") or c.get("execution_count") is not None for c in nb["cells"])
+
+
+def committed(out: pathlib.Path):
+    """The notebook as this checkout's commit holds it, or None outside a git checkout."""
+    try:
+        return subprocess.run(["git", "-C", str(ROOT), "show", f"HEAD:{out.relative_to(ROOT).as_posix()}"],
+                              capture_output=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def current(saved: bytes, cells, committed_as=None) -> str:
+    """Why the notebook saved on disk is current, or "" when it is stale. Bytes, not text: a notebook written with
+    other line endings is stale too. A notebook that has been run is current when its cells are the generated
+    ones and the commit holds the generated notebook (committed_as is None outside a git checkout): Jupyter saved
+    its outputs into the file, and a commit must not carry them."""
+    nb = notebook(cells)
+    generated = (json.dumps(nb, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
+    if saved == generated:
+        return "up to date"
+    if committed_as is not None and committed_as != generated:
+        return ""
+    try:
+        ran = json.loads(saved.decode("utf-8"))
+        if has_run(ran) and cell_content(ran) == cell_content(nb):
+            return "up to date: it has been run, and its cells are the generated ones (outputs ignored)"
+    except (ValueError, KeyError, TypeError, AttributeError):
+        pass
+    return ""
+
+
 def main(argv) -> int:
     stale = 0
     for out, cells in NOTEBOOKS:
         text = json.dumps(notebook(cells), indent=1, ensure_ascii=False) + "\n"
         if "--check" in argv:
-            # Bytes, not text: a notebook written with other line endings is stale too.
-            current = out.read_bytes() if out.exists() else b""
-            if current != text.encode("utf-8"):
+            why = current(out.read_bytes() if out.exists() else b"", cells, committed(out))
+            if why:
+                print(f"{out} is {why}")
+            else:
                 print(f"{out} is stale: regenerate with `python tools/make_notebook.py`")
                 stale = 1
-            else:
-                print(f"{out} is up to date")
             continue
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(text, encoding="utf-8", newline="\n")      # LF on every platform, as git keeps it
