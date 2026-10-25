@@ -205,15 +205,24 @@ public final class GridRunner {
         double[] w = arm.priced() ? weights.profile(profile) : weights.global();
         JsonObject prices = new JsonObject();
         for (Map.Entry<String, Double> e : pricesOf(weights, arm.priced() ? profile : null).entrySet()) prices.add(e.getKey(), e.getValue());
+        // The commit that plays this leaf's turns; a leaf continued from another commit names the earlier ones.
+        JsonObject magat = thisMagat();
+        String commit = magat.getString("commit", "unknown");
+        List<String> earlier = earlierCommits(dir, done.size(), commit);
         JsonObject meta = new JsonObject().add("arm", arm.id()).add("budget", level.budget)
                 .add("profile", arm.priced() ? profile : "global (arm is not priced)")
                 .add("weights", new JsonArray().add(w[0]).add(w[1]).add(w[2]))
                 .add("currencyVersion", weights.version()).add("prices", prices)
-                .add("threads", threads).add("host", host()).add("started", Instant.now().toString())
-                .add("turnsTotal", total).add("turnsDoneAtStart", done.size()).add("status", "running");
+                .add("threads", threads).add("host", host()).add("commit", commit);
+        if (magat.get("notebook") != null) meta.add("notebook", magat.get("notebook"));
+        if (!earlier.isEmpty()) meta.add("earlierCommits", Json.array(earlier.toArray(new String[0])));
+        meta.add("started", Instant.now().toString()).add("turnsTotal", total).add("turnsDoneAtStart", done.size()).add("status", "running");
         writeMeta(dir, meta);
         System.out.println(String.format(Locale.ROOT, "[run] RUN %s @ %d: %d turns (%d already done) on %d thread(s)",
                 arm.id(), level.budget, total - done.size(), done.size(), threads));
+        if (!earlier.isEmpty())
+            System.out.println("  [warn]  " + arm.id() + "@" + level.budget + ": its " + done.size() + " turn(s) so far were played by MAGAT "
+                    + String.join(", ", earlier) + "; this invocation, " + commit + ", plays the rest");
 
         ExecutorService pool = RunGuard.register(Executors.newFixedThreadPool(Math.max(1, threads), r -> {
             Thread t = new Thread(r, "run-" + arm.id());
@@ -314,6 +323,27 @@ public final class GridRunner {
         return g;
     }
 
+    /** This MAGAT as the launcher names it. The commit is -dirty for code changes only; a notebook saved with its outputs is named apart. */
+    static JsonObject thisMagat() {
+        JsonObject m = new JsonObject().add("version", System.getProperty("magat.version", "unknown"))
+                .add("commit", System.getProperty("magat.git.commit", "unknown"));
+        if (System.getProperty("magat.git.notebook") != null) m.add("notebook", System.getProperty("magat.git.notebook"));
+        return m;
+    }
+
+    /** The commits other than {@code commit} that played the turns a leaf already holds, from its previous {@code _leaf.json}. */
+    static List<String> earlierCommits(Path dir, int turnsHeld, String commit) throws IOException {
+        Path f = dir.resolve(Leaf.META);
+        if (turnsHeld == 0 || !Files.isRegularFile(f)) return new ArrayList<>();
+        JsonObject was = Json.parse(new String(Files.readAllBytes(f), StandardCharsets.UTF_8)).asObject();
+        Set<String> seen = new LinkedHashSet<>();
+        JsonValue before = was.get("earlierCommits");
+        if (before != null && before.isArray()) for (JsonValue v : before.asArray()) seen.add(v.asString());
+        seen.add(was.getString("commit", "unknown"));      // a leaf from before commits were recorded
+        seen.remove(commit);
+        return new ArrayList<>(seen);
+    }
+
     private static void writeMeta(Path dir, JsonObject meta) throws IOException {
         RunGuard.atomicWrite(dir.resolve(Leaf.META), meta.toString(com.eclipsesource.json.WriterConfig.PRETTY_PRINT) + "\n");
     }
@@ -406,11 +436,15 @@ public final class GridRunner {
                                                 String weightsSha, Split.Half half, Options o) throws IOException {
         JsonObject cfg = new JsonObject();
         for (Map.Entry<String, String> e : game.configuration().entrySet()) cfg.add(e.getKey(), e.getValue());
-        // The commit is -dirty for code changes only; a notebook saved with its outputs is named apart.
-        JsonObject magat = new JsonObject().add("version", System.getProperty("magat.version", "unknown"))
-                .add("commit", System.getProperty("magat.git.commit", "unknown"));
-        if (System.getProperty("magat.git.notebook") != null) magat.add("notebook", System.getProperty("magat.git.notebook"));
-        prov.set("magat", magat);
+        // The tree's MAGAT is the one that started it; every invocation, and every leaf, records its own.
+        JsonObject magat = thisMagat();
+        String commit = magat.getString("commit", "unknown");
+        JsonValue had = prov.json.get("magat");
+        if (prov.fresh || had == null || !had.isObject()) prov.set("magat", magat);
+        else if (!commit.equals(had.asObject().getString("commit", "unknown")))
+            System.out.println("  [warn]  this tree was started by MAGAT " + had.asObject().getString("commit", "unknown")
+                    + "; this invocation is " + commit + ". The turns it plays come from this code: every invocation and every "
+                    + "leaf records the commit that played it");
         if (prov.fresh) {
             prov.set("game", new JsonObject().add("id", game.id()).add("configuration", cfg));
             prov.set("portfolio", new JsonObject().add("dir", portfolio.dir().toAbsolutePath().toString()).add("identity", portfolio.identity()));
@@ -426,7 +460,9 @@ public final class GridRunner {
         JsonObject threads = new JsonObject();
         Map<Long, Integer> sweep = o.threadsFile != null && Files.isRegularFile(o.threadsFile) ? ThreadSweep.read(o.threadsFile) : null;
         for (Experiment.Level l : x.levels) threads.add(String.valueOf(l.budget), threadsFor(l.budget, o, sweep));
-        prov.append("invocations", new JsonObject().add("date", Instant.now().toString()).add("host", host())
+        JsonObject invocation = new JsonObject().add("date", Instant.now().toString()).add("commit", commit);
+        if (magat.get("notebook") != null) invocation.add("notebook", magat.get("notebook"));
+        prov.append("invocations", invocation.add("host", host())
                 .add("machine", MachineProfile.get().summary()).add("java", System.getProperty("java.version"))
                 .add("experimentSha256", x.sha256).add("weightsSha256", weightsSha).add("threads", threads)
                 .add("args", String.join(" ", o.args)));

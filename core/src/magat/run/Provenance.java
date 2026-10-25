@@ -22,7 +22,8 @@ import java.util.Map;
  * (engine commit included), the portfolio identity and the split. A resume that differs in any of them
  * aborts: its turns would not be comparable with the ones already on disk. The weights file's hash is
  * recorded too, with the currency lock in {@link GridRunner}. Every invocation and every retired leaf
- * is appended, so the tree carries its own history.
+ * is appended, so the tree carries its own history. The MAGAT commit is recorded once, as the tree's
+ * first invocation had it; each invocation records its own, and each leaf the commit that played it.
  */
 final class Provenance {
 
