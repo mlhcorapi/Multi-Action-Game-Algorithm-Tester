@@ -1,0 +1,11 @@
+{
+  "policy": {
+    "PERFBOOSTMODE": 2,
+    "PROCFREQMAX": 4000,
+    "PROCFREQMAX1": 4000,
+    "PROCTHROTTLEMAX": 100,
+    "PROCTHROTTLEMAX1": 100,
+    "governor": null
+  },
+  "session": "20261112-193913"
+}

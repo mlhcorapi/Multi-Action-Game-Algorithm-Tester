@@ -1,0 +1,123 @@
+
+>>>>> 2026-11-12 19:50:47 $ magat calibrate --game tribes --out C:\Users\mlcor\magat_runs\calibration\tribes-laptop-i9-14900hx-time --arms mcts,oep,tbets
+19:50:47 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=C:\Users\mlcor\magat_runs -Dmagat.git.commit=c3afdaed76da7151cf4db255a270699a36e0fd21 -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine -cp C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\HOME\magat_runs\build\classes;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\core\lib\minimal-json-0.9.5.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\hamcrest-core-1.3.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\json.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\junit-4.13.2.jar magat.cli.Main calibrate --game tribes --out C:\Users\mlcor\magat_runs\calibration\tribes-laptop-i9-14900hx-time --arms mcts,oep,tbets --portfolio C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\portfolio\v1 --default-levels 9500,20000,101500
+19:50:47   -> C:\Users\mlcor\magat_runs\logs\calibrate.log
+19:50:47 # magat 0.1.0-m6 calibrate
+19:50:47 # data root: C:\Users\mlcor\magat_runs   engine: 828b13051d02fc55c6e95a3997d3757337883660
+19:50:48 ############################################################
+19:50:48 # compute-unit calibration: per arm, per budget level, relative to one reference advance
+19:50:48 # single-threaded; needs an idle machine: this is a timing measurement
+19:50:48 # new currency in C:\Users\mlcor\magat_runs\calibration\tribes-laptop-i9-14900hx-time\compute_weights.properties
+19:50:48 # reference cell emcts@9500   levels 9500,20000,101500   arms [mcts, oep, tbets]
+19:50:48 # reps 3   turns/rep 16,16,16 over levels 9500,20000,101500   warmup 6   gap gate 10%   min ops 20000
+19:50:48 # portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7 (400 positions; a pool of 16 of them)
+19:50:48 # every operation an arm declares is measured and priced
+19:50:48 # every cell is measured under the fixed measurement weights (advance 1.0, copy 0.16, eval 0.077, the arms' own operations free), whatever the file prices
+19:50:48 ------------------------------------------------------------
+19:50:48 [machine] calibration
+19:50:48 [machine] Intel64 Family 6 Model 183 Stepping 1, GenuineIntel (Windows 11/amd64) | 32 logical / 16 physical (ASSUMED) (SMT x2) | 1 NUMA node(s) | maxHeap 4096 MB | reserve 1 | worker ceiling 15
+19:50:48 [machine] physical cores are not readable on this OS; assumed logical/2. Set MAGAT_MAX_THREADS=N to state the ceiling explicitly.
+19:50:48 [machine] SMT is on; workers are capped at physical cores (this workload is copy- and bandwidth-bound, so sibling threads add heat and memory, not throughput).
+19:50:48 ------------------------------------------------------------
+19:50:48 
+19:50:48 [calibrate] warm-up for level 9500: 6 turns (discarded)
+19:51:12   [ 1/12] emcts@9500                         advance  45827.8 ns  copy   6797.4 ns  eval   2060.1 ns   (gap 0.1/0.4/0.1% | CV 0.5/1.8/0.8%)  5 op(s), unpriced 0.2%, spend 1.00x  21 s
+19:51:49   [ 2/12] mcts@9500                          advance  67992.5 ns  copy   9129.5 ns  eval   2673.0 ns   (gap 0.4/1.9/1.5% | CV 0.6/1.6/0.9%)  2 op(s), unpriced 0.1%, spend 1.00x  38 s
+19:52:30   [ 3/12] oep@9500                           advance  48019.3 ns  copy  10840.2 ns  eval   2032.4 ns   (gap 0.1/0.4/0.0% | CV 0.1/0.4/0.2%)  4 op(s), unpriced 0.0%, spend 1.00x  41 s
+19:53:11   [ 4/12] tbets@9500                         advance  49087.9 ns  copy  10450.1 ns  eval   2123.6 ns   (gap 0.2/0.8/0.0% | CV 0.2/0.6/0.0%)  4 op(s), unpriced 0.1%, spend 1.00x  41 s
+19:53:11 
+19:53:11 [calibrate] warm-up for level 20000: 6 turns (discarded)
+19:54:00   [ 5/12] emcts@20000                        advance  44557.0 ns  copy   6775.7 ns  eval   1972.9 ns   (gap 0.0/0.3/1.2% | CV 0.8/1.0/0.8%)  5 op(s), unpriced 0.1%, spend 1.00x  44 s
+19:55:17   [ 6/12] mcts@20000                         advance  68209.5 ns  copy   9163.2 ns  eval   2720.4 ns   (gap 0.2/0.5/1.0% | CV 0.1/0.8/0.9%)  2 op(s), unpriced 0.1%, spend 1.00x  77 s
+19:56:28   [ 7/12] oep@20000                          advance  45316.9 ns  copy  10395.0 ns  eval   1979.6 ns   (gap 0.0/0.7/0.6% | CV 0.0/0.6/0.6%)  4 op(s), unpriced 0.0%, spend 1.00x  71 s
+19:57:52   [ 8/12] tbets@20000                        advance  48890.0 ns  copy  10512.0 ns  eval   2147.7 ns   (gap 0.1/0.2/1.1% | CV 0.1/1.1/1.0%)  4 op(s), unpriced 0.1%, spend 1.00x  84 s
+19:57:52 
+19:57:52 [calibrate] warm-up for level 101500: 6 turns (discarded)
+20:01:52   [ 9/12] emcts@101500                       advance  43194.5 ns  copy   6652.1 ns  eval   1967.7 ns   (gap 0.2/0.6/0.4% | CV 0.2/0.4/0.4%)  5 op(s), unpriced 0.0%, spend 1.00x  217 s
+20:08:04   [10/12] mcts@101500                        advance  67345.5 ns  copy   9407.2 ns  eval   2764.5 ns   (gap 0.0/0.5/1.2% | CV 0.0/0.5/1.1%)  2 op(s), unpriced 0.0%, spend 1.00x  372 s
+20:12:47   [11/12] oep@101500                         advance  43585.7 ns  copy  10047.8 ns  eval   1947.9 ns   (gap 0.4/1.0/0.9% | CV 0.3/0.6/0.7%)  4 op(s), unpriced 0.0%, spend 1.00x  283 s
+20:19:40   [12/12] tbets@101500                       advance  48857.8 ns  copy  10624.5 ns  eval   2201.3 ns   (gap 0.1/0.3/1.3% | CV 0.1/0.4/0.8%)  4 op(s), unpriced 0.0%, spend 1.00x  413 s
+20:19:40 
+20:19:40 [calibrate] bracket: emcts@9500 again, last (warm-up 6 turns, discarded)
+20:20:04   [bracket] emcts@9500                       advance  45685.3 ns  copy   6797.9 ns  eval   2057.1 ns
+20:20:04   measured in 29.3 min
+20:20:04 
+20:20:04 === RESULT: weights relative to one advance of emcts@9500 = 45827.8 ns ===
+20:20:04   profile                              wAdvance      wCopy      wEval   ns/advance
+20:20:04   emcts@9500                             1.0000     0.1483     0.0450      45827.8
+20:20:04   mcts@9500                              1.4837     0.1992     0.0583      67992.5
+20:20:04   oep@9500                               1.0478     0.2365     0.0443      48019.3
+20:20:04   tbets@9500                             1.0711     0.2280     0.0463      49087.9
+20:20:04   emcts@20000                            0.9723     0.1479     0.0431      44557.0
+20:20:04   mcts@20000                             1.4884     0.1999     0.0594      68209.5
+20:20:04   oep@20000                              0.9889     0.2268     0.0432      45316.9
+20:20:04   tbets@20000                            1.0668     0.2294     0.0469      48890.0
+20:20:04   emcts@101500                           0.9425     0.1452     0.0429      43194.5
+20:20:04   mcts@101500                            1.4695     0.2053     0.0603      67345.5
+20:20:04   oep@101500                             0.9511     0.2193     0.0425      43585.7
+20:20:04   tbets@101500                           1.0661     0.2318     0.0480      48857.8
+20:20:04 
+20:20:04 === DOES AN OPERATION COST THE SAME FOR EVERY ARM? ===
+20:20:04       9500  cheapest advance emcts 45827.8 ns, dearest mcts 67992.5 ns: spread 48.4%
+20:20:04      20000  cheapest advance emcts 44557.0 ns, dearest mcts 68209.5 ns: spread 53.1%
+20:20:04     101500  cheapest advance emcts 43194.5 ns, dearest mcts 67345.5 ns: spread 55.9%
+20:20:04 
+20:20:04   The reference arm across levels:
+20:20:04         9500 units:  45827.8 ns/advance (1.00x the reference cell)
+20:20:04        20000 units:  44557.0 ns/advance (0.97x the reference cell)
+20:20:04       101500 units:  43194.5 ns/advance (0.94x the reference cell)
+20:20:04 
+20:20:04 === WHAT ONE GLOBAL WEIGHT SET WOULD MIS-ALLOCATE ===
+20:20:04   Wall-clock 1,000 nominal units buy under the fixed weights 1/0.16/0.077, given each cell's own operation mix.
+20:20:04       9500  44.630 to 64.657 ms: 44.9% unfair (emcts@9500 vs mcts@9500)
+20:20:04      20000  43.530 to 64.890 ms: 49.1% unfair (emcts@20000 vs mcts@20000)
+20:20:04     101500  42.267 to 64.457 ms: 52.5% unfair (emcts@101500 vs mcts@101500)
+20:20:04 
+20:20:04 === AUDIT: HOW MUCH OF EACH TURN THE CURRENCY PRICES ===
+20:20:04   profile                               turn ms  fwd model    own ops  unaccounted   unpriced
+20:20:04   emcts@9500                              440.6      96.2%       3.6%         0.2%       0.2%
+20:20:04   mcts@9500                               773.8      79.6%      20.3%         0.1%       0.1%
+20:20:04   oep@9500                                841.3      54.4%      45.6%         0.0%       0.0%
+20:20:04     note: oep@9500: two fastest oep.generation times differ by 26.7% (limit 10%); it is 0.02% of the turn, so reported, not gated
+20:20:04   tbets@9500                              851.7      54.9%      45.0%         0.1%       0.1%
+20:20:04   emcts@20000                             909.7      95.8%       4.2%         0.1%       0.1%
+20:20:04     note: emcts@20000: two fastest emcts.burn times differ by 50.6% (limit 10%); it is 0.01% of the turn, so reported, not gated
+20:20:04   mcts@20000                             1580.9      82.1%      17.8%         0.1%       0.1%
+20:20:04   oep@20000                              1472.9      61.7%      38.3%         0.0%       0.0%
+20:20:04     note: oep@20000: two fastest oep.generation times differ by 21.0% (limit 10%); it is 0.01% of the turn, so reported, not gated
+20:20:04   tbets@20000                            1734.4      56.5%      43.4%         0.1%       0.1%
+20:20:04     note: tbets@20000: two fastest tbets.select times differ by 117.2% (limit 10%); it is 0.00% of the turn, so reported, not gated
+20:20:04   emcts@101500                           4469.4      96.0%       4.0%         0.0%       0.0%
+20:20:04     note: emcts@101500: two fastest emcts.burn times differ by 20.3% (limit 10%); it is 0.00% of the turn, so reported, not gated
+20:20:04   mcts@101500                            7692.3      85.1%      14.8%         0.0%       0.0%
+20:20:04   oep@101500                             5840.3      75.9%      24.1%         0.0%       0.0%
+20:20:04   tbets@101500                           8554.9      58.1%      41.9%         0.0%       0.0%
+20:20:04   every cell's priced operations account for at least 90% of its turn time
+20:20:04 
+20:20:04 === SPEND: EACH CELL'S MEAN TURN AGAINST ITS LEVEL (flagged above 1.10x) ===
+20:20:04   emcts@9500                           1.00x
+20:20:04   mcts@9500                            1.00x
+20:20:04   oep@9500                             1.00x
+20:20:04   tbets@9500                           1.00x
+20:20:04   emcts@20000                          1.00x
+20:20:04   mcts@20000                           1.00x
+20:20:04   oep@20000                            1.00x
+20:20:04   tbets@20000                          1.00x
+20:20:04   emcts@101500                         1.00x
+20:20:04   mcts@101500                          1.00x
+20:20:04   oep@101500                           1.00x
+20:20:04   tbets@101500                         1.00x
+20:20:04 SPEND: every cell's mean turn is within 1.10x of its level
+20:20:04 
+20:20:04 === IS THIS A FAIR BENCHMARK? ===
+20:20:04   [ok]   every cell measured cleanly (12 cells)
+20:20:04   [ok]   weights are plausible in every cell
+20:20:04   [ok]   the reference cell moved -0.3% / +0.0% / -0.1% (advance / copy / eval) between the start and the end of the session: the machine held its speed
+20:20:04   [ok]   load average not exposed by this OS (not checked)
+20:20:04 
+20:20:04   VERDICT: PASS - calibration is trustworthy.
+20:20:04   Weights  -> C:\Users\mlcor\magat_runs\calibration\tribes-laptop-i9-14900hx-time\compute_weights.properties
+20:20:04   Measured -> C:\Users\mlcor\magat_runs\calibration\tribes-laptop-i9-14900hx-time\compute_profiles.csv
+20:20:04 CALIBRATION: PASS C:\Users\mlcor\magat_runs\calibration\tribes-laptop-i9-14900hx-time\compute_weights.properties
+20:20:04 [exit 0] after 0:29:17.142296
+===== exit 0 after 1757 s

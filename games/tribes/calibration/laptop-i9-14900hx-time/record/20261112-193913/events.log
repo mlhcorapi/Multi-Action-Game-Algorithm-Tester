@@ -1,0 +1,27 @@
+[2026-11-12 19:39:20] [start] tribes-laptop-i9-14900hx-time: one session pricing 4 arm(s): emcts, mcts, oep, tbets; then the checks against the published currency and against this machine's own new currency; JVMs on CPUs 0-15 (the performance cores of a hybrid CPU (16 logical CPUs)), kept awake, priority high
+[2026-11-12 19:40:59] [controls] soak 1: JVM pid 17404, CPUs 0-15, priority high, power throttling off
+[2026-11-12 19:40:59] [stability] estimate 1: 9500: 0.46 s/turn, 20000: 0.94 s/turn, 101500: 4.54 s/turn
+[2026-11-12 19:42:37] [controls] soak 2: JVM pid 15412, CPUs 0-15, priority high, power throttling off
+[2026-11-12 19:42:37] [stability] estimate 2: 9500: 0.46 s/turn, 20000: 0.93 s/turn, 101500: 4.51 s/turn; change 1.1%
+[2026-11-12 19:44:15] [controls] soak 3: JVM pid 4252, CPUs 0-15, priority high, power throttling off
+[2026-11-12 19:44:15] [stability] estimate 3: 9500: 0.46 s/turn, 20000: 0.93 s/turn, 101500: 4.56 s/turn; change 1.1%
+[2026-11-12 19:45:22] [load] at least 1.0 logical CPUs of other work for 30 s during soak 4; using CPU now: not visible from here (another container or user)
+[2026-11-12 19:45:54] [controls] soak 4: JVM pid 22784, CPUs 0-15, priority high, power throttling off
+[2026-11-12 19:45:54] [stability] estimate 4: 9500: 0.46 s/turn, 20000: 0.94 s/turn, 101500: 4.57 s/turn; change 1.1%
+[2026-11-12 19:47:32] [controls] soak 5: JVM pid 15404, CPUs 0-15, priority high, power throttling off
+[2026-11-12 19:47:32] [stability] estimate 5: 9500: 0.46 s/turn, 20000: 0.92 s/turn, 101500: 4.51 s/turn; change 2.1%
+[2026-11-12 19:49:09] [controls] soak 6: JVM pid 11176, CPUs 0-15, priority high, power throttling off
+[2026-11-12 19:49:09] [stability] estimate 6: 9500: 0.46 s/turn, 20000: 0.92 s/turn, 101500: 4.48 s/turn; change 0.7%
+[2026-11-12 19:50:47] [controls] soak 7: JVM pid 8496, CPUs 0-15, priority high, power throttling off
+[2026-11-12 19:50:47] [stability] estimate 7: 9500: 0.46 s/turn, 20000: 0.92 s/turn, 101500: 4.50 s/turn; change 0.4%
+[2026-11-12 19:50:47] [stability] steady after 11 min: two estimates in a row within 3%
+[2026-11-12 19:50:47] [stability] busiest measuring core during the last estimate: about 4173-4240 MHz (median 4220), up to 43 C
+[2026-11-12 19:50:47] [plan] about 0.3 h for the session and 0.2 h for the checks at this pace; expected to finish around 20:21 (up to 25% later if the arms run slower than the reference)
+[2026-11-12 19:50:47] [plan] leave the machine alone from here: nothing else should run until it finishes
+[2026-11-12 19:50:47] [session] session starts: emcts, mcts, oep, tbets; the calibrator's output goes to C:\Users\mlcor\magat_runs\calibration\tribes-laptop-i9-14900hx-time\record\20261112-193913\session.log
+[2026-11-12 20:20:04] [controls] session: JVM pid 16688, CPUs 0-15, priority high, power throttling off
+[2026-11-12 20:20:04] [session] session: PASS in 29.3 min; bracket -0.3/+0.0/-0.1%
+[2026-11-12 20:25:42] [controls] check published: JVM pid 17744, CPUs 0-15, priority high, power throttling off
+[2026-11-12 20:25:42] [check] published: PASS, largest turn-price drift -0.4% (emcts@101500)
+[2026-11-12 20:31:22] [controls] check self: JVM pid 16172, CPUs 0-15, priority high, power throttling off
+[2026-11-12 20:31:22] [check] self: PASS, largest turn-price drift 0.2% (emcts@20000)

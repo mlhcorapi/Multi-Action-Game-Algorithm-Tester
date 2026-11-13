@@ -1,0 +1,10 @@
+
+>>>>> 2026-11-12 20:20:04 $ magat weights --weights C:\Users\mlcor\magat_runs\calibration\tribes-laptop-i9-14900hx-time\compute_weights.properties --game tribes --arms emcts,mcts,emcts,oep,tbets --levels 9500,20000,101500 --progress
+20:20:04 $ java -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=500 -Dmagat.data=C:\Users\mlcor\magat_runs -Dmagat.git.commit=c3afdaed76da7151cf4db255a270699a36e0fd21 -Dmagat.engine.commit=828b13051d02fc55c6e95a3997d3757337883660 -Dtribes.home=C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine -cp C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\HOME\magat_runs\build\classes;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\core\lib\minimal-json-0.9.5.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\hamcrest-core-1.3.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\json.jar;C:\Users\mlcor\OneDrive\Documents\GitHub\Multi-Action-Game-Algorithm-Tester\games\tribes\engine\lib\junit-4.13.2.jar magat.cli.Main weights --weights C:\Users\mlcor\magat_runs\calibration\tribes-laptop-i9-14900hx-time\compute_weights.properties --game tribes --arms emcts,mcts,emcts,oep,tbets --levels 9500,20000,101500 --progress
+20:20:04   -> C:\Users\mlcor\magat_runs\logs\weights.log
+20:20:04 # compute_weights.properties: 12 profiles, up to 5 algorithm operation(s) each, reference emcts@9500 (45827.8 ns/advance), global 1.0000/0.1483/0.0450
+20:20:04 # game tribes, turnsPerRep 16,16,16, portfolio ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7
+20:20:04 # 4 arm(s) x 3 level(s): 12 of 12 profiles priced, every declared operation checked
+20:20:04 WEIGHTS: COVERED
+20:20:04 [exit 0] after 0:00:00.152035
+===== exit 0 after 0 s
