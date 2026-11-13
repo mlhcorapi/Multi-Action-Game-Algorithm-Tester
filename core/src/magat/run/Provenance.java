@@ -19,7 +19,7 @@ import java.util.Map;
  * locks a resume is checked against.
  *
  * <p>Recorded once, on the first run into the tree, and then enforced: the game, its configuration
- * (engine commit included), the portfolio identity and the split. A resume that differs in any of them
+ * (engine commit included), the portfolio identity, the split and the positions the spec selects of it. A resume that differs in any of them
  * aborts: its turns would not be comparable with the ones already on disk. The weights file's hash is
  * recorded too, with the currency lock in {@link GridRunner}. Every invocation and every retired leaf
  * is appended, so the tree carries its own history. The MAGAT commit is recorded once, as the tree's
@@ -46,11 +46,13 @@ final class Provenance {
     }
 
     /** The locks: identical or abort. Returns the differences, empty when the tree may be extended. */
-    List<String> mismatches(String game, Map<String, String> configuration, String portfolioIdentity, String split) {
+    List<String> mismatches(String game, Map<String, String> configuration, String portfolioIdentity, String split,
+                            String selection) {
         List<String> out = new ArrayList<>();
         if (fresh) return out;
         compare(out, "game", str(json, "game", "id"), game);
         compare(out, "split", json.getString("split", null), split);
+        compare(out, "selection", json.getString("selection", null), selection);
         compare(out, "portfolio identity", str(json, "portfolio", "identity"), portfolioIdentity);
         JsonValue cfg = json.get("game") == null ? null : json.get("game").asObject().get("configuration");
         if (cfg != null)

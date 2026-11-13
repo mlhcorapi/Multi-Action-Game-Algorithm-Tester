@@ -2,6 +2,7 @@ package magat.calibrate;
 
 import com.eclipsesource.json.Json;
 import com.eclipsesource.json.JsonObject;
+import com.eclipsesource.json.JsonValue;
 import com.eclipsesource.json.WriterConfig;
 import magat.agent.AgentFactory;
 import magat.agent.Episode;
@@ -320,6 +321,12 @@ public final class ThreadSweep {
         JsonObject levels = Json.parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8)).asObject().get("levels").asObject();
         for (JsonObject.Member m : levels) out.put(Long.parseLong(m.getName()), m.getValue().asObject().getInt("threads", 1));
         return out;
+    }
+
+    /** The CPU model a {@code threads.json} was swept on, or null when it does not say. */
+    public static String machineModel(Path file) throws IOException {
+        JsonValue m = Json.parse(new String(Files.readAllBytes(file), StandardCharsets.UTF_8)).asObject().get("machine");
+        return m == null || !m.isString() ? null : MachineProfile.modelOf(m.asString());
     }
 
     private static String fmt(double v) {
