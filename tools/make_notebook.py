@@ -251,9 +251,13 @@ def experiment_cells(game: str) -> list:
         if x.get("name") == "shakedown" or "levels" not in x:      # the shakedown's own spec
             continue
         name, split = x["name"], x.get("split", "all")
-        levels = ", ".join(f"{l['budget']:,} x {l['visits']}" for l in x.get("levels", []))
+        # A level is units, a published level's name, or an object; its repetitions default to the spec's own.
+        lvs = [l if isinstance(l, dict) else {"budget": l} for l in x.get("levels", [])]
+        reps = [l.get("repetitions", l.get("visits", x.get("repetitions", 0))) for l in lvs]
+        levels = ", ".join(f"{l['budget']:,} x {r}" if isinstance(l["budget"], int) else f"{l['budget']} x {r}"
+                           for l, r in zip(lvs, reps))
         arms = ", ".join(a["id"] if isinstance(a, dict) else a for a in x.get("arms", []))
-        turns = sum(len(l.get("arms") or x.get("arms", [])) * l["visits"] for l in x["levels"])
+        turns = sum(len(l.get("arms") or x.get("arms", [])) * r for l, r in zip(lvs, reps))
         cells.append(md(f"""
 ## Experiment: {name}
 

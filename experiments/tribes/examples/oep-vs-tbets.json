@@ -1,0 +1,14 @@
+{
+  "name": "oep-vs-tbets",
+  "game": "tribes",
+  "description": "An example of the short forms (docs/EXPERIMENTS.md): two arms against the baseline at two published levels, on 40 early single-player positions of the development half, in the reference machine's published currency.",
+  "arms": ["emcts", "oep", "tbets"],
+  "baseline": "emcts",
+  "levels": ["500ms", "1000ms"],
+  "repetitions": 4,
+  "split": "dev",
+  "sources": ["single"],
+  "phases": { "min": 10, "max": 20 },
+  "scenarios": 40,
+  "weights": "r7615-time"
+}

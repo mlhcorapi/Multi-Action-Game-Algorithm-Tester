@@ -200,6 +200,20 @@ def main(argv) -> int:
     check("the shipped spec reference validates against the published currency",
           [PY, ROOT / "magat.py", "experiment", "validate", "--experiment",
            ROOT / "experiments" / game / "reference.json"], "VALIDATION: PASS")
+    for example in sorted((ROOT / "experiments" / game / "examples").glob("*.json")):
+        check(f"the example spec {example.name} validates against the currency it names",
+              [PY, ROOT / "magat.py", "experiment", "validate", "--experiment", example], "VALIDATION: PASS")
+    short = data / "shakedown" / f"short-{game}.json"
+    short.write_text(json.dumps(dict(name="short", game=game, baseline="emcts", arms=["emcts", "random"], levels=[2000, 4000],
+                                     repetitions=1, split="all", sources=["single"], scenarios=1)), encoding="utf-8")
+    short_root = data / "shakedown" / f"run-{game}-short"
+    shutil.rmtree(short_root, ignore_errors=True)
+    check("a spec in the short forms runs the positions it selects: one single-player position",
+          [PY, ROOT / "magat.py", "run", "--experiment", short, "--portfolio", toy_dir, "--weights", weights,
+           "--out", short_root, "--threads", "2", "--toy"], "RUN: COMPLETE",
+          then=lambda: '"selection": "sources=single;scenarios=1"' in (short_root / "all" / "_run.json").read_text(encoding="utf-8")
+          and len((short_root / "all" / "emcts" / "2000cu" / "turns.csv").read_text(encoding="utf-8").splitlines()) == 2
+          and ",single," in (short_root / "all" / "emcts" / "2000cu" / "turns.csv").read_text(encoding="utf-8"))
     check("bundle zips a run tree", [PY, ROOT / "magat.py", "bundle", "--name", "shakedown-run", "--paths", run_root], "BUNDLE:")
 
     step("8. Analyzer: the toy run, re-priced in its own currency")

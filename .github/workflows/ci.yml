@@ -77,6 +77,11 @@ jobs:
           python magat.py calibrate-controlled $CC | grep -q "nothing to measure"
       - name: The shipped experiment spec validates against the published currency
         run: python magat.py experiment validate --experiment experiments/tribes/reference.json
+      - name: Every example spec validates against the currency it names
+        run: |
+          for spec in experiments/tribes/examples/*.json; do
+            python magat.py experiment validate --experiment "$spec"
+          done
       - name: Toy run on dev and holdout, and a resume that skips every leaf
         run: |
           RUN="python magat.py run --experiment experiments/tribes/shakedown.json --portfolio $RUNNER_TEMP/toy --weights $RUNNER_TEMP/calib/compute_weights.properties --out $RUNNER_TEMP/run --threads 2 --toy"
@@ -86,6 +91,11 @@ jobs:
           test "$(wc -l < "$RUNNER_TEMP/run/dev/_completed.txt")" -eq 10
           head -1 "$RUNNER_TEMP/run/dev/emcts/2000cu/turns.csv" | grep -q "op_emcts.generation"
           head -1 "$RUNNER_TEMP/run/dev/tbets/2000cu/turns.csv" | grep -q "op_tbets.turn"
+      - name: A spec in the short forms runs the positions it selects
+        run: |
+          echo '{"name": "short", "game": "tribes", "baseline": "emcts", "arms": ["emcts", "random"], "levels": [2000, 4000], "repetitions": 1, "split": "all", "sources": ["single"], "scenarios": 1}' > "$RUNNER_TEMP/short.json"
+          python magat.py run --experiment "$RUNNER_TEMP/short.json" --portfolio $RUNNER_TEMP/toy --weights $RUNNER_TEMP/calib/compute_weights.properties --out $RUNNER_TEMP/short --threads 2 --toy | grep -q "RUN: COMPLETE"
+          grep -q '"selection": "sources=single;scenarios=1"' "$RUNNER_TEMP/short/all/_run.json"
       - name: Analyze the toy run, re-priced in its own currency, and beside itself as another machine's
         run: |
           python magat.py analyze --run "$RUNNER_TEMP/run" --reprice "$RUNNER_TEMP/calib/compute_weights.properties" --out "$RUNNER_TEMP/analysis"

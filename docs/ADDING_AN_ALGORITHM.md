@@ -231,13 +231,16 @@ port against the original rather than trusting it:
    {
      "name": "first",
      "game": "tribes",
-     "split": "dev",
+     "arms": ["emcts", "first"],
      "baseline": "emcts",
-     "levels": [ { "budget": 9500, "visits": 4 }, { "budget": 20000, "visits": 4 } ],
-     "arms": [ { "id": "emcts" }, { "id": "first" } ],
+     "levels": ["500ms", "1000ms"],
+     "repetitions": 4,
+     "split": "dev",
      "contrasts": [ { "a": "first", "b": "emcts", "label": "random restarts against the baseline" } ]
    }
    ```
+
+   [`EXPERIMENTS.md`](EXPERIMENTS.md) describes every key, and how to select positions.
 
 3. **Validate it, run it on the development half, and analyse it:**
 

@@ -27,9 +27,10 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
                               the levels that are those milliseconds of thinking time here (a maintainer's tool, run on the
                               reference machine; refused without --remeasure once games/<game>/levels.json is published)
     python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...] [--progress]
-    python magat.py run --experiment SPEC [--split dev|holdout|all] [--out DIR] [--portfolio DIR] [--weights FILE]
+    python magat.py run --experiment SPEC [--split dev|holdout|all] [--out DIR] [--portfolio DIR] [--weights FILE|NAME]
                         [--threads N] [--threads-at 400000=31] [--retire-leaf arm@budget] [--toy]
-    python magat.py experiment validate --experiment SPEC [--weights FILE | --no-weights] [--split ...]
+    python magat.py experiment validate --experiment SPEC [--weights FILE|NAME | --no-weights] [--split ...] [--threads N]
+                                      the spec read back, the positions it selects, the run's size and estimated hours
     python magat.py bundle --name NAME --paths P [P ...] [--exclude seqlog_,mutlog_]
     python magat.py check replay    --game tribes --leaf DIR [--portfolio DIR] [--weights FILE] [--turns 20]
     python magat.py check time      --game tribes (--weights FILE | --fixed-weights) [--levels ...] [--arms a,b] [--targets ms,...]
@@ -482,19 +483,68 @@ def git_state() -> tuple:
     return (rev or "unknown") + ("-dirty" if len(notebooks) < len(changed) else ""), bool(notebooks)
 
 
+def read_spec(args: list) -> dict:
+    """The spec --experiment names, as JSON (empty without one)."""
+    if "--experiment" not in args:
+        return {}
+    import json
+    spec = pathlib.Path(args[args.index("--experiment") + 1])
+    try:
+        x = json.loads(spec.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        sys.exit(f"cannot read the experiment spec {spec}: {e}")
+    return x if isinstance(x, dict) else {}
+
+
 def with_spec_game(args: list) -> list:
     """`run` and `experiment` name their game in the spec; pass it on so the JVM gets the engine settings."""
     args = list(args)
-    if "--experiment" in args and "--game" not in args:
-        import json
-        spec = pathlib.Path(args[args.index("--experiment") + 1])
-        try:
-            game = json.loads(spec.read_text(encoding="utf-8")).get("game")
-        except (OSError, ValueError) as e:
-            sys.exit(f"cannot read the experiment spec {spec}: {e}")
-        if game:
-            args += ["--game", game]
+    game = read_spec(args).get("game")
+    if "--experiment" in args and "--game" not in args and game:
+        args += ["--game", game]
     return args
+
+
+def currency(name: str, game: str, near: pathlib.Path = None) -> pathlib.Path:
+    """A currency by name or path: a weights file, a calibration directory holding one, a published currency's
+    name (games/<game>/calibration/<name>), or a currency this machine measured (<data>/calibration/<game>-<name>,
+    where calibrate-controlled --name writes it). A relative path is tried beside the spec, then here."""
+    raw = pathlib.Path(name)
+    tries = [raw] if raw.is_absolute() else [*([near / raw] if near else []), pathlib.Path.cwd() / raw, ROOT / raw]
+    tries += [GAMES / game / "calibration" / name, data_root() / "calibration" / f"{game}-{name}"]
+    for t in tries:
+        if t.is_file():
+            return t.resolve()
+        if (t / "compute_weights.properties").is_file():
+            return (t / "compute_weights.properties").resolve()
+    published = sorted(d.name for d in (GAMES / game / "calibration").glob("*") if (d / "compute_weights.properties").is_file())
+    sys.exit(f"no currency '{name}': not a weights file, not a published currency of {game} ({', '.join(published) or 'none'}), "
+             f"and not one this machine measured ({data_root() / 'calibration' / f'{game}-{name}'})")
+
+
+def with_spec_weights(args: list) -> list:
+    """The currency the spec names ("weights"), when no --weights is given; a --weights given wins, and is said to.
+    A --weights that is a name rather than a file is resolved the same way."""
+    args = list(args)
+    game = args[args.index("--game") + 1] if "--game" in args else None
+    if not game:
+        return args
+    if "--weights" in args:
+        i = args.index("--weights") + 1
+        if not pathlib.Path(args[i]).is_file():
+            args[i] = str(currency(args[i], game))
+    named = read_spec(args).get("weights")
+    if not isinstance(named, str) or "--no-weights" in args:
+        return args
+    spec = pathlib.Path(args[args.index("--experiment") + 1]).resolve()
+    chosen = currency(named, game, near=spec.parent)
+    if "--weights" in args:
+        given = pathlib.Path(args[args.index("--weights") + 1]).resolve()
+        if given != chosen:
+            print(f"# the spec names the currency {named} ({chosen}); --weights {given} was given and is used", flush=True)
+        return args
+    print(f"# currency {named}: {chosen}", flush=True)
+    return args + ["--weights", str(chosen)]
 
 
 def bundle(argv: list) -> None:
@@ -554,7 +604,7 @@ def with_published_defaults(args: list) -> list:
     if "--game" in args:
         game = args[args.index("--game") + 1]
         pub = PUBLISHED.get(game, {})
-        wants_portfolio = args[0] in ("check", "calibrate", "threads", "run")
+        wants_portfolio = args[0] in ("check", "calibrate", "threads", "run") or args[:2] == ["experiment", "validate"]
         if wants_portfolio and "--portfolio" not in args and "portfolio" in pub and pub["portfolio"].is_dir():
             args += ["--portfolio", str(pub["portfolio"])]
         wants_weights = ("equivalence" in args or "replay" in args or args[0] in ("weights", "run")
@@ -568,6 +618,9 @@ def with_published_defaults(args: list) -> list:
         levels = published_levels(game) if wants_levels and "--levels" not in args else []
         if levels:
             args += ["--default-levels", ",".join(map(str, levels))]
+        # A spec may name the published levels ("500ms"): the file that names them.
+        if args[0] in ("run", "experiment") and "--levels-file" not in args and pub.get("levels") and pub["levels"].is_file():
+            args += ["--levels-file", str(pub["levels"])]
     return args
 
 
@@ -585,7 +638,7 @@ def main(argv: list) -> None:
     elif cmd == "analyze":
         python_analysis([cmd, *rest], log=cmd)
     elif cmd in ("run", "experiment"):
-        args = with_published_defaults(with_spec_game([cmd, *rest]))
+        args = with_published_defaults(with_spec_weights(with_spec_game([cmd, *rest])))
         log = "run" if cmd == "run" else "experiment-validate"
         if cmd == "run":
             split = rest[rest.index("--split") + 1] if "--split" in rest else None

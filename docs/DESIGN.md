@@ -163,9 +163,10 @@ from the position's random generator: leaving one out lets a chance event come o
 
 ## 8. Running
 
-An experiment is a JSON spec in `experiments/<game>/`: the split, the baseline, the levels (each a budget
-and a number of visits), the arms and the contrasts to report. `experiments/tribes/reference.json` runs
-the four algorithms and the floor at the three published levels on the whole portfolio.
+An experiment is a JSON spec ([`EXPERIMENTS.md`](EXPERIMENTS.md)): the arms and the baseline, the levels
+(each a budget and a number of repetitions), the positions (a split, optionally narrowed), the currency
+and the contrasts to report. `experiments/tribes/reference.json` runs the four algorithms and the floor at
+the three published levels on the whole portfolio.
 
 - **The validator** checks a spec before anything runs: every arm registered and priced at every level it
   runs, every declared operation included.

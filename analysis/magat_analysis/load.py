@@ -173,7 +173,17 @@ def load_spec(path) -> dict:
     x["_path"] = str(p)
     x["_sha256"] = hashlib.sha256(p.read_bytes()).hexdigest()
     x["arms"] = [a if isinstance(a, dict) else {"id": a} for a in x.get("arms", [])]
+    if "contrasts" not in x:
+        x["contrasts"] = every_pair([a.get("id") for a in x["arms"]])
     return x
+
+
+def every_pair(ids) -> list:
+    """The contrasts a spec without any asks for (magat.run.Experiment.everyPair): every arm against every arm
+    written before it, grouped by the earlier one, in the order written."""
+    ids = [i for i in dict.fromkeys(ids) if i]
+    return [dict(a=ids[j], b=ids[i], label=f"{ids[j]} against {ids[i]}")
+            for i in range(len(ids)) for j in range(i + 1, len(ids))]
 
 
 def spec_of(split: Split):
@@ -183,9 +193,10 @@ def spec_of(split: Split):
     if e.get("path") and resolve(e["path"]).is_file():
         return load_spec(e["path"])
     game, name = (split.run.get("game") or {}).get("id"), e.get("name")
-    here = ROOT / "experiments" / str(game) / f"{name}.json"
-    if game and name and here.is_file() and e.get("sha256") and sha256(here) == e["sha256"]:
-        return load_spec(here)
+    if game and name and e.get("sha256"):
+        for here in sorted((ROOT / "experiments" / str(game)).rglob(f"{name}.json")):
+            if sha256(here) == e["sha256"]:
+                return load_spec(here)
     return None
 
 
@@ -270,6 +281,7 @@ def provenance(split: Split, spec) -> dict:
         game=game.get("id", "unknown"),
         engine_commit=cfg.get("engine.commit") or cfg.get("engine") or "unknown",
         portfolio_identity=p.get("identity", "unknown"),
+        selection=r.get("selection", "all"),
         currency=split.currency(),
         currency_reference=w.get("reference", "unknown"),
         experiment=(spec or {}).get("name") or (r.get("experiment") or {}).get("name", "none"),

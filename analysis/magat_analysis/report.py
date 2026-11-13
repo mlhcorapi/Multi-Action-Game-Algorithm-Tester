@@ -229,6 +229,8 @@ def render(splits, specs, baseline, results, prov, weights, n, prov_b=None, othe
     keys = [("game", "game"), ("engine commit", "engine_commit"), ("portfolio identity", "portfolio_identity"),
             ("currency", "currency"), ("currency reference", "currency_reference"), ("experiment", "experiment"),
             ("experiment sha256", "experiment_sha256"), ("leaves / turns", None), ("written by MAGAT", "magat_commit")]
+    if any(prov[s].get("selection", "all") != "all" for s in names):
+        keys.insert(3, ("positions selected", "selection"))
     rows = []
     for label, k in keys:
         if k is None:

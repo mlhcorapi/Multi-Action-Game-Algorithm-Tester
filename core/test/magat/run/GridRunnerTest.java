@@ -11,6 +11,7 @@ import magat.agent.TurnBudget;
 import magat.agents.emcts.EmctsFactory;
 import magat.agents.random.RandomAgent;
 import magat.game.Game;
+import magat.game.Scenario;
 import magat.game.GameModule;
 import magat.machine.MachineProfile;
 import magat.meter.Meter;
@@ -372,5 +373,45 @@ public class GridRunnerTest {
         assertTrue(invalid.out, invalid.out.contains("VALIDATION: FAIL") && invalid.out.contains("emcts-alt@300"));
         assertFalse(Files.exists(out.resolve("dev")));
         assertEquals(Arrays.asList(600L, 300L), Arrays.asList(Experiment.load(spec(SPEC)).levels.get(0).budget, Experiment.load(spec(SPEC)).levels.get(1).budget));
+    }
+
+    @Test
+    public void aSelectionPlaysOnlyItsPositionsAndAResumeMustSelectTheSame() throws Exception {
+        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-alt"));
+        Experiment x = Experiment.load(spec(SPEC.replace("\"split\": \"dev\",", "\"split\": \"dev\", \"phases\": [1],")));
+        List<Scenario<ToyGame.State>> dev = Split.apply(portfolio.scenarios(), portfolioDir, Split.Half.DEV);
+        long early = dev.stream().filter(s -> s.phase == 1).count();
+        assertTrue("the toy portfolio's dev half has both phases", early > 0 && early < dev.size());
+        assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, options(Split.Half.DEV)));
+        Path root = out.resolve("dev");
+        assertEquals(early * 2, Leaf.rows(Leaf.dir(root, "emcts", 600)));
+        assertTrue(read(root.resolve(Provenance.FILE)).contains("\"selection\": \"phases=1\""));
+
+        Stdout.Captured<Integer> other = Stdout.capture(() ->
+                GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), portfolio, w, options(Split.Half.DEV)));
+        assertEquals("another selection would mix positions in one tree", GridRunner.MISMATCH, (int) other.value);
+        assertTrue(other.out, other.out.contains("selection: this tree holds 'phases=1', this run has 'all'"));
+    }
+
+    @Test
+    public void aSelectionNeverReachesAcrossTheSplitAndMustLeaveSomething() throws Exception {
+        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-alt"));
+        int holdout = Split.ids(portfolioDir, Split.Half.HOLDOUT).iterator().next();
+        String[][] refused = {
+                {"\"ids\": [" + holdout + "],", "never reaches across the split"},
+                {"\"sources\": [\"nope\"],", "source 'nope' is not in the portfolio"},
+                {"\"phases\": [7],", "leaves no position of the dev half"},
+        };
+        for (String[] r : refused) {
+            Experiment x = Experiment.load(spec(SPEC.replace("\"split\": \"dev\",", "\"split\": \"dev\", " + r[0])));
+            Stdout.Captured<Integer> run = Stdout.capture(() -> GridRunner.run(module(game, new ArrayList<>()), x, portfolio, w, options(Split.Half.DEV)));
+            assertEquals(r[0], GridRunner.INVALID, (int) run.value);
+            assertTrue(run.out, run.out.contains(r[1]));
+        }
+        assertFalse("nothing was run", Files.exists(out.resolve("dev")));
+        Experiment many = Experiment.load(spec(SPEC.replace("\"split\": \"dev\",", "\"split\": \"dev\", \"sources\": [\"toy\"], \"scenarios\": 99,")));
+        Stdout.Captured<Integer> run = Stdout.capture(() -> GridRunner.run(module(game, new ArrayList<>()), many, portfolio, w, options(Split.Half.DEV)));
+        assertEquals(GridRunner.OK, (int) run.value);
+        assertTrue(run.out, run.out.contains("asks for 99 positions") && run.out.contains("all of them run"));
     }
 }

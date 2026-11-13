@@ -92,6 +92,7 @@ public final class GridRunner {
         // ---- the spec, before anything is touched
         System.out.println("# experiment " + x.name + " (" + (x.source == null ? "inline" : x.source) + ", sha256 " + Identity.shortForm(x.sha256) + ")");
         Validator.Report v = Validator.check(x, game.id(), module.agents(), half, weights, o.toy);
+        if (v.ok()) Validator.checkSelection(x, portfolio.scenarios(), portfolio.dir(), half, v);
         v.print();
         if (!v.ok()) {
             System.out.println("VALIDATION: FAIL (" + v.errors.size() + " error(s)); nothing was run");
@@ -113,7 +114,7 @@ public final class GridRunner {
         try {
             Split.claimOutputRoot(root, half);
             Provenance prov = Provenance.open(root);
-            List<String> mismatch = prov.mismatches(game.id(), game.configuration(), portfolio.identity(), half.key());
+            List<String> mismatch = prov.mismatches(game.id(), game.configuration(), portfolio.identity(), half.key(), x.selection());
             if (!mismatch.isEmpty()) {
                 System.out.println("ABORT: " + root + " was produced under different conditions:");
                 for (String m : mismatch) System.out.println("  " + m);
@@ -142,8 +143,7 @@ public final class GridRunner {
             prov.save();
 
             // ---- the scenarios
-            List<Scenario<S>> scenarios = Split.apply(portfolio.scenarios(), portfolio.dir(), half);
-            if (x.scenarios > 0 && x.scenarios < scenarios.size()) scenarios = spread(scenarios, x.scenarios);
+            List<Scenario<S>> scenarios = x.select(Split.apply(portfolio.scenarios(), portfolio.dir(), half));
 
             Weights previous = Meter.installed();
             Meter.install(weights);
@@ -466,6 +466,7 @@ public final class GridRunner {
             prov.set("game", new JsonObject().add("id", game.id()).add("configuration", cfg));
             prov.set("portfolio", new JsonObject().add("dir", portfolio.dir().toAbsolutePath().toString()).add("identity", portfolio.identity()));
             prov.set("split", Json.value(half.key()));
+            prov.set("selection", Json.value(x.selection()));
         }
         JsonObject header = new JsonObject();
         for (Map.Entry<String, String> e : weights.header().entrySet()) header.add(e.getKey(), e.getValue());
@@ -495,33 +496,43 @@ public final class GridRunner {
 
     private static void banner(Experiment x, Split.Half half, Path root, int scenarios, Weights weights, Options o, Map<Long, Integer> sweep) {
         System.out.println("############################################################");
-        System.out.println("# run " + x.name + "   split " + half.key() + "   " + scenarios + " scenarios   -> " + root);
+        System.out.println("# run " + x.name + "   split " + half.key() + "   " + scenarios + " scenarios"
+                + (x.selects() ? " (" + x.selection() + ")" : "") + "   -> " + root);
         System.out.println("# weights " + weights.summary());
+        for (String line : estimate(x, scenarios, weights, o, sweep)) System.out.println("#" + line);
+        MachineProfile.get().printBanner("run " + x.name);
+    }
+
+    /**
+     * The grid's size and how long it should take: one line per level, then the total. A unit is calibrated to
+     * wall-clock, so a turn of B units costs about B reference advances of the machine the currency was measured
+     * on; on another machine the hours are that machine's, which the last line says. Nothing decides on it.
+     */
+    public static List<String> estimate(Experiment x, int scenarios, Weights weights, Options o, Map<Long, Integer> sweep) {
+        List<String> out = new ArrayList<>();
         double refNs = weights.referenceAdvanceNanos(), hours = 0;
         long turns = 0;
         for (Experiment.Level l : x.levels) {
+            if (l.budget <= 0 || l.visits < 1) continue;
             long t = (long) x.armsAt(l).size() * scenarios * l.visits;
             turns += t;
-            // A unit is calibrated to wall-clock: a turn of B units costs about B reference advances.
             hours += t * l.budget * refNs * 1e-9 * o.machineFactor / 3600.0 / threadsFor(l.budget, o, sweep);
-            System.out.println(String.format(Locale.ROOT, "#   level %7d: %2d arm(s) x %d scenarios x %d visit(s) on %d thread(s)",
+            out.add(String.format(Locale.ROOT, "   level %7d: %2d arm(s) x %d scenarios x %d visit(s) on %d thread(s)",
                     l.budget, x.armsAt(l).size(), scenarios, l.visits, threadsFor(l.budget, o, sweep)));
         }
-        System.out.println(String.format(Locale.ROOT, "# %,d turns; estimate %.1f h (budget x %.0f ns per reference advance x machine factor %.2f; "
-                + "nothing decides on it)", turns, hours, refNs, o.machineFactor));
-        MachineProfile.get().printBanner("run " + x.name);
+        out.add(String.format(Locale.ROOT, " %,d turns; estimate %s (budget x %.0f ns per reference advance x machine factor %.2f; "
+                + "nothing decides on it)", turns, hours < 1 ? String.format(Locale.ROOT, "%.0f min", Math.ceil(hours * 60))
+                : String.format(Locale.ROOT, "%.1f h", hours), refNs, o.machineFactor));
+        String machine = weights.header().get("machine");
+        if (machine != null && !MachineProfile.modelOf(machine).equals(MachineProfile.get().cpuModel()))
+            out.add(" the currency was measured on " + MachineProfile.modelOf(machine) + ": those are its hours; this machine's differ");
+        return out;
     }
 
     private static Set<String> readCheckpoint(Path f) throws IOException {
         Set<String> out = new LinkedHashSet<>();
         if (!Files.isRegularFile(f)) return out;
         for (String line : Files.readAllLines(f, StandardCharsets.UTF_8)) if (!line.trim().isEmpty()) out.add(line.trim());
-        return out;
-    }
-
-    private static <S> List<Scenario<S>> spread(List<Scenario<S>> list, int n) {
-        List<Scenario<S>> out = new ArrayList<>(n);
-        for (int i = 0; i < n; i++) out.add(list.get((int) ((long) i * list.size() / n)));
         return out;
     }
 

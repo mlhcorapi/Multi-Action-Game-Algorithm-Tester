@@ -32,7 +32,7 @@ wrap it). It:
 | `weights --weights F [--game G --arms ...] [--progress]` | what a weights file prices; exit 1 if anything asked for is missing. With `--progress`, a probe of a calibration under way: what is still to price, and exit 0 |
 | `check contract \| equivalence \| replay \| audit` | the gates (below) |
 | `check time (--weights F \| --fixed-weights) [--levels ...] [--arms ...] [--targets ms,...]` | single-threaded whole turns over positions spread across the portfolio: each level's thinking time on this machine, and each cell's mean spend against its level, flagged above 1.10× |
-| `experiment validate --experiment SPEC [--weights F \| --no-weights]` | the spec validator alone |
+| `experiment validate --experiment SPEC [--weights F \| --no-weights]` | the spec validator alone, then the spec read back and the run's estimated hours |
 | `run --experiment SPEC --split dev\|holdout\|all` | run an experiment (below) |
 | `analyze --run DIR [--experiment SPEC] [--baseline ARM] [--reprice W] [--compare DIR] --out DIR` | every measure, as tables and `SUMMARY.md`; with `--compare`, beside another machine's run of the same experiment |
 | `bundle --name N --paths P...` | zip files into `<data>/bundles/N.zip` |
@@ -102,17 +102,21 @@ else, so it cannot drift from the CLI. Its stages:
 
 ## Experiments and runs
 
-An experiment is a JSON spec in `experiments/<game>/`. A spec names:
-- the split and the baseline;
-- the levels, as `{budget, visits}`, each optionally with its own `arms`;
-- the arms;
-- the `contrasts`, the paired comparisons to report;
-- optionally `scenarios`, an evenly spread subset of the split for smoke runs.
+An experiment is a JSON spec ([`docs/EXPERIMENTS.md`](EXPERIMENTS.md) describes every key). A spec names:
+- the arms and the baseline;
+- the levels, as units or a published level's name (`"500ms"`), with their `repetitions` (the older
+  `visits`), each optionally with its own `arms`;
+- the positions: the split, optionally narrowed by `sources`, `phases`, `ids` and a `scenarios` count;
+- optionally the currency (`weights`, a published currency's name or a file) and the `contrasts` (every
+  pair by default).
 
 `magat experiment validate` checks it before anything runs:
 - every arm is registered and priced at every level it runs, every declared operation included;
 - the baseline is at two levels or more, or the budget multiplier cannot be computed (a warning);
+- the positions it selects exist, belong to the split it runs, and are not none;
 - every key is one it knows (an unknown key is a warning: a typo?).
+
+It then reads the spec back (its levels in units, its positions) and estimates the run's hours.
 
 ```bash
 python magat.py run --experiment experiments/tribes/reference.json --weights <your weights> --out $HOME/magat_runs/tribes/runs/reference
@@ -123,7 +127,9 @@ python magat.py run --experiment experiments/tribes/reference.json --weights <yo
 - **Never delete to re-run.** `--retire-leaf arm@budget` discards a leaf deliberately and logs it in
   `_run.json`.
 - **Threads.** `--threads N`, `--threads-at 101500=31` per level, or by default the `threads.json`
-  beside the weights file. Results do not depend on the thread count; wall-clock does.
+  beside the weights file when it was swept on this CPU model, else this machine's worker ceiling: a
+  currency published from another machine carries that machine's thread choices, which say nothing of
+  this one. Results do not depend on the thread count; wall-clock does.
 
 **Guards**, each a past mistake made structural:
 - **The currency lock.** A leaf whose price changed in the weights file is refused until it is
