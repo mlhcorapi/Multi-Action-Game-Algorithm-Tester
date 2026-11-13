@@ -360,7 +360,11 @@ public final class Experiment {
         }
         if (v.isString()) {
             String s = v.asString().trim();
-            if (s.matches("[0-9]+")) return Long.parseLong(s);
+            if (s.matches("[0-9]{1,15}") && Long.parseLong(s) > 0) return Long.parseLong(s);
+            if (s.matches("[0-9]+")) {
+                problems.add("level '" + s + "' is not a positive whole number of units");
+                return -1;
+            }
             Long units = named.get(levelKey(s));
             if (units != null) return units;
             problems.add("level '" + s + "' is " + (named.isEmpty()

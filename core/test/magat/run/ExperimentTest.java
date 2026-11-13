@@ -86,6 +86,9 @@ public class ExperimentTest {
         for (String needle : new String[]{"an arm is 7", "both visits and repetitions", "2.5 is not a positive whole number",
                 "a level is true", "repetitions is \"many\"", "not 'from'", "sources is \"single\", not a list", "ids is \"two\""})
             assertTrue(needle + " in " + all, all.contains(needle));
+        for (String level : new String[]{"\"0\"", "0", "\"99999999999999999999\"", "-300"})
+            assertTrue(level, spec("\"arms\": [\"emcts\"], \"levels\": [" + level + "], \"repetitions\": 1").problems.toString()
+                    .contains("not a positive whole number"));
         Experiment noReps = spec("\"arms\": [\"emcts\"], \"levels\": [300]");
         assertEquals(-1, noReps.levels.get(0).visits);
     }
