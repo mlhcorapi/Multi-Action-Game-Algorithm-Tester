@@ -6,6 +6,8 @@ answers is "does this all work on this machine". Run before every pull request.
 
     python tools/shakedown.py [--game tribes]
 """
+import hashlib
+import json
 import os
 import pathlib
 import shutil
@@ -81,11 +83,15 @@ def main(argv) -> int:
     check("audit: each arm's declared operations and forward model account for its turn (toy size)",
           [PY, ROOT / "magat.py", "check", "audit", "--game", game, "--arms", "@reference",
            "--budget", "4000", "--turns", "2", "--reps", "1", "--warmup", "1"], "AUDIT: PASS")
-    # The reference machine's published run: this machine plays its turns field for field, in its published currency.
-    for published in sorted((ROOT / "games" / game / "results" / "reference").glob("*/all"))[:1]:
+    # Each published run: this machine plays its turns field for field, in the currency it was priced in (found by hash).
+    currencies = {hashlib.sha256(f.read_bytes()).hexdigest(): f
+                  for f in (ROOT / "games" / game / "calibration").glob("*/compute_weights.properties")}
+    for published in sorted((ROOT / "games" / game / "results" / "reference").glob("*/all")):
+        priced_in = currencies.get(json.loads((published / "_run.json").read_text(encoding="utf-8"))["weights"]["sha256"])
         for leaf in sorted(published.glob("*/9500cu")):
             check(f"replay: 2 of the published {published.parent.name} turns of {leaf.parent.name}@9500 re-plan here field for field",
-                  [PY, ROOT / "magat.py", "check", "replay", "--game", game, "--leaf", leaf, "--turns", "2"], "REPLAY: PASS")
+                  [PY, ROOT / "magat.py", "check", "replay", "--game", game, "--leaf", leaf, "--weights", priced_in, "--turns", "2"],
+                  "REPLAY: PASS", then=lambda p=priced_in: p is not None)
 
     step("5. Portfolio: toy build, freeze, verify against the published portfolio")
     data = pathlib.Path(os.environ.get("MAGAT_DATA") or (pathlib.Path.home() / "magat_runs")).resolve()
