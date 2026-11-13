@@ -69,7 +69,7 @@ The runner checks every level for it and stops, and the analyzer checks again on
 | 6 | Terminal plans | `terminals.csv` | how often a plan ends the game, which the headline reports apart |
 | 7 | Spend, time and plans | `spend.csv` | did each turn spend its level, how long did it take, how long are the plans |
 | 8 | Re-pricing in another currency | `repriced.csv`, `repriced_spend.csv` | the same work, priced on another machine |
-| 9 | Across machines | `across.csv` | the same experiment on two machines, side by side |
+| 9 | Across machines | `across.csv`, `agreement.csv` | the same experiment on two machines, side by side and position by position |
 | 10 | Full-game win rate | not in v0.1 | an optional external yardstick, never the primary |
 
 How they are computed:
@@ -114,7 +114,10 @@ How they are computed:
    own currency. On the cells both ran, neither turn terminal: each machine's mean with its interval,
    and the paired difference, which is what the two currencies did to where the searches stopped (the
    chance events are the same). The budget multipliers are dimensionless and should agree; the seconds
-   per turn are each machine's own; and one run's turns are re-priced in the other's currency.
+   per turn are each machine's own; and one run's turns are re-priced in the other's currency. Below the
+   means (`agreement.csv`): the share of turns that come out identical, the correlation and gaps of the
+   two machines' values, how each arm's advantage over the baseline agrees position by position, and how
+   often the two name the same best arm ([`results/cross-machine.md`](results/cross-machine.md)).
 
 The bootstrap draws each row from a generator seeded by the row's own identity, so re-running, or
 adding an arm, leaves every other interval where it was. A re-analysis with the same numpy is

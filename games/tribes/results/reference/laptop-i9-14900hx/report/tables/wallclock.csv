@@ -1,0 +1,13 @@
+Split,Budget,Arm,Baseline,Pairs,Scenarios,UnitsDiff,WallDiff,WallLo,WallHi,ClampedShare,MeanArmMillis,Verdict,currency
+all,9500,mcts,emcts,3152,394,-149.0136,-155.5775,-186.8755,-126.5456,0.3201,660.5247,no win,compute_weights.properties (1e3d9ab0)
+all,9500,oep,emcts,3152,394,54.6091,52.2614,22.8447,81.3334,0.7468,559.4699,wins both,compute_weights.properties (1e3d9ab0)
+all,9500,random,emcts,3152,394,-601.1377,-601.1377,-669.0003,-537.5628,1.0000,4.0260,no win,compute_weights.properties (1e3d9ab0)
+all,9500,tbets,emcts,3152,394,48.0349,47.0671,17.6378,77.6720,0.8331,520.4918,wins both,compute_weights.properties (1e3d9ab0)
+all,20000,mcts,emcts,3152,394,-179.5828,-180.9759,-212.5914,-149.9330,0.1783,1377.5543,no win,compute_weights.properties (1e3d9ab0)
+all,20000,oep,emcts,3152,394,148.7782,167.8954,138.8321,198.6620,0.0685,1172.2970,wins both,compute_weights.properties (1e3d9ab0)
+all,20000,random,emcts,3152,394,-660.5730,-601.1377,-666.6327,-539.2376,1.0000,5.8530,no win,compute_weights.properties (1e3d9ab0)
+all,20000,tbets,emcts,3152,394,74.5520,97.3917,67.8709,125.8171,0.0466,1093.5920,wins both,compute_weights.properties (1e3d9ab0)
+all,101500,mcts,emcts,2364,394,-254.7991,-253.9039,-290.6403,-218.0970,0.8278,7937.7827,no win,compute_weights.properties (1e3d9ab0)
+all,101500,oep,emcts,2364,394,143.5948,164.3899,135.4045,193.4755,0.2838,6158.4209,wins both,compute_weights.properties (1e3d9ab0)
+all,101500,random,emcts,2364,394,-792.5838,-598.2817,-663.2175,-535.5730,1.0000,4.1071,no win,compute_weights.properties (1e3d9ab0)
+all,101500,tbets,emcts,2364,394,107.9425,140.1563,111.5765,168.2689,0.1316,5513.5825,wins both,compute_weights.properties (1e3d9ab0)

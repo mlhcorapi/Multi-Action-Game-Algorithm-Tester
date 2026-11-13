@@ -183,7 +183,10 @@ flags. Every command works the same in bash and in PowerShell.
   `tbets` are ports of the engine's own agents, gated field for field against them;
 - a published currency, the reference machine's (`games/tribes/calibration/r7615-time/`), and the
   reference experiment's run on it (`games/tribes/results/reference/r7615/`), to compare your machine
-  with.
+  with;
+- the same experiment on a second machine, a laptop, in its own currency: the same ranking, every
+  difference inside the intervals, and agreement position by position
+  ([`docs/results/cross-machine.md`](docs/results/cross-machine.md)).
 
 MAGAT grew out of an earlier study; what v0.1 set aside, and where it lives, is in
 [`docs/ARCHIVE.md`](docs/ARCHIVE.md).
@@ -201,6 +204,7 @@ MAGAT grew out of an earlier study; what v0.1 set aside, and where it lives, is 
 | [`docs/ADDING_A_GAME.md`](docs/ADDING_A_GAME.md) | writing a game adapter, capturing a portfolio, publishing a currency |
 | [`docs/CALIBRATING_A_MACHINE.md`](docs/CALIBRATING_A_MACHINE.md) | calibrating a laptop or a shared server, in one session |
 | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | the launcher, where output goes, the notebook, runs and their guards, the gates |
+| [`docs/results/cross-machine.md`](docs/results/cross-machine.md) | the reference experiment on two machines, compared position by position |
 | [`docs/TRAPS.md`](docs/TRAPS.md) | each trap that cost time, and what now prevents it |
 | [`docs/ARCHIVE.md`](docs/ARCHIVE.md) | what v0.1 set aside, where it lives, and how to re-add it |
 

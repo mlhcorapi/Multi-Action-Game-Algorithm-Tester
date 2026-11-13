@@ -36,6 +36,8 @@ EMPTY = {
     "repriced_spend": "Split Budget Arm Turns MeanUnits MeanRepricedUnits Ratio currency",
     "across": "Split Budget Arm Pairs Scenarios MeanA LoA HiA MeanB LoB HiB Diff DiffLo DiffHi MultA MultALo MultAHi "
               "MultB MultBLo MultBHi SecondsA SecondsB RepricedRatio currency",
+    "agreement": "Split Budget Arm Turns Identical TerminalAgree Corr MeanGap P95Gap P95RelGap Scenarios ScenCorr ScenSameSign "
+                 "ScenMeanGap ScenEffectSD SameBest currency",
 }
 
 
@@ -150,11 +152,12 @@ def analyze(run, out, experiment=None, baseline=None, reprice=None, compare=None
             s.notes.append(f"{s.name}: the --compare run has no {s.name} split, so it is not compared")
         elif o is not None:
             results[s.name]["across"], notes = measures.across(s.turns, o.turns, baseline, s.name, n, s.leaves, other_weights)
+            results[s.name]["agreement"] = measures.agreement(s.turns, o.turns, baseline, s.name)
             s.notes.extend(notes)
 
     out = pathlib.Path(out)
     (out / "tables").mkdir(parents=True, exist_ok=True)
-    names = list(TABLES) + (["repriced", "repriced_spend"] if weights else []) + (["across"] if others else [])
+    names = list(TABLES) + (["repriced", "repriced_spend"] if weights else []) + (["across", "agreement"] if others else [])
     combined = {}
     for name in names:
         cur = (weights["name"] + f" ({weights['sha256'][:8]})") if name.startswith("repriced") else None
@@ -253,6 +256,7 @@ def render(splits, specs, baseline, results, prov, weights, n, prov_b=None, othe
     for s in splits:
         if "across" in results[s.name]:
             L += across_section(s.name, results[s.name], prov[s.name], (prov_b or {}).get(s.name), other_weights)
+            L += agreement_section(s.name, results[s.name], baseline)
     L += scope_section(splits, results, weights)
     L += ["Full tables in `tables/` (every row names its split and its currency), the same numbers in "
           "`report.json`, figures in `figures/` when matplotlib is installed.", ""]
@@ -433,6 +437,26 @@ def across_section(split, R, prov_a, prov_b, other_weights) -> list:
             for x_ in x.itertuples(index=False)]
     return L + table(["Budget", "Arm", "Pairs", "A mean [CI]", "B mean [CI]", "A - B [CI]", "A multiplier [CI]",
                       "B multiplier [CI]", "A s/turn", "B s/turn", "A at B's prices"], rows)
+
+
+def agreement_section(split, R, baseline) -> list:
+    g = R.get("agreement")
+    if g is None or g.empty:
+        return []
+    L = [f"## The two machines, turn by turn and scenario by scenario ({split})", "",
+         "The same (scenario, visit) and seed on both. `Identical`: turns with the same final value. On the turns where",
+         "neither plan ends the game: the correlation of the two machines' values, their mean gap and the gap 95% of turns",
+         f"stay under. Per scenario, each arm's advantage over `{baseline}` (visits averaged) on each machine: the correlation",
+         "of the two, the share with the same sign, their mean gap, and how much the advantage varies across scenarios",
+         "(SD), for scale. `Same best arm`: the share of scenarios on which both machines name the same best arm.", ""]
+    rows = []
+    for x in g.itertuples(index=False):
+        rows.append([x.Budget, x.Arm, x.Turns, f"{x.Identical:.1%}", f(x.Corr, ".4f"), f(x.MeanGap, ".1f"),
+                     f"{f(x.P95Gap, '.0f')} ({f(100 * x.P95RelGap, '.2f')}%)", f(x.ScenCorr, ".3f"),
+                     "-" if not np.isfinite(x.ScenSameSign) else f"{x.ScenSameSign:.1%}", f(x.ScenMeanGap, ".1f"),
+                     f(x.ScenEffectSD, ".1f"), f"{x.SameBest:.1%}"])
+    return L + table(["Budget", "Arm", "Turns", "Identical", "Corr", "Mean gap", "95% under", "Scenario corr",
+                      "Same sign", "Scenario gap", "Effect SD", "Same best arm"], rows)
 
 
 def scope_section(splits, results, weights) -> list:
