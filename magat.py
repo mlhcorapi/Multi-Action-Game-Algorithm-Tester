@@ -29,8 +29,11 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...] [--progress]
     python magat.py run --experiment SPEC [--split dev|holdout|all] [--out DIR] [--portfolio DIR] [--weights FILE|NAME]
                         [--threads N] [--threads-at 400000=31] [--retire-leaf arm@budget] [--toy]
-    python magat.py experiment validate --experiment SPEC [--weights FILE|NAME | --no-weights] [--split ...] [--threads N]
+    python magat.py experiment validate SPEC [--weights FILE|NAME | --no-weights] [--split ...] [--threads N]
                                       the spec read back, the positions it selects, the run's size and estimated hours
+    python magat.py experiment run SPEC [--split ...] [--weights FILE|NAME] [--out DIR] [--results DIR] [--no-bundle]
+                                 [and every run option]   validate, run (resuming), analyse, summarise and bundle, in one
+                                 command (docs/EXPERIMENTS.md); SPEC may also be given as --experiment SPEC
     python magat.py bundle --name NAME --paths P [P ...] [--exclude seqlog_,mutlog_]
     python magat.py check replay    --game tribes --leaf DIR [--portfolio DIR] [--weights FILE] [--turns 20]
     python magat.py check time      --game tribes (--weights FILE | --fixed-weights) [--levels ...] [--arms a,b] [--targets ms,...]
@@ -448,7 +451,22 @@ def test(rest: list) -> int:
     return 1 if failed else 0
 
 
+# Options that name a file or a directory. The JVM and the analysis run in the repository, so a relative one is
+# made absolute against the directory the command was typed in, where the caller meant it.
+PATH_OPTIONS = {"--experiment", "--out", "--results", "--portfolio", "--weights", "--leaf", "--threads-file", "--levels-file",
+                "--published", "--run", "--reprice", "--compare", "--compare-weights"}
+
+
+def from_caller(args: list) -> list:
+    args = list(args)
+    for i, a in enumerate(args[:-1]):
+        if a in PATH_OPTIONS and not pathlib.Path(args[i + 1]).is_absolute() and not args[i + 1].startswith("--"):
+            args[i + 1] = str((pathlib.Path.cwd() / args[i + 1]).resolve())
+    return args
+
+
 def java(args, heap: str = None, props=(), log: str = None, check: bool = True) -> int:
+    args = from_caller(args)
     build()
     game = None
     if "--game" in args:
@@ -591,7 +609,81 @@ def python_analysis(args: list, log: str) -> int:
     """Run the analysis package (numpy and pandas; matplotlib optional) in a child Python, teed like
     every other command."""
     os.environ["PYTHONPATH"] = os.pathsep.join(p for p in (str(ANALYSIS), os.environ.get("PYTHONPATH")) if p)
-    return run([sys.executable, "-m", "magat_analysis", *args], log=log)
+    return run([sys.executable, "-m", "magat_analysis", *from_caller(args)], log=log)
+
+
+def outside_clone(args: list) -> None:
+    """A run's --out must lie outside the clone, as the data root must: a re-clone or a merge would touch it."""
+    if "--out" in args:
+        out = pathlib.Path(args[args.index("--out") + 1]).resolve()
+        if out == ROOT or ROOT in out.parents:
+            sys.exit(f"--out {out} is inside the repository; run output must live outside the clone (the default is "
+                     f"{data_root()})")
+
+
+def experiment_run(rest: list) -> int:
+    """An experiment from its spec in one command: validate it, run it (a re-run resumes: finished leaves are
+    skipped), analyse every split in its run directory, print the summary's headline, and bundle the run tree and
+    the report. Each step is the command of the same name, logged as it would be on its own; the first that fails
+    stops the rest. Output: <data>/<game>/runs/<name> (--out), <data>/<game>/results/<name> (--results),
+    <data>/bundles/run-<name>.zip."""
+    rest = list(rest)
+    results = rest.pop(rest.index("--results") + 1) if "--results" in rest else None
+    if "--results" in rest:
+        rest.remove("--results")
+    no_bundle = "--no-bundle" in rest
+    if no_bundle:
+        rest.remove("--no-bundle")
+    if "--experiment" not in rest:
+        sys.exit("usage: magat experiment run SPEC [--split ...] [--weights FILE|NAME] [--out DIR] [--results DIR] [--no-bundle]")
+    # Absolute, since the JVM runs in the repository while a path on the command line is the caller's.
+    rest[rest.index("--experiment") + 1] = str(pathlib.Path(rest[rest.index("--experiment") + 1]).resolve())
+    spec = pathlib.Path(rest[rest.index("--experiment") + 1])
+    x = read_spec(rest)
+    name, game = x.get("name"), x.get("game")
+    if not isinstance(name, str) or not isinstance(game, str):
+        sys.exit(f"{spec} names no experiment or no game: `experiment validate` says what else it lacks")
+    data = data_root()
+    out = pathlib.Path(rest.pop(rest.index("--out") + 1)).resolve() if "--out" in rest else data / game / "runs" / name
+    if "--out" in rest:
+        rest.remove("--out")
+    results = pathlib.Path(results).resolve() if results else data / game / "results" / name
+    split = rest[rest.index("--split") + 1] if "--split" in rest else None
+    outside_clone(["--out", str(out)])
+    args = with_published_defaults(with_spec_weights(with_spec_game(["run", *rest])))
+
+    say(f"== 1/4 validate {spec}")
+    validate = ["experiment", "validate"]
+    skip = {"--retire-leaf", "--audit-warn"}                       # the run's own options, which validate does not take
+    i = 1
+    while i < len(args):
+        if args[i] in skip:
+            i += 2
+            continue
+        validate.append(args[i])
+        i += 1
+    if java(validate, log="experiment-validate", check=False) != 0:
+        say("EXPERIMENT: INVALID - nothing was run; the validator says why above")
+        return 2
+    say(f"== 2/4 run -> {out}")
+    rc = java([*args, "--out", str(out)], heap="big", log="run" + (f"-{split}" if split else ""), check=False)
+    if rc != 0:
+        say(f"EXPERIMENT: the run did not complete (exit {rc}); run the same command again to resume it: finished "
+            "leaves are skipped and a partial one continues")
+        return rc
+    say(f"== 3/4 analyse every split in {out} -> {results}")
+    python_analysis(["analyze", "--run", str(out), "--experiment", str(spec), "--out", str(results)], log="analyze")
+    report = results / "SUMMARY.md"
+    text = report.read_text(encoding="utf-8")
+    cut = text.find("## Budget multiplier")
+    say(text if cut < 0 else text[:cut] + f"... the rest in {report}")
+    zipped = None
+    if not no_bundle:
+        say("== 4/4 bundle")
+        bundle(["--name", f"run-{name}", "--paths", str(out), str(report), str(results / "tables")])
+        zipped = data / "bundles" / f"run-{name}.zip"
+    say(f"EXPERIMENT: COMPLETE   run {out}   report {report}" + (f"   bundle {zipped}" if zipped else ""))
+    return 0
 
 
 def with_published_defaults(args: list) -> list:
@@ -637,10 +729,15 @@ def main(argv: list) -> None:
         sys.exit(test(rest))
     elif cmd == "analyze":
         python_analysis([cmd, *rest], log=cmd)
+    elif cmd == "experiment" and rest[:1] in (["run"], ["validate"]) and len(rest) > 1 and not rest[1].startswith("--")             and "--experiment" not in rest:
+        main([cmd, rest[0], "--experiment", *rest[1:]])         # the spec as a plain argument
+    elif cmd == "experiment" and rest[:1] == ["run"]:
+        sys.exit(experiment_run(rest[1:]))
     elif cmd in ("run", "experiment"):
         args = with_published_defaults(with_spec_weights(with_spec_game([cmd, *rest])))
         log = "run" if cmd == "run" else "experiment-validate"
         if cmd == "run":
+            outside_clone(from_caller(rest))
             split = rest[rest.index("--split") + 1] if "--split" in rest else None
             log = "run" + (f"-{split}" if split else "")
         java(args, heap="big" if cmd == "run" else None, log=log)
