@@ -264,18 +264,15 @@ def experiment_cells(game: str) -> list:
 {x.get("description", "")}
 
 Split `{split}`; baseline `{x.get("baseline")}`; levels (budget x visits) {levels}; arms {arms}
-({turns:,} turns per scenario of the split). Re-running the cell resumes: finished leaves are skipped,
-a partial leaf continues where it stopped.
+({turns:,} turns per scenario of the split). `experiment run` validates the spec, runs it, analyses it,
+prints the headline and bundles the run and its report. Re-running the cell resumes: finished leaves are
+skipped, a partial leaf continues where it stopped.
 """))
         cells.append(code(f'''SPEC = ROOT / "experiments" / GAME / "{spec.name}"
 RUN = DATA / GAME / "runs" / "{name}"
 RESULTS = DATA / GAME / "results" / "{name}"
-magat("run", "--experiment", SPEC, "--split", "{split}", "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--out", RUN)
-assert_in_log("run-{split}", "RUN: COMPLETE")
-magat("analyze", "--run", RUN / "{split}", "--out", RESULTS)
-assert_in_log("analyze", "ANALYZE: OK")
-summary(RESULTS)
-bundle("run-{name}", [RUN / "{split}", RESULTS / "SUMMARY.md", RESULTS / "tables"])''', tags=("experiment",)))
+magat("experiment", "run", SPEC, "--split", "{split}", "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--out", RUN,
+      "--results", RESULTS)''', tags=("experiment",)))
     return cells
 
 
