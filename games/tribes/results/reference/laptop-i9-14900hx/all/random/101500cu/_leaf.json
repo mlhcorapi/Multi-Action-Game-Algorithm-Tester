@@ -1,0 +1,33 @@
+{
+  "arm": "random",
+  "budget": 101500,
+  "profile": "global (arm is not priced)",
+  "weights": [
+    1,
+    0.148326,
+    0.044954
+  ],
+  "currencyVersion": 2,
+  "prices": {
+    "advance": 1,
+    "copy": 0.148326,
+    "eval": 0.044954,
+    "emcts.generation": 0.304040023,
+    "emcts.legal": 1.383249456,
+    "emcts.check": 0.019301876,
+    "emcts.seqkey": 0.040396336,
+    "emcts.burn": 0.09733338
+  },
+  "threads": 15,
+  "host": "Marcus_Laptop",
+  "commit": "c3afdaed76da7151cf4db255a270699a36e0fd21",
+  "started": "2026-11-12T20:01:27.113295800Z",
+  "turnsTotal": 2400,
+  "turnsDoneAtStart": 0,
+  "status": "complete",
+  "finished": "2026-11-12T20:01:28.003473200Z",
+  "turnsDone": 2400,
+  "failures": 0,
+  "seconds": 0.889,
+  "governor": "concurrency 15/15 (low-water 15, 0 throttle event(s)); oldgen 0% after GC, GC share 0.0%"
+}

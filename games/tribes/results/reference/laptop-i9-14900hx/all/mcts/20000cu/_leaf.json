@@ -1,0 +1,38 @@
+{
+  "arm": "mcts",
+  "budget": 20000,
+  "profile": "mcts@20000",
+  "weights": [
+    1.488387,
+    0.199948,
+    0.059362
+  ],
+  "currencyVersion": 2,
+  "prices": {
+    "advance": 1.488387,
+    "copy": 0.199948,
+    "eval": 0.059362,
+    "mcts.iteration": 0.054862227,
+    "mcts.legal": 4.227732531
+  },
+  "threads": 15,
+  "host": "Marcus_Laptop",
+  "commit": "c3afdaed76da7151cf4db255a270699a36e0fd21",
+  "started": "2026-11-12T19:35:38.110168900Z",
+  "turnsTotal": 3200,
+  "turnsDoneAtStart": 0,
+  "status": "complete",
+  "finished": "2026-11-12T19:40:32.926924500Z",
+  "turnsDone": 3200,
+  "failures": 0,
+  "seconds": 294.815,
+  "governor": "concurrency 15/15 (low-water 15, 0 throttle event(s)); oldgen 4% after GC, GC share 4.9%",
+  "audit": {
+    "unpricedShare": 0.3352002544828341,
+    "predictedMs": 2934741.1917921454,
+    "measuredMs": 4414474,
+    "threads": 15,
+    "sameMachine": true,
+    "basis": "(units + initialization units) x referenceAdvanceNanos 45827.788 ns, against the turns' plan milliseconds"
+  }
+}

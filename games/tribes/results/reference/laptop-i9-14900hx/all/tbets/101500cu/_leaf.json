@@ -1,0 +1,40 @@
+{
+  "arm": "tbets",
+  "budget": 101500,
+  "profile": "tbets@101500",
+  "weights": [
+    1.066118,
+    0.231835,
+    0.048035
+  ],
+  "currencyVersion": 2,
+  "prices": {
+    "advance": 1.066118,
+    "copy": 0.231835,
+    "eval": 0.048035,
+    "tbets.turn": 0.376641606,
+    "tbets.legal": 2.730698144,
+    "tbets.check": 0.017450633,
+    "tbets.select": 5.67266E-4
+  },
+  "threads": 15,
+  "host": "Marcus_Laptop",
+  "commit": "c3afdaed76da7151cf4db255a270699a36e0fd21",
+  "started": "2026-11-12T20:56:37.595793Z",
+  "turnsTotal": 2400,
+  "turnsDoneAtStart": 0,
+  "status": "complete",
+  "finished": "2026-11-12T21:11:20.971715100Z",
+  "turnsDone": 2400,
+  "failures": 0,
+  "seconds": 883.374,
+  "governor": "concurrency 15/15 (low-water 15, 0 throttle event(s)); oldgen 2% after GC, GC share 1.5%",
+  "audit": {
+    "unpricedShare": 0.1554959542158656,
+    "predictedMs": 1.1165614463855162E7,
+    "measuredMs": 13221505,
+    "threads": 15,
+    "sameMachine": true,
+    "basis": "(units + initialization units) x referenceAdvanceNanos 45827.788 ns, against the turns' plan milliseconds"
+  }
+}
