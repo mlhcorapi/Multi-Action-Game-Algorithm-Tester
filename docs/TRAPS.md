@@ -53,6 +53,8 @@ this page says what it was holding back.
 | A leaf priced in two currencies | a development cell continued after a merge changed its price | the per-leaf currency lock; `--retire-leaf` is the only way through |
 | A run's commit rewritten by an invocation that played nothing | on the R7615 a second clone resumed a finished run, and `_run.json` named its commit for turns the first clone had played | the tree keeps the commit that started it; each invocation and each leaf record their own, and a resume under another commit says so |
 | Deleting a leaf to re-run it | history lost | `--retire-leaf`, logged in `_run.json`; resume by re-running the same command |
+| Another machine's thread choices | the R7615's published currency carries its `threads.json`, so a run on the laptop in that currency would have started 62 workers on 32 logical CPUs (found 2026-11-13, before any run did) | a `threads.json` is used only on the CPU model it was swept on |
+| A resume that selects other positions | a tree would mix turns from two selections of the portfolio | the run records its selection in `_run.json`, and a resume that selects otherwise aborts |
 | An exception escaping a scenario source read as "no captures" | could change the portfolio without a word | anything escaping `play` stops the build |
 | Serialized positions are not byte-identical between JVM runs | hash maps iterate in identity-hash order, so bins differ | `portfolio verify --plan` compares plans from both sets of bins |
 | Line endings change a file's hash | a hash recorded on one platform did not match the file on another | `.gitattributes` keeps CSV, JSON and specs LF; outputs are written LF |
