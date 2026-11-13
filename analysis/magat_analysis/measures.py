@@ -13,6 +13,7 @@ reached a terminal state, worth about +/-2e9).
     variance           what a scenario and a visit each buy (the design)
     reprice            each turn's work priced in another machine's currency, re-scored
     across             the same experiment on two machines: each one's means, multipliers and seconds
+    agreement          the same experiment on two machines, turn by turn and scenario by scenario
     spend              what each leaf's turns spent and took: spend, seconds, plan length, the run's audit
 """
 import numpy as np
@@ -276,7 +277,8 @@ def reprice(t, leaves, weights, baseline, split="", n=N_BOOT):
             continue
         w = weights["profiles"].get(f"{arm}@{budget}")
         if w is None and (int(budget), arm) in ran_global:
-            w = weights["globals"]
+            # The runner plays an arm that is not priced under the forward model's global weights alone.
+            w = {op: weights["globals"][op] for op in ("advance", "copy", "eval")}
         if w is None:
             notes.append(f"{arm}@{budget}: not priced in {weights['name']}, so not re-priced")
             continue
@@ -347,6 +349,52 @@ def across(ta, tb, baseline, split="", n=N_BOOT, leaves_a=None, weights_b=None):
             row["RepricedRatio"] = r.Ratio if r is not None else np.nan
             rows.append(row)
     return frame(rows, ["Budget", "Arm"]), notes
+
+
+def agreement(ta, tb, baseline, split="") -> pd.DataFrame:
+    """The same experiment on two machines, turn by turn and scenario by scenario, per budget and arm.
+
+    Turn by turn, on the (scenario, visit) cells both ran: the share of turns with the same final value, the
+    share that end the game on both or on neither, and, on the turns where neither does, the correlation of
+    the two machines' values and the size of their gaps. Scenario by scenario, for every arm but the
+    baseline: its advantage over the baseline on each scenario (visits averaged, no terminal turns on
+    either machine), and how the two machines' advantages agree. `SameBest` is the share of scenarios on
+    which the two machines name the same best arm at that budget (no terminal turns)."""
+    rows = []
+    for budget in sorted(set(ta.budget.unique()) & set(tb.budget.unique())):
+        arms = sorted(set(ta[ta.budget == budget].arm) & set(tb[tb.budget == budget].arm))
+        joined = {}
+        for arm in arms:
+            x = ta[(ta.arm == arm) & (ta.budget == budget)]
+            y = tb[(tb.arm == arm) & (tb.budget == budget)]
+            joined[arm] = x.merge(y, on=KEYS, suffixes=("", "_b"))[KEYS + ["final", "final_b", "term", "term_b"]]
+        best = {}
+        for side, col in (("a", "final"), ("b", "final_b")):
+            means = {a: j[~(j.term | j.term_b)].groupby("scenario")[col].mean() for a, j in joined.items()}
+            best[side] = pd.DataFrame(means).dropna().idxmax(axis=1)
+        common = best["a"].index.intersection(best["b"].index)
+        same_best = float((best["a"][common] == best["b"][common]).mean()) if len(common) else np.nan
+        base = joined.get(baseline)
+        for arm, j in joined.items():
+            n = j[~(j.term | j.term_b)]
+            gap = (n["final"] - n["final_b"]).abs()
+            corr = float(np.corrcoef(n["final"], n["final_b"])[0, 1]) if len(n) > 1 and n["final"].std() > 0 else np.nan
+            row = dict(Budget=int(budget), Arm=arm, Turns=len(j), Identical=float((j["final"] == j["final_b"]).mean()),
+                       TerminalAgree=float((j["term"] == j["term_b"]).mean()), Corr=corr, MeanGap=float(gap.mean()),
+                       P95Gap=float(gap.quantile(0.95)), P95RelGap=float((gap / n["final"].abs().clip(lower=1)).quantile(0.95)),
+                       Scenarios=np.nan, ScenCorr=np.nan, ScenSameSign=np.nan, ScenMeanGap=np.nan, ScenEffectSD=np.nan,
+                       SameBest=same_best)
+            if base is not None and arm != baseline:
+                k = j.merge(base, on=KEYS, suffixes=("", "_e"))
+                k = k[~(k.term | k.term_b | k.term_e | k.term_b_e)]
+                k["ea"], k["eb"] = k["final"] - k["final_e"], k["final_b"] - k["final_b_e"]
+                s = k.groupby("scenario")[["ea", "eb"]].mean()
+                moved = s[(s.ea != 0) | (s.eb != 0)]
+                row.update(Scenarios=len(s), ScenMeanGap=float((s.ea - s.eb).abs().mean()), ScenEffectSD=float(s.ea.std()),
+                           ScenCorr=float(np.corrcoef(s.ea, s.eb)[0, 1]) if len(s) > 1 and s.ea.std() > 0 and s.eb.std() > 0 else np.nan,
+                           ScenSameSign=float((np.sign(moved.ea) == np.sign(moved.eb)).mean()) if len(moved) else np.nan)
+            rows.append(row)
+    return frame(rows, ["Budget", "Arm"])
 
 
 # --------------------------------------------------------------------------- design: variance

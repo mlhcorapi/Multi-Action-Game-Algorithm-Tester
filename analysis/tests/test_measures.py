@@ -201,6 +201,17 @@ class SyntheticTree(unittest.TestCase):
         self.assertTrue(np.allclose(spend2.Ratio, 2.0, atol=1e-6))
         self.assertFalse(table.empty)
 
+    def test_an_arm_that_is_not_priced_reprices_on_the_forward_models_global_weights(self):
+        # A real currency's global section carries the reference arm's operations too; the runner played the arm on
+        # the forward model's global weights alone, so its re-pricing must not ask for those operations.
+        w = load.read_weights(syn.write_weights(self.tmp / "globals.properties"))
+        w["globals"]["x.step"] = 0.5
+        del w["profiles"]["poor@1000"]
+        leaves = [m for m in self.sp.leaves if m.get("arm") != "poor"] + [dict(arm="poor", budget=1000, profile="global (arm is not priced)")]
+        _, spend, notes = measures.reprice(self.t, leaves, w, "base", "dev", n=50)
+        self.assertFalse(any("poor" in n for n in notes), notes)
+        self.assertAlmostEqual(self.row(spend, Arm="poor", Budget=1000).Ratio, 1.0, places=6)
+
     def test_an_unpriced_leaf_and_a_leaf_without_counts_are_named(self):
         w = load.read_weights(syn.write_weights(self.tmp / "partial.properties"))
         del w["profiles"]["weak@4000"]
@@ -345,6 +356,18 @@ class AcrossMachines(unittest.TestCase):
         self.assertTrue(math.isnan(base.MultA), "the baseline has no multiplier against itself")
         self.assertEqual(set(x.Arm), {"base", "good", "great", "weak", "poor", "noisy"})
 
+    def test_turn_by_turn_and_scenario_by_scenario_agreement(self):
+        g = measures.agreement(self.a.turns, self.b.turns, "base", "dev")
+        base = self.row(g, Arm="base", Budget=1000)
+        self.assertEqual((base.Identical, base.TerminalAgree, base.MeanGap), (1.0, 1.0, 0.0), "the same turns on both machines")
+        good = self.row(g, Arm="good", Budget=1000)
+        self.assertAlmostEqual(good.Identical, 1 / (syn.S * syn.V), places=9, msg="only its terminal turn is the same on both")
+        self.assertAlmostEqual(good.MeanGap, 7.0, places=9)
+        self.assertAlmostEqual(good.ScenMeanGap, 7.0, places=9, msg="7 more on every scenario")
+        self.assertEqual((good.Scenarios, good.ScenSameSign), (syn.S, 1.0), "scenario 12 keeps its two other visits")
+        self.assertEqual(good.SameBest, 1.0, "great is the best arm at 1,000 on both machines")
+        self.assertTrue(math.isnan(base.ScenCorr), "the baseline has no advantage over itself")
+
     def test_the_report_finds_bs_currency_or_says_it_did_not(self):
         out = self.tmp / "out"
         rc = report.analyze(self.tmp / "a", out, baseline="base", compare=self.tmp / "b", compare_weights=self.wb,
@@ -356,6 +379,8 @@ class AcrossMachines(unittest.TestCase):
         summary = (out / "SUMMARY.md").read_text(encoding="utf-8")
         self.assertIn("## Across machines (dev)", summary)
         self.assertIn("A at B's prices", summary)
+        self.assertIn("## The two machines, turn by turn and scenario by scenario (dev)", summary)
+        self.assertEqual(list(pd.read_csv(out / "tables" / "agreement.csv").columns), report.EMPTY["agreement"].split())
 
         # B's recorded currency is a path that does not exist here, and no published currency has its hash.
         rc = report.analyze(self.tmp / "a", self.tmp / "out2", baseline="base", compare=self.tmp / "b", n=50,
