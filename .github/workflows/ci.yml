@@ -42,6 +42,12 @@ jobs:
           for arm in emcts mcts oep tbets random; do
             python magat.py check replay --game tribes --leaf games/tribes/results/reference/r7615/all/$arm/9500cu --turns 2
           done
+      - name: The laptop's published turns replay here too, in the laptop's currency
+        run: |
+          for arm in emcts mcts oep tbets random; do
+            python magat.py check replay --game tribes --leaf games/tribes/results/reference/laptop-i9-14900hx/all/$arm/9500cu \
+              --weights games/tribes/calibration/laptop-i9-14900hx-time/compute_weights.properties --turns 2
+          done
       - name: Published portfolio verifies (bins, identity, split rule)
         run: python magat.py portfolio verify --game tribes
       - name: Toy portfolio build, freeze, and verify against the published rows
@@ -89,5 +95,10 @@ jobs:
           python magat.py analyze --run "$RUNNER_TEMP/run" --compare "$RUNNER_TEMP/run" --out "$RUNNER_TEMP/compare"
           test -s "$RUNNER_TEMP/compare/tables/across.csv"
           grep -q "## Across machines (dev)" "$RUNNER_TEMP/compare/SUMMARY.md"
+      - name: The two published runs compare as docs/results/cross-machine.md says
+        run: |
+          python magat.py analyze --run games/tribes/results/reference/r7615 --compare games/tribes/results/reference/laptop-i9-14900hx --out "$RUNNER_TEMP/cross-machine"
+          # The agreement table has no bootstrap, so it is the same on any numpy.
+          diff games/tribes/results/reference/r7615-vs-laptop-i9-14900hx/tables/agreement.csv "$RUNNER_TEMP/cross-machine/tables/agreement.csv"
       - name: Notebook self-test
         run: python magat.py notebook selftest
