@@ -1,4 +1,5 @@
 """Every measure on the synthetic tree (synthetic.py), against its known answer."""
+import json
 import math
 import pathlib
 import shutil
@@ -68,6 +69,27 @@ class SyntheticTree(unittest.TestCase):
     def test_the_contrasts_come_from_the_spec(self):
         pairs = load.comparisons(load.load_spec(self.spec))
         self.assertEqual([(p["a"], p["b"], p["label"]) for p in pairs], [("great", "good", "great over good")])
+
+    def test_a_spec_without_contrasts_compares_every_arm_with_every_arm_before_it(self):
+        # The reference experiment writes out its ten contrasts; without them, the default is the same ten pairs.
+        ref = load.load_spec(load.ROOT / "experiments" / "tribes" / "reference.json")
+        bare = self.tmp / "bare.json"
+        x = json.loads((load.ROOT / "experiments" / "tribes" / "reference.json").read_text(encoding="utf-8"))
+        del x["contrasts"]
+        bare.write_text(json.dumps(x), encoding="utf-8")
+        pairs = [(c["a"], c["b"]) for c in load.load_spec(bare)["contrasts"]]
+        self.assertEqual(pairs, [(c["a"], c["b"]) for c in ref["contrasts"]])
+        self.assertEqual(load.load_spec(bare)["contrasts"][-1]["label"], "tbets against oep")
+        x["contrasts"] = []
+        bare.write_text(json.dumps(x), encoding="utf-8")
+        self.assertEqual(load.load_spec(bare)["contrasts"], [], "an empty list asks for none")
+
+    def test_a_spec_in_a_folder_of_its_game_is_found_by_hash_too(self):
+        spec = load.ROOT / "experiments" / "tribes" / "examples" / "oep-vs-tbets.json"
+        run = dict(game=dict(id="tribes"), experiment=dict(name="oep-vs-tbets", path="/gone/oep-vs-tbets.json", sha256=load.sha256(spec)))
+        found = load.spec_of(load.Split(self.sp.path, "dev", run, [], self.t))
+        self.assertEqual([a["id"] for a in found["arms"]], ["emcts", "oep", "tbets"], "the short form's arms, as objects")
+        self.assertEqual(len(found["contrasts"]), 3)
 
     # ------------------------------------------------------------------ the headline and d
     def test_headline_in_both_strata(self):
