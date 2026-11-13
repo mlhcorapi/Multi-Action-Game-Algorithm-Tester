@@ -242,18 +242,18 @@ port against the original rather than trusting it:
 
    [`EXPERIMENTS.md`](EXPERIMENTS.md) describes every key, and how to select positions.
 
-3. **Validate it, run it on the development half, and analyse it:**
+3. **Validate it, run it on the development half, and analyse it**, in one command:
 
    ```bash
-   python magat.py experiment validate --experiment experiments/tribes/first.json --weights <your weights>
-   python magat.py run --experiment experiments/tribes/first.json --split dev --weights <your weights> --out $HOME/magat_runs/tribes/runs/first
-   python magat.py analyze --run $HOME/magat_runs/tribes/runs/first --out $HOME/magat_runs/tribes/results/first
+   python magat.py experiment run experiments/tribes/first.json --weights <your-machine>
    ```
 
-   `SUMMARY.md` gives the paired difference against the baseline in units and in seconds, and the
-   budget multiplier. Budget multipliers are dimensionless, so they compare across machines and
+   `experiment validate` alone reads the spec back and estimates the run's hours first. The report,
+   `$HOME/magat_runs/tribes/results/first/SUMMARY.md`, gives the paired difference against the baseline in
+   units and in seconds, and the budget multiplier. Budget multipliers are dimensionless, so they compare across machines and
    currencies.
 4. **Confirm on the holdout.** Once the choices are made on the development half, run the same spec
-   with `--split holdout` ([methods](METHODS.md#3-two-halves-explore-on-one-confirm-on-the-other)).
+   with `--split holdout` ([methods](METHODS.md#3-two-halves-explore-on-one-confirm-on-the-other)). The
+   report then holds both halves side by side.
 
 The README's "afternoon path" does all of this at toy size in a few minutes.

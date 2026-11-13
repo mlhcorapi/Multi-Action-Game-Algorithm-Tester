@@ -32,7 +32,8 @@ wrap it). It:
 | `weights --weights F [--game G --arms ...] [--progress]` | what a weights file prices; exit 1 if anything asked for is missing. With `--progress`, a probe of a calibration under way: what is still to price, and exit 0 |
 | `check contract \| equivalence \| replay \| audit` | the gates (below) |
 | `check time (--weights F \| --fixed-weights) [--levels ...] [--arms ...] [--targets ms,...]` | single-threaded whole turns over positions spread across the portfolio: each level's thinking time on this machine, and each cell's mean spend against its level, flagged above 1.10× |
-| `experiment validate --experiment SPEC [--weights F \| --no-weights]` | the spec validator alone, then the spec read back and the run's estimated hours |
+| `experiment validate SPEC [--weights F \| --no-weights]` | the spec validator alone, then the spec read back and the run's estimated hours |
+| `experiment run SPEC [--split S] [--weights F] [--out D] [--results D] [--no-bundle]` | validate, run (resuming), analyse, summarise and bundle, in one command |
 | `run --experiment SPEC --split dev\|holdout\|all` | run an experiment (below) |
 | `analyze --run DIR [--experiment SPEC] [--baseline ARM] [--reprice W] [--compare DIR] --out DIR` | every measure, as tables and `SUMMARY.md`; with `--compare`, beside another machine's run of the same experiment |
 | `bundle --name N --paths P...` | zip files into `<data>/bundles/N.zip` |
@@ -96,7 +97,8 @@ else, so it cannot drift from the CLI. Its stages:
    measures this machine's currency: a preflight, one cell that measures the currency in one session and
    checks it, and one that bundles it ([guide](CALIBRATING_A_MACHINE.md#on-a-shared-server-the-r7615-through-jupyterhub)).
 5. **Gates.** The contract, equivalence on every ported arm, and the audit.
-6. **One cell per experiment** in `experiments/<game>/`: run, analyse, summarise, bundle.
+6. **One cell per experiment** in `experiments/<game>/`: `experiment run`, which validates, runs,
+   analyses, summarises and bundles.
 7. **The shakedown.**
 8. **The inventory.** What to keep, with a tick per file and the bundles to download.
 
@@ -117,6 +119,14 @@ An experiment is a JSON spec ([`docs/EXPERIMENTS.md`](EXPERIMENTS.md) describes 
 - every key is one it knows (an unknown key is a warning: a typo?).
 
 It then reads the spec back (its levels in units, its positions) and estimates the run's hours.
+
+```bash
+python magat.py experiment run experiments/tribes/reference.json --weights <your-machine>
+```
+
+`experiment run` validates, runs, analyses, prints the headline and bundles
+([experiments](EXPERIMENTS.md#running-it)). `run` and `analyze` are its steps on their own, for a
+run tree or a report somewhere else:
 
 ```bash
 python magat.py run --experiment experiments/tribes/reference.json --weights <your weights> --out $HOME/magat_runs/tribes/runs/reference

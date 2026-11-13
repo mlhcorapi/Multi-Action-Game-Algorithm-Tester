@@ -2,15 +2,16 @@
 
 An experiment is one JSON file. It names the algorithms to compare, the budget levels and how many
 times each position is played at each, the positions to play them on, and the currency to spend.
-`experiment validate` reads it back, checks it, and estimates how long the run would take, before
-anything runs:
+`experiment validate` reads it back, checks it, and estimates how long the run would take:
 
 ```bash
-python magat.py experiment validate --experiment experiments/tribes/examples/oep-vs-tbets.json
+python magat.py experiment validate experiments/tribes/examples/oep-vs-tbets.json
 ```
 
+`experiment run` then does everything else ([below](#running-it)):
+
 ```bash
-python magat.py run --experiment experiments/tribes/examples/oep-vs-tbets.json
+python magat.py experiment run experiments/tribes/examples/oep-vs-tbets.json
 ```
 
 ## An example
@@ -130,6 +131,23 @@ Without `contrasts`, every arm is compared with every arm written before it, in 
 `["random", "mcts", "emcts"]` that is `mcts` against `random`, `emcts` against `random`, then `emcts`
 against `mcts`, which is how the reference experiment writes its own ten out. Write `contrasts` to choose
 them or to label them, or write `[]` for none.
+
+## Running it
+
+`experiment run` takes the spec through four steps, and the first that fails stops the rest:
+1. **validate:** as `experiment validate`; an invalid spec runs nothing.
+2. **run:** into `$HOME/magat_runs/<game>/runs/<name>/<split>/` (`--out` moves it). Every arm at every
+   level is checkpointed as it goes, so running the same command again resumes a run that stopped:
+   finished leaves are skipped and a partial one continues where it stopped.
+3. **analyse:** every split in the run directory, into `$HOME/magat_runs/<game>/results/<name>/`
+   (`--results` moves it). A `dev` run and a later `holdout` run of the same spec share one report.
+   The headline is printed, and the whole report is `SUMMARY.md` there.
+4. **bundle:** the run tree and the report, zipped into `$HOME/magat_runs/bundles/run-<name>.zip`, to
+   carry them off a server (`--no-bundle` skips it).
+
+Each step is logged under `$HOME/magat_runs/logs/` as the command of the same name. Every option of
+`run` passes through: `--split`, `--weights`, `--portfolio`, `--threads`, `--threads-at`,
+`--retire-leaf` and `--toy` ([operations](OPERATIONS.md#experiments-and-runs)).
 
 ## The long form
 
