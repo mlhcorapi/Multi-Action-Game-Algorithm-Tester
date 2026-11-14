@@ -442,7 +442,7 @@ public class GridRunnerTest {
         Experiment more = Experiment.load(spec(SPEC.replace("{\"budget\": 600, \"visits\": 2}", "{\"budget\": 600, \"visits\": 3}")));
         GridRunner.Options o = options(Split.Half.DEV);
         o.out = Files.createTempDirectory("magat-run-reuse");
-        o.reuse = published;
+        o.reuse = Collections.singletonList(published);
         Stdout.Captured<Integer> run = Stdout.capture(() -> GridRunner.run(module(game, new ArrayList<>()), more, portfolio, w, o));
         assertEquals(run.out, GridRunner.OK, (int) run.value);
         Path root = o.out.resolve("dev");
@@ -462,7 +462,7 @@ public class GridRunnerTest {
         // Leaf by leaf, as a currency extended with a new arm keeps every price it had.
         GridRunner.Options other = options(Split.Half.DEV);
         other.out = Files.createTempDirectory("magat-run-reuse2");
-        other.reuse = published;
+        other.reuse = Collections.singletonList(published);
         Weights bumped = Weights.load(weights(work, "w2.properties", 0.05, "emcts", "emcts-alt"));
         Stdout.Captured<Integer> priced = Stdout.capture(() ->
                 GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), portfolio, bumped, other));
@@ -477,7 +477,7 @@ public class GridRunnerTest {
         Split.freeze(elsewhere);
         GridRunner.Options third = options(Split.Half.DEV);
         third.out = Files.createTempDirectory("magat-run-reuse4");
-        third.reuse = published;
+        third.reuse = Collections.singletonList(published);
         Stdout.Captured<Integer> moved = Stdout.capture(() ->
                 GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), Portfolio.load(game, elsewhere), w, third));
         assertEquals(GridRunner.OK, (int) moved.value);
@@ -504,11 +504,35 @@ public class GridRunnerTest {
 
         GridRunner.Options o = options(Split.Half.DEV);
         o.out = Files.createTempDirectory("magat-run-reuse3");
-        o.reuse = published;
+        o.reuse = Collections.singletonList(published);
         Stdout.Captured<Integer> run = Stdout.capture(() -> GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), portfolio, w, o));
         assertEquals(GridRunner.OK, (int) run.value);
         assertTrue(run.out, run.out.contains("[reuse] emcts@300 is played: this machine did not re-play"));
         assertTrue(run.out, run.out.contains("[run] REUSED arm=emcts-alt;budget=300"));
         assertEquals("the leaf is played here, not copied", played, turnsWithoutTime(Leaf.dir(o.out.resolve("dev"), "emcts", 300)));
+    }
+
+    @Test
+    public void aRunTakesEachLeafFromTheFirstOfSeveralRunsThatHoldsItWhole() throws Exception {
+        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-alt"));
+        // One run plays the leaves at 600, another those at 300: neither holds the whole grid.
+        Experiment high = Experiment.load(spec(SPEC.replace(", {\"budget\": 300, \"visits\": 1}", "")));
+        Experiment low = Experiment.load(spec(SPEC.replace("{\"budget\": 600, \"visits\": 2}, ", "")));
+        GridRunner.Options a = options(Split.Half.DEV), b = options(Split.Half.DEV);
+        a.out = Files.createTempDirectory("magat-run-high");
+        b.out = Files.createTempDirectory("magat-run-low");
+        assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), high, portfolio, w, a));
+        assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), low, portfolio, w, b));
+
+        GridRunner.Options o = options(Split.Half.DEV);
+        o.out = Files.createTempDirectory("magat-run-both");
+        o.reuse = Arrays.asList(a.out.resolve("dev"), b.out.resolve("dev"));
+        Stdout.Captured<Integer> run = Stdout.capture(() -> GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), portfolio, w, o));
+        assertEquals(run.out, GridRunner.OK, (int) run.value);
+        for (String arm : new String[]{"emcts", "emcts-alt", "random"}) {
+            assertTrue(run.out, run.out.contains("[run] REUSED arm=" + arm + ";budget=600;split=dev from " + Leaf.dir(a.out.resolve("dev"), arm, 600)));
+            assertTrue(run.out, run.out.contains("[run] REUSED arm=" + arm + ";budget=300;split=dev from " + Leaf.dir(b.out.resolve("dev"), arm, 300)));
+        }
+        assertFalse("nothing is played", run.out.contains("[run] RUN "));
     }
 }
