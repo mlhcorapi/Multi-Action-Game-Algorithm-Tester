@@ -1,0 +1,8 @@
+{
+  "name": "my-laptop-time",
+  "game": "tribes",
+  "description": "A laptop's own currency: every reference algorithm at the three published levels, in one session on mains power. Copy this file, give the currency your machine's name, then run calibrate-controlled --config FILE --preflight before the session (docs/CALIBRATING_A_MACHINE.md).",
+  "arms": ["emcts", "mcts", "oep", "tbets"],
+  "levels": ["500ms", "1000ms", "5000ms"],
+  "soak-minutes": 10
+}

@@ -5,6 +5,8 @@ can and records where it cannot, with a reliability verdict.
     python magat.py calibrate-controlled --name laptop-i9-14900hx-time --preflight   the checklist; measures nothing
     python magat.py calibrate-controlled --name laptop-i9-14900hx-time               the session, then the checks
     python magat.py calibrate-controlled --name laptop-i9-14900hx-time --checks      the checks alone, again
+    python magat.py calibrate-controlled --config calibrations/tribes/examples/laptop.json [--preflight | --checks]
+                                                     the same, its options written in a file (below)
 
 The measurement is `magat calibrate`, unchanged: the same cells, gates, bracket and merge. This script
 decides how it is run and keeps the evidence. docs/CALIBRATING_A_MACHINE.md is the guide.
@@ -30,6 +32,12 @@ decides how it is run and keeps the evidence. docs/CALIBRATING_A_MACHINE.md is t
    published currency once there is one.
 7. A monitor throughout: power source, other work on the machine (and which programs), throttling, and
    the busiest measuring core's clock and temperature.
+
+A config file is a JSON object whose keys are this script's options without their dashes:
+{"name": "my-laptop-time", "arms": ["emcts", "oep"], "levels": ["500ms", 20000], "other-cpus": 4}. A list is
+written comma-separated; a level may be a published level's name ("500ms"); a flag is true or false. An
+option given on the command line beside --config wins. The modes (--preflight, --checks, --no-checks)
+belong to one invocation and are given on the command line only. The file is copied into the record.
 
 The screen gets the verdict and a few lines; the rest goes to the record. Output lives outside the
 clone: <data>/calibration/<game>-<name>/ holds the currency, and record/ holds one folder per
@@ -1508,6 +1516,74 @@ def cell_progress(line):
     return f"  bracket  {m.group(1)} again" if m else None
 
 
+# The modes of one invocation, which a config file does not hold.
+MODES = ("preflight", "checks", "no-checks")
+
+
+def config_argv(path: pathlib.Path, ap: argparse.ArgumentParser, game: str = None) -> list:
+    """A config file's keys as the command-line options they name (docs/CALIBRATING_A_MACHINE.md). Raises ValueError
+    on anything it cannot read, all of it at once: a session takes hours, so a typo must not be ignored."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise ValueError(f"cannot read the config {path}: {e}")
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path} is not a JSON object")
+    options = {a.option_strings[0][2:]: a for a in ap._actions if a.option_strings and a.option_strings[0].startswith("--")}
+    takes = sorted(k for k in options if k not in ("config", "help", *MODES))
+    game = game or raw.get("game") or "tribes"
+    out, problems = [], []
+    for key, value in raw.items():
+        if key == "description":
+            continue
+        if key in MODES:
+            problems.append(f"'{key}' is the mode of one invocation: give --{key} on the command line")
+            continue
+        action = options.get(key)
+        if action is None or key in ("config", "help"):
+            near = [k for k in takes if k.replace("-", "") == key.replace("_", "").replace("-", "")]
+            problems.append(f"unknown key '{key}'" + (f": did you mean '{near[0]}'?" if near else f"; a config takes {', '.join(takes)}"))
+            continue
+        if isinstance(action, argparse._StoreTrueAction):
+            if not isinstance(value, bool):
+                problems.append(f"'{key}' is a flag: true or false, not {json.dumps(value)}")
+            elif value:
+                out.append(f"--{key}")
+            continue
+        if key == "levels" and isinstance(value, list):
+            try:
+                value = ",".join(str(level_units(v, game)) for v in value)
+            except ValueError as e:
+                problems.append(str(e))
+                continue
+        elif isinstance(value, list) and all(isinstance(v, str) for v in value):
+            value = ",".join(value)
+        if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+            problems.append(f"'{key}' is {json.dumps(value)}: "
+                            + ("a list, a number or text" if key in ("arms", "check-arms", "levels") else "a number or text")
+                            + " was expected")
+            continue
+        out += [f"--{key}", str(value)]
+    if problems:
+        raise ValueError(f"{path}:\n  " + "\n  ".join(problems))
+    return out
+
+
+def level_units(v, game: str) -> int:
+    """A level as units: a whole number, or a published level's name ("500ms", games/<game>/levels.json)."""
+    if isinstance(v, int) and not isinstance(v, bool) and v > 0:
+        return v
+    if isinstance(v, str) and v.strip().isdigit() and int(v) > 0:
+        return int(v)
+    named = {}
+    f = ROOT / "games" / game / "levels.json"
+    if f.is_file():
+        named = {f"{lv['time_ms']}ms": int(lv["units"]) for lv in json.loads(f.read_text(encoding="utf-8")).get("levels", [])}
+    if isinstance(v, str) and v.replace(" ", "").lower() in named:
+        return named[v.replace(" ", "").lower()]
+    raise ValueError(f"level {json.dumps(v)} is neither units nor a published level of {game} ({', '.join(named) or 'none'})")
+
+
 def main(argv) -> int:
     try:
         sys.stdout.reconfigure(errors="replace")
@@ -1515,6 +1591,7 @@ def main(argv) -> int:
         pass
     ap = argparse.ArgumentParser(prog="magat calibrate-controlled", description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--config", help="a JSON file of these options, without their dashes; the command line wins")
     ap.add_argument("--name", required=True, help="the currency's name, e.g. laptop-i9-14900hx-time or r7615-time")
     ap.add_argument("--game", default="tribes")
     ap.add_argument("--out", help="the calibration directory (default <data>/calibration/<game>-<name>)")
@@ -1544,7 +1621,21 @@ def main(argv) -> int:
     ap.add_argument("--allow-other-java", action="store_true")
     ap.add_argument("--allow-policy-change", action="store_true", help="measure a currency under a different clock policy")
     ap.add_argument("--toy", action="store_true", help="toy sizes for the shakedown: gates reported, not enforced")
+    config = None
+    if "--config" in argv:
+        i = argv.index("--config")
+        if i + 1 >= len(argv):
+            print("--config takes a file", file=sys.stderr)
+            return 2
+        config = pathlib.Path(argv[i + 1]).resolve()
+        rest = argv[:i] + argv[i + 2:]
+        try:
+            argv = config_argv(config, ap, rest[rest.index("--game") + 1] if "--game" in rest[:-1] else None) + rest
+        except ValueError as e:
+            print(e, file=sys.stderr)
+            return 2
     a = ap.parse_args(argv)
+    a.config = config
 
     if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", a.name):
         print("--name: lower-case letters, digits, '.', '_' and '-'", file=sys.stderr)
@@ -1564,6 +1655,8 @@ def main(argv) -> int:
     record_root = out / "record"
     record = record_root / stamp
     record.mkdir(parents=True, exist_ok=True)
+    if a.config:
+        shutil.copyfile(a.config, record / "config.json")
     events = Events(record / "events.log")
     # The clock policy of the session that wrote the currency: a later session or check under another is refused.
     policy_file = record_root / "policy.json"
@@ -1573,6 +1666,8 @@ def main(argv) -> int:
           + ("   (TOY)" if a.toy else ""))
     print(f"# currency  {out}")
     print(f"# record    {record}")
+    if a.config:
+        print(f"# config    {a.config}")
     print("############################################################")
     quiet_runner = Runner(a, plat, None, events, record)
 
@@ -1992,7 +2087,8 @@ def write_summary(a, record, facts, soak, sessions, checks, counters, mstats, we
          f"- Verdict: {verdict}",
          f"- Currency: `{weights}`" + (" (written)" if weights.is_file() else " (not written)"),
          "- This invocation: " + ("the checks" if a.checks else "the session" + ("" if a.no_checks else " and the checks"))
-         + f"; record `{record}`, {seconds / 3600:.2f} h, finished {now()}, exit {code}",
+         + f"; record `{record}`, {seconds / 3600:.2f} h, finished {now()}, exit {code}"
+         + (f"; options from `{a.config}`, copied as `config.json`" if a.config else ""),
          f"- Commit {facts.get('commit')}" + (", notebook modified" if facts.get("notebook") else "")
          + f"; {facts.get('cpu')}; {facts.get('machine')}; "
          f"{(facts.get('java') or ['java ?'])[0]}", "",

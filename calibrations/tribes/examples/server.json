@@ -1,0 +1,10 @@
+{
+  "name": "my-server-time",
+  "game": "tribes",
+  "description": "A shared server's own currency, as the notebook measures one: no warming up, a wait of up to 30 minutes for the machine to fall quiet, and a session called suspect if other work holds more than 4 logical CPUs (docs/CALIBRATING_A_MACHINE.md, \"On a shared server\").",
+  "arms": ["emcts", "mcts", "oep", "tbets"],
+  "levels": ["500ms", "1000ms", "5000ms"],
+  "soak-minutes": 0,
+  "wait-quiet": 30,
+  "other-cpus": 4
+}

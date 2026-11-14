@@ -164,6 +164,22 @@ def main(argv) -> int:
           then=lambda: "profile.emcts@4000.w.advance" in priced.read_text(encoding="utf-8")
           and "- Verdict: COMPLETE" in (controlled / "record" / "SUMMARY.md").read_text(encoding="utf-8"))
     check("a currency that prices every arm is not measured again", cc, "nothing to measure")
+    # The same options in a config file: the same currency, so again nothing to measure.
+    cfg = data / "shakedown" / f"controlled-{game}.json"
+    cfg.write_text(json.dumps({"name": "shakedown", "game": game, "out": str(controlled), "toy": True, "arms": ["emcts"],
+                               "levels": [2000, 4000], "turns": "2", "reps": "2", "warmup": "1", "soak-minutes": 0,
+                               "interval": 2}), encoding="utf-8")
+    check("--config: the same options written in a file, the same currency, nothing to measure",
+          [PY, ROOT / "magat.py", "calibrate-controlled", "--config", cfg], "nothing to measure",
+          then=lambda: any((r / "config.json").is_file() for r in (controlled / "record").iterdir() if r.is_dir()))
+    bad = data / "shakedown" / f"controlled-{game}-bad.json"
+    bad.write_text(json.dumps({"name": "shakedown", "soak_minutes": 0, "checks": True, "levels": ["750ms"]}), encoding="utf-8")
+    check("a config with a misspelt key, a mode and an unpublished level is refused, every problem named",
+          [PY, ROOT / "magat.py", "calibrate-controlled", "--config", bad, "--preflight"], "did you mean 'soak-minutes'", codes=(2,))
+    for example in sorted((ROOT / "calibrations" / game / "examples").glob("*.json")):
+        check(f"the example config {example.name} reads, and its preflight says what it would measure",
+              [PY, ROOT / "magat.py", "calibrate-controlled", "--config", example, "--out",
+               data / "shakedown" / f"config-{example.stem}", "--preflight", "--toy"], "4 arm(s): emcts, mcts, oep, tbets")
     older = data / "shakedown" / f"controlled-{game}-older"
     shutil.rmtree(older, ignore_errors=True)
     older.mkdir(parents=True)
