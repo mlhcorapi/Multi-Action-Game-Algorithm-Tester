@@ -1,0 +1,37 @@
+% How each arm spends its budget: the share of a turn's units, its initialization included, paid for the arm's own operations rather than the forward model's; the units spent per turn as a share of the budget; and the actions in its plan. random is not priced: it spends no units of its own.
+\begin{tabular}{lllrrr}
+\toprule
+Machine & Level & Arm & Own operations & Spend & Plan length \\
+\midrule
+R7615 & 500 ms & emcts & 3.1\% & 1.000 & 15.9 \\
+R7615 & 500 ms & random & 0.0\% & 0.002 & 15.6 \\
+R7615 & 500 ms & mcts & 19.5\% & 1.001 & 3.8 \\
+R7615 & 500 ms & oep & 50.1\% & 1.002 & 18.0 \\
+R7615 & 500 ms & tbets & 44.7\% & 1.002 & 17.4 \\
+R7615 & 1,000 ms & emcts & 3.3\% & 1.000 & 16.1 \\
+R7615 & 1,000 ms & random & 0.0\% & 0.001 & 15.6 \\
+R7615 & 1,000 ms & mcts & 14.4\% & 1.001 & 4.2 \\
+R7615 & 1,000 ms & oep & 41.3\% & 1.001 & 18.1 \\
+R7615 & 1,000 ms & tbets & 42.6\% & 1.001 & 17.4 \\
+R7615 & 5,000 ms & emcts & 3.2\% & 1.000 & 16.7 \\
+R7615 & 5,000 ms & random & 0.0\% & 0.000 & 15.6 \\
+R7615 & 5,000 ms & mcts & 12.7\% & 1.000 & 5.1 \\
+R7615 & 5,000 ms & oep & 23.1\% & 1.000 & 18.1 \\
+R7615 & 5,000 ms & tbets & 41.6\% & 1.000 & 17.6 \\
+Laptop & 500 ms & emcts & 3.3\% & 1.000 & 15.9 \\
+Laptop & 500 ms & random & 0.0\% & 0.002 & 15.6 \\
+Laptop & 500 ms & mcts & 21.4\% & 1.001 & 3.8 \\
+Laptop & 500 ms & oep & 52.1\% & 1.002 & 18.0 \\
+Laptop & 500 ms & tbets & 46.2\% & 1.002 & 17.4 \\
+Laptop & 1,000 ms & emcts & 3.6\% & 1.000 & 16.1 \\
+Laptop & 1,000 ms & random & 0.0\% & 0.001 & 15.6 \\
+Laptop & 1,000 ms & mcts & 15.6\% & 1.001 & 4.2 \\
+Laptop & 1,000 ms & oep & 42.9\% & 1.001 & 18.1 \\
+Laptop & 1,000 ms & tbets & 43.6\% & 1.001 & 17.4 \\
+Laptop & 5,000 ms & emcts & 3.5\% & 1.000 & 16.8 \\
+Laptop & 5,000 ms & random & 0.0\% & 0.000 & 15.6 \\
+Laptop & 5,000 ms & mcts & 13.4\% & 1.000 & 5.1 \\
+Laptop & 5,000 ms & oep & 24.4\% & 1.000 & 18.1 \\
+Laptop & 5,000 ms & tbets & 42.8\% & 1.000 & 17.6 \\
+\bottomrule
+\end{tabular}

@@ -1,0 +1,6 @@
+# The Python packages MAGAT's analysis and paper outputs (paper/) were generated and checked with, on
+# Python 3.12. The analysis needs numpy and pandas; matplotlib draws the figures. Other recent versions
+# should work; these are the ones CI installs, so `python magat.py paper --check` compares like with like.
+numpy==2.5.2
+pandas==3.0.5
+matplotlib==3.11.1

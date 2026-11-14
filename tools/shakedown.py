@@ -58,7 +58,7 @@ def main(argv) -> int:
 
     step("0. Environment")
     check("java on PATH", ["java", "-version"])
-    check("python has numpy and pandas (analysis)", [PY, "-c", "import numpy, pandas"])
+    check("python has numpy and pandas (analysis), and matplotlib (the paper's figures)", [PY, "-c", "import numpy, pandas, matplotlib"])
 
     step("1. Build")
     check("core, adapter, engine and tests compile", [PY, ROOT / "magat.py", "build", "--tests"], "TEST BUILD OK")
@@ -291,6 +291,9 @@ def main(argv) -> int:
     check("analyze --compare: the toy run beside itself, as another machine's run of the same experiment",
           [PY, ROOT / "magat.py", "analyze", "--run", run_root, "--compare", run_root, "--out", cmp_out], "ANALYZE: OK",
           then=lambda: no_difference(cmp_out) and "## Across machines (dev)" in (cmp_out / "SUMMARY.md").read_text(encoding="utf-8"))
+
+    check("paper --check: the paper's tables rebuild from the published artefacts byte for byte, and its figures render",
+          [PY, ROOT / "magat.py", "paper", "--check"], "PAPER: CURRENT")
 
     step("9. Notebook")
     check("generated notebook is current and its setup cells run from three directories",

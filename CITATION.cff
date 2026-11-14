@@ -1,0 +1,48 @@
+cff-version: 1.2.0
+message: "If you use MAGAT, please cite it as below."
+type: software
+title: "MAGAT: Multi-Action Game Algorithm Tester"
+abstract: >-
+  MAGAT evaluates search algorithms for multi-action games, where a turn is a sequence of actions, by
+  replanning single turns on a pinned portfolio of positions under a compute-unit budget. A unit is a priced
+  count of operations, calibrated per machine, so results measured on different machines can be replayed,
+  re-priced and compared. The first game is Tribes.
+authors:
+  - given-names: Marcus
+    family-names: Corapi
+repository-code: "https://github.com/mlhcorapi/Multi-Action-Game-Algorithm-Tester"
+license: Apache-2.0
+keywords:
+  - multi-action games
+  - game AI
+  - search algorithms
+  - Monte Carlo tree search
+  - evolutionary planning
+  - benchmarking
+  - compute budget
+  - reproducibility
+  - Tribes
+references:
+  - type: conference-paper
+    title: "Tribes: A New Turn-Based Strategy Game for AI Research"
+    authors:
+      - given-names: Diego
+        family-names: Perez-Liebana
+      - given-names: Yu-Jhen
+        family-names: Hsu
+      - given-names: Stavros
+        family-names: Emmanouilidis
+      - given-names: Bobby Dewan Akram
+        family-names: Khaleque
+      - given-names: Raluca D.
+        family-names: Gaina
+    collection-title: "Proceedings of the AAAI Conference on Artificial Intelligence and Interactive Digital Entertainment (AIIDE)"
+    year: 2020
+    start: 252
+    end: 258
+    url: "https://ojs.aaai.org/index.php/AIIDE/article/view/7438"
+  - type: software
+    title: "Tribes"
+    authors:
+      - name: "Game AI Research Group, Queen Mary University of London"
+    repository-code: "https://github.com/GAIGResearch/Tribes"
