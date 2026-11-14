@@ -60,8 +60,10 @@ python magat.py experiment run experiments/tribes/reference.json --weights <your
 `--weights <your-machine>` finds the currency you measured by its name
 (`$HOME/magat_runs/calibration/tribes-<your-machine>/`). Without it, a run spends the published currency,
 the R7615's, and your machine plays the R7615's turns exactly: a replay of the reference machine, not a
-measurement of yours. The report is `$HOME/magat_runs/tribes/results/reference/SUMMARY.md`. Running the
-same command again resumes a run that stopped.
+measurement of yours, and `experiment run` takes the R7615's published turns instead of playing them
+again, after re-playing a sample of them here. The report is
+`$HOME/magat_runs/tribes/results/reference/SUMMARY.md`. Running the same command again resumes a run
+that stopped.
 
 **3. Compare with published results.** Every published row carries its raw operation counts, so:
 - **replay**: `check replay` re-plans the published turns on your machine and compares them field for

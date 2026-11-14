@@ -231,6 +231,8 @@ def render(splits, specs, baseline, results, prov, weights, n, prov_b=None, othe
             ("experiment sha256", "experiment_sha256"), ("leaves / turns", None), ("written by MAGAT", "magat_commit")]
     if any(prov[s].get("selection", "all") != "all" for s in names):
         keys.insert(3, ("positions selected", "selection"))
+    if any(prov[s].get("reused") for s in names):
+        keys.insert(len(keys) - 1, ("leaves reused", "reused"))
     rows = []
     for label, k in keys:
         if k is None:

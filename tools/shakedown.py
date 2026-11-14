@@ -207,6 +207,24 @@ def main(argv) -> int:
     check("holdout: runs into its own tree", [*run, "--split", "holdout"], "RUN: COMPLETE",
           then=lambda: (run_root / "holdout" / "_run.json").is_file())
     check("a retired leaf is discarded and re-run", [*run, "--split", "dev", "--retire-leaf", "emcts@4000"], "RETIRED emcts@4000")
+    reused_root = data / "shakedown" / f"run-{game}-reused"
+    shutil.rmtree(reused_root, ignore_errors=True)
+    check("--reuse: a second run in the same currency takes every leaf of the first, after re-playing two turns of each",
+          [*run[:run.index("--out") + 1], reused_root, *run[run.index("--out") + 2:], "--split", "dev", "--reuse", run_root / "dev"],
+          "RUN: COMPLETE", then=lambda: all('"reused"' in m.read_text(encoding="utf-8")
+                                          for m in (reused_root / "dev").glob("*/*cu/_leaf.json"))
+          and len(list((reused_root / "dev").glob("*/*cu/_leaf.json"))) == 10)
+    reuse_spec = data / "shakedown" / f"reuse-{game}.json"
+    reuse_spec.write_text(json.dumps(dict(name="reuse", game=game, arms=["emcts", "random"], baseline="emcts",
+                                          levels=[9500, dict(budget="1000ms", repetitions=9, arms=["random"])], repetitions=2,
+                                          split="all", ids=[1, 2, 3])), encoding="utf-8")
+    reuse_root = data / "shakedown" / f"run-{game}-published"
+    shutil.rmtree(reuse_root, ignore_errors=True)
+    check("experiment run in the published currency takes the published leaves it may, and plays the one it needs more of",
+          [PY, ROOT / "magat.py", "experiment", "run", reuse_spec, "--out", reuse_root, "--results",
+           data / "shakedown" / f"results-{game}-published", "--no-bundle"], "random@20000 is played: the published leaf holds 24",
+          then=lambda: '"reused"' in (reuse_root / "all" / "emcts" / "9500cu" / "_leaf.json").read_text(encoding="utf-8")
+          and "leaves reused" in (data / "shakedown" / f"results-{game}-published" / "SUMMARY.md").read_text(encoding="utf-8"))
     repriced = calib / "compute_weights_repriced.properties"
     repriced.write_text(weights.read_text(encoding="utf-8").replace("profile.emcts@2000.w.copy = ", "profile.emcts@2000.w.copy = 9"),
                         encoding="utf-8")

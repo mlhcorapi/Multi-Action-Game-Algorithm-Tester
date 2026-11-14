@@ -30,11 +30,13 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py weights   [--game tribes] [--weights FILE] [--arms a,b|@set] [--levels ...] [--progress]
     python magat.py run --experiment SPEC [--split dev|holdout|all] [--out DIR] [--portfolio DIR] [--weights FILE|NAME]
                         [--threads N] [--threads-at 400000=31] [--retire-leaf arm@budget] [--toy]
+                        [--reuse SPLIT_TREE [--reuse-replay 2]]   take the leaves a run in the same currency played
     python magat.py experiment validate SPEC [--weights FILE|NAME | --no-weights] [--split ...] [--threads N]
                                       the spec read back, the positions it selects, the run's size and estimated hours
     python magat.py experiment run SPEC [--split ...] [--weights FILE|NAME] [--out DIR] [--results DIR] [--no-bundle]
-                                 [and every run option]   validate, run (resuming), analyse, summarise and bundle, in one
-                                 command (docs/EXPERIMENTS.md); SPEC may also be given as --experiment SPEC
+                                 [--no-reuse] [and every run option]   validate, run (resuming), analyse, summarise and
+                                 bundle, in one command (docs/EXPERIMENTS.md); SPEC may also be given as --experiment SPEC.
+                                 In a published currency, the published run's leaves are taken where they can be
     python magat.py bundle --name NAME --paths P [P ...] [--exclude seqlog_,mutlog_]
     python magat.py check replay    --game tribes --leaf DIR [--portfolio DIR] [--weights FILE] [--turns 20]
     python magat.py check time      --game tribes (--weights FILE | --fixed-weights) [--levels ...] [--arms a,b] [--targets ms,...]
@@ -455,7 +457,7 @@ def test(rest: list) -> int:
 # Options that name a file or a directory. The JVM and the analysis run in the repository, so a relative one is
 # made absolute against the directory the command was typed in, where the caller meant it.
 PATH_OPTIONS = {"--experiment", "--out", "--results", "--portfolio", "--weights", "--leaf", "--threads-file", "--levels-file",
-                "--published", "--run", "--reprice", "--compare", "--compare-weights", "--config"}
+                "--published", "--run", "--reprice", "--compare", "--compare-weights", "--config", "--reuse"}
 
 
 def from_caller(args: list) -> list:
@@ -622,6 +624,30 @@ def outside_clone(args: list) -> None:
                      f"{data_root()})")
 
 
+def published_run(game: str, weights: pathlib.Path):
+    """The split tree of a run published with the repository (games/<game>/results/reference/<machine>/all) priced in
+    this currency's unit, or None: the same reference cell and its nanoseconds, which a currency keeps when an arm is
+    calibrated into it. Which of its leaves were played at this run's prices, the runner checks leaf by leaf."""
+    import json
+    if not weights.is_file():
+        return None
+    header = {}
+    for line in weights.read_text(encoding="utf-8", errors="replace").splitlines():
+        k, sep, v = line.partition("=")
+        if sep and k.strip() in ("reference", "referenceAdvanceNanos"):
+            header[k.strip()] = v.strip()
+    if len(header) < 2:
+        return None
+    for tree in sorted((GAMES / game / "results" / "reference").glob("*/all")):
+        try:
+            recorded = (json.loads((tree / "_run.json").read_text(encoding="utf-8")).get("weights") or {}).get("header") or {}
+        except (OSError, ValueError):
+            continue
+        if all(recorded.get(k) == v for k, v in header.items()):
+            return tree
+    return None
+
+
 def experiment_run(rest: list) -> int:
     """An experiment from its spec in one command: validate it, run it (a re-run resumes: finished leaves are
     skipped), analyse every split in its run directory, print the summary's headline, and bundle the run tree and
@@ -635,6 +661,9 @@ def experiment_run(rest: list) -> int:
     no_bundle = "--no-bundle" in rest
     if no_bundle:
         rest.remove("--no-bundle")
+    no_reuse = "--no-reuse" in rest
+    if no_reuse:
+        rest.remove("--no-reuse")
     if "--experiment" not in rest:
         sys.exit("usage: magat experiment run SPEC [--split ...] [--weights FILE|NAME] [--out DIR] [--results DIR] [--no-bundle]")
     # Absolute, since the JVM runs in the repository while a path on the command line is the caller's.
@@ -652,10 +681,16 @@ def experiment_run(rest: list) -> int:
     split = rest[rest.index("--split") + 1] if "--split" in rest else None
     outside_clone(["--out", str(out)])
     args = with_published_defaults(with_spec_weights(with_spec_game(["run", *rest])))
+    if not no_reuse and "--reuse" not in args and "--weights" in args:
+        published = published_run(game, pathlib.Path(args[args.index("--weights") + 1]))
+        if published:
+            say(f"# the published run {published} was priced in this currency's unit: its leaves played at this run's "
+                "prices are taken where they can be (--no-reuse plays every leaf)")
+            args += ["--reuse", str(published)]
 
     say(f"== 1/4 validate {spec}")
     validate = ["experiment", "validate"]
-    skip = {"--retire-leaf", "--audit-warn"}                       # the run's own options, which validate does not take
+    skip = {"--retire-leaf", "--audit-warn", "--reuse", "--reuse-replay"}   # the run's own options, which validate does not take
     i = 1
     while i < len(args):
         if args[i] in skip:

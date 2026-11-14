@@ -82,6 +82,10 @@ public final class GridRunner {
         public List<String> args = new ArrayList<>();
         /** The audit's warning, on one thread: a leaf whose priced work accounts for less than (1 - this) of its plan time. */
         public double auditWarn = 0.10;
+        /** A run's split tree whose leaves this run takes instead of playing them, where it may ({@link Reuse}); null plays every leaf. */
+        public Path reuse;
+        /** How many of a leaf's turns this machine re-plays, field for field, before taking it. */
+        public int reuseReplay = 2;
     }
 
     public static <S, A> int run(GameModule<S, A> module, Experiment x, Portfolio<S> portfolio, Weights weights, Options o)
@@ -151,6 +155,15 @@ public final class GridRunner {
             try {
                 Map<Long, Integer> sweep = o.threadsFile != null && Files.isRegularFile(o.threadsFile) ? ThreadSweep.read(o.threadsFile) : null;
                 banner(x, half, root, scenarios.size(), weights, o, sweep);
+                Reuse reuse = null;
+                if (o.reuse != null) {
+                    List<String> why = new ArrayList<>();
+                    reuse = Reuse.open(o.reuse, portfolio.identity(), game.configuration(), why);
+                    System.out.println(reuse != null
+                            ? "[reuse] from " + reuse.source() + ", played on " + MachineProfile.modelOf(reuse.machine()) + ": each leaf it holds "
+                              + "whole, at this run's prices, is taken after " + o.reuseReplay + " of its turns re-play here field for field"
+                            : "[reuse] not from " + o.reuse + ": " + String.join("; ", why) + ". Every leaf is played");
+                }
                 Set<String> done = readCheckpoint(checkpoint);
                 for (Experiment.Level level : x.levels) {
                     int threads = threadsFor(level.budget, o, sweep);
@@ -160,6 +173,18 @@ public final class GridRunner {
                         if (done.contains(key)) {
                             System.out.println("[run] SKIP (done) " + key);
                             continue;
+                        }
+                        if (reuse != null) {
+                            AgentFactory<S, A> arm = module.agents().get(id);
+                            String not = reuse.take(game, portfolio, arm, level, scenarios, Leaf.dir(root, id, level.budget),
+                                    baseMeta(arm, level.budget, weights), o.reuseReplay, threads);
+                            if (not == null) {
+                                RunGuard.appendLine(checkpoint, key);
+                                done.add(key);
+                                System.out.println("[run] REUSED " + key + " from " + Leaf.dir(reuse.source(), id, level.budget));
+                                continue;
+                            }
+                            System.out.println("[reuse] " + id + "@" + level.budget + " is played: " + not);
                         }
                         boolean complete = runLeaf(game, module.agents().get(id), level, scenarios, root, threads, weights, o.auditWarn);
                         if (!complete) return finish(INCOMPLETE, "leaf " + id + "@" + level.budget + " incomplete; re-run the same command to continue it");
@@ -203,17 +228,11 @@ public final class GridRunner {
         int total = scenarios.size() * level.visits;
         String profile = Profile.key(arm.id(), level.budget);
         double[] w = arm.priced() ? weights.profile(profile) : weights.global();
-        JsonObject prices = new JsonObject();
-        for (Map.Entry<String, Double> e : pricesOf(weights, arm.priced() ? profile : null).entrySet()) prices.add(e.getKey(), e.getValue());
         // The commit that plays this leaf's turns; a leaf continued from another commit names the earlier ones.
         JsonObject magat = thisMagat();
         String commit = magat.getString("commit", "unknown");
         List<String> earlier = earlierCommits(dir, done.size(), commit);
-        JsonObject meta = new JsonObject().add("arm", arm.id()).add("budget", level.budget)
-                .add("profile", arm.priced() ? profile : "global (arm is not priced)")
-                .add("weights", new JsonArray().add(w[0]).add(w[1]).add(w[2]))
-                .add("currencyVersion", weights.version()).add("prices", prices)
-                .add("threads", threads).add("host", host()).add("commit", commit);
+        JsonObject meta = baseMeta(arm, level.budget, weights).add("threads", threads).add("host", host()).add("commit", commit);
         if (magat.get("notebook") != null) meta.add("notebook", magat.get("notebook"));
         if (!earlier.isEmpty()) meta.add("earlierCommits", Json.array(earlier.toArray(new String[0])));
         meta.add("started", Instant.now().toString()).add("turnsTotal", total).add("turnsDoneAtStart", done.size()).add("status", "running");
@@ -361,7 +380,19 @@ public final class GridRunner {
         return new ArrayList<>(seen);
     }
 
-    private static void writeMeta(Path dir, JsonObject meta) throws IOException {
+    /** What a leaf's {@code _leaf.json} says of its arm and prices, whoever played it. */
+    static JsonObject baseMeta(AgentFactory<?, ?> arm, long budget, Weights weights) {
+        String profile = Profile.key(arm.id(), budget);
+        double[] w = arm.priced() ? weights.profile(profile) : weights.global();
+        JsonObject prices = new JsonObject();
+        for (Map.Entry<String, Double> e : pricesOf(weights, arm.priced() ? profile : null).entrySet()) prices.add(e.getKey(), e.getValue());
+        return new JsonObject().add("arm", arm.id()).add("budget", budget)
+                .add("profile", arm.priced() ? profile : "global (arm is not priced)")
+                .add("weights", new JsonArray().add(w[0]).add(w[1]).add(w[2]))
+                .add("currencyVersion", weights.version()).add("prices", prices);
+    }
+
+    static void writeMeta(Path dir, JsonObject meta) throws IOException {
         RunGuard.atomicWrite(dir.resolve(Leaf.META), meta.toString(com.eclipsesource.json.WriterConfig.PRETTY_PRINT) + "\n");
     }
 
@@ -483,6 +514,7 @@ public final class GridRunner {
         prov.append("invocations", invocation.add("host", host())
                 .add("machine", MachineProfile.get().summary()).add("java", System.getProperty("java.version"))
                 .add("experimentSha256", x.sha256).add("weightsSha256", weightsSha).add("threads", threads)
+                .add("reuse", o.reuse == null ? "" : o.reuse.toAbsolutePath().toString())
                 .add("args", String.join(" ", o.args)));
     }
 

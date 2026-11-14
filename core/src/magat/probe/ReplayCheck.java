@@ -58,6 +58,13 @@ public final class ReplayCheck {
         }
 
         public int size() { return rows.size(); }
+
+        /** The same leaf, narrowed to these turns ({@code "scenario:visit"}), in its own order. */
+        public Leaf only(java.util.Set<String> keys) {
+            List<Row> kept = new ArrayList<>();
+            for (Row r : rows) if (keys.contains(r.scenario + ":" + r.visit)) kept.add(r);
+            return new Leaf(format, arm, kept);
+        }
     }
 
     public static final class Result {

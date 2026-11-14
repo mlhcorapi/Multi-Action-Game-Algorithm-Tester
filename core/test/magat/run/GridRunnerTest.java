@@ -414,4 +414,101 @@ public class GridRunnerTest {
         assertEquals(GridRunner.OK, (int) run.value);
         assertTrue(run.out, run.out.contains("asks for 99 positions") && run.out.contains("all of them run"));
     }
+
+    /** A leaf's turns without its wall-clock columns, sorted: what a reused leaf must share with a played one. */
+    private static List<String> turnsWithoutTime(Path leaf) throws Exception {
+        List<String> lines = Files.readAllLines(leaf.resolve(Leaf.TURNS), StandardCharsets.UTF_8);
+        List<String> header = Arrays.asList(lines.get(0).split(","));
+        int ms = header.indexOf("plan_ms"), init = header.indexOf("init_ms");
+        List<String> out = new ArrayList<>();
+        for (String line : lines.subList(1, lines.size())) {
+            String[] f = line.split(",", -1);
+            f[ms] = "";
+            f[init] = "";
+            out.add(String.join(",", f));
+        }
+        Collections.sort(out);
+        return out;
+    }
+
+    @Test
+    public void aRunInTheSameCurrencyTakesTheLeavesAnotherRunHoldsWholeAndPlaysTheRest() throws Exception {
+        Path wf = weights(work, "w.properties", 0, "emcts", "emcts-alt");
+        Weights w = Weights.load(wf);
+        assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), portfolio, w, options(Split.Half.DEV)));
+        Path published = out.resolve("dev");
+
+        // The same levels, one more visit at 600: the leaves at 300 are taken, those at 600 played.
+        Experiment more = Experiment.load(spec(SPEC.replace("{\"budget\": 600, \"visits\": 2}", "{\"budget\": 600, \"visits\": 3}")));
+        GridRunner.Options o = options(Split.Half.DEV);
+        o.out = Files.createTempDirectory("magat-run-reuse");
+        o.reuse = published;
+        Stdout.Captured<Integer> run = Stdout.capture(() -> GridRunner.run(module(game, new ArrayList<>()), more, portfolio, w, o));
+        assertEquals(run.out, GridRunner.OK, (int) run.value);
+        Path root = o.out.resolve("dev");
+        for (String arm : new String[]{"emcts", "emcts-alt", "random"}) {
+            assertTrue(run.out, run.out.contains("[run] REUSED arm=" + arm + ";budget=300"));
+            assertTrue(run.out, run.out.contains("[reuse] " + arm + "@600 is played: the published leaf holds"));
+            assertEquals("a reused leaf is the leaf this machine plays, wall-clock aside",
+                    turnsWithoutTime(Leaf.dir(published, arm, 300)), turnsWithoutTime(Leaf.dir(root, arm, 300)));
+            String meta = read(Leaf.dir(root, arm, 300).resolve(Leaf.META));
+            assertTrue(meta, meta.contains("\"reused\"") && meta.contains("\"reproduced\": " + Math.min(2, Leaf.rows(Leaf.dir(root, arm, 300)))));
+            assertFalse(read(Leaf.dir(root, arm, 600).resolve(Leaf.META)).contains("\"reused\""));
+        }
+        assertEquals(6, Files.readAllLines(root.resolve(GridRunner.CHECKPOINT)).size());
+        assertTrue(read(root.resolve(Provenance.FILE)).contains("\"reuse\": \"" + published.toString().replace("\\", "\\\\")));
+
+        // A currency that prices one leaf otherwise (emcts-alt@300's copy): that leaf is played, every other is taken.
+        // Leaf by leaf, as a currency extended with a new arm keeps every price it had.
+        GridRunner.Options other = options(Split.Half.DEV);
+        other.out = Files.createTempDirectory("magat-run-reuse2");
+        other.reuse = published;
+        Weights bumped = Weights.load(weights(work, "w2.properties", 0.05, "emcts", "emcts-alt"));
+        Stdout.Captured<Integer> priced = Stdout.capture(() ->
+                GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), portfolio, bumped, other));
+        assertEquals(GridRunner.OK, (int) priced.value);
+        assertTrue(priced.out, priced.out.contains("[reuse] emcts-alt@300 is played: it was played at other prices (copy "));
+        for (String leaf : new String[]{"emcts;budget=600", "emcts;budget=300", "emcts-alt;budget=600", "random;budget=600", "random;budget=300"})
+            assertTrue(leaf + "\n" + priced.out, priced.out.contains("[run] REUSED arm=" + leaf));
+
+        // Another portfolio: nothing is taken, and the run says why.
+        Path elsewhere = Files.createTempDirectory("magat-run-portfolio3");
+        PortfolioBuilder.build(game, Collections.singletonMap("toy", 6), elsewhere, 1);
+        Split.freeze(elsewhere);
+        GridRunner.Options third = options(Split.Half.DEV);
+        third.out = Files.createTempDirectory("magat-run-reuse4");
+        third.reuse = published;
+        Stdout.Captured<Integer> moved = Stdout.capture(() ->
+                GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), Portfolio.load(game, elsewhere), w, third));
+        assertEquals(GridRunner.OK, (int) moved.value);
+        assertTrue(moved.out, moved.out.contains("[reuse] not from") && moved.out.contains("played on another portfolio"));
+        assertFalse(moved.out, moved.out.contains("REUSED"));
+    }
+
+    @Test
+    public void aLeafWhoseTurnsDoNotReplayHereIsPlayed() throws Exception {
+        Weights w = Weights.load(weights(work, "w.properties", 0, "emcts", "emcts-alt"));
+        assertEquals(GridRunner.OK, GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), portfolio, w, options(Split.Half.DEV)));
+        Path published = out.resolve("dev"), turns = Leaf.dir(published, "emcts", 300).resolve(Leaf.TURNS);
+        List<String> played = turnsWithoutTime(Leaf.dir(published, "emcts", 300));
+        // Another value in every row's final column: what a changed arm, or a changed engine, would leave behind.
+        List<String> lines = Files.readAllLines(turns, StandardCharsets.UTF_8), tampered = new ArrayList<>();
+        int fin = Arrays.asList(lines.get(0).split(",")).indexOf("final");
+        tampered.add(lines.get(0));
+        for (String line : lines.subList(1, lines.size())) {
+            String[] f = line.split(",", -1);
+            f[fin] = String.valueOf(Double.parseDouble(f[fin]) + 1);
+            tampered.add(String.join(",", f));
+        }
+        Files.write(turns, tampered, StandardCharsets.UTF_8);
+
+        GridRunner.Options o = options(Split.Half.DEV);
+        o.out = Files.createTempDirectory("magat-run-reuse3");
+        o.reuse = published;
+        Stdout.Captured<Integer> run = Stdout.capture(() -> GridRunner.run(module(game, new ArrayList<>()), Experiment.load(spec(SPEC)), portfolio, w, o));
+        assertEquals(GridRunner.OK, (int) run.value);
+        assertTrue(run.out, run.out.contains("[reuse] emcts@300 is played: this machine did not re-play"));
+        assertTrue(run.out, run.out.contains("[run] REUSED arm=emcts-alt;budget=300"));
+        assertEquals("the leaf is played here, not copied", played, turnsWithoutTime(Leaf.dir(o.out.resolve("dev"), "emcts", 300)));
+    }
 }

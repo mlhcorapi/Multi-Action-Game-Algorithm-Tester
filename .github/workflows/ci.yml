@@ -89,7 +89,7 @@ jobs:
           for spec in experiments/tribes/examples/*.json; do
             python magat.py experiment validate --experiment "$spec"
           done
-      - name: Toy run on dev and holdout, and a resume that skips every leaf
+      - name: Toy run on dev and holdout, a resume that skips every leaf, and a second run that reuses every leaf
         run: |
           RUN="python magat.py run --experiment experiments/tribes/shakedown.json --portfolio $RUNNER_TEMP/toy --weights $RUNNER_TEMP/calib/compute_weights.properties --out $RUNNER_TEMP/run --threads 2 --toy"
           $RUN --split dev
@@ -98,6 +98,7 @@ jobs:
           test "$(wc -l < "$RUNNER_TEMP/run/dev/_completed.txt")" -eq 10
           head -1 "$RUNNER_TEMP/run/dev/emcts/2000cu/turns.csv" | grep -q "op_emcts.generation"
           head -1 "$RUNNER_TEMP/run/dev/tbets/2000cu/turns.csv" | grep -q "op_tbets.turn"
+          test "$(python magat.py run --experiment experiments/tribes/shakedown.json --portfolio $RUNNER_TEMP/toy --weights $RUNNER_TEMP/calib/compute_weights.properties --out $RUNNER_TEMP/run-reused --threads 2 --toy --split dev --reuse $RUNNER_TEMP/run/dev | grep -c "REUSED")" -eq 10
       - name: experiment run takes a spec in the short forms from validation to its report and bundle, and resumes
         run: |
           echo '{"name": "short", "game": "tribes", "baseline": "emcts", "arms": ["emcts", "random"], "levels": [2000, 4000], "repetitions": 1, "split": "all", "sources": ["single"]}' > "$RUNNER_TEMP/short.json"
@@ -108,6 +109,14 @@ jobs:
           grep -q "positions selected | sources=single" "$RUNNER_TEMP/short-results/SUMMARY.md"
           python -c "import os, pathlib, sys, zipfile; d = pathlib.Path(os.environ.get('MAGAT_DATA') or pathlib.Path.home() / 'magat_runs'); z = zipfile.ZipFile(d / 'bundles' / 'run-short.zip'); sys.exit(0 if any(n.endswith('SUMMARY.md') for n in z.namelist()) else 1)"
           $ER | grep -q "SKIP (done)"
+      - name: experiment run takes the published run's leaves played at its prices, and plays the rest
+        run: |
+          echo '{"name": "reuse", "game": "tribes", "arms": ["emcts", "random"], "baseline": "emcts", "levels": [9500, {"budget": "1000ms", "repetitions": 9, "arms": ["random"]}], "repetitions": 2, "split": "all", "ids": [1, 2, 3]}' > "$RUNNER_TEMP/reuse.json"
+          python magat.py experiment run "$RUNNER_TEMP/reuse.json" --out "$RUNNER_TEMP/reuse" --results "$RUNNER_TEMP/reuse-results" --no-bundle > "$RUNNER_TEMP/reuse.log" || { tail -60 "$RUNNER_TEMP/reuse.log"; exit 1; }
+          grep -q "REUSED arm=emcts;budget=9500" "$RUNNER_TEMP/reuse.log"
+          grep -q "REUSED arm=random;budget=9500" "$RUNNER_TEMP/reuse.log"
+          grep -q "random@20000 is played: the published leaf holds 24 of the 27 turns" "$RUNNER_TEMP/reuse.log"
+          grep -q "leaves reused" "$RUNNER_TEMP/reuse-results/SUMMARY.md"
       - name: Analyze the toy run, re-priced in its own currency, and beside itself as another machine's
         run: |
           python magat.py analyze --run "$RUNNER_TEMP/run" --reprice "$RUNNER_TEMP/calib/compute_weights.properties" --out "$RUNNER_TEMP/analysis"
