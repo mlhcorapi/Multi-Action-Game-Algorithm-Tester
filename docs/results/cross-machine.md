@@ -134,3 +134,6 @@ python magat.py analyze --run games/tribes/results/reference/r7615 --compare gam
 
 To add your machine: calibrate it ([`CALIBRATING_A_MACHINE.md`](../CALIBRATING_A_MACHINE.md)), run the
 reference experiment under your currency, and compare your run with `games/tribes/results/reference/r7615`.
+
+The paper's tables and figures of these results are rebuilt from the published runs by
+`python magat.py paper` ([`paper/`](../../paper/README.md)).

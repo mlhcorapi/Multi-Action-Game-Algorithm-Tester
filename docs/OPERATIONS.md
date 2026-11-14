@@ -27,6 +27,7 @@ wrap it). It:
 | `portfolio build \| freeze \| verify` | [the portfolio](METHODS.md#1-the-portfolio) |
 | `threads` | the thread sweep: the knee of sustained throughput per budget level, into `threads.json` |
 | `calibrate`, `calibrate --estimate`, `calibrate --check` | [the currency](CURRENCY.md#calibrating) |
+| `paper [--check]` | every table and figure of the paper, from the published runs ([paper](../paper/README.md)) |
 | `calibrate-controlled` | a calibration in one session, with reliability checks ([guide](CALIBRATING_A_MACHINE.md)); `--config FILE` reads its options from a JSON file |
 | `calibrate-time --remeasure [--times 500,1000,5000]` | the levels that are those milliseconds of thinking time on this machine: a maintainer's tool for the reference machine, refused without `--remeasure` once the game's levels are published ([units as time](CURRENCY.md#units-as-time)) |
 | `weights --weights F [--game G --arms ...] [--progress]` | what a weights file prices; exit 1 if anything asked for is missing. With `--progress`, a probe of a calibration under way: what is still to price, and exit 0 |
