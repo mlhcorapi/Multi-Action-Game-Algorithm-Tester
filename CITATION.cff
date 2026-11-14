@@ -3,6 +3,7 @@ message: "If you use MAGAT, please cite it as below."
 type: software
 title: "MAGAT: Multi-Action Game Algorithm Tester"
 version: "1.0.0"
+date-released: 2026-11-14
 abstract: >-
   MAGAT evaluates search algorithms for multi-action games, where a turn is a sequence of actions, by
   replanning single turns on a pinned portfolio of positions under a compute-unit budget. A unit is a priced

@@ -256,6 +256,11 @@ them again:
 python magat.py import my-experiment-my-laptop-time.magat.zip
 ```
 
+The [v1.0 release](https://github.com/mlhcorapi/Multi-Action-Game-Algorithm-Tester/releases/tag/v1.0) has
+both published runs as packages, `reference-r7615-time.magat.zip` and
+`reference-laptop-i9-14900hx-time.magat.zip`: download one and import it to check the reference results
+on your machine.
+
 ## Checking your installation
 
 To check everything works on your machine, the shakedown runs every moving part at toy size in about
