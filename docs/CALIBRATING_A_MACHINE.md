@@ -47,6 +47,46 @@ python magat.py calibrate-controlled --name <machine>
 
 `--checks` runs only the checks, against the currency as it is; `--no-checks` leaves them out.
 
+### A config file
+
+The options can be written in a JSON file instead, kept beside your experiments and read again for the
+next session. Each key is an option without its dashes:
+
+```json
+{
+  "name": "my-server-time",
+  "game": "tribes",
+  "arms": ["emcts", "mcts", "oep", "tbets"],
+  "levels": ["500ms", "1000ms", "5000ms"],
+  "soak-minutes": 0,
+  "wait-quiet": 30,
+  "other-cpus": 4
+}
+```
+
+```bash
+python magat.py calibrate-controlled --config calibrations/tribes/examples/server.json --preflight
+```
+
+```bash
+python magat.py calibrate-controlled --config calibrations/tribes/examples/server.json
+```
+
+- **Lists** (`arms`, `levels`, `check-arms`) are JSON lists. A level is units or a published level's name
+  (`"500ms"`, from `games/<game>/levels.json`). A flag such as `toy` or `allow-online` is `true` or `false`.
+- **Without `arms` or `levels`**, the session prices every arm the game registers at the published
+  levels. The reference cell, `emcts` at the lowest level, is always measured, because it defines the unit.
+- **An option on the command line wins** over the file, so one file serves several sessions:
+  `--config server.json --name r7615-again`.
+- **The modes are not in the file.** `--preflight`, `--checks` and `--no-checks` say what one invocation
+  does, so they are given on the command line.
+- **Nothing is ignored.** A misspelt key, a mode, a level that is not published, or a value of the wrong
+  kind refuses the whole file and names every problem, before anything is measured.
+- **The file goes into the record** as `config.json`, beside the session's `SUMMARY.md`, which names it.
+
+[`calibrations/tribes/examples/`](../calibrations/tribes/examples/) holds a laptop's config and a shared
+server's. The server's uses the settings the notebook passes.
+
 **What it does:**
 
 1. **Preflight.** It refuses a machine on battery or in battery saver, a second JVM, a memory limit under
