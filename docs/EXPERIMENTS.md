@@ -182,8 +182,11 @@ says why:
 A taken leaf keeps the commit and host that played it, and records where it came from. Its turns are
 this run's, but its times are another machine's, so the analysis leaves them out of the wall-clock
 re-score, the multiplier in seconds and every time column, lists the reused leaves in the provenance,
-and says so in the scope notes. `--no-reuse` plays every leaf. `run` takes a split tree to reuse
-explicitly, `--reuse DIR`, from any run, published or not.
+and says so in the scope notes. `--no-reuse` plays every leaf.
+
+Runs imported from a package ([sharing](SHARING.md)) are sources too, once their import is `VERIFIED`:
+each leaf comes from the first source that holds it, the published runs first, then the imports by name.
+`run` takes split trees to reuse explicitly, `--reuse DIR,DIR`, from any run, in that order.
 
 ## The long form
 

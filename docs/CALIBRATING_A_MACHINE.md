@@ -383,4 +383,6 @@ The reference machine's levels are published as `games/<game>/levels.json`, with
 `games/<game>/levels.md` and the rest of the measurement in `games/<game>/levels-record/`. A currency's
 `ORIGIN.md` names the levels it was measured at.
 
-Results computed under it quote its name.
+Results computed under it quote its name. `python magat.py export --currency <name>` makes the currency a
+file to send, and `export <experiment>` a run with the currency it was priced in
+([sharing](SHARING.md)).
