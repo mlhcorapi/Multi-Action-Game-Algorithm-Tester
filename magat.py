@@ -48,6 +48,7 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py layering
     python magat.py notebook build|selftest
     python magat.py shakedown
+    python magat.py paper [--check]           every table and figure of the paper, from the published artefacts (paper/)
     python magat.py version
 """
 import datetime
@@ -795,6 +796,8 @@ def main(argv: list) -> None:
         run([sys.executable, ROOT / "tools" / script, *rest[1:]], log="notebook")
     elif cmd == "shakedown":
         run([sys.executable, ROOT / "tools" / "shakedown.py", *rest], log="shakedown")
+    elif cmd == "paper":
+        run([sys.executable, ROOT / "tools" / "make_paper.py", *rest], log="paper")
     elif cmd == "calibrate-controlled":
         run([sys.executable, ROOT / "tools" / "calibrate_controlled.py", *from_caller(rest)], log="calibrate-controlled")
     elif cmd == "calibrate-time":

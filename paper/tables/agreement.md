@@ -1,0 +1,12 @@
+<!-- The two machines position by position: the share of turns identical on both; across positions, the correlation of each arm's advantage over emcts and the share with the same sign; the share of positions on which both name the same best arm. -->
+| Level | Arm | Same turn | Advantage correlation | Same sign | Same best arm |
+|---|---|---|---|---|---|
+| 500 ms | mcts | 95.2% | 0.995 | 94.9% | 90.9% |
+| 500 ms | oep | 74.8% | 0.992 | 94.5% | 90.9% |
+| 500 ms | tbets | 82.5% | 0.993 | 96.1% | 90.9% |
+| 1,000 ms | mcts | 97.1% | 0.985 | 93.7% | 92.4% |
+| 1,000 ms | oep | 73.5% | 0.982 | 94.0% | 92.4% |
+| 1,000 ms | tbets | 82.2% | 0.981 | 93.2% | 92.4% |
+| 5,000 ms | mcts | 98.5% | 0.973 | 93.8% | 92.9% |
+| 5,000 ms | oep | 94.4% | 0.960 | 93.3% | 92.9% |
+| 5,000 ms | tbets | 85.4% | 0.955 | 91.9% | 92.9% |
