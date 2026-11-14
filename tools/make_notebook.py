@@ -67,12 +67,6 @@ PUBLISHED_PORTFOLIO = ROOT / "games" / GAME / "portfolio" / "v1"
 # Workers for parallel stages. Half the logical CPUs (SMT siblings add heat, not throughput) less two
 # for the machine; MAGAT_WORKERS overrides. `magat machine` reports the measured ceiling.
 WORKERS = int(os.environ.get("MAGAT_WORKERS") or max(1, (os.cpu_count() or 2) // 2 - 2))
-# This machine's own currency: <data>/calibration/<game>-<name>. The published R7615 currency stays in
-# the repository; a new calibration of the R7615 is published beside it under this name, never over it.
-# A currency keeps the levels it was first measured at, so a currency at the published levels
-# (games/<game>/levels.json) has a name of its own.
-CURRENCY_NAME = os.environ.get("MAGAT_CURRENCY") or "r7615-time"
-
 def magat(*args, check=True):
     """Run one launcher command; the launcher tees its own output to <DATA>/logs/<name>.log."""
     cmd = [PY, str(ROOT / "magat.py"), *map(str, args)]
@@ -126,6 +120,55 @@ print("workers    :", WORKERS)
 '''
 
 
+PARAMETERS = r'''
+# What this notebook does: edit these, and nothing else in it.
+#
+# This machine's calibration: a calibration config (calibrations/<game>/, docs/CALIBRATING_A_MACHINE.md), relative
+# to the repository or absolute. Its "name" names the currency (MAGAT_CURRENCY overrides it); give it a new name to
+# measure a new currency. None calibrates nothing and spends PUBLISHED_CURRENCY instead: this machine then plays the
+# reference machine's turns, a replay rather than a measurement of this machine.
+CALIBRATION_CONFIG = "calibrations/tribes/examples/server.json"
+PUBLISHED_CURRENCY = "r7615-time"
+# The experiments to run, in order: spec files (experiments/<game>/, docs/EXPERIMENTS.md), in the currency above.
+EXPERIMENTS = ["experiments/tribes/reference.json"]
+'''
+
+
+PLAN = r'''
+# The plan: the files the parameters cell names, read and checked. Nothing runs here.
+import json
+
+def _file(path, what):
+    p = pathlib.Path(path)
+    p = (p if p.is_absolute() else ROOT / p).resolve()
+    if not p.is_file():
+        raise FileNotFoundError(f"{what} {p} does not exist: fix the parameters cell")
+    return p
+
+CALIBRATING = CALIBRATION_CONFIG is not None
+CAL_CONFIG = _file(CALIBRATION_CONFIG, "the calibration config") if CALIBRATING else None
+CAL = json.loads(CAL_CONFIG.read_text(encoding="utf-8")) if CALIBRATING else {}
+# The currency: this machine's own, <data>/calibration/<game>-<name>, or a published one in the repository. A
+# currency keeps the levels it was first measured at, and a new calibration of the reference machine is published
+# beside its old one under a new name, never over it.
+CURRENCY_NAME = (os.environ.get("MAGAT_CURRENCY") or CAL.get("name")) if CALIBRATING else PUBLISHED_CURRENCY
+if not CURRENCY_NAME:
+    raise ValueError(f"{CAL_CONFIG} has no \"name\": the currency needs one (or set MAGAT_CURRENCY)")
+# This machine's calibration folder: the currency when the notebook calibrates, and the thread sweep either way.
+CALIBRATION = DATA / "calibration" / f"{GAME}-{CURRENCY_NAME}"
+WEIGHTS = (CALIBRATION if CALIBRATING else ROOT / "games" / GAME / "calibration" / CURRENCY_NAME) / "compute_weights.properties"
+if not CALIBRATING and not WEIGHTS.is_file():
+    raise FileNotFoundError(f"no published currency {CURRENCY_NAME}; games/{GAME}/calibration/ has "
+                            + ", ".join(d.name for d in sorted((ROOT / "games" / GAME / "calibration").iterdir()) if d.is_dir()))
+EXPERIMENT_SPECS = [_file(x, "the experiment spec") for x in EXPERIMENTS]
+EXPERIMENT_NAMES = [json.loads(x.read_text(encoding="utf-8")).get("name") or x.stem for x in EXPERIMENT_SPECS]
+print("calibration :", f"{CAL_CONFIG} -> the currency {CURRENCY_NAME}, in {CALIBRATION}" if CALIBRATING
+      else f"none: the published currency {CURRENCY_NAME} ({WEIGHTS})")
+for name, spec in zip(EXPERIMENT_NAMES, EXPERIMENT_SPECS):
+    print("experiment  :", name, f"({spec})")
+'''
+
+
 PORTFOLIO_CELL = r'''
 PORTFOLIO = DATA / "portfolio" / GAME
 if (PORTFOLIO / "_split_dev.txt").exists() and (PORTFOLIO / "_split_holdout.txt").exists():
@@ -164,8 +207,8 @@ for lv in LEVELS_DOC["levels"]:
 '''
 
 THREADS_CELL = r'''
-# threads.json goes beside this machine's currency: that is where a run looks for it.
-CALIBRATION = DATA / "calibration" / f"{GAME}-{CURRENCY_NAME}"
+# threads.json goes into this machine's calibration folder (the plan cell's CALIBRATION), and every experiment below
+# is run with it.
 REDO_THREADS = False   # True: sweep again; the previous threads.json and thread_sweep.csv are kept, renamed
 if REDO_THREADS:
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -182,51 +225,61 @@ bundle("threads", [CALIBRATION / "threads.json", CALIBRATION / "thread_sweep.csv
 '''
 
 CALIBRATE_CELL = r'''
-# This machine's own currency, on this machine's own portfolio, in one session (calibrate-controlled; read
-# docs/CALIBRATING_A_MACHINE.md, "On a shared server"). Idle and single-threaded: nothing else of yours may
-# run while it measures. The currency prices every operation an arm declares, its own work included.
-CAL_OTHER_CPUS = 4.0    # other work on the machine, in logical CPUs, that makes the session SUSPECT
-CAL_WAIT_QUIET = 30     # minutes to wait for the machine to drop below that before refusing to start
-CAL_SOAK_MINUTES = 0    # a server needs no warming up: the stability check is two estimates that agree within 3%
-WEIGHTS = CALIBRATION / "compute_weights.properties"     # the currency every run below spends
-CAL_ARGS = ["--name", CURRENCY_NAME, "--game", GAME, "--portfolio", PORTFOLIO, "--other-cpus", CAL_OTHER_CPUS,
-            "--wait-quiet", CAL_WAIT_QUIET, "--soak-minutes", CAL_SOAK_MINUTES, "--levels", LEVELS]
+# This machine's own currency, on this machine's own portfolio, in one session: calibrate-controlled with the
+# calibration config of the parameters cell (docs/CALIBRATING_A_MACHINE.md, "On a shared server"). Idle and
+# single-threaded: nothing else of yours may run while it measures. The currency prices every operation an arm
+# declares, its own work included. The config's levels, else the published ones.
+CAL_ARGS = ["--config", CAL_CONFIG, "--name", CURRENCY_NAME, "--game", GAME, "--portfolio", PORTFOLIO,
+            *([] if "levels" in CAL else ["--levels", LEVELS])]
+# What the currency must price: the config's arms (else every reference arm) at its levels (else the published ones).
+_named = {f"{lv['time_ms']}ms": int(lv["units"]) for lv in LEVELS_DOC["levels"]}
+_arms, _levels = CAL.get("arms"), CAL.get("levels")
+CAL_ARMS = "@reference" if _arms is None else _arms if isinstance(_arms, str) else ",".join(_arms)
+CAL_LEVELS = LEVELS if _levels is None else ",".join(str(_named.get(str(v).replace(" ", "").lower(), v)) for v in _levels)
 
 def priced():
-    """Whether the currency prices every reference arm at every level: the check of the last calibration cell."""
-    return WEIGHTS.is_file() and magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", "@reference",
-                                       "--levels", LEVELS, check=False) == 0
+    """Whether the currency prices every arm the config names at every level: the check of the last calibration cell."""
+    return WEIGHTS.is_file() and magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", CAL_ARMS,
+                                       "--levels", CAL_LEVELS, check=False) == 0
 
-incomplete = WEIGHTS.is_file() and not priced()
-magat("calibrate-controlled", *CAL_ARGS, "--preflight")
-if incomplete:
-    print(f"\n*** {WEIGHTS} exists but does not price every reference arm: the next cell prices the missing ones in "
-          "one session and merges them into it by ratio. To measure a whole new currency in one session instead, "
-          "give CURRENCY_NAME a new name in the first cell and run the cells from there again.")
+if not CALIBRATING:
+    print(f"[skip] nothing to calibrate: the experiments spend the published currency {CURRENCY_NAME}")
+else:
+    incomplete = WEIGHTS.is_file() and not priced()
+    magat("calibrate-controlled", *CAL_ARGS, "--preflight")
+    if incomplete:
+        print(f"\n*** {WEIGHTS} exists but does not price every arm the config names: the next cell prices the missing "
+              "ones in one session and merges them into it by ratio. To measure a whole new currency in one session "
+              "instead, give the config a new \"name\" and run the cells from the plan cell again.")
 '''
 
 MEASURE_CELL = r'''
-# The session, then the checks. Skips itself once the currency prices every reference arm at every level. Over
-# a currency that lacks one, calibrate-controlled prices what is missing and merges it in by ratio. A session
+# The session, then the checks. Skips itself once the currency prices every arm the config names at every level.
+# Over a currency that lacks one, calibrate-controlled prices what is missing and merges it in by ratio. A session
 # that did not finish wrote nothing, so running the cell again measures it again.
-if priced():
-    print(f"[skip] {WEIGHTS} prices every reference arm at every level")
+if not CALIBRATING:
+    print(f"[skip] nothing to calibrate: the experiments spend the published currency {CURRENCY_NAME}")
+elif priced():
+    print(f"[skip] {WEIGHTS} prices every arm the config names at every level")
 else:
     rc = magat("calibrate-controlled", *CAL_ARGS, check=False)
     if rc == 5:
         print("\n*** SUSPECT: the currency is written, but read the reasons above. To measure it again when the machine "
-              "is quiet, give CURRENCY_NAME a new name in the first cell and run it and the calibration cells again.")
+              "is quiet, give the config a new \"name\" and run the plan cell and the calibration cells again.")
     elif rc == 4:
         raise RuntimeError("the machine stayed busy and nothing was started: run this cell again later")
     elif rc != 0:
         raise RuntimeError(f"exit {rc}: run this cell again; the record is {CALIBRATION / 'record' / 'SUMMARY.md'}")
-summary(CALIBRATION / "record", until="## ")
+    summary(CALIBRATION / "record", until="## ")
 '''
 
 CHECKS_CELL = r'''
-# Every reference arm priced at every level, then the bundle: the currency and its whole record.
-magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", "@reference", "--levels", LEVELS)
-bundle("calibration", [CALIBRATION, LOGS / "calibrate-controlled.log"])
+# Every arm the config names priced at every level, then the bundle: the currency and its whole record.
+if CALIBRATING:
+    magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", CAL_ARMS, "--levels", CAL_LEVELS)
+    bundle("calibration", [CALIBRATION, LOGS / "calibrate-controlled.log"])
+else:
+    print(f"[skip] nothing calibrated: the experiments spend the published currency {CURRENCY_NAME}")
 '''
 
 GATES_CELL = r'''
@@ -241,58 +294,33 @@ bundle("gates", [LOGS / f"{n}.log" for n in ("check-contract", "check-equivalenc
 '''
 
 
-def experiment_cells(game: str) -> list:
-    """One markdown and one code cell per experiment in experiments/<game>/, so the notebook cannot drift
-    from the specs it runs: each runs its split, is analysed, and is bundled. The shakedown spec runs
-    inside the shakedown."""
-    cells = []
-    for spec in sorted((ROOT / "experiments" / game).glob("*.json")):
-        x = json.loads(spec.read_text(encoding="utf-8"))
-        if x.get("name") == "shakedown" or "levels" not in x:      # the shakedown's own spec
-            continue
-        name, split = x["name"], x.get("split", "all")
-        # A level is units, a published level's name, or an object; its repetitions default to the spec's own.
-        lvs = [l if isinstance(l, dict) else {"budget": l} for l in x.get("levels", [])]
-        reps = [l.get("repetitions", l.get("visits", x.get("repetitions", 0))) for l in lvs]
-        levels = ", ".join(f"{l['budget']:,} x {r}" if isinstance(l["budget"], int) else f"{l['budget']} x {r}"
-                           for l, r in zip(lvs, reps))
-        arms = ", ".join(a["id"] if isinstance(a, dict) else a for a in x.get("arms", []))
-        turns = sum(len(l.get("arms") or x.get("arms", [])) * r for l, r in zip(lvs, reps))
-        cells.append(md(f"""
-## Experiment: {name}
-
-{x.get("description", "")}
-
-Split `{split}`; baseline `{x.get("baseline")}`; levels (budget x visits) {levels}; arms {arms}
-({turns:,} turns per scenario of the split). `experiment run` validates the spec, runs it, analyses it,
-prints the headline and bundles the run and its report. Re-running the cell resumes: finished leaves are
-skipped, a partial leaf continues where it stopped.
-"""))
-        cells.append(code(f'''SPEC = ROOT / "experiments" / GAME / "{spec.name}"
-RUN = DATA / GAME / "runs" / "{name}"
-RESULTS = DATA / GAME / "results" / "{name}"
-magat("experiment", "run", SPEC, "--split", "{split}", "--portfolio", PORTFOLIO, "--weights", WEIGHTS, "--out", RUN,
-      "--results", RESULTS)''', tags=("experiment",)))
-    return cells
+EXPERIMENTS_CELL = r'''
+# Every experiment of the parameters cell, in order, in the currency of the plan cell (WEIGHTS, which wins over a
+# spec's own "weights") and with this machine's thread sweep. experiment run validates each spec, runs it (running
+# the cell again resumes: finished leaves are skipped, a partial one continues), analyses it, prints its headline,
+# and bundles it as run-<name>.
+for spec in EXPERIMENT_SPECS:
+    magat("experiment", "run", spec, "--portfolio", PORTFOLIO, "--weights", WEIGHTS,
+          "--threads-file", CALIBRATION / "threads.json")
+'''
 
 
 INVENTORY_CELL = r'''
-# Defaults, so this cell also runs on its own after a kernel restart.
+# Defaults, so this cell also runs on its own after a kernel restart (and the setup cells).
 PORTFOLIO = globals().get("PORTFOLIO", DATA / "portfolio" / GAME)
-CALIBRATION = globals().get("CALIBRATION", DATA / "calibration" / f"{GAME}-{CURRENCY_NAME}")
-BUNDLED = [
-    ("portfolio", "this machine's portfolio: manifest, split files, identity, the verify log"),
-    ("threads", "the thread sweep and threads.json"),
-    ("calibration", f"the currency {CURRENCY_NAME}: weights, the session's record and verdict, the checks"),
-    ("gates", "contract, equivalence, audit"),
-@RUNS@    ("shakedown", "the shakedown's log"),
-]
-FILES = [
-    (PORTFOLIO / "identity.txt", "the portfolio's identity"),
-    (CALIBRATION / "compute_weights.properties", "this machine's currency"),
-    (CALIBRATION / "record" / "SUMMARY.md", "the calibration's verdict"),
-    (CALIBRATION / "threads.json", "the thread choices runs read"),
-@REPORTS@]
+BUNDLED = [("portfolio", "this machine's portfolio: manifest, split files, identity, the verify log"),
+           ("threads", "the thread sweep and threads.json")]
+if CALIBRATING:
+    BUNDLED.append(("calibration", f"the currency {CURRENCY_NAME}: weights, the session's record and verdict, the checks"))
+BUNDLED += [("gates", "contract, equivalence, audit")]
+BUNDLED += [(f"run-{n}", f"experiment {n}: its run tree and its analysis") for n in EXPERIMENT_NAMES]
+BUNDLED += [("shakedown", "the shakedown's log")]
+FILES = [(PORTFOLIO / "identity.txt", "the portfolio's identity"),
+         (WEIGHTS, "the currency the experiments spent" + ("" if CALIBRATING else ", published"))]
+if CALIBRATING:
+    FILES.append((CALIBRATION / "record" / "SUMMARY.md", "the calibration's verdict"))
+FILES.append((CALIBRATION / "threads.json", "the thread choices the experiments read"))
+FILES += [(DATA / GAME / "results" / n / "SUMMARY.md", f"the report of {n}") for n in EXPERIMENT_NAMES]
 total, missing = 0, []
 print(f"Bundles in {BUNDLES}: download these; together they hold everything the analysis needs.")
 for name, what in BUNDLED:
@@ -307,23 +335,11 @@ print("\nThe files behind them:")
 for path, what in FILES:
     print(f"  [{'ok' if path.exists() else 'missing':7}] {path}   ({what})")
 record = CALIBRATION / "record" / "SUMMARY.md"
-if record.is_file():
+if CALIBRATING and record.is_file():
     verdict = next((line for line in record.read_text(encoding="utf-8").splitlines() if line.startswith("- Verdict:")), None)
     print("\nCalibration, latest invocation: " + (verdict[len("- Verdict: "):] if verdict else f"read {record}"))
 print("\nINVENTORY: " + ("COMPLETE" if not missing else f"{len(missing)} bundle(s) missing: " + ", ".join(missing)))
 '''
-
-
-def inventory_cell(game: str) -> str:
-    """The inventory cell, naming the bundle and the report of every experiment the experiment cells run."""
-    names = []
-    for spec in sorted((ROOT / "experiments" / game).glob("*.json")):
-        x = json.loads(spec.read_text(encoding="utf-8"))
-        if x.get("name") != "shakedown" and "levels" in x:
-            names.append(x["name"])
-    runs = "".join(f'    ("run-{n}", "experiment {n}: its run tree and its analysis"),\n' for n in names)
-    reports = "".join(f'    (DATA / GAME / "results" / "{n}" / "SUMMARY.md", "the report of {n}"),\n' for n in names)
-    return INVENTORY_CELL.replace("@RUNS@", runs).replace("@REPORTS@", reports)
 
 
 CELLS = [
@@ -335,12 +351,22 @@ outputs exist, and every stage ends with a `bundle(...)` cell. Run output lives 
 (or `MAGAT_DATA`), **outside the clone**.
 """),
     md("""
-## Parameters and helpers
+## Parameters
 
-Run this first, always. It finds the repository on its own (a Jupyter kernel's working directory is
-the notebook's folder, not where the server was launched) and puts the data root outside the clone.
+What the notebook does: the calibration config that measures this machine's currency (or a published
+currency to spend instead), and the experiment specs to run in it. Edit these and nothing else; the
+files themselves are described in `docs/CALIBRATING_A_MACHINE.md` and `docs/EXPERIMENTS.md`.
+"""),
+    code(PARAMETERS, tags=("setup", "parameters")),
+    md("""
+## Helpers and the plan
+
+Run these first, always. They find the repository on their own (a Jupyter kernel's working directory
+is the notebook's folder, not where the server was launched), put the data root outside the clone, and
+read the files the parameters name: the plan cell prints what the notebook will do.
 """),
     code(SETUP, tags=("setup",)),
+    code(PLAN, tags=("setup", "plan")),
     md("""
 ## Build, tests, layering
 """),
@@ -379,19 +405,21 @@ levels mean every currency must be measured again.
     md("""
 ### This machine's currency, in one session
 
-`calibrate-controlled` prices every arm at the levels above in one calibration session, which writes all
-or nothing. First it waits (up to `CAL_WAIT_QUIET` minutes) for the machine to be quiet and checks that
-two estimates agree. Then it measures, and gives a verdict:
+`calibrate-controlled`, with the calibration config of the parameters cell, prices every arm it names at
+its levels (the published ones above, unless it names others) in one calibration session, which writes all
+or nothing. First it waits (up to the config's `wait-quiet` minutes) for the machine to be quiet and checks
+that two estimates agree. Then it measures, and gives a verdict:
 - **PASS**: the calibrator's gates passed and nothing was seen disturbing it.
-- **SUSPECT**: the gates passed, but the machine was busy with other work (`CAL_OTHER_CPUS`) or the
-  container was CPU-throttled. The currency is written; to measure it again when the machine is quiet,
-  give `CURRENCY_NAME` a new name.
+- **SUSPECT**: the gates passed, but the machine was busy with other work (the config's `other-cpus`) or
+  the container was CPU-throttled. The currency is written; to measure it again when the machine is quiet,
+  give the config a new `name`.
 - **FAIL**: nothing was written. It is retried once, and running the cell again measures it again.
 
 Then it checks the new currency against itself (did the machine hold its speed?), and against the
-published currency once there is one. The measuring cell skips itself once the currency prices every
-reference arm at every level. Over a currency that lacks an arm, measured before that arm was registered,
-it prices just the missing arms and merges them in by ratio; the preflight cell says so first. Keep
+published currency once there is one. The measuring cell skips itself once the currency prices every arm
+the config names at every level. Over a currency that lacks an arm, measured before that arm was
+registered, it prices just the missing arms and merges them in by ratio; the preflight cell says so first.
+With no calibration config, the three cells skip: the experiments spend the published currency. Keep
 this tab open while it runs, and start nothing else in this server. The screen shows the verdict;
 `record/SUMMARY.md` in the currency's folder has the rest, and the last cell bundles it all.
 """),
@@ -406,7 +434,14 @@ the engine agent it was ported from, field for field; and the audit, where each 
 operations and forward model must account for its turn. Nothing downstream runs otherwise.
 """),
     code(GATES_CELL, tags=("gates",)),
-    *experiment_cells("tribes"),
+    md("""
+## Experiments
+
+Every spec the parameters cell names, in order, in this machine's currency. `experiment run` validates
+each, runs it, analyses it, prints its headline and bundles the run and its report. Running the cell
+again resumes: finished leaves are skipped, a partial leaf continues where it stopped.
+"""),
+    code(EXPERIMENTS_CELL, tags=("experiment",)),
     md("""
 ## Shakedown
 
@@ -420,7 +455,7 @@ What to keep from this machine: every bundle the stages above wrote, with a tick
 them, and the calibration's verdict. Download the bundles; everything else can be regenerated from
 them.
 """),
-    code(inventory_cell("tribes"), tags=("inventory",)),
+    code(INVENTORY_CELL, tags=("inventory",)),
 ]
 
 
@@ -504,7 +539,8 @@ Bundle `levels` holds the measurement. To publish it, in a pull request:
    `probe.json` and `iter-*/` replace `games/<game>/levels-record/` (update its README).
 2. Set the levels of every spec that runs at the published levels (`experiments/<game>/reference.json`),
    and the expected units in `PublishedLevelsTest`.
-3. Every currency is then measured again, under a new name (`CURRENCY_NAME` in `run_magat.ipynb`).
+3. Every currency is then measured again, under a new name (the calibration config's `name`, read by
+   `run_magat.ipynb`).
 """),
 ]
 
