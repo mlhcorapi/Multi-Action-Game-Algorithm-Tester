@@ -2,11 +2,11 @@
 
 MAGAT evaluates search algorithms for multi-action games by replanning single turns on a pinned
 portfolio of positions under a **compute-unit budget**. A unit is a priced count of operations, so a
-budget buys the same work on any machine. This page is the design of v0.1: what each part is for and
+budget buys the same work on any machine. This page is MAGAT's design: what each part is for and
 why it is built the way it is. The other documents go into each part in depth; the last section points
 to them.
 
-**The takeaway of v0.1.** Compute-based budgeting lets researchers on different machines compare
+**The takeaway.** Compute-based budgeting lets researchers on different machines compare
 results. A published result can be replayed exactly elsewhere, re-priced in another machine's currency,
 and set beside new results measured anywhere.
 
@@ -34,7 +34,7 @@ game's heuristic scores where the plan leaves the game.
 
 The claim this supports is deliberately narrow: under the same budget, on the same positions, with the
 same chance events, this algorithm finds plans of this much more value, with this interval. What a
-better turn is worth over a whole game is a different question, for a full-game yardstick, which v0.1
+better turn is worth over a whole game is a different question, for a full-game yardstick, which MAGAT
 does not include.
 
 ## 3. The portfolio
@@ -144,7 +144,7 @@ An algorithm is written once against two interfaces:
 The agent receives only the metered game. Its only randomness is its seed, and it records a
 `TurnRecord`: the values, the raw counts, the units, the wall-clock, and diversity and telemetry.
 
-v0.1 ships four reference algorithms, `@reference`, and a floor:
+MAGAT ships four reference algorithms, `@reference`, and a floor:
 
 | Arm | What it is |
 |---|---|
@@ -245,7 +245,7 @@ Raw units are never compared across games: each game has its own currency. Budge
 engine's state (`TribesState`), whose one escape hatch, `raw()`, only the adapter and its oracles use.
 Engine code is never copied into MAGAT.
 
-## 13. What v0.1 leaves out
+## 13. What MAGAT leaves out
 
 - **Full-game win rates**, as an external yardstick beside the turn measures.
 - **The earlier study's algorithms and tooling** (33 EMCTS variants and their analysis), archived with

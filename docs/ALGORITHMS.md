@@ -1,6 +1,6 @@
 # The algorithms
 
-MAGAT v0.1 ships four reference algorithms and a floor. All five are written against the `Game`
+MAGAT ships four reference algorithms and a floor. All five are written against the `Game`
 contract ([`CONTRACT.md`](CONTRACT.md)), so a game that implements it gets them unchanged. Each plans one
 whole turn and spends its budget in compute units, its initialization included. Each draws its random
 numbers from the seed of the `(scenario, visit)` only, so arms are paired turn by turn. The four

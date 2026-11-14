@@ -1,6 +1,6 @@
 [project]
 name = "magat-analysis"
-version = "0.1.0.dev6"
+version = "1.0.0"
 description = "MAGAT's analysis layer: paired, scenario-clustered measures of a multi-action search experiment"
 requires-python = ">=3.8"
 license = { text = "Apache-2.0" }
