@@ -23,6 +23,7 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py calibrate --check --game tribes --arms a,b [--weights FILE] [--portfolio DIR]   gates each cell's turn price
     python magat.py calibrate-controlled --name NAME [--preflight | --checks | --no-checks] ...
                               this machine's own currency in one session, with reliability checks (docs/CALIBRATING_A_MACHINE.md)
+    python magat.py calibrate-controlled --config FILE [--preflight | --checks]    the same, its options in a JSON file
     python magat.py calibrate-time --game tribes --remeasure [--times 500,1000,5000] [--positions 64] [--tolerance 0.05] [--round 500]
                               the levels that are those milliseconds of thinking time here (a maintainer's tool, run on the
                               reference machine; refused without --remeasure once games/<game>/levels.json is published)
@@ -454,7 +455,7 @@ def test(rest: list) -> int:
 # Options that name a file or a directory. The JVM and the analysis run in the repository, so a relative one is
 # made absolute against the directory the command was typed in, where the caller meant it.
 PATH_OPTIONS = {"--experiment", "--out", "--results", "--portfolio", "--weights", "--leaf", "--threads-file", "--levels-file",
-                "--published", "--run", "--reprice", "--compare", "--compare-weights"}
+                "--published", "--run", "--reprice", "--compare", "--compare-weights", "--config"}
 
 
 def from_caller(args: list) -> list:
@@ -760,7 +761,7 @@ def main(argv: list) -> None:
     elif cmd == "shakedown":
         run([sys.executable, ROOT / "tools" / "shakedown.py", *rest], log="shakedown")
     elif cmd == "calibrate-controlled":
-        run([sys.executable, ROOT / "tools" / "calibrate_controlled.py", *rest], log="calibrate-controlled")
+        run([sys.executable, ROOT / "tools" / "calibrate_controlled.py", *from_caller(rest)], log="calibrate-controlled")
     elif cmd == "calibrate-time":
         run([sys.executable, ROOT / "tools" / "calibrate_time.py", *rest], log="calibrate-time")
     else:
