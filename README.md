@@ -47,19 +47,18 @@ python magat.py calibrate-controlled --name <your-machine>
 
 **2. Run the four reference algorithms on the pinned portfolio.** `experiments/tribes/reference.json`
 runs `mcts`, `emcts`, `oep`, `tbets` and the random floor at the three published levels
-([`docs/ALGORITHMS.md`](docs/ALGORITHMS.md)), then the analysis writes every measure and a `SUMMARY.md`:
+([`docs/ALGORITHMS.md`](docs/ALGORITHMS.md)). One command validates the spec, runs it, analyses it,
+prints the headline, and bundles the run and its report:
 
 ```bash
-python magat.py run --experiment experiments/tribes/reference.json --weights <your currency> --out $HOME/magat_runs/tribes/runs/reference
+python magat.py experiment run experiments/tribes/reference.json --weights <your-machine>
 ```
 
-```bash
-python magat.py analyze --run $HOME/magat_runs/tribes/runs/reference --out $HOME/magat_runs/tribes/results/reference
-```
-
-Your currency is `$HOME/magat_runs/calibration/tribes-<your-machine>/compute_weights.properties`. Without
-`--weights`, a run spends the published currency, the R7615's, and your machine plays the R7615's turns
-exactly: a replay of the reference machine, not a measurement of yours.
+`--weights <your-machine>` finds the currency you measured by its name
+(`$HOME/magat_runs/calibration/tribes-<your-machine>/`). Without it, a run spends the published currency,
+the R7615's, and your machine plays the R7615's turns exactly: a replay of the reference machine, not a
+measurement of yours. The report is `$HOME/magat_runs/tribes/results/reference/SUMMARY.md`. Running the
+same command again resumes a run that stopped.
 
 **3. Compare with published results.** Every published row carries its raw operation counts, so:
 - **replay**: `check replay` re-plans the published turns on your machine and compares them field for
@@ -162,20 +161,16 @@ flags. Every command works the same in bash and in PowerShell.
    }
    ```
 
-   [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) describes every key a spec can have.
+   [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) describes every key a spec can have. Then validate, run
+   and analyse it in one command, in the toy currency of step 3, found by its name:
 
    ```bash
-   python magat.py run --experiment first-toy.json --split dev --portfolio $HOME/magat_runs/portfolio/tribes-toy --weights $HOME/magat_runs/calibration/tribes-toy/compute_weights.properties --out $HOME/magat_runs/tribes/runs/first-toy --threads 2 --toy
+   python magat.py experiment run first-toy.json --portfolio $HOME/magat_runs/portfolio/tribes-toy --weights toy --threads 2 --toy
    ```
 
-5. **Analyse it:**
-
-   ```bash
-   python magat.py analyze --run $HOME/magat_runs/tribes/runs/first-toy/dev --out $HOME/magat_runs/tribes/results/first-toy
-   ```
-
-   `SUMMARY.md` gives the provenance, the paired difference against the baseline in units and in seconds,
-   the budget multiplier, the design and the scope notes.
+5. **Read the report**, `$HOME/magat_runs/tribes/results/first-toy/SUMMARY.md`. It gives the provenance,
+   the paired difference against the baseline in units and in seconds, the budget multiplier, the design
+   and the scope notes.
 
 ## Status
 

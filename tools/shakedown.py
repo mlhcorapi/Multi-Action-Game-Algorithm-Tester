@@ -206,14 +206,22 @@ def main(argv) -> int:
     short = data / "shakedown" / f"short-{game}.json"
     short.write_text(json.dumps(dict(name="short", game=game, baseline="emcts", arms=["emcts", "random"], levels=[2000, 4000],
                                      repetitions=1, split="all", sources=["single"], scenarios=1)), encoding="utf-8")
-    short_root = data / "shakedown" / f"run-{game}-short"
+    short_root, short_results = data / "shakedown" / f"run-{game}-short", data / "shakedown" / f"results-{game}-short"
     shutil.rmtree(short_root, ignore_errors=True)
-    check("a spec in the short forms runs the positions it selects: one single-player position",
-          [PY, ROOT / "magat.py", "run", "--experiment", short, "--portfolio", toy_dir, "--weights", weights,
-           "--out", short_root, "--threads", "2", "--toy"], "RUN: COMPLETE",
+    shutil.rmtree(short_results, ignore_errors=True)
+    er = [PY, ROOT / "magat.py", "experiment", "run", short, "--portfolio", toy_dir, "--weights", weights, "--out", short_root,
+          "--results", short_results, "--threads", "2", "--toy"]
+    check("experiment run: a spec in the short forms, validated, run on the one single-player position it selects, "
+          "analysed and bundled", er, "EXPERIMENT: COMPLETE",
           then=lambda: '"selection": "sources=single;scenarios=1"' in (short_root / "all" / "_run.json").read_text(encoding="utf-8")
           and len((short_root / "all" / "emcts" / "2000cu" / "turns.csv").read_text(encoding="utf-8").splitlines()) == 2
-          and ",single," in (short_root / "all" / "emcts" / "2000cu" / "turns.csv").read_text(encoding="utf-8"))
+          and ",single," in (short_root / "all" / "emcts" / "2000cu" / "turns.csv").read_text(encoding="utf-8")
+          and "positions selected | sources=single;scenarios=1" in (short_results / "SUMMARY.md").read_text(encoding="utf-8")
+          and (data / "bundles" / "run-short.zip").is_file())
+    check("experiment run again resumes: every leaf is skipped", er, "SKIP (done)")
+    check("a run's --out inside the repository is refused before anything runs",
+          [*er[:er.index("--out") + 1], ROOT / "experiments" / "stray-run", *er[er.index("--out") + 2:]],
+          "inside the repository", codes=(1,), then=lambda: not (ROOT / "experiments" / "stray-run").exists())
     check("bundle zips a run tree", [PY, ROOT / "magat.py", "bundle", "--name", "shakedown-run", "--paths", run_root], "BUNDLE:")
 
     step("8. Analyzer: the toy run, re-priced in its own currency")
