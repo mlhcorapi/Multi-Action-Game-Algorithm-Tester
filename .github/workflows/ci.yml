@@ -75,6 +75,13 @@ jobs:
           grep -q "profile.emcts@4000.w.advance" "$RUNNER_TEMP/controlled/compute_weights.properties"
           grep -q "^- Verdict: COMPLETE" "$RUNNER_TEMP/controlled/record/SUMMARY.md"
           python magat.py calibrate-controlled $CC | grep -q "nothing to measure"
+          echo "{\"name\": \"ci\", \"toy\": true, \"out\": \"$RUNNER_TEMP/controlled\", \"arms\": [\"emcts\"], \"levels\": [2000, 4000], \"turns\": \"2\", \"reps\": \"2\", \"warmup\": \"1\", \"soak-minutes\": 0, \"interval\": 2}" > "$RUNNER_TEMP/controlled.json"
+          python magat.py calibrate-controlled --config "$RUNNER_TEMP/controlled.json" | grep -q "nothing to measure"
+      - name: Every example calibration config reads, and its preflight says what it would measure
+        run: |
+          for cfg in calibrations/tribes/examples/*.json; do
+            python magat.py calibrate-controlled --config "$cfg" --out "$RUNNER_TEMP/config-$(basename "$cfg" .json)" --preflight --toy | grep -q "4 arm(s): emcts, mcts, oep, tbets"
+          done
       - name: The shipped experiment spec validates against the published currency
         run: python magat.py experiment validate --experiment experiments/tribes/reference.json
       - name: Every example spec validates against the currency it names
