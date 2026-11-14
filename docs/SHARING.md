@@ -63,6 +63,10 @@ there, and the commands to use it printed:
 | `CHECKS FAILED` | a turn did not re-play, or the report does not follow from the turns; `IMPORT.md` says which | 1 |
 | `REFUSED` | the package is not what its manifest says, or names a file outside its folder; nothing unpacked | 2 |
 
+The [v1.0 release](https://github.com/mlhcorapi/Multi-Action-Game-Algorithm-Tester/releases/tag/v1.0)
+has both published runs as packages, `reference-r7615-time.magat.zip` and
+`reference-laptop-i9-14900hx-time.magat.zip`, exported from the v1.0 tag.
+
 Importing the same package again checks it again. Another package under a name already taken is
 refused: give it `--name`. `python magat.py import --list` lists what is imported, with each verdict.
 
