@@ -10,3 +10,6 @@ experiments/** text eol=lf
 *.properties text eol=lf
 # The notebooks are generated: the same bytes on every platform, so a regeneration shows only what changed.
 *.ipynb text eol=lf
+# The paper's tables are compared byte for byte with a rebuild (python magat.py paper --check): LF everywhere too.
+paper/tables/** text eol=lf
+*.pdf binary
