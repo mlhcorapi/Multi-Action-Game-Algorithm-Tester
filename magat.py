@@ -49,6 +49,13 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py notebook build|selftest
     python magat.py shakedown
     python magat.py paper [--check]           every table and figure of the paper, from the published artefacts (paper/)
+    python magat.py export <experiment | run dir> [--name NAME] [--no-curves] [--out FILE]
+    python magat.py export --currency NAME|FILE [--name NAME]
+                              a result as one file to share: the run, its currency, spec and report, and a manifest of
+                              hashes (<data>/exports/<name>.magat.zip; docs/SHARING.md)
+    python magat.py import <file.magat.zip> [--name NAME] [--replay 2] [--no-check]  |  import --list
+                              checked against its manifest, unpacked under <data>/imports/, and re-played here; its
+                              currency is then found by name, and its run reused and compared like a published one
     python magat.py version
 """
 import datetime
@@ -462,10 +469,13 @@ PATH_OPTIONS = {"--experiment", "--out", "--results", "--portfolio", "--weights"
 
 
 def from_caller(args: list) -> list:
+    """Path options made absolute against the caller's directory; --reuse takes a comma-separated list of them."""
     args = list(args)
     for i, a in enumerate(args[:-1]):
-        if a in PATH_OPTIONS and not pathlib.Path(args[i + 1]).is_absolute() and not args[i + 1].startswith("--"):
-            args[i + 1] = str((pathlib.Path.cwd() / args[i + 1]).resolve())
+        if a in PATH_OPTIONS and not args[i + 1].startswith("--"):
+            parts = args[i + 1].split(",") if a == "--reuse" else [args[i + 1]]
+            args[i + 1] = ",".join(p if pathlib.Path(p).is_absolute() else str((pathlib.Path.cwd() / p).resolve())
+                                   for p in parts if p)
     return args
 
 
@@ -533,15 +543,18 @@ def currency(name: str, game: str, near: pathlib.Path = None) -> pathlib.Path:
     where calibrate-controlled --name writes it). A relative path is tried beside the spec, then here."""
     raw = pathlib.Path(name)
     tries = [raw] if raw.is_absolute() else [*([near / raw] if near else []), pathlib.Path.cwd() / raw, ROOT / raw]
-    tries += [GAMES / game / "calibration" / name, data_root() / "calibration" / f"{game}-{name}"]
+    tries += [GAMES / game / "calibration" / name, data_root() / "calibration" / f"{game}-{name}",
+              *sorted((data_root() / "imports").glob(f"*/calibration/{name}"))]
     for t in tries:
         if t.is_file():
             return t.resolve()
         if (t / "compute_weights.properties").is_file():
             return (t / "compute_weights.properties").resolve()
     published = sorted(d.name for d in (GAMES / game / "calibration").glob("*") if (d / "compute_weights.properties").is_file())
+    imported = sorted({d.name for d in (data_root() / "imports").glob("*/calibration/*") if (d / "compute_weights.properties").is_file()})
     sys.exit(f"no currency '{name}': not a weights file, not a published currency of {game} ({', '.join(published) or 'none'}), "
-             f"and not one this machine measured ({data_root() / 'calibration' / f'{game}-{name}'})")
+             f"not one this machine measured ({data_root() / 'calibration' / f'{game}-{name}'}), and not an imported one "
+             f"({', '.join(imported) or 'none imported'})")
 
 
 def with_spec_weights(args: list) -> list:
@@ -625,28 +638,35 @@ def outside_clone(args: list) -> None:
                      f"{data_root()})")
 
 
-def published_run(game: str, weights: pathlib.Path):
-    """The split tree of a run published with the repository (games/<game>/results/reference/<machine>/all) priced in
-    this currency's unit, or None: the same reference cell and its nanoseconds, which a currency keeps when an arm is
-    calibrated into it. Which of its leaves were played at this run's prices, the runner checks leaf by leaf."""
+def reuse_sources(game: str, weights: pathlib.Path) -> list:
+    """The split trees whose leaves a run in this currency may take: the runs published with the repository
+    (games/<game>/results/reference/<machine>/all), then the imported ones (<data>/imports/*/results/*/<split>), each
+    priced in this currency's unit (the same reference cell and its nanoseconds, which a currency keeps when an arm is
+    calibrated into it). Which of their leaves were played at this run's prices, the runner checks leaf by leaf."""
     import json
     if not weights.is_file():
-        return None
+        return []
     header = {}
     for line in weights.read_text(encoding="utf-8", errors="replace").splitlines():
         k, sep, v = line.partition("=")
         if sep and k.strip() in ("reference", "referenceAdvanceNanos"):
             header[k.strip()] = v.strip()
     if len(header) < 2:
-        return None
-    for tree in sorted((GAMES / game / "results" / "reference").glob("*/all")):
+        return []
+    found = []
+    # An import is a source only once its checks passed: a package whose turns did not re-play, or whose report did
+    # not follow from them, stays unpacked for reading, and is never taken from.
+    verified = lambda pkg: (pkg / "IMPORT.md").is_file() and "- Verdict: VERIFIED" in (pkg / "IMPORT.md").read_text(encoding="utf-8")
+    trees = [*sorted((GAMES / game / "results" / "reference").glob("*/all")),
+             *sorted(t.parent for t in (data_root() / "imports").glob("*/results/*/*/_run.json") if verified(t.parents[3]))]
+    for tree in trees:
         try:
             recorded = (json.loads((tree / "_run.json").read_text(encoding="utf-8")).get("weights") or {}).get("header") or {}
         except (OSError, ValueError):
             continue
         if all(recorded.get(k) == v for k, v in header.items()):
-            return tree
-    return None
+            found.append(tree)
+    return found
 
 
 def experiment_run(rest: list) -> int:
@@ -683,11 +703,11 @@ def experiment_run(rest: list) -> int:
     outside_clone(["--out", str(out)])
     args = with_published_defaults(with_spec_weights(with_spec_game(["run", *rest])))
     if not no_reuse and "--reuse" not in args and "--weights" in args:
-        published = published_run(game, pathlib.Path(args[args.index("--weights") + 1]))
-        if published:
-            say(f"# the published run {published} was priced in this currency's unit: its leaves played at this run's "
-                "prices are taken where they can be (--no-reuse plays every leaf)")
-            args += ["--reuse", str(published)]
+        sources = reuse_sources(game, pathlib.Path(args[args.index("--weights") + 1]))
+        if sources:
+            say(f"# {len(sources)} published or imported run(s) were priced in this currency's unit: their leaves played at this "
+                "run's prices are taken where they can be, each from the first that holds it (--no-reuse plays every leaf)")
+            args += ["--reuse", ",".join(map(str, sources))]
 
     say(f"== 1/4 validate {spec}")
     validate = ["experiment", "validate"]
@@ -798,6 +818,15 @@ def main(argv: list) -> None:
         run([sys.executable, ROOT / "tools" / "shakedown.py", *rest], log="shakedown")
     elif cmd == "paper":
         run([sys.executable, ROOT / "tools" / "make_paper.py", *rest], log="paper")
+    elif cmd in ("export", "import"):
+        # The package, the run directory and --currency's file are the caller's paths; share.py runs in the repository.
+        rest = list(rest)
+        here = pathlib.Path.cwd()
+        for i, a in enumerate(rest):
+            mine = (i == 0 and not a.startswith("--")) or (i > 0 and rest[i - 1] == "--currency")
+            if mine and not pathlib.Path(a).is_absolute() and (here / a).exists():
+                rest[i] = str((here / a).resolve())
+        sys.exit(run([sys.executable, ROOT / "tools" / "share.py", cmd, *from_caller(rest)], log=cmd, check=False))
     elif cmd == "calibrate-controlled":
         run([sys.executable, ROOT / "tools" / "calibrate_controlled.py", *from_caller(rest)], log="calibrate-controlled")
     elif cmd == "calibrate-time":
