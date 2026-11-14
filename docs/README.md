@@ -9,6 +9,7 @@ there, by what you want to do.
 |---|---|
 | [`EXPERIMENTS.md`](EXPERIMENTS.md) | configuring an experiment (its arms, levels, repetitions, positions and currency), running it in one command, and reusing the published run |
 | [`CALIBRATING_A_MACHINE.md`](CALIBRATING_A_MACHINE.md) | measuring a laptop's or a shared server's currency in one session, and a calibration config file |
+| [`SHARING.md`](SHARING.md) | exporting a result as one file, importing and checking someone else's, and building on it |
 | [`OPERATIONS.md`](OPERATIONS.md) | the launcher, where output goes, the notebook, runs and their guards, the gates |
 
 ## Extending MAGAT

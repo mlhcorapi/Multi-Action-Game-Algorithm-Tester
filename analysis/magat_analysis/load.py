@@ -9,6 +9,7 @@ about +/-2e9).
 """
 import hashlib
 import json
+import os
 import pathlib
 from dataclasses import dataclass, field
 
@@ -206,10 +207,16 @@ def spec_of(split: Split):
         return load_spec(e["path"])
     game, name = (split.run.get("game") or {}).get("id"), e.get("name")
     if game and name and e.get("sha256"):
-        for here in sorted((ROOT / "experiments" / str(game)).rglob(f"{name}.json")):
+        for here in [*sorted((ROOT / "experiments" / str(game)).rglob(f"{name}.json")),
+                     *sorted(imports().glob(f"*/experiments/{name}.json"))]:
             if sha256(here) == e["sha256"]:
                 return load_spec(here)
     return None
+
+
+def imports() -> pathlib.Path:
+    """Where `magat import` unpacks packages: <data>/imports, the data root as the launcher sets it."""
+    return pathlib.Path(os.environ.get("MAGAT_DATA") or (pathlib.Path.home() / "magat_runs")).resolve() / "imports"
 
 
 def comparisons(*specs) -> list:

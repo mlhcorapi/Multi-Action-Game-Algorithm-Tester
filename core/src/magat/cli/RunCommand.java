@@ -29,7 +29,8 @@ final class RunCommand {
         System.out.println("                    [--split dev|holdout|all] [--threads N] [--threads-at 400000=31,...] [--threads-file threads.json]");
         System.out.println("                    [--machine-factor 1.5] [--retire-leaf arm@budget,...] [--toy] [--audit-warn 0.10]");
         System.out.println("                    [--levels-file levels.json]   the game's published levels, for levels named \"500ms\"");
-        System.out.println("                    [--reuse <split tree> [--reuse-replay 2]]   take the leaves a run in the same currency played");
+        System.out.println("                    [--reuse <split tree>[,<split tree>...] [--reuse-replay 2]]   take the leaves other runs played at");
+        System.out.println("                    this run's prices, each from the first that holds it whole");
         System.out.println("  experiment validate --game <name> --experiment <spec.json> [--weights <file>] [--portfolio <dir>] [--split ...]");
         System.out.println("                    [--threads N] [--levels-file levels.json] [--toy]   with the portfolio: the positions it selects,");
         System.out.println("                    and the run's size and estimated hours");
@@ -57,7 +58,7 @@ final class RunCommand {
         o.retire = new LinkedHashSet<>(args.getList("retire-leaf", new ArrayList<>()));
         o.toy = args.flag("toy");
         o.auditWarn = Double.parseDouble(args.get("audit-warn", "0.10"));
-        if (args.has("reuse")) o.reuse = Paths.get(args.get("reuse")).toAbsolutePath();
+        for (String from : args.getList("reuse", new ArrayList<>())) o.reuse.add(Paths.get(from).toAbsolutePath());
         o.reuseReplay = args.getInt("reuse-replay", 2);
         o.args = Arrays.asList(argv);
         RunGuard.install("run " + x.name, "re-run the same command; finished leaves are skipped and a partial leaf continues per scenario and visit");

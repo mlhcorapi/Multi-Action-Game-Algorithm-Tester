@@ -168,7 +168,13 @@ def experiments_cell(NB: pathlib.Path) -> int:
         and all(a[a.index("--weights") + 1] == ns["WEIGHTS"] and a[a.index("--threads-file") + 1] == pathlib.Path("cal") / "threads.json"
                 for a in calls)
     print(f"  [{'ok' if ok else 'FAIL'}] two specs: experiment run on each, in order, in the plan's currency and thread sweep")
-    return int(not ok)
+    exports = tagged(NB, {"export"})
+    calls.clear()
+    if len(exports) == 1:
+        exec(compile(exports[0], "<export-cell>", "exec"), dict(ns, EXPERIMENT_NAMES=["a", "b"]))
+    shared = len(exports) == 1 and calls == [("export", "a"), ("export", "b")]
+    print(f"  [{'ok' if shared else 'FAIL'}] and the export cell packages each experiment by its name")
+    return int(not ok) + int(not shared)
 
 
 def run_notebooks() -> int:

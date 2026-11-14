@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import time
+import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PY = sys.executable
@@ -25,12 +26,12 @@ def step(title: str) -> None:
     print(f"\n=== {title}", flush=True)
 
 
-def check(name: str, cmd: list, want: str = None, codes=(0,), then=None) -> None:
+def check(name: str, cmd: list, want: str = None, codes=(0,), then=None, env=None) -> None:
     """Run one command; it passes when it exits with one of `codes`, prints `want`, and `then()` holds."""
     global PASS, FAIL
     t0 = time.time()
     p = subprocess.run([str(c) for c in cmd], cwd=str(ROOT), capture_output=True, text=True,
-                       encoding="utf-8", errors="replace")
+                       encoding="utf-8", errors="replace", env=env)
     out = (p.stdout or "") + (p.stderr or "")
     ok = p.returncode in codes and (want is None or want in out)
     if ok and then is not None:
@@ -294,6 +295,37 @@ def main(argv) -> int:
 
     check("paper --check: the paper's tables rebuild from the published artefacts byte for byte, and its figures render",
           [PY, ROOT / "magat.py", "paper", "--check"], "PAPER: CURRENT")
+
+    step("8b. Sharing: export, import into another data root, check, build on it")
+    elsewhere = data / "shakedown" / f"elsewhere-{game}"
+    shutil.rmtree(elsewhere, ignore_errors=True)
+    there = dict(os.environ, MAGAT_DATA=str(elsewhere))
+    pkg = data / "shakedown" / f"toy-run-{game}.magat.zip"
+    check("export: the toy run, its currency, spec and a fresh report in one package, with a manifest of hashes",
+          [PY, ROOT / "magat.py", "export", run_root, "--name", "toy-run", "--out", pkg], "EXPORT: ", then=lambda: pkg.is_file())
+    check("import elsewhere: every file as its manifest says, every leaf re-plays a turn here, the report follows from the turns",
+          [PY, ROOT / "magat.py", "import", pkg, "--replay", "1"], "IMPORT: VERIFIED", env=there,
+          then=lambda: "- Verdict: VERIFIED" in (elsewhere / "imports" / "toy-run" / "IMPORT.md").read_text(encoding="utf-8"))
+    edited = data / "shakedown" / f"edited-{game}.magat.zip"
+    with zipfile.ZipFile(pkg) as z, zipfile.ZipFile(edited, "w") as w:
+        for n in z.namelist():
+            w.writestr(n, z.read(n) + (b" " if n.endswith("_run.json") else b""))
+    check("a package with an edited file is refused, and nothing of it is unpacked",
+          [PY, ROOT / "magat.py", "import", edited, "--name", "edited"], "IMPORT: REFUSED", codes=(2,), env=there,
+          then=lambda: not (elsewhere / "imports" / "edited").exists())
+    rerun = elsewhere / "rerun"
+    check("in the imported currency, named by its name, experiment run takes every leaf from the verified import",
+          [PY, ROOT / "magat.py", "experiment", "run", spec, "--split", "dev", "--portfolio", toy_dir, "--weights",
+           "calibration-tribes", "--out", rerun, "--results", elsewhere / "rerun-results", "--threads", "2", "--toy", "--no-bundle"],
+          "EXPERIMENT: COMPLETE", env=there,
+          then=lambda: len(list((rerun / "dev").glob("*/*cu/_leaf.json"))) == 10
+          and all('"reused"' in m.read_text(encoding="utf-8") for m in (rerun / "dev").glob("*/*cu/_leaf.json")))
+    published_pkg = data / "shakedown" / f"r7615-{game}.magat.zip"
+    check("the published R7615 run, exported as a package",
+          [PY, ROOT / "magat.py", "export", ROOT / "games" / game / "results" / "reference" / "r7615" / "all", "--out", published_pkg],
+          "EXPORT: ")
+    check("... and its import re-plays a turn of every leaf here, field for field",
+          [PY, ROOT / "magat.py", "import", published_pkg, "--replay", "1"], "IMPORT: VERIFIED", env=there)
 
     step("9. Notebook")
     check("generated notebook is current and its setup cells run from three directories",

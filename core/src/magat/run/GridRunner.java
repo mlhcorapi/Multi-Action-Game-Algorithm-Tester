@@ -82,8 +82,11 @@ public final class GridRunner {
         public List<String> args = new ArrayList<>();
         /** The audit's warning, on one thread: a leaf whose priced work accounts for less than (1 - this) of its plan time. */
         public double auditWarn = 0.10;
-        /** A run's split tree whose leaves this run takes instead of playing them, where it may ({@link Reuse}); null plays every leaf. */
-        public Path reuse;
+        /**
+         * Split trees of other runs whose leaves this run takes instead of playing them, where it may ({@link Reuse}): tried in
+         * order for each leaf, the first that may give it giving it. Empty plays every leaf.
+         */
+        public List<Path> reuse = new ArrayList<>();
         /** How many of a leaf's turns this machine re-plays, field for field, before taking it. */
         public int reuseReplay = 2;
     }
@@ -155,14 +158,16 @@ public final class GridRunner {
             try {
                 Map<Long, Integer> sweep = o.threadsFile != null && Files.isRegularFile(o.threadsFile) ? ThreadSweep.read(o.threadsFile) : null;
                 banner(x, half, root, scenarios.size(), weights, o, sweep);
-                Reuse reuse = null;
-                if (o.reuse != null) {
+                List<Reuse> sources = new ArrayList<>();
+                for (Path from : o.reuse) {
                     List<String> why = new ArrayList<>();
-                    reuse = Reuse.open(o.reuse, portfolio.identity(), game.configuration(), why);
+                    Reuse reuse = Reuse.open(from, portfolio.identity(), game.configuration(), why);
+                    if (reuse != null) sources.add(reuse);
                     System.out.println(reuse != null
                             ? "[reuse] from " + reuse.source() + ", played on " + MachineProfile.modelOf(reuse.machine()) + ": each leaf it holds "
                               + "whole, at this run's prices, is taken after " + o.reuseReplay + " of its turns re-play here field for field"
-                            : "[reuse] not from " + o.reuse + ": " + String.join("; ", why) + ". Every leaf is played");
+                            : "[reuse] not from " + from + ": " + String.join("; ", why)
+                              + (o.reuse.size() > 1 ? "" : ". Every leaf is played"));
                 }
                 Set<String> done = readCheckpoint(checkpoint);
                 for (Experiment.Level level : x.levels) {
@@ -174,17 +179,26 @@ public final class GridRunner {
                             System.out.println("[run] SKIP (done) " + key);
                             continue;
                         }
-                        if (reuse != null) {
+                        if (!sources.isEmpty()) {
                             AgentFactory<S, A> arm = module.agents().get(id);
-                            String not = reuse.take(game, portfolio, arm, level, scenarios, Leaf.dir(root, id, level.budget),
-                                    baseMeta(arm, level.budget, weights), o.reuseReplay, threads);
-                            if (not == null) {
+                            Reuse taken = null;
+                            List<String> nots = new ArrayList<>();
+                            for (Reuse from : sources) {
+                                String not = from.take(game, portfolio, arm, level, scenarios, Leaf.dir(root, id, level.budget),
+                                        baseMeta(arm, level.budget, weights), o.reuseReplay, threads);
+                                if (not == null) {
+                                    taken = from;
+                                    break;
+                                }
+                                nots.add(sources.size() > 1 ? not + " (" + from.source() + ")" : not);
+                            }
+                            if (taken != null) {
                                 RunGuard.appendLine(checkpoint, key);
                                 done.add(key);
-                                System.out.println("[run] REUSED " + key + " from " + Leaf.dir(reuse.source(), id, level.budget));
+                                System.out.println("[run] REUSED " + key + " from " + Leaf.dir(taken.source(), id, level.budget));
                                 continue;
                             }
-                            System.out.println("[reuse] " + id + "@" + level.budget + " is played: " + not);
+                            System.out.println("[reuse] " + id + "@" + level.budget + " is played: " + String.join("; ", nots));
                         }
                         boolean complete = runLeaf(game, module.agents().get(id), level, scenarios, root, threads, weights, o.auditWarn);
                         if (!complete) return finish(INCOMPLETE, "leaf " + id + "@" + level.budget + " incomplete; re-run the same command to continue it");
@@ -514,8 +528,14 @@ public final class GridRunner {
         prov.append("invocations", invocation.add("host", host())
                 .add("machine", MachineProfile.get().summary()).add("java", System.getProperty("java.version"))
                 .add("experimentSha256", x.sha256).add("weightsSha256", weightsSha).add("threads", threads)
-                .add("reuse", o.reuse == null ? "" : o.reuse.toAbsolutePath().toString())
+                .add("reuse", joined(o.reuse))
                 .add("args", String.join(" ", o.args)));
+    }
+
+    private static String joined(List<Path> paths) {
+        List<String> out = new ArrayList<>();
+        for (Path p : paths) out.add(p.toAbsolutePath().toString());
+        return String.join(", ", out);
     }
 
     static int threadsFor(long budget, Options o, Map<Long, Integer> sweep) {
