@@ -268,15 +268,17 @@ sensor; read them as a trend.
 
 ## On a shared server (the R7615, through JupyterHub)
 
-The notebook's calibration stage is the server's path. It has one cell with the parameters and the
-preflight, one cell that measures the currency and checks it, and one that confirms every reference arm
-is priced and bundles the record. The measuring cell skips itself once the currency prices every
-reference arm at every level. Over a currency that lacks an arm, such as one measured before that arm was
-registered, it prices the missing arms and merges them in by ratio, and the preflight cell says so
-first; to measure a whole new currency in one session instead, give `CURRENCY_NAME` a new name. A
+The notebook's calibration stage is the server's path. Its parameters cell names a calibration config
+([above](#a-config-file)); by default `calibrations/tribes/examples/server.json`, whose settings are the
+ones below. Its `name` names the currency, and `MAGAT_CURRENCY` overrides it. The stage has one cell with
+the preflight, one cell that measures the currency and checks it, and one that confirms every arm the
+config names is priced and bundles the record. The measuring cell skips itself once the currency prices
+every arm the config names at every level. Over a currency that lacks an arm, such as one measured before
+that arm was registered, it prices the missing arms and merges them in by ratio, and the preflight cell
+says so first; to measure a whole new currency in one session instead, give the config a new `name`. A
 currency an older MAGAT wrote, one that prices arms this MAGAT no longer registers, should be replaced,
 not extended, and the preflight warns about one: move its whole folder
-(`<data>/calibration/<game>-<name>`, its `record/` with it) aside, or give `CURRENCY_NAME` a new name.
+(`<data>/calibration/<game>-<name>`, its `record/` with it) aside, or give the config a new `name`.
 Move the runs priced in it aside as well, since the runner will not continue a leaf in another currency.
 A session cut short wrote nothing, and running the cell again measures it again. The plan prints the
 expected finishing time after the stability check.
@@ -300,10 +302,10 @@ The script reads what it can of these and records it. From inside the container,
 ### What you can do
 
 1. **Measure when the machine is quiet:** nights and weekends. The preflight prints the work on the
-   machine right now. Before measuring, the cell waits up to `CAL_WAIT_QUIET` minutes (30) for other work
-   to drop below `CAL_OTHER_CPUS` logical CPUs (4). If it does not, the cell refuses to start, and you
-   run it again later. A session that saw other work anyway is SUSPECT; measure it again under a new
-   `CURRENCY_NAME`.
+   machine right now. Before measuring, the cell waits up to the config's `wait-quiet` minutes (30) for
+   other work to drop below its `other-cpus` logical CPUs (4). If it does not, the cell refuses to start,
+   and you run it again later. A session that saw other work anyway is SUSPECT; measure it again under a
+   new `name`.
 2. **Read the preflight's line about other users.** Many JupyterHub containers see the host's `/proc`,
    so the monitor sees other users' work and names it "not visible from here". Then a quiet machine is
    something the script can verify. If the preflight says all the work is this container's, the machine

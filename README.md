@@ -105,7 +105,9 @@ python magat.py shakedown
 The shakedown runs every moving part at toy size in about ten minutes and exits non-zero on any
 failure. `python magat.py` with no arguments lists every command. Output goes outside the clone, under
 `$HOME/magat_runs` (`MAGAT_DATA` moves it). On a server, [`notebooks/run_magat.ipynb`](notebooks/run_magat.ipynb)
-runs everything, one cell per stage, each stage ending in a bundle to download.
+runs everything, one cell per stage, each stage ending in a bundle to download. Its first cell names the
+files it runs: a calibration config, or a published currency to spend instead, and the experiment
+specs.
 
 ## The afternoon path: add an algorithm and compare it, at toy size
 
