@@ -36,6 +36,12 @@ there, by what you want to do.
 | [`results/cross-machine.md`](results/cross-machine.md) | the reference experiment on two machines, compared position by position |
 | [`../paper/README.md`](../paper/README.md) | the paper's tables and figures, and how they are rebuilt from the published runs |
 
+## Plans
+
+| Read | For |
+|---|---|
+| [`plans/2.0-compute-unit.md`](plans/2.0-compute-unit.md) | finding the best basket of operations for 2.0's compute unit, including one independent of any decision-making algorithm |
+
 ## History
 
 | Read | For |
