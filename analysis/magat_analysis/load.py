@@ -119,11 +119,23 @@ def load_split(path) -> Split:
         if t.empty:
             notes.append(f"{leaf.relative_to(d)}: no turns yet, skipped")
             continue
+        if meta.get("reused"):
+            # Taken from another run in the same currency: its turns are the ones this run would play, its times
+            # another machine's, so they are left out of every time measure.
+            t[[c for c in TIME_COLUMNS if c in t]] = np.nan
         meta["turns"] = len(t)
         leaves.append(meta)
         turns.append(t)
     if not turns:
         raise FileNotFoundError(f"{d}: no leaf holds any turns")
+    reused = [m for m in leaves if m.get("reused")]
+    if reused:
+        machines = sorted({str((m["reused"] or {}).get("machine", "unknown")).split(" | ")[0] for m in reused})
+        cells = ", ".join(f"{m.get('arm')}@{m.get('budget')}" for m in reused)
+        notes.append(f"{len(reused)} of {len(leaves)} leaves were taken from another run in the same currency, after their "
+                     f"turns re-played here field for field ({cells}; played on "
+                     f"{', '.join(machines)}). Their turns are this run's; their times are not, so the wall-clock re-score, "
+                     "the multiplier in seconds and every time column leave them out.")
     t = pd.concat(turns, ignore_index=True)
     t = prepare(t)
     return Split(d, name, run, leaves, t, notes)
@@ -262,6 +274,19 @@ def read_weights(path) -> dict:
 
 
 # --------------------------------------------------------------------------- provenance
+# The wall-clock columns of a turn: what another machine's leaf does not bring with it.
+TIME_COLUMNS = ("plan_ms", "init_ms")
+
+
+def reused_from(split: Split) -> str:
+    """Which leaves were taken from another run, and from where, or "" when none were."""
+    reused = [m for m in split.leaves if m.get("reused")]
+    if not reused:
+        return ""
+    sources = sorted({str(pathlib.Path((m["reused"] or {}).get("from", "?")).parent.parent.parent) for m in reused})
+    return f"{len(reused)} of {len(split.leaves)} leaves, from {', '.join(shown(pathlib.Path(x)) for x in sources)}"
+
+
 def provenance(split: Split, spec) -> dict:
     r = split.run
     game = r.get("game") or {}
@@ -282,6 +307,7 @@ def provenance(split: Split, spec) -> dict:
         engine_commit=cfg.get("engine.commit") or cfg.get("engine") or "unknown",
         portfolio_identity=p.get("identity", "unknown"),
         selection=r.get("selection", "all"),
+        reused=reused_from(split),
         currency=split.currency(),
         currency_reference=w.get("reference", "unknown"),
         experiment=(spec or {}).get("name") or (r.get("experiment") or {}).get("name", "none"),

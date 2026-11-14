@@ -70,6 +70,24 @@ class SyntheticTree(unittest.TestCase):
         pairs = load.comparisons(load.load_spec(self.spec))
         self.assertEqual([(p["a"], p["b"], p["label"]) for p in pairs], [("great", "good", "great over good")])
 
+    def test_a_reused_leaf_keeps_its_turns_and_leaves_its_times_out(self):
+        tree = self.tmp / "reused"
+        syn.build(tree, "dev", self.spec)
+        meta = tree / "dev" / "good" / "1000cu" / "_leaf.json"
+        m = json.loads(meta.read_text(encoding="utf-8"))
+        m["reused"] = dict(**{"from": "/elsewhere/r7615/all/good/1000cu"}, machine="AMD EPYC 9534 64-Core Processor | 128 logical")
+        meta.write_text(json.dumps(m), encoding="utf-8")
+        sp = load.load_split(tree / "dev")
+        good, base = sp.turns[sp.turns.arm == "good"], sp.turns[sp.turns.arm == "base"]
+        self.assertTrue(good.plan_ms.isna().all() and good.init_ms.isna().all(), "another machine's times are left out")
+        self.assertTrue(good["final"].notna().all() and base.plan_ms.notna().all(), "the turns, and the other leaves' times, stay")
+        self.assertTrue(any("1 of 7 leaves were taken from another run" in n and "good@1000" in n for n in sp.notes), sp.notes)
+        self.assertEqual(load.provenance(sp, None)["reused"], "1 of 7 leaves, from " + load.shown(pathlib.Path("/elsewhere/r7615")))
+        h = measures.headline(sp.turns, "base", "dev", n=200)
+        w = measures.wallclock(sp.turns, "base", h, "dev", n=200)
+        self.assertNotIn("good", set(w.Arm) if len(w) else set(), "no wall-clock re-score from another machine's times")
+        self.assertEqual(load.provenance(self.sp, None)["reused"], "", "a run that took nothing says nothing")
+
     def test_a_spec_without_contrasts_compares_every_arm_with_every_arm_before_it(self):
         # The reference experiment writes out its ten contrasts; without them, the default is the same ten pairs.
         ref = load.load_spec(load.ROOT / "experiments" / "tribes" / "reference.json")
