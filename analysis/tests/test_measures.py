@@ -1,6 +1,7 @@
 """Every measure on the synthetic tree (synthetic.py), against its known answer."""
 import json
 import math
+import os
 import pathlib
 import shutil
 import tempfile
@@ -101,6 +102,29 @@ class SyntheticTree(unittest.TestCase):
         x["contrasts"] = []
         bare.write_text(json.dumps(x), encoding="utf-8")
         self.assertEqual(load.load_spec(bare)["contrasts"], [], "an empty list asks for none")
+
+    def test_an_imported_currency_and_spec_are_found_by_hash(self):
+        data = self.tmp / "data"
+        pkg = data / "imports" / "someone-elses"
+        (pkg / "calibration" / "theirs").mkdir(parents=True)
+        (pkg / "experiments").mkdir(parents=True)
+        weights = pkg / "calibration" / "theirs" / "compute_weights.properties"
+        weights.write_text("magat.weights.version = 2\nreference = base@1000\n", encoding="utf-8")
+        spec = pkg / "experiments" / "theirs.json"
+        spec.write_text(json.dumps(dict(name="theirs", game="tribes", arms=["base", "good"], baseline="base")), encoding="utf-8")
+        run = dict(game=dict(id="tribes"), weights=dict(path="/their/machine/compute_weights.properties", sha256=load.sha256(weights)),
+                   experiment=dict(name="theirs", path="/their/machine/theirs.json", sha256=load.sha256(spec)))
+        split = load.Split(self.sp.path, "dev", run, [], self.t)
+        before = os.environ.get("MAGAT_DATA")
+        os.environ["MAGAT_DATA"] = str(data)
+        try:
+            self.assertEqual(report.currency_file(split), weights, "the recorded path is gone; the import holds the same bytes")
+            self.assertEqual(load.spec_of(split)["name"], "theirs")
+        finally:
+            if before is None:
+                os.environ.pop("MAGAT_DATA", None)
+            else:
+                os.environ["MAGAT_DATA"] = before
 
     def test_a_spec_in_a_folder_of_its_game_is_found_by_hash_too(self):
         spec = load.ROOT / "experiments" / "tribes" / "examples" / "oep-vs-tbets.json"

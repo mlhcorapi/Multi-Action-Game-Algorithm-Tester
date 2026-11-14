@@ -199,7 +199,8 @@ def currency_file(split: load.Split):
     p = load.resolve(w["path"]) if w.get("path") else None
     if p is not None and p.is_file() and (not sha or load.sha256(p) == sha):
         return p
-    for q in sorted(load.ROOT.glob("games/*/calibration/*/compute_weights.properties")):
+    for q in [*sorted(load.ROOT.glob("games/*/calibration/*/compute_weights.properties")),
+              *sorted(load.imports().glob("*/calibration/*/compute_weights.properties"))]:
         if sha and load.sha256(q) == sha:
             return q
     return None
