@@ -118,6 +118,9 @@ its provenance table.
 
 A `--weights` given on the command line wins over the spec, and the launcher says so.
 
+In a published currency, `experiment run` also takes the published run's turns instead of playing them
+again ([below](#reusing-the-published-run)).
+
 A currency measured on **this** machine makes a budget a share of this machine's time: each algorithm
 gets its own share of the same seconds. A currency measured on **another** machine makes a budget that
 machine's time, spent here as the same work. The turns then come out identical to that machine's, and
@@ -148,6 +151,39 @@ them or to label them, or write `[]` for none.
 Each step is logged under `$HOME/magat_runs/logs/` as the command of the same name. Every option of
 `run` passes through: `--split`, `--weights`, `--portfolio`, `--threads`, `--threads-at`,
 `--retire-leaf` and `--toy` ([operations](OPERATIONS.md#experiments-and-runs)).
+
+## Reusing the published run
+
+The repository publishes the reference experiment as each machine played it
+(`games/tribes/results/reference/<machine>/all/`): every reference arm at every published level, 8
+repetitions at 500 and 1000 ms and 6 at 5000 ms, on all 400 positions. At the same prices, on the same
+portfolio and engine, a turn depends only on its arm, level, position and repetition, so those turns
+are the ones this machine would play. `experiment run` therefore takes them instead of playing them
+again, when the run is priced in that machine's unit:
+
+```text
+[reuse] from games/tribes/results/reference/r7615/all, played on AMD EPYC 9534 64-Core Processor: ...
+[run] REUSED arm=emcts;budget=9500;split=all from .../r7615/all/emcts/9500cu
+[reuse] random@20000 is played: the published leaf holds 24 of the 27 turns this run needs
+```
+
+An arm at a level (a leaf) is taken only when all of these hold; otherwise it is played, and the run
+says why:
+- **the same portfolio and game configuration**, engine commit included;
+- **the same prices**: the published leaf was played at the prices this run would play it at. This is
+  checked leaf by leaf, not by the currency's hash, so a currency extended with a new arm (calibrated into
+  a copy of the published one, which keeps every price it had) takes the published leaves too, and plays
+  only the new arm;
+- **every turn the run needs**: each position it selects, at each repetition, is in the published leaf;
+- **a spot replay**: this machine, at this commit, re-plays two of those turns (`--reuse-replay N`) and
+  gets every field the published rows hold, wall-clock aside. A change to an arm or the engine since the
+  publication fails it.
+
+A taken leaf keeps the commit and host that played it, and records where it came from. Its turns are
+this run's, but its times are another machine's, so the analysis leaves them out of the wall-clock
+re-score, the multiplier in seconds and every time column, lists the reused leaves in the provenance,
+and says so in the scope notes. `--no-reuse` plays every leaf. `run` takes a split tree to reuse
+explicitly, `--reuse DIR`, from any run, published or not.
 
 ## The long form
 

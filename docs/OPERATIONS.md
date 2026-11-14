@@ -33,7 +33,7 @@ wrap it). It:
 | `check contract \| equivalence \| replay \| audit` | the gates (below) |
 | `check time (--weights F \| --fixed-weights) [--levels ...] [--arms ...] [--targets ms,...]` | single-threaded whole turns over positions spread across the portfolio: each level's thinking time on this machine, and each cell's mean spend against its level, flagged above 1.10× |
 | `experiment validate SPEC [--weights F \| --no-weights]` | the spec validator alone, then the spec read back and the run's estimated hours |
-| `experiment run SPEC [--split S] [--weights F] [--out D] [--results D] [--no-bundle]` | validate, run (resuming), analyse, summarise and bundle, in one command |
+| `experiment run SPEC [--split S] [--weights F] [--out D] [--results D] [--no-bundle] [--no-reuse]` | validate, run (resuming), analyse, summarise and bundle, in one command; in a published currency, the published run's leaves are taken where they may be ([experiments](EXPERIMENTS.md#reusing-the-published-run)) |
 | `run --experiment SPEC --split dev\|holdout\|all` | run an experiment (below) |
 | `analyze --run DIR [--experiment SPEC] [--baseline ARM] [--reprice W] [--compare DIR] --out DIR` | every measure, as tables and `SUMMARY.md`; with `--compare`, beside another machine's run of the same experiment |
 | `bundle --name N --paths P...` | zip files into `<data>/bundles/N.zip` |
@@ -143,6 +143,9 @@ python magat.py run --experiment experiments/tribes/reference.json --weights <yo
   compacted on resume, and a finished leaf is skipped.
 - **Never delete to re-run.** `--retire-leaf arm@budget` discards a leaf deliberately and logs it in
   `_run.json`.
+- **Reuse another run's leaves.** `--reuse <split tree>` takes each leaf that run holds whole, played at
+  this run's prices on the same portfolio and engine, after this machine re-plays two of its turns
+  (`--reuse-replay N`) field for field ([experiments](EXPERIMENTS.md#reusing-the-published-run)).
 - **Threads.** `--threads N`, `--threads-at 101500=31` per level, or by default the `threads.json`
   beside the weights file when it was swept on this CPU model, else this machine's worker ceiling: a
   currency published from another machine carries that machine's thread choices, which say nothing of

@@ -224,6 +224,21 @@ port against the original rather than trusting it:
    ```
 
    This merges into the currency by ratio, and prices its operations as well.
+
+   **Or price it into a copy of the published currency**, to run it against the published turns of the
+   reference arms (step 3). Copy the published file into a calibration folder of your own, then price
+   the arm into it:
+
+   ```bash
+   mkdir -p $HOME/magat_runs/calibration/tribes-r7615-plus-first
+   cp games/tribes/calibration/r7615-time/compute_weights.properties $HOME/magat_runs/calibration/tribes-r7615-plus-first/
+   python magat.py calibrate --game tribes --out $HOME/magat_runs/calibration/tribes-r7615-plus-first --arms first
+   ```
+
+   The merge keeps every published price. The new arm's prices are measured on your machine and
+   re-denominated in the published unit through the reference cell, so they carry your machine's
+   relative speeds, which differed by up to about 9% between the two published machines
+   ([cross-machine](results/cross-machine.md)).
 2. **Write a spec** with the arm, the baseline at two levels or more, and the comparisons. For example
    `experiments/tribes/first.json`:
 
@@ -247,6 +262,10 @@ port against the original rather than trusting it:
    ```bash
    python magat.py experiment run experiments/tribes/first.json --weights <your-machine>
    ```
+
+   In your own currency every arm is played. Priced into a copy of a published currency instead, your
+   arm is the only one played: `experiment run` takes the reference arms' turns from the published run
+   ([reusing the published run](EXPERIMENTS.md#reusing-the-published-run)).
 
    `experiment validate` alone reads the spec back and estimates the run's hours first. The report,
    `$HOME/magat_runs/tribes/results/first/SUMMARY.md`, gives the paired difference against the baseline in
