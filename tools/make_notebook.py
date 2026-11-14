@@ -305,6 +305,14 @@ for spec in EXPERIMENT_SPECS:
 '''
 
 
+EXPORT_CELL = r'''
+# Each experiment as one package to share: its run, the currency it was priced in, its spec and its report, with a
+# manifest of every file's hash (docs/SHARING.md). Anyone can import it, and re-play its turns on their own machine.
+for name in EXPERIMENT_NAMES:
+    magat("export", name)
+'''
+
+
 INVENTORY_CELL = r'''
 # Defaults, so this cell also runs on its own after a kernel restart (and the setup cells).
 PORTFOLIO = globals().get("PORTFOLIO", DATA / "portfolio" / GAME)
@@ -323,6 +331,11 @@ FILES.append((CALIBRATION / "threads.json", "the thread choices the experiments 
 FILES += [(DATA / GAME / "results" / n / "SUMMARY.md", f"the report of {n}") for n in EXPERIMENT_NAMES]
 total, missing = 0, []
 print(f"Bundles in {BUNDLES}: download these; together they hold everything the analysis needs.")
+EXPORTS = sorted((DATA / "exports").glob("*.magat.zip"))
+print(f"Packages in {DATA / 'exports'}: one per experiment, to share; anyone imports one with `magat import`.")
+for path in EXPORTS:
+    print(f"  {path.name:40} {path.stat().st_size / 2**20:8.1f} MB")
+print()
 for name, what in BUNDLED:
     path = BUNDLES / f"{name}.zip"
     size = path.stat().st_size if path.is_file() else 0
@@ -442,6 +455,16 @@ each, runs it, analyses it, prints its headline and bundles the run and its repo
 again resumes: finished leaves are skipped, a partial leaf continues where it stopped.
 """),
     code(EXPERIMENTS_CELL, tags=("experiment",)),
+    md("""
+## Sharing
+
+Each experiment as one package: its run, the currency it was priced in, its spec and its report, with a
+manifest of every file's hash. Download the packages from `exports/` under the data root. Anyone can
+import one, which checks it file by file and re-plays a sample of its turns on their machine, and then
+spend its currency, compare with its run, or run an algorithm of their own against it
+([`docs/SHARING.md`](../docs/SHARING.md)).
+"""),
+    code(EXPORT_CELL, tags=("export",)),
     md("""
 ## Shakedown
 
