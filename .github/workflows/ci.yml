@@ -126,6 +126,19 @@ jobs:
           python magat.py analyze --run "$RUNNER_TEMP/run" --compare "$RUNNER_TEMP/run" --out "$RUNNER_TEMP/compare"
           test -s "$RUNNER_TEMP/compare/tables/across.csv"
           grep -q "## Across machines (dev)" "$RUNNER_TEMP/compare/SUMMARY.md"
+      - name: A result exported, imported into another data root and checked there; an edited package refused
+        run: |
+          python magat.py export $RUNNER_TEMP/run --name toy-run --out $RUNNER_TEMP/toy-run.magat.zip | grep -q "EXPORT: "
+          MAGAT_DATA=$RUNNER_TEMP/elsewhere python magat.py import $RUNNER_TEMP/toy-run.magat.zip --replay 1 > "$RUNNER_TEMP/import.log" || { tail -40 "$RUNNER_TEMP/import.log"; exit 1; }
+          grep -q "IMPORT: VERIFIED" "$RUNNER_TEMP/import.log"
+          python -c "import sys, zipfile; z = zipfile.ZipFile(sys.argv[1]); w = zipfile.ZipFile(sys.argv[2], 'w'); [w.writestr(n, z.read(n) + (b' ' if n.endswith('_run.json') else b'')) for n in z.namelist()]; w.close()" $RUNNER_TEMP/toy-run.magat.zip $RUNNER_TEMP/edited.magat.zip
+          MAGAT_DATA=$RUNNER_TEMP/elsewhere python magat.py import $RUNNER_TEMP/edited.magat.zip --name edited | grep -q "IMPORT: REFUSED"
+          test ! -e $RUNNER_TEMP/elsewhere/imports/edited
+      - name: The published R7615 run exported, imported into another data root, and verified on this machine
+        run: |
+          python magat.py export games/tribes/results/reference/r7615/all --out $RUNNER_TEMP/r7615.magat.zip | grep -q "EXPORT: "
+          MAGAT_DATA=$RUNNER_TEMP/elsewhere python magat.py import $RUNNER_TEMP/r7615.magat.zip --replay 1 > "$RUNNER_TEMP/import-r7615.log" || { tail -40 "$RUNNER_TEMP/import-r7615.log"; exit 1; }
+          grep -q "IMPORT: VERIFIED" "$RUNNER_TEMP/import-r7615.log"
       - name: The two published runs compare as docs/results/cross-machine.md says
         run: |
           python magat.py analyze --run games/tribes/results/reference/r7615 --compare games/tribes/results/reference/laptop-i9-14900hx --out "$RUNNER_TEMP/cross-machine"
