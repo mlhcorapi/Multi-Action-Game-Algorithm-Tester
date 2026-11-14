@@ -70,7 +70,7 @@ The runner checks every level for it and stops, and the analyzer checks again on
 | 7 | Spend, time and plans | `spend.csv` | did each turn spend its level, how long did it take, how long are the plans |
 | 8 | Re-pricing in another currency | `repriced.csv`, `repriced_spend.csv` | the same work, priced on another machine |
 | 9 | Across machines | `across.csv`, `agreement.csv` | the same experiment on two machines, side by side and position by position |
-| 10 | Full-game win rate | not in v0.1 | an optional external yardstick, never the primary |
+| 10 | Full-game win rate | not in MAGAT | an optional external yardstick, never the primary |
 
 How they are computed:
 
@@ -126,7 +126,7 @@ byte-identical.
 ## 6. Turns, not games: the scope
 
 A replanned turn measures what a search does with a position. It does not measure what a stronger
-turn is worth over a whole game: that is the job of a full-game yardstick, which v0.1 does not
+turn is worth over a whole game: that is the job of a full-game yardstick, which MAGAT does not
 include. MAGAT's claim is narrower and firmer. Under the same budget, on the same positions, with the
 same chance events, this algorithm finds plans of this much more value, and here is the interval, in
 units and in seconds.

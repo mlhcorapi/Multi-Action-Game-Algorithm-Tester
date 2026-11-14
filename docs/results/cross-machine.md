@@ -2,7 +2,7 @@
 
 MAGAT budgets a turn in compute units: a priced count of the work an algorithm does, calibrated on each
 machine so that a unit buys the same wall-clock of every algorithm's work there. The claim this page
-tests is the one v0.1 is built on: **researchers on different machines, each with their own currency, get
+tests is the one MAGAT is built on: **researchers on different machines, each with their own currency, get
 the same results.**
 
 The reference experiment (`experiments/tribes/reference.json`) ran on two very different machines:
