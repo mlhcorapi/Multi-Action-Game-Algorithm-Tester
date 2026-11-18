@@ -220,4 +220,28 @@ public class ProbeToyTest {
             assertTrue("paid from the budget, the initialization leaves the search less",
                     in.get(i).candidate.units < out.get(i).candidate.units);
     }
+
+    @Test
+    public void anArmTheCurrencyDoesNotPriceIsGatedAtTheMeasurementWeights() throws Exception {
+        // A currency that prices another arm only, as the published one prices none of an experiment's new arms:
+        // the gate does not stop at this arm, it prices both sides alike, at the fixed measurement weights.
+        Path work = Files.createTempDirectory("magat-gate");
+        Weights other = Weights.load(magat.run.GridRunnerTest.weightsV2(work, "other.properties", 0.5, "emcts-alt"));
+        Meter.install(other);
+        List<Scenario<ToyGame.State>> positions = game.positions(2);
+        AgentFactory<ToyGame.State, ToyGame.Move> emcts = EmctsFactory.plain();
+        List<double[]> seen = Collections.synchronizedList(new ArrayList<>());
+        Oracle<ToyGame.State> itself = new Oracle<ToyGame.State>() {
+            @Override public String describe() { return "the port itself"; }
+            @Override public TurnBudget.Initialization initialization() { return TurnBudget.Initialization.IN_BUDGET; }
+            @Override public Signature plan(Scenario<ToyGame.State> sc, long seed, long budget, double[] w) {
+                seen.add(w.clone());
+                return Signature.of(Episode.run(game, sc, (int) (seed - Seeds.visit(sc.id, 0)), emcts, budget, w, "itself"));
+            }
+        };
+        EquivalenceCheck.Result r = EquivalenceCheck.run(game, emcts, itself, positions, 1, new long[]{300, 600}, other, 2);
+        assertTrue(r.failures() + " cell(s) failed", r.passed());
+        assertEquals("every cell gated", 4, r.cells.size());
+        for (double[] w : seen) assertArrayEquals("both sides at the fixed measurement weights", Weights.DEFAULT, w, 0.0);
+    }
 }

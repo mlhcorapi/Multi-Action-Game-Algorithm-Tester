@@ -75,22 +75,31 @@ public final class EquivalenceCheck {
                                          List<Scenario<S>> scenarios, int visits, long[] budgets,
                                          Weights weights, int threads) throws Exception {
         Result result = new Result(arm.id());
+        boolean noted = false;
         ExecutorService pool = Executors.newFixedThreadPool(Math.max(1, threads));
         try {
             for (long budget : budgets) {
                 // Both sides are priced by the arm's profile at this budget; at a budget no file
-                // prices (a toy gate), by the arm's profile at its smallest priced level; with no file,
-                // by the fixed measurement weights.
+                // prices (a toy gate), by the arm's profile at its smallest priced level; with no file, or
+                // for an arm the file does not price at all (one not yet calibrated), by the fixed
+                // measurement weights. The gate asks only that both sides are priced alike.
                 String profile = weights == null ? "fixed measurement weights" : Profile.key(arm.id(), budget);
                 double[] w = weights == null ? Weights.DEFAULT.clone() : weights.profile(profile);
                 if (w == null) {
                     String nearest = smallestPricedLevel(weights, arm.id());
-                    if (nearest == null)
-                        throw new IllegalStateException("arm " + arm.id() + " has no priced profile in " + weights.source());
-                    w = weights.profile(nearest);
-                    profile = nearest + " (used for " + budget + ")";
-                    System.out.println("  note: " + Profile.key(arm.id(), budget) + " is not priced; both sides use "
-                            + nearest + "'s weights");
+                    if (nearest == null) {
+                        w = Weights.DEFAULT.clone();
+                        profile = "fixed measurement weights";
+                        if (!noted)
+                            System.out.println("  note: " + arm.id() + " is not priced in " + weights.source().getFileName()
+                                    + "; both sides use the fixed measurement weights");
+                        noted = true;
+                    } else {
+                        w = weights.profile(nearest);
+                        profile = nearest + " (used for " + budget + ")";
+                        System.out.println("  note: " + Profile.key(arm.id(), budget) + " is not priced; both sides use "
+                                + nearest + "'s weights");
+                    }
                 }
                 final double[] priced = w;
                 final String label = profile;

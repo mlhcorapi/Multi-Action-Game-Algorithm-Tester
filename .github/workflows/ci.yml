@@ -35,8 +35,8 @@ jobs:
         run: python magat.py check contract --game tribes --scenarios 4
       - name: Equivalence gate (emcts and tbets vs the engine's agents, 2 positions, 8k units)
         run: python magat.py check equivalence --game tribes --arms emcts,tbets --scenarios 2 --visits 1 --budgets 8000
-      - name: Equivalence gate (the AB-EMCTS arms vs the engine's agents, at the measurement weights, 2 positions, 8k units)
-        run: python magat.py check equivalence --game tribes --arms @ab-emcts --no-weights --scenarios 2 --visits 1 --budgets 8000
+      - name: Equivalence gate (the AB-EMCTS arms vs the engine's agents; unpriced in the published currency, so at the measurement weights; 2 positions, 8k units)
+        run: python magat.py check equivalence --game tribes --arms @ab-emcts --scenarios 2 --visits 1 --budgets 8000
       - name: Audit (each arm's declared operations and forward model account for its turn)
         run: python magat.py check audit --game tribes --arms @reference --budget 4000 --turns 2 --reps 1 --warmup 1
       - name: The R7615's published turns replay here field for field (2 per arm at 9,500, in the published currency)
