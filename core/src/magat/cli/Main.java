@@ -170,7 +170,7 @@ public final class Main {
         int visits = args.getInt("visits", 2);
         long[] budgets = args.getLongs("budgets", new long[]{8_000L, 40_000L});
         int threads = args.getInt("threads", Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
-        List<String> armIds = args.getList("arms", null);
+        List<String> armIds = args.has("arms") ? module.expandArms(args.getList("arms", new ArrayList<>())) : null;
         if (armIds == null) armIds = new ArrayList<>(module.oracles().keySet());
         System.out.println(String.format(Locale.ROOT, "# arms %s, %d scenarios x %d visits, budgets %s, %d threads",
                 armIds, scenarios.size(), visits, Arrays.toString(budgets), threads));
