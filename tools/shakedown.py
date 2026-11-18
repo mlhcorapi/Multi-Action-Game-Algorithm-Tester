@@ -81,8 +81,9 @@ def main(argv) -> int:
     check("emcts and tbets reproduce the engine's agents at 8k on 2 positions",
           [PY, ROOT / "magat.py", "check", "equivalence", "--game", game, "--arms", "emcts,tbets",
            "--scenarios", "2", "--visits", "1", "--budgets", "8000"], "EQUIVALENCE: PASS")
-    check("the AB-EMCTS arms reproduce the engine's agents at 8k on 2 positions, at the measurement weights",
-          [PY, ROOT / "magat.py", "check", "equivalence", "--game", game, "--arms", "@ab-emcts", "--no-weights",
+    check("the AB-EMCTS arms reproduce the engine's agents at 8k on 2 positions; unpriced in the published currency, "
+          "so at the measurement weights",
+          [PY, ROOT / "magat.py", "check", "equivalence", "--game", game, "--arms", "@ab-emcts",
            "--scenarios", "2", "--visits", "1", "--budgets", "8000"], "EQUIVALENCE: PASS")
     check("audit: each arm's declared operations and forward model account for its turn (toy size)",
           [PY, ROOT / "magat.py", "check", "audit", "--game", game, "--arms", "@reference",
