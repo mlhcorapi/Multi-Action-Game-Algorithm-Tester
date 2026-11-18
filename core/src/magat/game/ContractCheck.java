@@ -14,8 +14,8 @@ import java.util.Set;
  * The contract laws, as runnable checks over captured positions. Every law is total: a throw inside
  * a law is a failure of that law, not of the check.
  *
- * <p>Runs on the un-metered game for L1–L8 and wraps it itself for L9, so the meter's state never
- * leaks into a law that is not about the meter.
+ * <p>Runs on the un-metered game for L1–L8 and L10 and wraps it itself for L9, so the meter's state never
+ * leaks into a law that is not about the meter. L10 applies only to a game that offers action classes.
  */
 public final class ContractCheck {
 
@@ -92,6 +92,8 @@ public final class ContractCheck {
         r.verdicts.add(law("L7", "action keys are unique within a state", () -> l7(game, positions)));
         r.verdicts.add(law("L8", "evaluate is deterministic and finite", () -> l8(game, positions)));
         r.verdicts.add(law("L9", "the meter counts every operation", () -> l9(game, positions)));
+        if (game.hasActionClasses())
+            r.verdicts.add(law("L10", "action classes nest: each finer class within one coarser class", () -> l10(game, positions)));
         return r;
     }
 
@@ -226,6 +228,25 @@ public final class ContractCheck {
             double v2 = g.evaluate(s, player);
             if (Double.isNaN(v1) || Double.isInfinite(v1)) return sc + ": non-finite value " + v1;
             if (Double.compare(v1, v2) != 0) return sc + ": evaluate not deterministic: " + v1 + " vs " + v2;
+        }
+        return null;
+    }
+
+    /** Within a state (action identities are unique per state, L7, not across games, where actor ids collide). */
+    private static <S, A> String l10(Game<S, A> g, List<Scenario<S>> ps) {
+        for (Scenario<S> sc : ps) {
+            java.util.Map<String, String> fineToMid = new java.util.HashMap<>(), midToCoarse = new java.util.HashMap<>();
+            S s = g.copy(sc.state);
+            for (A a : g.legalActions(s)) {
+                String f = g.actionClass(s, a, Granularity.FINE);
+                String m = g.actionClass(s, a, Granularity.MID);
+                String c = g.actionClass(s, a, Granularity.COARSE);
+                if (f == null || m == null || c == null) return sc + ": null action class";
+                String pm = fineToMid.put(f, m);
+                if (pm != null && !pm.equals(m)) return sc + ": FINE " + f + " maps to two MID classes";
+                String pc = midToCoarse.put(m, c);
+                if (pc != null && !pc.equals(c)) return sc + ": MID " + m + " maps to two COARSE classes";
+            }
         }
         return null;
     }

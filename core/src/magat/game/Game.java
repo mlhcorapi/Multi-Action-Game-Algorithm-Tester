@@ -81,6 +81,25 @@ public interface Game<S, A> {
      */
     String actionKey(A action);
 
+    // ---- abstraction of actions: optional -------------------------------------------------------
+
+    /**
+     * Whether {@link #actionClass} abstracts actions at every {@link Granularity}: what an algorithm that learns
+     * action values across a turn needs (AB-EMCTS's table). A game that does not offer it changes nothing.
+     */
+    default boolean hasActionClasses() {
+        return false;
+    }
+
+    /**
+     * The action abstracted to a granularity, for learned tables: {@code COARSE} ("MOVE"), {@code MID}
+     * ("MOVE:RIDER"), {@code FINE} (the full identity). Coarser levels partition finer ones (law L10). Only a
+     * game whose {@link #hasActionClasses} is true implements it.
+     */
+    default String actionClass(S state, A action, Granularity level) {
+        throw new UnsupportedOperationException(id() + " offers no action classes");
+    }
+
     /** A descriptive count for stratification and reporting; the game documents what it counts. */
     int branchingFactor(S state);
 
