@@ -51,8 +51,13 @@ import java.util.Random;
  * one legality check of a planned action during repair; {@code emcts.seqkey}, one plan key built and
  * looked up or stored for the uniqueness count; and {@code emcts.burn}, one bridge burn (re-rooting and
  * pruning).
+ *
+ * <p><b>Extending it.</b> A subclass changes the search through the hooks below, each called where the thesis
+ * tree's subclass had its own: {@link #onTurnStart}, {@link #afterInsertion}, {@link #afterMutation},
+ * {@link #onEvaluated}, {@link #repair} and {@link #moreTelemetry}. Plain EMCTS's hooks do nothing, take no
+ * random draw and touch no forward model, so its search is unchanged by them: its gate says so.
  */
-public final class Emcts<S, A> implements SearchAgent<S, A> {
+public class Emcts<S, A> implements SearchAgent<S, A> {
 
     /** The operations EMCTS records, in the order its rows carry them. */
     public static final List<String> OPERATIONS = Collections.unmodifiableList(Arrays.asList(
@@ -63,11 +68,11 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
     private static final Meter.Op SEQKEY = Meter.register("emcts.seqkey");
     private static final Meter.Op BURN = Meter.register("emcts.burn");
 
-    private final Random rnd;
+    protected final Random rnd;
     private final EmctsParams params;
 
-    private Game<S, A> game;
-    private int player;
+    protected Game<S, A> game;
+    protected int player;
     /** The budget the turn stops at; null under the engine's rule, which the equivalence gate plays. */
     private TurnBudget stopAt;
 
@@ -84,7 +89,8 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
     // Operator telemetry: observation only, no forward-model calls, no random draws.
     private long mutEvents, mutBestGains, mutChildDuplicates, mutRepairKept, mutRepairReplaced;
     private double mutBestGainSum;
-    private int lastRepairKept, lastRepairReplaced;
+    /** What the last repair kept and replaced; a {@link #repair} of a subclass's sets them as the base one does. */
+    protected int lastRepairKept, lastRepairReplaced;
 
     public Emcts(long seed, EmctsParams params) {
         this.rnd = new Random(seed);
@@ -106,6 +112,7 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
         fmCalls = 0; nodesEvaluated = 0; sumNodeValue = 0.0; uniqueSeqKeys.clear();
         mutEvents = mutBestGains = mutChildDuplicates = mutRepairKept = mutRepairReplaced = 0;
         mutBestGainSum = 0.0;
+        onTurnStart();
         TurnRecord.Builder record = TurnRecord.builder();
 
         // The stop rule: the turn stops when its budget is spent (spent()). The engine's agent never cuts its
@@ -186,6 +193,7 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
         double finalValue = bestNode.value();
         double avgNodeValue = nodesEvaluated > 0 ? sumNodeValue / nodesEvaluated : 0.0;
         boolean terminal = bestNode.state() != null && game.isTerminal(bestNode.state());
+        moreTelemetry(record);
         return record
                 .values(initialValue, finalValue, terminal, avgNodeValue)
                 .search(Meter.advances(), Meter.copies(), Meter.evals(), Meter.units())
@@ -203,6 +211,31 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
                 .build();
     }
 
+    // ------------------------------------------------------------------ hooks: nothing in plain EMCTS
+
+    /** The turn begins: before the initialization's first copy. */
+    protected void onTurnStart() {
+    }
+
+    /**
+     * A mutation has drawn its new action: {@code prefixState} is the state after the plan's prefix, on which
+     * {@code inserted} replaces {@code removed} (either null when there was none). Before the repair.
+     */
+    protected void afterInsertion(S prefixState, Node<S, A> parent, A inserted, A removed) {
+    }
+
+    /** A mutation's child exists, repaired, and is about to be scored. */
+    protected void afterMutation(Node<S, A> parent, Node<S, A> child) {
+    }
+
+    /** A node has been scored. */
+    protected void onEvaluated(Node<S, A> node) {
+    }
+
+    /** Adds a subclass's telemetry to the turn's record. Observation only. */
+    protected void moreTelemetry(TurnRecord.Builder record) {
+    }
+
     /** The plan the search settled on, for callers that replay it. */
     public ArrayList<A> bestSequence() {
         return bestNode == null ? new ArrayList<>() : new ArrayList<>(bestNode.sequence());
@@ -211,7 +244,7 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
     // ------------------------------------------------------------------ one child
 
     /** Whether the turn's budget is spent (the stop rule in the class comment); never under the engine's rule. */
-    private boolean spent() {
+    protected boolean spent() {
         return stopAt != null && stopAt.exhausted();
     }
 
@@ -316,6 +349,7 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
         try (Meter.Span key = SEQKEY.span()) {
             uniqueSeqKeys.add(seqKey(node.sequence()));
         }
+        onEvaluated(node);
     }
 
     private String seqKey(List<A> seq) {
@@ -325,20 +359,20 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
         return sb.toString();
     }
 
-    private void advance(S state, A move) {
+    protected void advance(S state, A move) {
         fmCalls++;
         game.advance(state, move);
     }
 
     /** The legal actions, as one {@code emcts.legal} operation. */
-    private List<A> legalActions(S state) {
+    protected List<A> legalActions(S state) {
         try (Meter.Span q = LEGAL.span()) {
             return game.legalActions(state);
         }
     }
 
     /** Whether a planned action is legal, as one {@code emcts.check} operation. */
-    private boolean isLegal(S state, A action) {
+    protected boolean isLegal(S state, A action) {
         try (Meter.Span c = CHECK.span()) {
             return game.isLegal(state, action);
         }
@@ -400,7 +434,7 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
     }
 
     /** A plan must end at the first end-of-turn action. */
-    private ArrayList<A> truncateAtEndTurn(ArrayList<A> seq) {
+    protected ArrayList<A> truncateAtEndTurn(ArrayList<A> seq) {
         ArrayList<A> out = new ArrayList<>();
         for (A a : seq) {
             out.add(a);
@@ -421,9 +455,12 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
             newSeq.add(seq.get(i));
         }
         List<A> available = legalActions(state);
+        A inserted = null;
         if (!available.isEmpty()) {
-            newSeq.add(available.get(rnd.nextInt(available.size())));
+            inserted = available.get(rnd.nextInt(available.size()));
+            newSeq.add(inserted);
         }
+        afterInsertion(state, node, inserted, moveToMutate < seq.size() ? seq.get(moveToMutate) : null);
         for (int i = moveToMutate + 1; i < seq.size(); i++) newSeq.add(seq.get(i));
 
         newSeq = truncateAtEndTurn(repair(newSeq, clone));
@@ -432,6 +469,7 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
         node.addChild(newNode);
         int nChildren = node.children().size();
         if (nChildren > maxChildrenOnANode) maxChildrenOnANode = nChildren;
+        afterMutation(node, newNode);
         return newNode;
     }
 
@@ -440,7 +478,7 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
      * when applied) is replaced by the legal action with the best 1-ply value. The structure,
      * including what happens to a kept action that throws, is the engine agent's exactly.
      */
-    private ArrayList<A> repair(ArrayList<A> child, S state) {
+    protected ArrayList<A> repair(ArrayList<A> child, S state) {
         ArrayList<A> repaired = new ArrayList<>();
         lastRepairKept = 0;
         lastRepairReplaced = 0;
