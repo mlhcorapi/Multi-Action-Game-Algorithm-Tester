@@ -26,11 +26,15 @@ import java.util.Random;
  * plan ever scored, which survives pruning.
  *
  * <p>It stops when its budget is spent, its initialization included. It checks the budget before every
- * candidate a greedy step tries (in the initial plan and in a repair), before every action a child
- * replays or keeps, and before a child is scored; the step or the child the budget runs out in is
- * abandoned, and with it the rest of its generation, and the turn plays the best plan scored by then. A turn passes its budget by at most the one
- * action it was trying. A generation can cost thousands of units on a large position, so finishing it would
- * let a turn run far past a small budget.
+ * candidate a greedy step tries (in the initial plan and in a repair), before every action a mutation
+ * replays or a repair keeps, and before a child it has built is scored; the step or the child the budget
+ * runs out in is abandoned, and with it the rest of its generation, and the turn plays the best plan scored
+ * by then. A child built within the budget is scored whole: a copy, the replay of its plan and an
+ * evaluation, unchecked, as the engine scores one; and the next child of a comma generation makes its two
+ * copies before its first check. So a turn passes its budget by at most one child's scoring and those two
+ * copies: on Tribes, whose plans hold 20 actions at most, about 20 advances, 0.2% of the smallest
+ * published level. A generation can cost thousands of units on a large position, so finishing it would let
+ * a turn run far past a small budget.
  *
  * <p>This is a line-for-line port of the engine fork's {@code ExperimentalEMCTSAgent} with (1+1) or (1,k)
  * selection: every forward-model call and every random draw happens in the same order, which the

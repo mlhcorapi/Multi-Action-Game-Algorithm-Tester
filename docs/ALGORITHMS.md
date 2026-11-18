@@ -85,11 +85,18 @@ Baier and Cowling's evolutionary MCTS (2018), in the variant of the engine fork'
   incumbent's path and prunes every other branch.
 - **The turn played** is the best plan ever scored.
 - **It stops when the budget is spent.** It checks the budget before every candidate a greedy step
-  tries, in the initial plan and in a repair, and before every action a generation replays or keeps. The
-  step or generation the budget runs out in is abandoned, and the turn plays the best plan scored by
-  then, so a turn passes its budget by one action's trial at most. Finishing it instead would cost
-  thousands of units on a large Tribes position: a repair tries every legal action, about 270, for each
-  action it replaces.
+  tries, in the initial plan and in a repair, before every action a mutation replays or a repair keeps,
+  and before a child it has built is scored. The step or child the budget runs out in is abandoned, with
+  the rest of its generation, and the turn plays the best plan scored by then. A child built within the
+  budget is scored whole (a copy, the replay of its plan and an evaluation, as the engine scores one),
+  and the next child of a comma generation makes two copies before its first check. So a turn passes its
+  budget by one child's scoring at most, and those two copies: on Tribes, whose plans hold 20 actions at
+  most, about 20 advances, 0.2% of the smallest published level. Finishing the generation instead would
+  cost thousands of units on a large Tribes position: a repair tries every legal action, about 270, for
+  each action it replaces. *(Corrected 2026-11-18: this said a turn passes its budget by one action's
+  trial at most, which a child's scoring exceeds: in a sweep of the toy game's turns, 13% of plain
+  EMCTS's passed their budget by more than 1.5 units. The code is unchanged, so every published run
+  stands.)*
 
 | Parameter | Default | |
 |---|---|---|

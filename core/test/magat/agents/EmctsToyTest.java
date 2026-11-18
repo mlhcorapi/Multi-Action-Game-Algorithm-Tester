@@ -12,6 +12,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.Assert.*;
@@ -20,6 +21,14 @@ public class EmctsToyTest {
 
     private final ToyGame game = new ToyGame();
     private List<Scenario<ToyGame.State>> positions;
+
+    /**
+     * The most a turn passes its budget by (the stop rule in {@code Emcts}): one child's scoring, a copy, the
+     * replay of a plan of five actions at most here and an evaluation, at the measurement weights.
+     */
+    private static final double SCORING = 0.16 + (ToyGame.MAX_ACTIONS_PER_TURN + 1) * 1.0 + 0.077 + 1e-9;
+    /** And in a comma generation, the two copies the next child makes before its first check. */
+    private static final double SCORING_COMMA = SCORING + 2 * 0.16;
 
     @Before
     public void setUp() {
@@ -68,9 +77,8 @@ public class EmctsToyTest {
     @Test
     public void aTurnStopsWhenItsBudgetIsSpentWhereTheEnginesRuleGoesOn() {
         // Here the greedy initialization takes 5 steps, about 37 units, and a generation about 13. A turn may pass
-        // its budget by the candidate it was trying (a copy, an advance and an evaluation, 1.24 units) and the
-        // root's evaluation, no more.
-        final double over = 1.5;
+        // its budget by one child's scoring, no more.
+        final double over = SCORING;
         TurnRecord whole = byTheEnginesRule(2_000);
         for (long budget : new long[]{5, 20, 40, 66, 136}) {
             TurnRecord in = Episode.run(game, positions.get(0), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), budget);
@@ -94,14 +102,14 @@ public class EmctsToyTest {
         TurnRecord r = Episode.run(game, positions.get(0), 0, comma, 2_000);
         double turn = r.units + r.initUnits;
         assertTrue("the turn reaches its budget (" + turn + ")", turn >= 2_000 * 20 / 21);
-        assertTrue("and passes it by one candidate at most (" + turn + ")", turn < 2_000 + 1.5);
+        assertTrue("and passes it by one child's scoring at most (" + turn + ")", turn < 2_000 + SCORING_COMMA);
         TurnRecord plain = Episode.run(game, positions.get(0), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 2_000);
         assertNotEquals("comma selection is another search", plain.finalValue + ":" + plain.nodes, r.finalValue + ":" + r.nodes);
         assertTrue("deterministic", Signature.of(r).differences(Signature.of(Episode.run(game, positions.get(0), 0, comma, 2_000)), 0).isEmpty());
         // Budgets smaller than a generation of five children: the turn stops inside it.
         for (long budget : new long[]{40, 50, 66, 90}) {
             TurnRecord in = Episode.run(game, positions.get(0), 0, comma, budget);
-            assertTrue(budget + ": stops inside a generation (" + (in.units + in.initUnits) + ")", in.units + in.initUnits < budget + 1.5);
+            assertTrue(budget + ": stops inside a generation (" + (in.units + in.initUnits) + ")", in.units + in.initUnits < budget + SCORING_COMMA);
         }
         // Under the engine's rule, which only the equivalence gate plays, every generation is whole.
         magat.agent.TurnBudget.setInitialization(magat.agent.TurnBudget.Initialization.OUTSIDE_BUDGET);
@@ -110,6 +118,28 @@ public class EmctsToyTest {
             assertEquals("whole generations of five", 0, (int) engine.telemetry.get("iterations").doubleValue() % 5);
         } finally {
             magat.agent.TurnBudget.setInitialization(magat.agent.TurnBudget.Initialization.IN_BUDGET);
+        }
+    }
+
+    @Test
+    public void aTurnPassesItsBudgetByOneChildsScoringAtMost() {
+        // The stop rule's bound, swept over positions and budgets. A child built within the budget is scored
+        // whole, so its scoring is the term that binds, not a greedy step's trial (1.24 units here): some turns
+        // pass the budget by more than a trial, and none by more than a scoring.
+        List<Scenario<ToyGame.State>> many = game.positions(8);
+        for (EmctsFactory<ToyGame.State, ToyGame.Move> arm : Arrays.asList(EmctsFactory.<ToyGame.State, ToyGame.Move>plain(),
+                EmctsFactory.<ToyGame.State, ToyGame.Move>comma(5))) {
+            double bound = arm.id().equals("emcts") ? SCORING : SCORING_COMMA;
+            int pastATrial = 0;
+            for (Scenario<ToyGame.State> position : many) {
+                for (long budget = 30; budget <= 1_500; budget += 37) {
+                    TurnRecord r = Episode.run(game, position, 0, arm, budget);
+                    double past = r.units + r.initUnits - budget;
+                    assertTrue(arm.id() + " at " + budget + ": past its budget by " + past, past < bound);
+                    if (past > 1.24 + 1e-9) pastATrial++;
+                }
+            }
+            assertTrue(arm.id() + ": a child's scoring, not a trial, is the bound that binds", pastATrial > 0);
         }
     }
 
