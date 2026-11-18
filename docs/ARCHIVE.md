@@ -25,6 +25,13 @@ Every path below is a path on the tag.
 | Tools | `import_r7615.py`, `legacy-arms.json`, `package_worked_result.py`, `make_engine_branch.py` | `tools/` |
 | Documents | the earlier `ALGORITHMS.md` (the 33 arms; v0.1 has its own), `MAGAT/BRIEF.md`, `MAGAT/STARTING_PROMPT.md`, and the full design history `MAGAT/DESIGN.md` | |
 
+**Back on main** for the AB-EMCTS experiment ([`plans/ab-emcts-vs-oep.md`](plans/ab-emcts-vs-oep.md)): `Game.actionClass` with
+`Granularity`, now an optional capability with a law of its own (L10); `emcts-comma`; and `QdeltaEmcts`
+with `ActionTable` and the two arms the experiment runs, `comma-z0-coarse` and `comma-z0-random`, gated
+against `Stage1BiasedAgent` by `EngineQdeltaOracle` (the archived oracle, brought to the current
+accounting). Its other 29 arms, the fine-grained table, the biased insertion, the shortlist and the rest
+of the table above stay archived.
+
 ## A finding kept for the paper
 
 `emcts-comma` overspent at small levels in the archive: about 2.2× its budget at 9,500 units and 1.3× at
@@ -38,8 +45,8 @@ theirs when the budget runs out (`emcts`'s greedy plan, a fifth of the smallest 
 ## Re-adding an algorithm family
 
 1. Restore its classes from the tag (`git checkout ab-emcts-archive -- <paths>`) and bring them to the
-   v0.1 contract: no `actionClass`, and an initialization paid from the budget that stops when it runs
-   out.
+   current contract: `actionClass` only on a game that offers it (`hasActionClasses`), and an
+   initialization paid from the budget that stops when it runs out.
 2. Register its arms in `TribesAgents.registry()`, and any arm set in `TribesAgents.armSets()`.
 3. Restore its oracle, register it in `TribesAgents.oracles()`, and gate the port with `magat check
    equivalence --arms <ids>`.

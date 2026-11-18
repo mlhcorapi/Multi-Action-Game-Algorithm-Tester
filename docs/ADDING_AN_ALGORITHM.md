@@ -214,6 +214,12 @@ port against the original rather than trusting it:
    with `deadInitCopies()`. `emcts` passes this gate against the engine's EMCTS agent and `tbets`
    against its TBETS agent, counters included: 32 cells each by default, and 128 each on 64 positions.
 
+A variant of a gated port can extend it instead of copying it. `Emcts` has hooks for that, called where
+the engine's variants change the search: `onTurnStart`, `afterInsertion`, `afterMutation`,
+`onEvaluated`, `repair` and `moreTelemetry`. Plain EMCTS's hooks do nothing and draw nothing, so its own
+gate still holds with them in place. `QdeltaEmcts` is such a variant; its oracle drives the engine's
+variant, and its gate compares the variant's own counters too.
+
 ## Pricing it, running it, comparing it
 
 1. **Price it in your machine's currency.** Measuring and comparing arms needs an idle machine. With a

@@ -75,11 +75,14 @@ def main(argv) -> int:
           [PY, ROOT / "magat.py", "test"], "TESTS: PASS")
 
     step("3. Contract laws on published positions")
-    check("L1-L9 pass", [PY, ROOT / "magat.py", "check", "contract", "--game", game, "--scenarios", "4"], "CONTRACT: PASS")
+    check("L1-L10 pass", [PY, ROOT / "magat.py", "check", "contract", "--game", game, "--scenarios", "4"], "CONTRACT: PASS")
 
     step("4. Gates and probes: equivalence, audit")
     check("emcts and tbets reproduce the engine's agents at 8k on 2 positions",
           [PY, ROOT / "magat.py", "check", "equivalence", "--game", game, "--arms", "emcts,tbets",
+           "--scenarios", "2", "--visits", "1", "--budgets", "8000"], "EQUIVALENCE: PASS")
+    check("the AB-EMCTS arms reproduce the engine's agents at 8k on 2 positions, at the measurement weights",
+          [PY, ROOT / "magat.py", "check", "equivalence", "--game", game, "--arms", "@ab-emcts", "--no-weights",
            "--scenarios", "2", "--visits", "1", "--budgets", "8000"], "EQUIVALENCE: PASS")
     check("audit: each arm's declared operations and forward model account for its turn (toy size)",
           [PY, ROOT / "magat.py", "check", "audit", "--game", game, "--arms", "@reference",
