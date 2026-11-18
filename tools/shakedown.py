@@ -185,6 +185,22 @@ def main(argv) -> int:
         check(f"the example config {example.name} reads, and its preflight says what it would measure",
               [PY, ROOT / "magat.py", "calibrate-controlled", "--config", example, "--out",
                data / "shakedown" / f"config-{example.stem}", "--preflight", "--toy"], "4 arm(s): emcts, mcts, oep, tbets")
+    # --from: a currency started as a copy of the published one, which prices only the arms it lacks. Measuring into it
+    # is a real session (a toy one may not merge into a real currency): here, the copy and what it would measure.
+    published = ROOT / "games" / game / "calibration" / "r7615-time" / "compute_weights.properties"
+    copied = data / "shakedown" / f"from-{game}"
+    shutil.rmtree(copied, ignore_errors=True)
+    cf = [PY, ROOT / "magat.py", "calibrate-controlled", "--name", "shakedown-from", "--game", game, "--out", copied,
+          "--from", "r7615-time", "--arms", "@ab-emcts", "--toy", "--preflight"]
+    check("--from: the currency starts as a byte copy of the published one, and would price only the arms it lacks", cf,
+          "3 arm(s): emcts-comma, comma-z0-coarse, comma-z0-random, merged",
+          then=lambda: (copied / "compute_weights.properties").read_bytes() == published.read_bytes())
+    check("--from again: the currency there is that copy, kept", cf, "kept: it is that currency, extended")
+    changed = copied / "compute_weights.properties"
+    if changed.is_file():                                   # one published price changed
+        changed.write_text(changed.read_text(encoding="utf-8").replace("w.copy = ", "w.copy = 1", 1), encoding="utf-8")
+    check("--from refuses a currency whose published prices changed, naming the line", cf,
+          "is not the published r7615-time extended", codes=(2,))
     older = data / "shakedown" / f"controlled-{game}-older"
     shutil.rmtree(older, ignore_errors=True)
     older.mkdir(parents=True)

@@ -56,6 +56,7 @@ Exit codes:
 import argparse
 import csv
 import datetime
+import hashlib
 import json
 import os
 import pathlib
@@ -1584,6 +1585,38 @@ def level_units(v, game: str) -> int:
     raise ValueError(f"level {json.dumps(v)} is neither units nor a published level of {game} ({', '.join(named) or 'none'})")
 
 
+OPERATIONS_LINE = re.compile(r"^\s*operations\s*=")
+
+
+def start_from(game: str, name: str, weights: pathlib.Path, record: pathlib.Path):
+    """--from NAME: the currency at `weights` starts as a byte copy of the published currency NAME, or, if it exists,
+    must be that copy extended: every line of the published file still in it, its `operations` line aside (a merge
+    keeps every line it does not replace and extends that one). Writes record/from.json. Returns (problem, line)."""
+    published = ROOT / "games" / game / "calibration" / name / "compute_weights.properties"
+    if not published.is_file():
+        root = ROOT / "games" / game / "calibration"
+        names = sorted(d.name for d in root.iterdir() if (d / "compute_weights.properties").is_file()) if root.is_dir() else []
+        return (f"--from {name}: no published currency of that name; games/{game}/calibration/ has "
+                + (", ".join(names) or "none")), None
+    digest = hashlib.sha256(published.read_bytes()).hexdigest()
+    if not weights.is_file():
+        weights.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(published, weights)
+        how = "copied: the currency starts as it"
+    else:
+        have = {line.rstrip("\r") for line in weights.read_text(encoding="utf-8", errors="replace").splitlines()}
+        missing = [line for line in published.read_text(encoding="utf-8").splitlines()
+                   if line.strip() and not OPERATIONS_LINE.match(line) and line not in have]
+        if missing:
+            return (f"--from {name}: the currency at {weights} is not the published {name} extended: "
+                    f"{len(missing)} of its line(s) changed or gone, the first {missing[0][:100]!r}. Calibrate under another --name, or "
+                    "move the folder aside"), None
+        how = "kept: it is that currency, extended"
+    (record / "from.json").write_text(json.dumps({"from": name, "file": published.relative_to(ROOT).as_posix(),
+                                                  "sha256": digest, "currency": how}, indent=2), encoding="utf-8")
+    return None, f"# from      the published {name} (sha256 {digest[:12]}...), {how}"
+
+
 def main(argv) -> int:
     try:
         sys.stdout.reconfigure(errors="replace")
@@ -1597,6 +1630,10 @@ def main(argv) -> int:
     ap.add_argument("--out", help="the calibration directory (default <data>/calibration/<game>-<name>)")
     ap.add_argument("--portfolio", help="default: the game's published portfolio")
     ap.add_argument("--arms", help="arms or @sets to price (default: the game's reference arms, @reference)")
+    ap.add_argument("--from", dest="from_currency", metavar="NAME",
+                    help="start the currency as a copy of this published one (games/<game>/calibration/<NAME>), so it keeps "
+                         "every published price and prices only the arms it lacks; a currency already there must be that "
+                         "copy, extended")
     ap.add_argument("--levels"), ap.add_argument("--turns"), ap.add_argument("--reps"), ap.add_argument("--warmup")
     ap.add_argument("--checks", action="store_true", help="only the checks, against the currency as it is")
     ap.add_argument("--no-checks", action="store_true", help="the session only")
@@ -1669,6 +1706,12 @@ def main(argv) -> int:
     if a.config:
         print(f"# config    {a.config}")
     print("############################################################")
+    if a.from_currency:
+        problem, line = start_from(a.game, a.from_currency, weights, record)
+        if problem:
+            print(problem, file=sys.stderr)
+            return 2
+        print(line)
     quiet_runner = Runner(a, plat, None, events, record)
 
     # ---- the arms, and what the currency prices already

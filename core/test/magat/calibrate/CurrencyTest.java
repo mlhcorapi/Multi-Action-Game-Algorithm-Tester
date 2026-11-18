@@ -74,6 +74,11 @@ public class CurrencyTest {
 
             // The merge writes the new arm in the file's unit: 2000 ns over the reference advance's 1000, times 2.
             String merged = Currency.merge(FILE, file(), s(), Collections.singletonList(cells.get(2)), cells.get(0));
+            // Every line of the file is kept as it was, but the operations line, which the merge extends:
+            // calibrate-controlled --from tells a published currency, extended, from one changed by exactly this.
+            java.util.Set<String> kept = new java.util.HashSet<>(Arrays.asList(merged.split("\n")));
+            for (String line : FILE)
+                if (!line.trim().startsWith("operations")) assertTrue("kept: " + line, kept.contains(line));
             Weights w = Weights.parse(null, Arrays.asList(merged.split("\n")));
             assertEquals(4.0, w.profile("new@100")[0], 1e-6);
             assertEquals(0.5, w.profile("new@100")[1], 1e-6);
