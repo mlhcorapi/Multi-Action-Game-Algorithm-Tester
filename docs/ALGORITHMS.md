@@ -107,6 +107,12 @@ By those rules a 9,500-unit Tribes turn spent 1.035× its budget on average, and
 makes the engine's two copies of the state that the engine never reads, because each draws from the
 state's random generator: without them, the copies after them meet other chance events.
 
+**`emcts-comma`**, the same search with (1,5) comma selection: each generation makes five children of the
+incumbent, and the best of them becomes the incumbent, better or not. It is not a reference algorithm: it is
+the baseline of the AB-EMCTS experiment (pre-registered in `docs/plans/ab-emcts-vs-oep.md`), gated against
+the engine's agent with comma selection (`check equivalence --arms emcts-comma`). Its search stops hard inside
+a generation too, at the child the budget runs out in.
+
 ## `oep`: Online Evolutionary Planning
 
 Justesen, Mahlmann, Risi and Togelius's online evolutionary planning (2017): a genetic algorithm whose

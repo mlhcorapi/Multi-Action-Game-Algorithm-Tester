@@ -27,8 +27,10 @@ Every path below is a path on the tag.
 
 ## A finding kept for the paper
 
-`emcts-comma` overspends at small levels: about 2.2× its budget at 9,500 units and 1.3× at 20,000,
-because its five-plan greedy initialization cannot stop when the budget runs out. Plain `emcts` spends
+`emcts-comma` overspent at small levels in the archive: about 2.2× its budget at 9,500 units and 1.3× at
+20,000, because a generation of five children could not stop when the budget ran out (it makes one greedy
+initial plan, as `emcts` does; this page said five until 2026-11-18). Since 1.0 the search stops hard,
+inside a generation too, and `emcts-comma` is back on main as the AB-EMCTS experiment's baseline. Plain `emcts` spends
 1.05×, 1.01× and 1.00× at 9,500 / 20,000 / 101,500. `ARCHIVE_NOTES.md` on the branch has the table.
 In v0.1 every algorithm's initialization is paid from the budget, and `mcts`, `oep` and `tbets` stop
 theirs when the budget runs out (`emcts`'s greedy plan, a fifth of the smallest level, is never cut short).

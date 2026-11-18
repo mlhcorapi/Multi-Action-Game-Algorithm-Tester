@@ -74,8 +74,8 @@ python magat.py calibrate-controlled --config calibrations/tribes/examples/serve
 
 - **Lists** (`arms`, `levels`, `check-arms`) are JSON lists. A level is units or a published level's name
   (`"500ms"`, from `games/<game>/levels.json`). A flag such as `toy` or `allow-online` is `true` or `false`.
-- **Without `arms` or `levels`**, the session prices every arm the game registers at the published
-  levels. The reference cell, `emcts` at the lowest level, is always measured, because it defines the unit.
+- **Without `arms` or `levels`**, the session prices the game's reference arms (`@reference`) at the
+  published levels; an arm registered beyond them, an experiment's, is priced when named. The reference cell, `emcts` at the lowest level, is always measured, because it defines the unit.
 - **An option on the command line wins** over the file, so one file serves several sessions:
   `--config server.json --name r7615-again`.
 - **The modes are not in the file.** `--preflight`, `--checks` and `--no-checks` say what one invocation
