@@ -116,9 +116,29 @@ state's random generator: without them, the copies after them meet other chance 
 
 **`emcts-comma`**, the same search with (1,5) comma selection: each generation makes five children of the
 incumbent, and the best of them becomes the incumbent, better or not. It is not a reference algorithm: it is
-the baseline of the AB-EMCTS experiment (pre-registered in `docs/plans/ab-emcts-vs-oep.md`), gated against
+the baseline of the AB-EMCTS experiment (pre-registered in [`plans/ab-emcts-vs-oep.md`](plans/ab-emcts-vs-oep.md)), gated against
 the engine's agent with comma selection (`check equivalence --arms emcts-comma`). Its search stops hard inside
 a generation too, at the child the budget runs out in.
+
+**`comma-z0-coarse` and `comma-z0-random`**, the experiment's other two arms (`@ab-emcts` names all three):
+AB-EMCTS, `emcts-comma` whose repair is directed by an action-value table it learns within the turn
+(`QdeltaEmcts`). Every mutation's change in value, the child's over its parent's, is credited to the
+inserted action's classes and, negated, to the removed one's, at the game's coarse and mid action classes
+(`Game.actionClass`, an optional capability: [`CONTRACT.md`](CONTRACT.md)); an estimate shrinks toward the
+turn's mean change, with prior strength 5, and the table starts empty every turn. Where EMCTS's repair tries
+every legal action to replace one that is no longer legal, theirs evaluates nothing: `comma-z0-coarse` takes
+the legal action whose coarse class has the best estimate, ties broken at random, and `comma-z0-random`, its
+control, takes an arbitrary legal action, so the two differ in the ranking alone. Insertion stays uniform.
+They run only on a game that offers action classes. Operations: EMCTS's, then `qd.classify`, `qd.update`,
+`qd.lookup` (the ranking arm only) and `qd.zeropick`; at 9,500 units on Tribes the forward model takes
+about 91% of a turn and 0.3% is unaccounted (`check audit`). Code:
+`core/src/magat/agents/emcts/QdeltaEmcts.java`.
+
+**Gated** against the thesis line's agent, the engine fork's `Stage1BiasedAgent`, under the engine's
+accounting: `check equivalence --arms comma-z0-coarse,comma-z0-random --no-weights`, 32 cells each, 0
+failed (and 256 on 64 positions). The gate compares the mechanism's own counters as well as the turn's
+signature: the table's updates, the zero-evaluation picks, the repair's units and its candidate
+evaluations. It runs at the fixed measurement weights (`--no-weights`) until a currency prices the arms.
 
 ## `oep`: Online Evolutionary Planning
 
