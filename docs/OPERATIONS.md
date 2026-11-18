@@ -202,7 +202,7 @@ different portfolios are refused. The output is:
 | Command | What it asserts |
 |---|---|
 | `check contract` | the laws L1-L9 on captured positions ([contract](CONTRACT.md#the-laws-magat-check-contract)) |
-| `check equivalence` | each ported arm reproduces its oracle (the reference implementation it was ported from) field for field, including its counters, on N scenarios × V visits. Without `--weights` both sides are priced with the fixed measurement weights |
+| `check equivalence` | each ported arm reproduces its oracle (the reference implementation it was ported from) field for field, including its counters, on N scenarios × V visits. Without `--weights` both sides are priced with the fixed measurement weights, and so is an arm the currency does not price yet |
 | `check replay` | the turns of a published leaf, re-planned on this machine, agree with its rows field for field |
 | `check audit` | each arm's declared operations and forward model account for its turn: warns above 10% unaccounted, fails above 25% |
 
