@@ -1596,7 +1596,7 @@ def main(argv) -> int:
     ap.add_argument("--game", default="tribes")
     ap.add_argument("--out", help="the calibration directory (default <data>/calibration/<game>-<name>)")
     ap.add_argument("--portfolio", help="default: the game's published portfolio")
-    ap.add_argument("--arms", help="arms or @sets to price (default: every priced arm the game registers)")
+    ap.add_argument("--arms", help="arms or @sets to price (default: the game's reference arms, @reference)")
     ap.add_argument("--levels"), ap.add_argument("--turns"), ap.add_argument("--reps"), ap.add_argument("--warmup")
     ap.add_argument("--checks", action="store_true", help="only the checks, against the currency as it is")
     ap.add_argument("--no-checks", action="store_true", help="the session only")
@@ -1672,7 +1672,7 @@ def main(argv) -> int:
     quiet_runner = Runner(a, plat, None, events, record)
 
     # ---- the arms, and what the currency prices already
-    rc, lines = quiet_runner.launch(["arms", "--game", a.game, *(["--arms", a.arms] if a.arms else [])], "arms", "build", False)
+    rc, lines = quiet_runner.launch(["arms", "--game", a.game, *(["--arms", a.arms] if a.arms else ["--default"])], "arms", "build", False)
     if rc != 0:
         print(f"cannot list the arms (exit {rc}); read {record / 'build.log'}", file=sys.stderr)
         return 2

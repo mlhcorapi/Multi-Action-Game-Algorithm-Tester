@@ -42,6 +42,18 @@ public interface GameModule<S, A> {
         return Collections.emptyMap();
     }
 
+    /**
+     * The arms a calibration prices when it names none: the game's {@code @reference} set, else every arm it
+     * registers. An arm registered beyond the reference set (an experiment's) is priced when named.
+     */
+    default List<String> defaultCalibrationArms() {
+        List<String> set = armSets().get("reference");
+        if (set != null) return new ArrayList<>(set);
+        List<String> all = new ArrayList<>();
+        for (magat.agent.AgentFactory<S, A> f : agents().all()) if (f.priced()) all.add(f.id());
+        return all;
+    }
+
     /** Expands {@code @set} entries of a list of arm ids, keeping order and dropping repeats. */
     default List<String> expandArms(List<String> ids) {
         Set<String> out = new LinkedHashSet<>();

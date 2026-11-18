@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.Random;
 
 /**
- * The engine fork's {@code ExperimentalEMCTSAgent} with (1+1) incumbent selection, driven through the
+ * The engine fork's {@code ExperimentalEMCTSAgent} with (1+1) or (1,k) selection, driven through the
  * engine one turn at a time, as the oracle for the ported {@code Emcts}: the gate asserts that the port
  * makes every forward-model call and every random draw the engine's agent makes, in the same order.
  *
@@ -34,9 +34,23 @@ import java.util.Random;
  */
 public final class EngineEmctsOracle implements Oracle<TribesState> {
 
+    private final ExperimentalEMCTSParams.SelectionMode selection;
+    private final int childrenPerGeneration;
+
+    /** (1+1) selection: the oracle of plain {@code emcts}. */
+    public EngineEmctsOracle() {
+        this(ExperimentalEMCTSParams.SelectionMode.PLUS, 1);
+    }
+
+    /** The engine's agent at a selection mode and children per generation: (COMMA, 5) is {@code emcts-comma}'s. */
+    public EngineEmctsOracle(ExperimentalEMCTSParams.SelectionMode selection, int childrenPerGeneration) {
+        this.selection = selection;
+        this.childrenPerGeneration = childrenPerGeneration;
+    }
+
     @Override
     public String describe() {
-        return "engine ExperimentalEMCTSAgent(PLUS, k=1)";
+        return "engine ExperimentalEMCTSAgent(" + selection + ", k=" + childrenPerGeneration + ")";
     }
 
     /** The engine's EMCTS bounds its search alone: its greedy initialization is paid outside the budget. */
@@ -59,8 +73,8 @@ public final class EngineEmctsOracle implements Oracle<TribesState> {
         p.heuristic_method = p.SIMPLE_HEURISTIC;
         p.depth = 21;
         p.computeProfile = null;
-        p.selectionMode = ExperimentalEMCTSParams.SelectionMode.PLUS;
-        p.childrenPerGeneration = 1;
+        p.selectionMode = selection;
+        p.childrenPerGeneration = childrenPerGeneration;
         ExperimentalEMCTSAgent agent = new ExperimentalEMCTSAgent(seed, p);
 
         GameState gs = scenario.state.raw().copy();

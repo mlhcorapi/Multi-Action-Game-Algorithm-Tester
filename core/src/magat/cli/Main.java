@@ -117,7 +117,9 @@ public final class Main {
     private static <S, A> int arms(Args args) {
         GameModule<S, A> module = Games.load(args.require("game"));
         // --arms a,b|@set lists only those, in the order given (sets expanded), so a tool can plan with them.
-        List<String> only = args.has("arms") ? module.expandArms(args.getList("arms", new ArrayList<>())) : null;
+        // --default lists the arms a calibration prices when it names none.
+        List<String> only = args.has("arms") ? module.expandArms(args.getList("arms", new ArrayList<>()))
+                : args.flag("default") ? module.defaultCalibrationArms() : null;
         List<AgentFactory<S, A>> list = new ArrayList<>();
         if (only == null) list.addAll(module.agents().all());
         else for (String id : only) {

@@ -79,7 +79,7 @@ final class CalibrateCommand {
         o.check = check;
         o.levels = args.getLongs("levels", null);
         o.defaultLevels = args.getLongs("default-levels", null);
-        if (args.has("arms")) o.arms = module.expandArms(args.getList("arms", new ArrayList<>()));
+        o.arms = args.has("arms") ? module.expandArms(args.getList("arms", new ArrayList<>())) : module.defaultCalibrationArms();
         o.reps = args.getInt("reps", o.reps);
         o.turns = args.get("turns");
         o.warmup = args.getInt("warmup", o.warmup);
