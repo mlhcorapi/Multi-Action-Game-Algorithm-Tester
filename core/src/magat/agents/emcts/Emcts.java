@@ -18,19 +18,21 @@ import java.util.Random;
  * Evolutionary MCTS for multi-action turns, written against the {@link Game} contract.
  *
  * <p>The search: a greedy 1-ply initial plan; then, in {@code phases} equal cumulative slices of the
- * budget, mutate-and-repair children of the incumbent, scored by the heuristic, with (1+1) selection: a
- * child that beats the incumbent becomes the incumbent. At every phase boundary but the last a bridge
- * burn promotes the root child on the incumbent's path and prunes every other branch. The answer is the
- * best plan ever scored, which survives pruning.
+ * budget, generations of mutate-and-repair children of the incumbent, scored by the heuristic. Under (1+1)
+ * selection, plain EMCTS, a generation is one child, which becomes the incumbent if it beats it. Under
+ * (1,k) comma selection a generation is k children of the incumbent, and the best of them becomes the
+ * incumbent, better or not ({@link Selection}). At every phase boundary but the last a bridge burn
+ * promotes the root child on the incumbent's path and prunes every other branch. The answer is the best
+ * plan ever scored, which survives pruning.
  *
  * <p>It stops when its budget is spent, its initialization included. It checks the budget before every
- * candidate a greedy step tries (in the initial plan and in a repair), before every action a generation
- * replays or keeps, and before a child is scored; the step or the generation the budget runs out in is
- * abandoned, and the turn plays the best plan scored by then. A turn passes its budget by at most the one
+ * candidate a greedy step tries (in the initial plan and in a repair), before every action a child
+ * replays or keeps, and before a child is scored; the step or the child the budget runs out in is
+ * abandoned, and with it the rest of its generation, and the turn plays the best plan scored by then. A turn passes its budget by at most the one
  * action it was trying. A generation can cost thousands of units on a large position, so finishing it would
  * let a turn run far past a small budget.
  *
- * <p>This is a line-for-line port of the engine fork's {@code ExperimentalEMCTSAgent} with (1+1)
+ * <p>This is a line-for-line port of the engine fork's {@code ExperimentalEMCTSAgent} with (1+1) or (1,k)
  * selection: every forward-model call and every random draw happens in the same order, which the
  * equivalence gate asserts against that class under that class's accounting
  * ({@link TurnBudget.Initialization#OUTSIDE_BUDGET}, which only the gate uses): its initialization is
@@ -84,6 +86,10 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
         this.rnd = new Random(seed);
         this.params = params;
         if (params.phases < 1) throw new IllegalArgumentException("phases must be >= 1");
+        if (params.childrenPerGeneration < 1)
+            throw new IllegalArgumentException("childrenPerGeneration must be >= 1 (got " + params.childrenPerGeneration + ")");
+        if (params.selection == Selection.PLUS && params.childrenPerGeneration != 1)
+            throw new IllegalArgumentException("(1+1) selection makes one child per generation (got " + params.childrenPerGeneration + ")");
     }
 
     // ------------------------------------------------------------------ the turn
@@ -131,11 +137,28 @@ public final class Emcts<S, A> implements SearchAgent<S, A> {
                 if ((numIters - phaseStartIters) >= maxItersPerPhase) break;
 
                 numIters++;
+                boolean abandoned = false;
                 try (Meter.Span g = GENERATION.span()) {
-                    Node<S, A> child = expandOnce(incumbent, state);
-                    if (child == null) break;                    // the budget ran out in it: abandoned
-                    if (child.value() > incumbent.value()) incumbent = child;
+                    final int k = params.childrenPerGeneration;
+                    Node<S, A> parent = incumbent, bestOfGeneration = null;
+                    for (int childIdx = 0; childIdx < k; childIdx++) {
+                        if (childIdx > 0) numIters++;
+                        Node<S, A> born = expandOnce(parent, state);
+                        if (born == null) {                      // the budget ran out in it: the generation ends here
+                            abandoned = true;
+                            break;
+                        }
+                        if (bestOfGeneration == null || born.value() > bestOfGeneration.value()) bestOfGeneration = born;
+                        // The engine's reservoir pick over the generation, drawn for every child when k > 1 and never
+                        // at k = 1: comma selection does not use it, but it takes its draw from the random stream.
+                        if (k > 1) rnd.nextInt(childIdx + 1);
+                    }
+                    if (!abandoned && bestOfGeneration != null) {
+                        if (params.selection == Selection.COMMA) incumbent = bestOfGeneration;
+                        else if (bestOfGeneration.value() > incumbent.value()) incumbent = bestOfGeneration;
+                    }
                 }
+                if (abandoned) break;
             }
 
             // Bridge burn at every phase boundary except the last.

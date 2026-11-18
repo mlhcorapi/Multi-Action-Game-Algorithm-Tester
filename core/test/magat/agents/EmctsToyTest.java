@@ -88,6 +88,44 @@ public class EmctsToyTest {
     }
 
     @Test
+    public void commaSelectionMakesGenerationsOfKChildrenAndStopsInsideOne() {
+        EmctsFactory<ToyGame.State, ToyGame.Move> comma = EmctsFactory.comma(5);
+        assertEquals("emcts-comma", comma.id());
+        TurnRecord r = Episode.run(game, positions.get(0), 0, comma, 2_000);
+        double turn = r.units + r.initUnits;
+        assertTrue("the turn reaches its budget (" + turn + ")", turn >= 2_000 * 20 / 21);
+        assertTrue("and passes it by one candidate at most (" + turn + ")", turn < 2_000 + 1.5);
+        TurnRecord plain = Episode.run(game, positions.get(0), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 2_000);
+        assertNotEquals("comma selection is another search", plain.finalValue + ":" + plain.nodes, r.finalValue + ":" + r.nodes);
+        assertTrue("deterministic", Signature.of(r).differences(Signature.of(Episode.run(game, positions.get(0), 0, comma, 2_000)), 0).isEmpty());
+        // Budgets smaller than a generation of five children: the turn stops inside it.
+        for (long budget : new long[]{40, 50, 66, 90}) {
+            TurnRecord in = Episode.run(game, positions.get(0), 0, comma, budget);
+            assertTrue(budget + ": stops inside a generation (" + (in.units + in.initUnits) + ")", in.units + in.initUnits < budget + 1.5);
+        }
+        // Under the engine's rule, which only the equivalence gate plays, every generation is whole.
+        magat.agent.TurnBudget.setInitialization(magat.agent.TurnBudget.Initialization.OUTSIDE_BUDGET);
+        try {
+            TurnRecord engine = Episode.run(game, positions.get(0), 0, comma, 2_000);
+            assertEquals("whole generations of five", 0, (int) engine.telemetry.get("iterations").doubleValue() % 5);
+        } finally {
+            magat.agent.TurnBudget.setInitialization(magat.agent.TurnBudget.Initialization.IN_BUDGET);
+        }
+    }
+
+    @Test
+    public void plusSelectionMakesOneChildPerGeneration() {
+        magat.agents.emcts.EmctsParams p = new magat.agents.emcts.EmctsParams();
+        p.childrenPerGeneration = 2;
+        try {
+            new magat.agents.emcts.Emcts<ToyGame.State, ToyGame.Move>(1L, p);
+            fail("(1+1) with two children is not a search MAGAT has gated");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("one child per generation"));
+        }
+    }
+
+    @Test
     public void searchRunsWithinBudgetAndImproves() {
         TurnRecord r = Episode.run(game, positions.get(0), 0, EmctsFactory.<ToyGame.State, ToyGame.Move>plain(), 2_000);
         assertTrue("final >= initial", r.finalValue >= r.initial);

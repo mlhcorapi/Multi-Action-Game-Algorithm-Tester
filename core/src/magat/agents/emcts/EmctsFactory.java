@@ -29,6 +29,18 @@ public final class EmctsFactory<S, A> implements AgentFactory<S, A> {
                 EmctsParams::new);
     }
 
+    /** EMCTS on (1,k) comma selection: AB-EMCTS's substrate and baseline ({@code emcts-comma}, k = 5). */
+    public static <S, A> EmctsFactory<S, A> comma(int k) {
+        return new EmctsFactory<>("emcts-comma",
+                "EMCTS with (1," + k + ") comma selection: greedy 1-ply initialization, 21 phases / 20 burns, exhaustive greedy repair",
+                () -> {
+                    EmctsParams p = new EmctsParams();
+                    p.selection = Selection.COMMA;
+                    p.childrenPerGeneration = k;
+                    return p;
+                });
+    }
+
     @Override public String id() { return id; }
     @Override public String description() { return description; }
     @Override public List<String> operations() { return Emcts.OPERATIONS; }
