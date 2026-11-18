@@ -259,6 +259,11 @@ def main(argv) -> int:
     check("... and run refuses to take leaves into it",
           [PY, ROOT / "magat.py", "run", "--experiment", own_spec, "--out", data / "shakedown" / f"run-{game}-own-refused",
            "--reuse", reuse_root / "all"], "leave out --reuse", codes=(2,))
+    check("check reproduction: the turns this machine played, in the published currency, are the published run's, "
+          "field for field but the times",
+          [PY, ROOT / "magat.py", "check", "reproduction", "--run", own_root, "--against",
+           ROOT / "games" / game / "results" / "reference" / "r7615" / "all", "--out", own_root / "reproduction.csv"],
+          "REPRODUCTION: PASS - 12 of 12 turns")
     repriced = calib / "compute_weights_repriced.properties"
     repriced.write_text(weights.read_text(encoding="utf-8").replace("profile.emcts@2000.w.copy = ", "profile.emcts@2000.w.copy = 9"),
                         encoding="utf-8")
