@@ -41,6 +41,7 @@ there, by what you want to do.
 | Read | For |
 |---|---|
 | [`plans/2.0-compute-unit.md`](plans/2.0-compute-unit.md) | finding the best basket of operations for 2.0's compute unit, including one independent of any decision-making algorithm |
+| [`plans/ab-emcts-vs-oep.md`](plans/ab-emcts-vs-oep.md) | the pre-registration of AB-EMCTS against the reference algorithms, under MAGAT 1.0's rules |
 
 ## History
 
