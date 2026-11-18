@@ -9,6 +9,12 @@ does, not five. Their archived overspend came from generations of five children 
 when the budget ran out (the engine's `ExperimentalEMCTSAgent` and the archived port both read so).
 Sections 1 and 3 say so now; nothing else changed.*
 
+*Amended 2026-11-18, before any turn is played: every arm is played in the runs, the five reference arms
+included, instead of taking the reference arms' turns from the published run. MAGAT's analysis leaves a
+reused turn's times out of the wall-clock re-score, because they were measured in another run, so section
+6's wall-clock condition could never have been met for H1 and H2. Sections 3, 4 and 5 say so now; the
+hypotheses, the arms, the levels and the decision rule are unchanged.*
+
 ## 1. The question
 
 The thesis line (archived at the tag `ab-emcts-archive`, [`ARCHIVE.md`](../ARCHIVE.md)) found that
@@ -44,14 +50,14 @@ bears on them.
 
 ## 3. The arms
 
-Three arms are added; the other five come from the published reference run.
+Three arms are added to MAGAT 1.0's five, and all eight are played together (section 4).
 
 | Arm | What it is | Its archived definition |
 |---|---|---|
 | `emcts-comma` | EMCTS with (1,5) comma selection and exhaustive greedy repair: the thesis's baseline | `EmctsFactory.comma(5)` |
 | `comma-z0-coarse` | the same search, with each repair taking the argmax of a learned action-value table at coarse keys: zero candidate evaluations. Insertion uniform (ε = 1), removal credited, live table, shrinkage m = 5 | `QdeltaArms`: `arm(1.00, MID, COARSE, removal, live, ZERO_EVAL, 0, COMMA, 5)`, frozen as the champion in `ab-emcts-frozen.txt` |
 | `comma-z0-random` | the same zero-evaluation repair with the table's ranking replaced by an arbitrary legal action: the attribution control | `arm(1.00, MID, MID, removal, live, ZERO_EVAL_RANDOM, 0, COMMA, 5)` |
-| `mcts`, `emcts`, `oep`, `tbets`, `random` | MAGAT 1.0's reference algorithms and floor | the published run `games/tribes/results/reference/r7615/` |
+| `mcts`, `emcts`, `oep`, `tbets`, `random` | MAGAT 1.0's reference algorithms and floor, unchanged | as published in 1.0; their turns are in `games/tribes/results/reference/r7615/` |
 
 No parameter is tuned for this experiment. The champion and its control were frozen on the development
 half by the thesis, before its holdout read.
@@ -79,14 +85,19 @@ exactly these changes:
   R7615), with 8 / 8 / 6 repetitions, as the reference experiment. These are not the thesis's levels
   (40,000 / 80,000 / 400,000 in its own currency), so sizes are not compared one to one with the thesis's.
 - **Currency:** the three arms priced on the R7615 **into a copy of the published `r7615-time`
-  currency**, which keeps every published price. The reference arms' published turns are therefore the
-  ones this run would play, and `experiment run` takes them after re-playing a sample. Only the three new
-  arms are played.
+  currency**, which keeps every published price.
+- **Every arm is played, all eight together in each run** (`experiment run --no-reuse`), so the wall-clock
+  re-score compares turns timed together, on the same machine under the same load. None is taken from
+  the published run.
+- **A reproduction check comes free:** at their unchanged published prices, the reference arms must play
+  the published run's turns again, field for field, wall-clock aside. It is checked turn by turn and
+  reported with the gates; a difference is reported as a deviation.
 - **Machine:** the R7615, in one calibration session, and the run on the same machine.
 
 ## 5. Positions, and which half decides
 
-The run plays all 400 published positions, as the reference run does.
+The run plays all 400 published positions, as the reference run does: one spec, run once on each half,
+since MAGAT's analysis reads one half per run.
 
 - **The holdout half (200 positions) is confirmatory.** The champion was chosen on the development half,
   so a development result carries the winner's curse.
