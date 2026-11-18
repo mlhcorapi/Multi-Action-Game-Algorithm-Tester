@@ -69,7 +69,7 @@ public final class Experiment {
 
     private static final Set<String> KNOWN = new LinkedHashSet<>(Arrays.asList("name", "game", "portfolio", "split",
             "baseline", "levels", "arms", "contrasts", "scenarios", "description", "repetitions", "weights", "sources",
-            "phases", "ids"));
+            "phases", "ids", "reuse"));
 
     public static final class Level {
         public final long budget;
@@ -122,6 +122,11 @@ public final class Experiment {
     public final int repetitions;
     /** The currency as the spec names it, or null; the launcher resolves it. */
     public final String weights;
+    /**
+     * Whether a run may take leaves other runs played ({@code --reuse}); {@code "reuse": false} plays every leaf,
+     * for an experiment whose wall-clock comparison needs every turn timed in the same run.
+     */
+    public final boolean reuse;
     /** The sources to keep, or null for every source. */
     public final List<String> sources;
     /** The capture phases to keep, exactly, or null. */
@@ -144,6 +149,7 @@ public final class Experiment {
         this.split = string(o, "split", problems);
         this.baseline = string(o, "baseline", problems);
         this.weights = string(o, "weights", problems);
+        this.reuse = bool(o, "reuse", true, problems);
         this.repetitions = count(o.get("repetitions"), "repetitions", problems);
         this.scenarios = count(o.get("scenarios"), "scenarios", problems);
         List<Level> lv = new ArrayList<>();
@@ -386,6 +392,14 @@ public final class Experiment {
         if (v.isString()) return v.asString();
         problems.add(key + " is " + v + ", not a string");
         return null;
+    }
+
+    private static boolean bool(JsonObject o, String key, boolean otherwise, List<String> problems) {
+        JsonValue v = o.get(key);
+        if (v == null || v.isNull()) return otherwise;
+        if (v.isBoolean()) return v.asBoolean();
+        problems.add(key + " is " + v + ", not true or false");
+        return otherwise;
     }
 
     private static int count(JsonValue v, String what, List<String> problems) {

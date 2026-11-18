@@ -246,6 +246,19 @@ def main(argv) -> int:
            data / "shakedown" / f"results-{game}-published", "--no-bundle"], "random@20000 is played: the published leaf holds 24",
           then=lambda: '"reused"' in (reuse_root / "all" / "emcts" / "9500cu" / "_leaf.json").read_text(encoding="utf-8")
           and "leaves reused" in (data / "shakedown" / f"results-{game}-published" / "SUMMARY.md").read_text(encoding="utf-8"))
+    own_spec = data / "shakedown" / f"own-{game}.json"
+    own_spec.write_text(json.dumps(dict(name="own", game=game, arms=["emcts", "random"], baseline="emcts", levels=[9500],
+                                        repetitions=2, split="all", ids=[1, 2, 3], reuse=False)), encoding="utf-8")
+    own_root = data / "shakedown" / f"run-{game}-own"
+    shutil.rmtree(own_root, ignore_errors=True)
+    check("a spec that says \"reuse\": false plays every leaf in the published currency, taking none",
+          [PY, ROOT / "magat.py", "experiment", "run", own_spec, "--out", own_root, "--results",
+           data / "shakedown" / f"results-{game}-own", "--no-bundle"], "every leaf is played",
+          then=lambda: not any('"reused"' in m.read_text(encoding="utf-8") for m in (own_root / "all").glob("*/*cu/_leaf.json"))
+          and len(list((own_root / "all").glob("*/*cu/_leaf.json"))) == 2)
+    check("... and run refuses to take leaves into it",
+          [PY, ROOT / "magat.py", "run", "--experiment", own_spec, "--out", data / "shakedown" / f"run-{game}-own-refused",
+           "--reuse", reuse_root / "all"], "leave out --reuse", codes=(2,))
     repriced = calib / "compute_weights_repriced.properties"
     repriced.write_text(weights.read_text(encoding="utf-8").replace("profile.emcts@2000.w.copy = ", "profile.emcts@2000.w.copy = 9"),
                         encoding="utf-8")

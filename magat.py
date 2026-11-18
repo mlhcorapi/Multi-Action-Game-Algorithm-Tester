@@ -702,6 +702,9 @@ def experiment_run(rest: list) -> int:
     split = rest[rest.index("--split") + 1] if "--split" in rest else None
     outside_clone(["--out", str(out)])
     args = with_published_defaults(with_spec_weights(with_spec_game(["run", *rest])))
+    if x.get("reuse") is False and not no_reuse:
+        say("# the spec says \"reuse\": false: every leaf is played, none taken from another run")
+        no_reuse = True
     if not no_reuse and "--reuse" not in args and "--weights" in args:
         sources = reuse_sources(game, pathlib.Path(args[args.index("--weights") + 1]))
         if sources:
