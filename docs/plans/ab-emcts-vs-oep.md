@@ -4,6 +4,11 @@
 is committed first and not edited after the run starts. A change before the run is a new commit that
 says what changed and why; anything decided after the data exists is reported as exploratory.
 
+*Corrected 2026-11-18, before any code or turn: the comma arms make one greedy initial plan, as `emcts`
+does, not five. Their archived overspend came from generations of five children that could not stop
+when the budget ran out (the engine's `ExperimentalEMCTSAgent` and the archived port both read so).
+Sections 1 and 3 say so now; nothing else changed.*
+
 ## 1. The question
 
 The thesis line (archived at the tag `ab-emcts-archive`, [`ARCHIVE.md`](../ARCHIVE.md)) found that
@@ -16,8 +21,8 @@ Two things are open:
 - **It was never compared with the algorithms outside the EMCTS family.** In MAGAT 1.0, `oep` and
   `tbets` beat `emcts` at every published level, `oep` by budget multipliers of about 2.4× to 6.8×.
 - **It was measured under the thesis's rules.** A version-1 currency left the arms' own operations free,
-  so the zero-evaluation arms used 17-22% more time per unit, and the comma arms' five greedy initial
-  plans were paid outside the budget.
+  so the zero-evaluation arms used 17-22% more time per unit; the greedy initial plan was paid outside the
+  budget; and a generation of five children could not be cut short when the budget ran out.
 
 This experiment answers both under MAGAT 1.0's rules.
 
@@ -54,10 +59,11 @@ half by the thesis, before its holdout read.
 **Ported, not re-designed.** The arms are restored from the archive and fitted to 1.0's rules, with
 exactly these changes:
 1. Every operation an arm declares is priced (a version-2 currency), the learned table's included.
-2. The initialization is paid from the budget, and the comma arms' five greedy initial plans **stop
-   when the budget runs out**, as `mcts`, `oep` and `tbets` stop theirs. In the archive they could not,
-   and overspent about 2.2× at 9,500 units.
-3. The search stops hard at its budget, as 1.0's `emcts` does.
+2. The initialization, one greedy plan as in `emcts`, is paid from the budget and stops when it runs
+   out.
+3. The search stops hard at its budget, as 1.0's `emcts` does, **including inside a generation**: a
+   comma generation of five children stops at the child the budget runs out in. In the archive it
+   could not, and the comma arms overspent about 2.2× at 9,500 units.
 
 **Gates, all passed before any run** (a failure is fixed and the gate run again, never waived):
 - **Equivalence, under the engine's own budget rule.** `emcts-comma` against the engine's
