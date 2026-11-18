@@ -185,6 +185,22 @@ def main(argv) -> int:
         check(f"the example config {example.name} reads, and its preflight says what it would measure",
               [PY, ROOT / "magat.py", "calibrate-controlled", "--config", example, "--out",
                data / "shakedown" / f"config-{example.stem}", "--preflight", "--toy"], "4 arm(s): emcts, mcts, oep, tbets")
+    # --from: a currency started as a copy of the published one, which prices only the arms it lacks. Measuring into it
+    # is a real session (a toy one may not merge into a real currency): here, the copy and what it would measure.
+    published = ROOT / "games" / game / "calibration" / "r7615-time" / "compute_weights.properties"
+    copied = data / "shakedown" / f"from-{game}"
+    shutil.rmtree(copied, ignore_errors=True)
+    cf = [PY, ROOT / "magat.py", "calibrate-controlled", "--name", "shakedown-from", "--game", game, "--out", copied,
+          "--from", "r7615-time", "--arms", "@ab-emcts", "--toy", "--preflight"]
+    check("--from: the currency starts as a byte copy of the published one, and would price only the arms it lacks", cf,
+          "3 arm(s): emcts-comma, comma-z0-coarse, comma-z0-random, merged",
+          then=lambda: (copied / "compute_weights.properties").read_bytes() == published.read_bytes())
+    check("--from again: the currency there is that copy, kept", cf, "kept: it is that currency, extended")
+    changed = copied / "compute_weights.properties"
+    if changed.is_file():                                   # one published price changed
+        changed.write_text(changed.read_text(encoding="utf-8").replace("w.copy = ", "w.copy = 1", 1), encoding="utf-8")
+    check("--from refuses a currency whose published prices changed, naming the line", cf,
+          "is not the published r7615-time extended", codes=(2,))
     older = data / "shakedown" / f"controlled-{game}-older"
     shutil.rmtree(older, ignore_errors=True)
     older.mkdir(parents=True)
@@ -230,6 +246,24 @@ def main(argv) -> int:
            data / "shakedown" / f"results-{game}-published", "--no-bundle"], "random@20000 is played: the published leaf holds 24",
           then=lambda: '"reused"' in (reuse_root / "all" / "emcts" / "9500cu" / "_leaf.json").read_text(encoding="utf-8")
           and "leaves reused" in (data / "shakedown" / f"results-{game}-published" / "SUMMARY.md").read_text(encoding="utf-8"))
+    own_spec = data / "shakedown" / f"own-{game}.json"
+    own_spec.write_text(json.dumps(dict(name="own", game=game, arms=["emcts", "random"], baseline="emcts", levels=[9500],
+                                        repetitions=2, split="all", ids=[1, 2, 3], reuse=False)), encoding="utf-8")
+    own_root = data / "shakedown" / f"run-{game}-own"
+    shutil.rmtree(own_root, ignore_errors=True)
+    check("a spec that says \"reuse\": false plays every leaf in the published currency, taking none",
+          [PY, ROOT / "magat.py", "experiment", "run", own_spec, "--out", own_root, "--results",
+           data / "shakedown" / f"results-{game}-own", "--no-bundle"], "every leaf is played",
+          then=lambda: not any('"reused"' in m.read_text(encoding="utf-8") for m in (own_root / "all").glob("*/*cu/_leaf.json"))
+          and len(list((own_root / "all").glob("*/*cu/_leaf.json"))) == 2)
+    check("... and run refuses to take leaves into it",
+          [PY, ROOT / "magat.py", "run", "--experiment", own_spec, "--out", data / "shakedown" / f"run-{game}-own-refused",
+           "--reuse", reuse_root / "all"], "leave out --reuse", codes=(2,))
+    check("check reproduction: the turns this machine played, in the published currency, are the published run's, "
+          "field for field but the times",
+          [PY, ROOT / "magat.py", "check", "reproduction", "--run", own_root, "--against",
+           ROOT / "games" / game / "results" / "reference" / "r7615" / "all", "--out", own_root / "reproduction.csv"],
+          "REPRODUCTION: PASS - 12 of 12 turns")
     repriced = calib / "compute_weights_repriced.properties"
     repriced.write_text(weights.read_text(encoding="utf-8").replace("profile.emcts@2000.w.copy = ", "profile.emcts@2000.w.copy = 9"),
                         encoding="utf-8")

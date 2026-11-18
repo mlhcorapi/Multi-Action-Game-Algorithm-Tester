@@ -30,13 +30,13 @@ wrap it). It:
 | `export <experiment \| run dir> [--name N] [--no-curves]`, `export --currency NAME` | a result, or a currency, as one file to share, with a manifest of hashes ([sharing](SHARING.md)) |
 | `import <file> [--replay N] [--no-check]`, `import --list` | a package checked against its manifest, unpacked under `imports/`, and re-played here |
 | `paper [--check]` | every table and figure of the paper, from the published runs ([paper](../paper/README.md)) |
-| `calibrate-controlled` | a calibration in one session, with reliability checks ([guide](CALIBRATING_A_MACHINE.md)); `--config FILE` reads its options from a JSON file |
+| `calibrate-controlled` | a calibration in one session, with reliability checks ([guide](CALIBRATING_A_MACHINE.md)); `--config FILE` reads its options from a JSON file; `--from NAME` starts the currency as a copy of a published one, to price only the arms it lacks ([extending a published currency](CALIBRATING_A_MACHINE.md#extending-a-published-currency)) |
 | `calibrate-time --remeasure [--times 500,1000,5000]` | the levels that are those milliseconds of thinking time on this machine: a maintainer's tool for the reference machine, refused without `--remeasure` once the game's levels are published ([units as time](CURRENCY.md#units-as-time)) |
 | `weights --weights F [--game G --arms ...] [--progress]` | what a weights file prices; exit 1 if anything asked for is missing. With `--progress`, a probe of a calibration under way: what is still to price, and exit 0 |
 | `check contract \| equivalence \| replay \| audit` | the gates (below) |
 | `check time (--weights F \| --fixed-weights) [--levels ...] [--arms ...] [--targets ms,...]` | single-threaded whole turns over positions spread across the portfolio: each level's thinking time on this machine, and each cell's mean spend against its level, flagged above 1.10× |
 | `experiment validate SPEC [--weights F \| --no-weights]` | the spec validator alone, then the spec read back and the run's estimated hours |
-| `experiment run SPEC [--split S] [--weights F] [--out D] [--results D] [--no-bundle] [--no-reuse]` | validate, run (resuming), analyse, summarise and bundle, in one command; in a published currency, the published run's leaves are taken where they may be ([experiments](EXPERIMENTS.md#reusing-the-published-run)) |
+| `experiment run SPEC [--split S] [--weights F] [--out D] [--results D] [--no-bundle] [--no-reuse]` | validate, run (resuming), analyse, summarise and bundle, in one command; in a published currency, the published run's leaves are taken where they may be, unless the spec says `"reuse": false` ([experiments](EXPERIMENTS.md#reusing-the-published-run)) |
 | `run --experiment SPEC --split dev\|holdout\|all` | run an experiment (below) |
 | `analyze --run DIR [--experiment SPEC] [--baseline ARM] [--reprice W] [--compare DIR] --out DIR` | every measure, as tables and `SUMMARY.md`; with `--compare`, beside another machine's run of the same experiment |
 | `bundle --name N --paths P...` | zip files into `<data>/bundles/N.zip` |
@@ -93,8 +93,9 @@ else, so it cannot drift from the CLI. Its stages:
 
 1. **Parameters.** The only cell to edit. It names this machine's calibration config
    ([guide](CALIBRATING_A_MACHINE.md#a-config-file)), or `None` and a published currency to spend
-   instead, and the experiment specs to run ([experiments](EXPERIMENTS.md)). Adding a spec needs no new
-   notebook.
+   instead, and the experiment specs to run ([experiments](EXPERIMENTS.md)). An entry may name the half it
+   runs, `("experiments/tribes/x.json", "holdout")`, so one spec can run on each half in turn. Adding a
+   spec needs no new notebook.
 2. **Setup and the plan.** Setup finds the repository from whatever directory the kernel started in; a
    Jupyter kernel's working directory is the notebook's own folder. It puts the data root outside the
    clone. The plan reads the files the parameters name, takes the currency's name from the config
@@ -107,8 +108,9 @@ else, so it cannot drift from the CLI. Its stages:
    ([guide](CALIBRATING_A_MACHINE.md#on-a-shared-server-the-r7615-through-jupyterhub)). With no config,
    the three skip.
 6. **Gates.** The contract, equivalence on every ported arm, and the audit.
-7. **Experiments.** One cell runs every spec of the parameters through `experiment run`, in the plan's
-   currency (it wins over a spec's own `weights`) and with this machine's thread sweep.
+7. **Experiments.** One cell runs every entry of the parameters through `experiment run`, in the plan's
+   currency (it wins over a spec's own `weights`), with this machine's thread sweep, and on the half an
+   entry names.
 8. **The shakedown.**
 9. **The inventory.** What to keep, with a tick per file and the bundles to download.
 
@@ -205,6 +207,7 @@ different portfolios are refused. The output is:
 | `check equivalence` | each ported arm reproduces its oracle (the reference implementation it was ported from) field for field, including its counters, on N scenarios × V visits. Without `--weights` both sides are priced with the fixed measurement weights, and so is an arm the currency does not price yet |
 | `check replay` | the turns of a published leaf, re-planned on this machine, agree with its rows field for field |
 | `check audit` | each arm's declared operations and forward model account for its turn: warns above 10% unaccounted, fails above 25% |
+| `check reproduction --run D --against D` | a run's turns are another run's, every turn both hold, field for field but the times ([experiments](EXPERIMENTS.md#reusing-the-published-run)) |
 
 Each prints PASS or FAIL and exits non-zero on FAIL. The shakedown and CI run the contract, equivalence
 and the audit at toy size.

@@ -241,6 +241,10 @@ variant, and its gate compares the variant's own counters too.
    python magat.py calibrate --game tribes --out $HOME/magat_runs/calibration/tribes-r7615-plus-first --arms first
    ```
 
+   On the reference machine, `calibrate-controlled --name r7615-plus-first --from r7615-time --arms first`
+   does the same in a controlled session, with its checks
+   ([extending a published currency](CALIBRATING_A_MACHINE.md#extending-a-published-currency)).
+
    The merge keeps every published price. The new arm's prices are measured on your machine and
    re-denominated in the published unit through the reference cell, so they carry your machine's
    relative speeds, which differed by up to about 9% between the two published machines

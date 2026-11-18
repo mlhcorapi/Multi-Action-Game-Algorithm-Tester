@@ -78,6 +78,29 @@ python magat.py calibrate-controlled --config calibrations/tribes/examples/serve
   published levels; an arm registered beyond them, an experiment's, is priced when named. The reference cell, `emcts` at the lowest level, is always measured, because it defines the unit.
 - **An option on the command line wins** over the file, so one file serves several sessions:
   `--config server.json --name r7615-again`.
+
+### Extending a published currency
+
+To price new arms on the reference machine without measuring its published arms again, start the currency
+as a copy of the published one with `--from` (`"from"` in a config file):
+
+```bash
+python magat.py calibrate-controlled --name r7615-plus-mine --from r7615-time --arms mine --preflight
+```
+
+- The currency starts as a byte copy of `games/<game>/calibration/<NAME>/compute_weights.properties`, so
+  it keeps every published price, and the session prices only the arms the copy lacks. They are merged by
+  ratio, in the published unit, and the checks then run as usual.
+- The record's `from.json` names the copy's source and its hash.
+- A currency already in the folder must be that copy, extended: every line of the published file still in
+  it, but the `operations` line, which a merge extends. Otherwise `--from` refuses, naming the first line
+  that changed.
+- Run on another machine, the new arms' prices carry that machine's relative speeds
+  ([cross-machine](results/cross-machine.md)). On the reference machine itself, they are what its own
+  calibration would have written.
+- A run in such a currency can still take the published run's leaves
+  ([reusing the published run](EXPERIMENTS.md#reusing-the-published-run)), since every published price
+  is unchanged.
 - **The modes are not in the file.** `--preflight`, `--checks` and `--no-checks` say what one invocation
   does, so they are given on the command line.
 - **Nothing is ignored.** A misspelt key, a mode, a level that is not published, or a value of the wrong

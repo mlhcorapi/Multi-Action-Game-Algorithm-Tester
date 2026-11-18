@@ -42,6 +42,9 @@ commit and the data root explicitly to every JVM, and tees every command's outpu
     python magat.py check time      --game tribes (--weights FILE | --fixed-weights) [--levels ...] [--arms a,b] [--targets ms,...]
                                     single-threaded whole turns over spread positions: each level's thinking time here
     python magat.py check audit     --game tribes [--arms a,b|@set] [--budget 40000] [--warn 0.10] [--fail 0.25]
+    python magat.py check reproduction --run DIR --against SPLIT_DIR [--out FILE]
+                                    whether a run plays another's turns again: every turn both hold, field for field
+                                    but the times (games/<game>/results/reference/<machine>/all is a published run)
     python magat.py analyze --run DIR [--experiment SPEC] [--baseline ARM] [--reprice WEIGHTS] --out DIR
                             [--compare DIR [--compare-weights WEIGHTS]]
     python magat.py java <args...>          raw magat.cli.Main invocation
@@ -465,7 +468,7 @@ def test(rest: list) -> int:
 # Options that name a file or a directory. The JVM and the analysis run in the repository, so a relative one is
 # made absolute against the directory the command was typed in, where the caller meant it.
 PATH_OPTIONS = {"--experiment", "--out", "--results", "--portfolio", "--weights", "--leaf", "--threads-file", "--levels-file",
-                "--published", "--run", "--reprice", "--compare", "--compare-weights", "--config", "--reuse"}
+                "--published", "--run", "--reprice", "--compare", "--compare-weights", "--config", "--reuse", "--against"}
 
 
 def from_caller(args: list) -> list:
@@ -702,6 +705,9 @@ def experiment_run(rest: list) -> int:
     split = rest[rest.index("--split") + 1] if "--split" in rest else None
     outside_clone(["--out", str(out)])
     args = with_published_defaults(with_spec_weights(with_spec_game(["run", *rest])))
+    if x.get("reuse") is False and not no_reuse:
+        say("# the spec says \"reuse\": false: every leaf is played, none taken from another run")
+        no_reuse = True
     if not no_reuse and "--reuse" not in args and "--weights" in args:
         sources = reuse_sources(game, pathlib.Path(args[args.index("--weights") + 1]))
         if sources:
@@ -800,6 +806,8 @@ def main(argv: list) -> None:
         java(args, heap="big" if cmd == "run" else None, log=log)
     elif cmd == "bundle":
         bundle(rest)
+    elif cmd == "check" and rest[:1] == ["reproduction"]:
+        sys.exit(python_analysis(["reproduce", *rest[1:]], log="check-reproduction"))
     elif cmd in ("check", "arms", "portfolio", "calibrate", "threads", "machine", "weights"):
         big = (cmd == "portfolio" and rest[:1] == ["build"]) or cmd == "threads"
         log = cmd + ("-" + rest[0] if rest and not rest[0].startswith("--") else "")

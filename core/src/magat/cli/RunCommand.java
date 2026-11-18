@@ -59,6 +59,8 @@ final class RunCommand {
         o.toy = args.flag("toy");
         o.auditWarn = Double.parseDouble(args.get("audit-warn", "0.10"));
         for (String from : args.getList("reuse", new ArrayList<>())) o.reuse.add(Paths.get(from).toAbsolutePath());
+        if (!x.reuse && !o.reuse.isEmpty())
+            throw new IllegalArgumentException("the spec says \"reuse\": false, so every leaf is played: leave out --reuse");
         o.reuseReplay = args.getInt("reuse-replay", 2);
         o.args = Arrays.asList(argv);
         RunGuard.install("run " + x.name, "re-run the same command; finished leaves are skipped and a partial leaf continues per scenario and visit");

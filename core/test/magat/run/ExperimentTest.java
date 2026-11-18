@@ -94,6 +94,17 @@ public class ExperimentTest {
     }
 
     @Test
+    public void aSpecMayPlayEveryLeafItself() {
+        assertTrue("reused where it can be, by default", spec("\"arms\": [\"emcts\"], \"levels\": [300], \"repetitions\": 1").reuse);
+        Experiment own = spec("\"arms\": [\"emcts\"], \"levels\": [300], \"repetitions\": 1, \"reuse\": false");
+        assertFalse(own.reuse);
+        assertTrue("a known key", own.unknownKeys.isEmpty());
+        assertTrue(own.problems.isEmpty());
+        assertTrue(spec("\"arms\": [\"emcts\"], \"levels\": [300], \"repetitions\": 1, \"reuse\": \"no\"").problems.toString()
+                .contains("reuse is \"no\", not true or false"));
+    }
+
+    @Test
     public void theSelectionIsRecordedInOneLine() {
         Experiment x = spec("\"arms\": [\"emcts\"], \"levels\": [300], \"repetitions\": 1, \"sources\": [\"single\"],"
                 + " \"phases\": {\"min\": 10, \"max\": 20}, \"ids\": [3, 1], \"scenarios\": 2");
