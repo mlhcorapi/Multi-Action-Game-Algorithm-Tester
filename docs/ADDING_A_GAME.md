@@ -53,6 +53,7 @@ that need care:
 | `isLegal` | never throws, false for stale referents (L4). Engines often throw on a stale id; catch it here |
 | `evaluate` | deterministic and finite (L8). Cache heuristic objects per player; never let the evaluation touch the meter or the state |
 | `actionKey` | injective over one state's legal actions (L7): plans are de-duplicated on it |
+| `actionClass` | optional (`hasActionClasses()` true): only for algorithms that learn action values across a turn. Coarser classes must partition finer ones (L10) |
 | `reseed` | pins every random event the state will produce (L2). Without it, a paired comparison is not paired |
 | `serialize` | stable for the life of the portfolio: the bins are what every result is measured on. Record the engine commit in `configuration()` |
 | `configuration` | every setting that changes what a position or a call means: engine commit, game mode, rule flags. Set engine globals exactly once, in the adapter's constructor, and report them here |

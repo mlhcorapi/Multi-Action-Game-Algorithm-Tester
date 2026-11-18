@@ -78,6 +78,8 @@ public final class MeteredGame<S, A> implements Game<S, A> {
     @Override public boolean endsTurn(A action) { return inner.endsTurn(action); }
     @Override public A endTurnAction(S state) { return inner.endTurnAction(state); }
     @Override public String actionKey(A action) { return inner.actionKey(action); }
+    @Override public boolean hasActionClasses() { return inner.hasActionClasses(); }
+    @Override public String actionClass(S state, A action, Granularity level) { return inner.actionClass(state, action, level); }
     @Override public int branchingFactor(S state) { return inner.branchingFactor(state); }
     @Override public void reseed(S state, long seed) { inner.reseed(state, seed); }
     @Override public byte[] serialize(S state) { return inner.serialize(state); }

@@ -58,6 +58,40 @@ public final class ToyGame implements Game<ToyGame.State, ToyGame.Move> {
     public static final int CAP = 12;
     public static final int TURNS = 3;
 
+    /** 0: no action classes; 1: nested classes (ADD, ADD<counter>, the move); 2: classes that do not nest. */
+    private final int classes;
+
+    public ToyGame() {
+        this(0);
+    }
+
+    private ToyGame(int classes) {
+        this.classes = classes;
+    }
+
+    /** The toy game with action classes: COARSE "ADD"/"END", MID "ADD" + counter, FINE the move. */
+    public static ToyGame withActionClasses() {
+        return new ToyGame(1);
+    }
+
+    /** The toy game with classes that do not nest: MID by amount, COARSE by counter, so law L10 fails. */
+    public static ToyGame withBrokenActionClasses() {
+        return new ToyGame(2);
+    }
+
+    @Override public boolean hasActionClasses() { return classes > 0; }
+
+    @Override
+    public String actionClass(State s, Move m, magat.game.Granularity level) {
+        if (classes == 0) return Game.super.actionClass(s, m, level);
+        if (m.isEnd()) return "END";
+        switch (level) {
+            case COARSE: return classes == 1 ? "ADD" : "IDX" + m.idx;
+            case MID: return classes == 1 ? "ADD" + m.idx : "AMT" + m.amount;
+            default: return m.toString();
+        }
+    }
+
     @Override public String id() { return "toy"; }
     @Override public Map<String, String> configuration() { return Collections.singletonMap("cap", String.valueOf(CAP)); }
     @Override public State copy(State s) { return s.copy(); }

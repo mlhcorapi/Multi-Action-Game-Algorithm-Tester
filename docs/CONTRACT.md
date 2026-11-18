@@ -32,6 +32,7 @@ Every method is total (no exceptions for ordinary inputs) and deterministic.
 | `boolean endsTurn(A action)` | true if the action ends the active player's turn |
 | `A endTurnAction(S state)` | the explicit end-of-turn action, or `null` if turns end implicitly |
 | `String actionKey(A action)` | the canonical identity of an action within a state; plans are de-duplicated on it. Two distinct legal actions of one state never share a key (L7) |
+| `boolean hasActionClasses()`, `String actionClass(S state, A action, Granularity level)` | **optional**, default none: the action abstracted to `COARSE` ("MOVE"), `MID` ("MOVE:RIDER") or `FINE` (the full action), for algorithms that learn action values across a turn. Coarser classes partition finer ones (L10). Tribes offers them; a game that does not changes nothing |
 | `int branchingFactor(S state)` | a descriptive count for stratification and reporting; the game says what it counts |
 | `void reseed(S state, long seed)` | pins the state's own randomness (Tribes: ruin outcomes), so two copies reseeded alike behave alike |
 | `byte[] serialize(S)`, `S deserialize(byte[])` | the portfolio's bins |
@@ -84,6 +85,7 @@ Each law is a runnable check over captured positions. The shakedown and CI run t
 | L7 | `actionKey` is injective over `legalActions(s)` |
 | L8 | `evaluate` is deterministic, finite, and independent of the meter's state |
 | L9 | After N advances, copies and evaluations through `MeteredGame`, the meter reads exactly N of each: no forward-model work bypasses the contract |
+| L10 | For a game that offers action classes: within a state, each `FINE` class lies in one `MID` class, and each `MID` class in one `COARSE` class |
 
 ## The agent protocol
 
