@@ -62,6 +62,7 @@ VALIDATION: PASS
 | `scenarios` | how many positions, spread evenly over what the filters keep | all of them |
 | `weights` | the currency ([below](#the-currency)) | the game's published one |
 | `contrasts` | the paired comparisons to report, `[{"a": "oep", "b": "tbets", "label": "..."}]` | every pair |
+| `reuse` | `false` plays every leaf, taking none from another run ([below](#reusing-the-published-run)) | `true` |
 | `description` | free text | none |
 
 An unknown key is a warning, since it is usually a typo. A value of the wrong kind, a level that is not
@@ -183,6 +184,19 @@ A taken leaf keeps the commit and host that played it, and records where it came
 this run's, but its times are another machine's, so the analysis leaves them out of the wall-clock
 re-score, the multiplier in seconds and every time column, lists the reused leaves in the provenance,
 and says so in the scope notes. `--no-reuse` plays every leaf.
+
+**An experiment that compares wall-clock times** across arms needs every turn timed in the same run. Its
+spec says `"reuse": false`: `experiment run` then plays every leaf, and `run --reuse` refuses. To show
+that the reference arms it played again are still the published ones, compare their turns with the
+published run's:
+
+```bash
+python magat.py check reproduction --run $HOME/magat_runs/tribes/runs/<name> --against games/tribes/results/reference/r7615/all
+```
+
+It matches every turn both runs hold, by arm, level, position and repetition, and compares every field
+both record but the times. It passes when each is identical, lists an arm or level the published run
+never played, and names the fields that differ, if any (`--out FILE` writes the table).
 
 Runs imported from a package ([sharing](SHARING.md)) are sources too, once their import is `VERIFIED`:
 each leaf comes from the first source that holds it, the published runs first, then the imports by name.
