@@ -1,0 +1,22 @@
+{
+  "name": "ab-emcts",
+  "game": "tribes",
+  "description": "AB-EMCTS against the reference algorithms, as pre-registered in docs/plans/ab-emcts-vs-oep.md: the three AB-EMCTS arms and MAGAT 1.0's five, all played in each run (none reused, so the wall-clock re-score compares turns timed together), at the published levels, in the R7615's currency extended with the three arms. Run on the holdout half, which decides, then on the development half (docs/plans/ab-emcts-run.md).",
+  "portfolio": "tribes/v1",
+  "split": "holdout",
+  "baseline": "emcts",
+  "levels": [
+    { "budget": "1000ms", "repetitions": 8 },
+    { "budget": "500ms", "repetitions": 8 },
+    { "budget": "5000ms", "repetitions": 6 }
+  ],
+  "arms": ["random", "mcts", "emcts", "oep", "tbets", "emcts-comma", "comma-z0-coarse", "comma-z0-random"],
+  "weights": "r7615-ab-emcts",
+  "reuse": false,
+  "contrasts": [
+    { "a": "comma-z0-coarse", "b": "oep", "label": "H1: AB-EMCTS against OEP" },
+    { "a": "comma-z0-coarse", "b": "tbets", "label": "H2: AB-EMCTS against TBETS" },
+    { "a": "comma-z0-coarse", "b": "emcts-comma", "label": "H3: AB-EMCTS against the same search with exhaustive repair" },
+    { "a": "comma-z0-coarse", "b": "comma-z0-random", "label": "H4: the learned table against an arbitrary legal action" }
+  ]
+}

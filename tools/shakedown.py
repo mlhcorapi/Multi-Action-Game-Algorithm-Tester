@@ -276,6 +276,16 @@ def main(argv) -> int:
     for example in sorted((ROOT / "experiments" / game / "examples").glob("*.json")):
         check(f"the example spec {example.name} validates against the currency it names",
               [PY, ROOT / "magat.py", "experiment", "validate", "--experiment", example], "VALIDATION: PASS")
+    ab = ROOT / "experiments" / game / "ab-emcts.json"
+    if ab.is_file():
+        # Its currency is measured on the R7615 (docs/plans/ab-emcts-run.md): here, its structure, and the calibration
+        # config's plan, which starts from a copy of the published currency.
+        check("the AB-EMCTS spec reads: its arms registered, its levels published, its contrasts sound",
+              [PY, ROOT / "magat.py", "experiment", "validate", "--experiment", ab, "--no-weights"], "VALIDATION: PASS")
+        check("the AB-EMCTS calibration config would price its three arms into a copy of the published currency",
+              [PY, ROOT / "magat.py", "calibrate-controlled", "--config", ROOT / "calibrations" / game / "ab-emcts.json",
+               "--out", data / "shakedown" / f"config-ab-emcts-{game}", "--preflight", "--toy"],
+              "3 arm(s): emcts-comma, comma-z0-coarse, comma-z0-random, merged")
     short = data / "shakedown" / f"short-{game}.json"
     short.write_text(json.dumps(dict(name="short", game=game, baseline="emcts", arms=["emcts", "random"], levels=[2000, 4000],
                                      repetitions=1, split="all", sources=["single"], scenarios=1)), encoding="utf-8")

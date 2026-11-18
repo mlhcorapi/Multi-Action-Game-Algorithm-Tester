@@ -1,0 +1,11 @@
+{
+  "name": "r7615-ab-emcts",
+  "game": "tribes",
+  "description": "The AB-EMCTS experiment's currency (docs/plans/ab-emcts-vs-oep.md, section 4): a copy of the published r7615-time, which keeps every published price, with the three AB-EMCTS arms priced into it on the R7615 in one session, at the published levels. Server settings as in examples/server.json: no warming up, a wait of up to 30 minutes for the machine to fall quiet, and a session called suspect if other work holds more than 4 logical CPUs.",
+  "from": "r7615-time",
+  "arms": ["@ab-emcts"],
+  "levels": ["500ms", "1000ms", "5000ms"],
+  "soak-minutes": 0,
+  "wait-quiet": 30,
+  "other-cpus": 4
+}
