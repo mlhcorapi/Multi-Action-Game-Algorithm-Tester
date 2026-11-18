@@ -10,6 +10,7 @@ import magat.agents.random.RandomAgent;
 import magat.agents.tbets.Tbets;
 import magat.games.tribes.oracle.EngineEmctsOracle;
 import magat.games.tribes.oracle.EngineTbetsOracle;
+import players.ExperimentalEMCTS.ExperimentalEMCTSParams;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -17,7 +18,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** The arms registered for Tribes, and the oracles the ported ones are gated against. */
+/**
+ * The arms registered for Tribes, and the oracles the ported ones are gated against. The reference
+ * algorithms are the ones a calibration prices when it names no arms; {@code emcts-comma} is the AB-EMCTS
+ * experiment's baseline ({@code docs/plans/ab-emcts-vs-oep.md}), priced when named.
+ */
 public final class TribesAgents {
 
     private TribesAgents() {}
@@ -39,6 +44,7 @@ public final class TribesAgents {
         r.register(EmctsFactory.plain());
         r.register(Oep.factory());
         r.register(Tbets.factory());
+        r.register(EmctsFactory.comma(5));
         return r;
     }
 
@@ -46,6 +52,7 @@ public final class TribesAgents {
         Map<String, Oracle<TribesState>> o = new LinkedHashMap<>();
         o.put("emcts", new EngineEmctsOracle());
         o.put("tbets", new EngineTbetsOracle());
+        o.put("emcts-comma", new EngineEmctsOracle(ExperimentalEMCTSParams.SelectionMode.COMMA, 5));
         return o;
     }
 }
