@@ -153,21 +153,24 @@ def calibration_cells(NB: pathlib.Path) -> int:
 
 
 def experiments_cell(NB: pathlib.Path) -> int:
-    """The experiments cell runs every spec of the parameters cell, in order, through `experiment run`, in the plan's
-    currency and with this machine's thread sweep."""
+    """The experiments cell runs every entry of the parameters cell, in order, through `experiment run`, in the plan's
+    currency and with this machine's thread sweep, and an entry that names a half runs that half."""
     cells = tagged(NB, {"experiment"})
     if len(cells) != 1:
         print(f"  [FAIL] expected one experiments cell, found {len(cells)}")
         return 1
     calls = []
     specs = [pathlib.Path("a.json"), pathlib.Path("b.json")]
-    ns = {"magat": lambda *args, check=True: calls.append(args) or 0, "EXPERIMENT_SPECS": specs,
+    runs = [(specs[0], None), (specs[1], "holdout")]
+    ns = {"magat": lambda *args, check=True: calls.append(args) or 0, "EXPERIMENT_RUNS": runs,
           "PORTFOLIO": pathlib.Path("portfolio"), "WEIGHTS": pathlib.Path("w.properties"), "CALIBRATION": pathlib.Path("cal")}
     exec(compile(cells[0], "<experiments-cell>", "exec"), ns)
     ok = [a[:3] for a in calls] == [("experiment", "run", s) for s in specs] \
         and all(a[a.index("--weights") + 1] == ns["WEIGHTS"] and a[a.index("--threads-file") + 1] == pathlib.Path("cal") / "threads.json"
-                for a in calls)
-    print(f"  [{'ok' if ok else 'FAIL'}] two specs: experiment run on each, in order, in the plan's currency and thread sweep")
+                for a in calls) \
+        and "--split" not in calls[0] and calls[1][calls[1].index("--split") + 1] == "holdout"
+    print(f"  [{'ok' if ok else 'FAIL'}] two specs: experiment run on each, in order, in the plan's currency and thread sweep;"
+          " the one whose entry names a half runs that half")
     exports = tagged(NB, {"export"})
     calls.clear()
     if len(exports) == 1:

@@ -129,7 +129,8 @@ PARAMETERS = r'''
 # reference machine's turns, a replay rather than a measurement of this machine.
 CALIBRATION_CONFIG = "calibrations/tribes/examples/server.json"
 PUBLISHED_CURRENCY = "r7615-time"
-# The experiments to run, in order: spec files (experiments/<game>/, docs/EXPERIMENTS.md), in the currency above.
+# The experiments to run, in order: spec files (experiments/<game>/, docs/EXPERIMENTS.md), in the currency above. An
+# entry may name the half it runs, ("experiments/tribes/x.json", "holdout"), in place of the spec's own "split".
 EXPERIMENTS = ["experiments/tribes/reference.json"]
 '''
 
@@ -160,12 +161,23 @@ WEIGHTS = (CALIBRATION if CALIBRATING else ROOT / "games" / GAME / "calibration"
 if not CALIBRATING and not WEIGHTS.is_file():
     raise FileNotFoundError(f"no published currency {CURRENCY_NAME}; games/{GAME}/calibration/ has "
                             + ", ".join(d.name for d in sorted((ROOT / "games" / GAME / "calibration").iterdir()) if d.is_dir()))
-EXPERIMENT_SPECS = [_file(x, "the experiment spec") for x in EXPERIMENTS]
-EXPERIMENT_NAMES = [json.loads(x.read_text(encoding="utf-8")).get("name") or x.stem for x in EXPERIMENT_SPECS]
+def _experiment(x):
+    """An entry of EXPERIMENTS: a spec, or (spec, half) to run that half in place of the spec's own "split"."""
+    spec, half = (x, None) if isinstance(x, (str, pathlib.PurePath)) else tuple(x)
+    if half not in (None, "dev", "holdout", "all"):
+        raise ValueError(f"{x!r}: a half is \"dev\", \"holdout\" or \"all\": fix the parameters cell")
+    return _file(spec, "the experiment spec"), half
+
+def _name(spec):
+    return json.loads(spec.read_text(encoding="utf-8")).get("name") or spec.stem
+
+EXPERIMENT_RUNS = [_experiment(x) for x in EXPERIMENTS]
+# Each experiment once, by its name: two halves of one spec are one experiment, analysed and exported together.
+EXPERIMENT_NAMES = list(dict.fromkeys(_name(spec) for spec, _ in EXPERIMENT_RUNS))
 print("calibration :", f"{CAL_CONFIG} -> the currency {CURRENCY_NAME}, in {CALIBRATION}" if CALIBRATING
       else f"none: the published currency {CURRENCY_NAME} ({WEIGHTS})")
-for name, spec in zip(EXPERIMENT_NAMES, EXPERIMENT_SPECS):
-    print("experiment  :", name, f"({spec})")
+for spec, half in EXPERIMENT_RUNS:
+    print("experiment  :", _name(spec), f"({spec})" + (f", the {half} half" if half else ""))
 '''
 
 
@@ -296,11 +308,11 @@ bundle("gates", [LOGS / f"{n}.log" for n in ("check-contract", "check-equivalenc
 
 EXPERIMENTS_CELL = r'''
 # Every experiment of the parameters cell, in order, in the currency of the plan cell (WEIGHTS, which wins over a
-# spec's own "weights") and with this machine's thread sweep. experiment run validates each spec, runs it (running
-# the cell again resumes: finished leaves are skipped, a partial one continues), analyses it, prints its headline,
-# and bundles it as run-<name>.
-for spec in EXPERIMENT_SPECS:
-    magat("experiment", "run", spec, "--portfolio", PORTFOLIO, "--weights", WEIGHTS,
+# spec's own "weights") and with this machine's thread sweep; an entry that names a half runs that half. experiment
+# run validates each spec, runs it (running the cell again resumes: finished leaves are skipped, a partial one
+# continues), analyses every half run so far, prints its headline, and bundles it as run-<name>.
+for spec, half in EXPERIMENT_RUNS:
+    magat("experiment", "run", spec, *(("--split", half) if half else ()), "--portfolio", PORTFOLIO, "--weights", WEIGHTS,
           "--threads-file", CALIBRATION / "threads.json")
 '''
 
