@@ -91,6 +91,10 @@ jobs:
           for spec in experiments/tribes/examples/*.json; do
             python magat.py experiment validate --experiment "$spec"
           done
+      - name: The AB-EMCTS experiment's spec reads, and its calibration config would price its three arms into a copy of the published currency
+        run: |
+          python magat.py experiment validate --experiment experiments/tribes/ab-emcts.json --no-weights
+          python magat.py calibrate-controlled --config calibrations/tribes/ab-emcts.json --out "$RUNNER_TEMP/config-ab-emcts" --preflight --toy | grep -q "3 arm(s): emcts-comma, comma-z0-coarse, comma-z0-random, merged"
       - name: Toy run on dev and holdout, a resume that skips every leaf, and a second run that reuses every leaf
         run: |
           RUN="python magat.py run --experiment experiments/tribes/shakedown.json --portfolio $RUNNER_TEMP/toy --weights $RUNNER_TEMP/calib/compute_weights.properties --out $RUNNER_TEMP/run --threads 2 --toy"

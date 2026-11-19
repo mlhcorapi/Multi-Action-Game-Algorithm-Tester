@@ -42,6 +42,7 @@ there, by what you want to do.
 |---|---|
 | [`plans/2.0-compute-unit.md`](plans/2.0-compute-unit.md) | finding the best basket of operations for 2.0's compute unit, including one independent of any decision-making algorithm |
 | [`plans/ab-emcts-vs-oep.md`](plans/ab-emcts-vs-oep.md) | the pre-registration of AB-EMCTS against the reference algorithms, under MAGAT 1.0's rules |
+| [`plans/ab-emcts-run.md`](plans/ab-emcts-run.md) | the run sheet for that experiment on the R7615: the notebook's parameters, what to read at each step, what to bring back |
 
 ## History
 

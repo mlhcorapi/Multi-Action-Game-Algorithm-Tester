@@ -575,12 +575,19 @@ def with_spec_weights(args: list) -> list:
     if not isinstance(named, str) or "--no-weights" in args:
         return args
     spec = pathlib.Path(args[args.index("--experiment") + 1]).resolve()
-    chosen = currency(named, game, near=spec.parent)
     if "--weights" in args:
+        # The given one wins, so the spec's need not exist here: a spec naming a currency measured on another machine
+        # is still validated, and run, in the one given.
         given = pathlib.Path(args[args.index("--weights") + 1]).resolve()
+        try:
+            chosen = currency(named, game, near=spec.parent)
+        except SystemExit:
+            chosen = None
         if given != chosen:
-            print(f"# the spec names the currency {named} ({chosen}); --weights {given} was given and is used", flush=True)
+            print(f"# the spec names the currency {named}" + (f" ({chosen})" if chosen else ", which this machine does not have")
+                  + f"; --weights {given} was given and is used", flush=True)
         return args
+    chosen = currency(named, game, near=spec.parent)
     print(f"# currency {named}: {chosen}", flush=True)
     return args + ["--weights", str(chosen)]
 
