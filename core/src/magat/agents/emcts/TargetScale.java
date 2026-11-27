@@ -32,7 +32,8 @@ final class TargetScale {
         return Math.max(-5.0, Math.min(5.0, (d - mean) / sd()));
     }
 
-    private double sd() {
+    /** The running, clipped standard deviation of the changes taken in; 1 before two are seen. */
+    double sd() {
         if (n < 2) return 1.0;
         return Math.max(StrictMath.sqrt(m2 / (n - 1)), 1e-9);
     }
