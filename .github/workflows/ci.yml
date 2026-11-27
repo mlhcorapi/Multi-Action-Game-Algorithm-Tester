@@ -50,6 +50,11 @@ jobs:
             python magat.py check replay --game tribes --leaf games/tribes/results/reference/laptop-i9-14900hx/all/$arm/9500cu \
               --weights games/tribes/calibration/laptop-i9-14900hx-time/compute_weights.properties --turns 2
           done
+      - name: The AB-EMCTS result's turns replay here too (its three arms, 2 per arm at 9,500 on the holdout half, in its currency)
+        run: |
+          for arm in emcts-comma comma-z0-coarse comma-z0-random; do
+            python magat.py check replay --game tribes --leaf games/tribes/results/ab-emcts-vs-oep/r7615/holdout/$arm/9500cu               --weights games/tribes/calibration/r7615-ab-emcts/compute_weights.properties --turns 2
+          done
       - name: Published portfolio verifies (bins, identity, split rule)
         run: python magat.py portfolio verify --game tribes
       - name: Toy portfolio build, freeze, and verify against the published rows

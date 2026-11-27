@@ -1,0 +1,68 @@
+{
+  "format": 1,
+  "magat": {
+    "version": "1.0.0",
+    "commit": "82f991aa0340aff33d9bded34113fa0704427cbd",
+    "notebook": "modified"
+  },
+  "game": {
+    "id": "tribes",
+    "configuration": {
+      "engine": "GAIGResearch/Tribes fork",
+      "engine.commit": "828b13051d02fc55c6e95a3997d3757337883660",
+      "heuristic": "SIMPLE",
+      "removeFishing": "true",
+      "turnTimeLimited": "false",
+      "fullObservability": "true"
+    }
+  },
+  "portfolio": {
+    "dir": "/home/jovyan/magat_runs/portfolio/tribes",
+    "identity": "ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7"
+  },
+  "split": "dev",
+  "selection": "all",
+  "weights": {
+    "path": "/home/jovyan/magat_runs/calibration/tribes-r7615-ab-emcts/compute_weights.properties",
+    "sha256": "b03a8d8fe82737da80c61160aa51e9ffe7b747b5592f80e75e82d7f809b9c5e7",
+    "reference": "emcts@9500",
+    "header": {
+      "magat.weights.version": "2",
+      "game": "tribes",
+      "machine": "AMD EPYC 9534 64-Core Processor | 16 physical / 16 logical",
+      "java": "11.0.29",
+      "measured": "Sun Oct 25 16:13:05 CET 2026",
+      "levels": "9500,20000,101500",
+      "reference": "emcts@9500",
+      "referenceAdvanceNanos": "55340.764",
+      "turnsPerRep": "16,16,16",
+      "portfolio.identity": "ec243fd7fe81b4f6e2635b654823348d7fe2838faf3711258f425c04f63b36a7",
+      "reps": "3",
+      "operations": "advance,copy,eval,emcts.generation,emcts.legal,emcts.check,emcts.seqkey,emcts.burn,mcts.iteration,mcts.legal,oep.genome,oep.legal,oep.check,oep.generation,tbets.turn,tbets.legal,tbets.check,tbets.select,qd.classify,qd.update,qd.lookup,qd.zeropick"
+    }
+  },
+  "experiment": {
+    "name": "ab-emcts",
+    "path": "/home/jovyan/Multi-Action-Game-Algorithm-Tester/experiments/tribes/ab-emcts.json",
+    "sha256": "20190ce02c95650d6d3c5065a1ccc316bb308e2be139c8dcc204e9738b17c2bb"
+  },
+  "invocations": [
+    {
+      "date": "2026-11-27T16:47:39.851700Z",
+      "commit": "82f991aa0340aff33d9bded34113fa0704427cbd",
+      "notebook": "modified",
+      "host": "4c259b6ae0d5",
+      "machine": "AMD EPYC 9534 64-Core Processor | 128 logical / 64 physical (SMT x2) | 1 NUMA node(s) | maxHeap 17408 MB | reserve 2 | worker ceiling 62",
+      "java": "11.0.29",
+      "experimentSha256": "20190ce02c95650d6d3c5065a1ccc316bb308e2be139c8dcc204e9738b17c2bb",
+      "weightsSha256": "b03a8d8fe82737da80c61160aa51e9ffe7b747b5592f80e75e82d7f809b9c5e7",
+      "threads": {
+        "20000": 54,
+        "9500": 54,
+        "101500": 54
+      },
+      "reuse": "",
+      "args": "run --experiment /home/jovyan/Multi-Action-Game-Algorithm-Tester/experiments/tribes/ab-emcts.json --split dev --portfolio /home/jovyan/magat_runs/portfolio/tribes --weights /home/jovyan/magat_runs/calibration/tribes-r7615-ab-emcts/compute_weights.properties --threads-file /home/jovyan/magat_runs/calibration/tribes-r7615-ab-emcts/threads.json --game tribes --levels-file /home/jovyan/Multi-Action-Game-Algorithm-Tester/games/tribes/levels.json --out /home/jovyan/magat_runs/tribes/runs/ab-emcts"
+    }
+  ]
+}

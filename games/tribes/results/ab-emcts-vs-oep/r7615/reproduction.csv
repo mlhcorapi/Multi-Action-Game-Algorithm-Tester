@@ -1,0 +1,49 @@
+Split,Arm,Budget,Turns,Compared,Identical,Unmatched,Differs,Note
+dev,comma-z0-coarse,9500,1600,0,0,1600,,not in the other run
+dev,comma-z0-coarse,20000,1600,0,0,1600,,not in the other run
+dev,comma-z0-coarse,101500,1200,0,0,1200,,not in the other run
+dev,comma-z0-random,9500,1600,0,0,1600,,not in the other run
+dev,comma-z0-random,20000,1600,0,0,1600,,not in the other run
+dev,comma-z0-random,101500,1200,0,0,1200,,not in the other run
+dev,emcts,9500,1600,1600,1600,0,,
+dev,emcts,20000,1600,1600,1600,0,,
+dev,emcts,101500,1200,1200,1200,0,,
+dev,emcts-comma,9500,1600,0,0,1600,,not in the other run
+dev,emcts-comma,20000,1600,0,0,1600,,not in the other run
+dev,emcts-comma,101500,1200,0,0,1200,,not in the other run
+dev,mcts,9500,1600,1600,1600,0,,
+dev,mcts,20000,1600,1600,1600,0,,
+dev,mcts,101500,1200,1200,1200,0,,
+dev,oep,9500,1600,1600,1600,0,,
+dev,oep,20000,1600,1600,1600,0,,
+dev,oep,101500,1200,1200,1200,0,,
+dev,random,9500,1600,1600,1600,0,,
+dev,random,20000,1600,1600,1600,0,,
+dev,random,101500,1200,1200,1200,0,,
+dev,tbets,9500,1600,1600,1600,0,,
+dev,tbets,20000,1600,1600,1600,0,,
+dev,tbets,101500,1200,1200,1200,0,,
+holdout,comma-z0-coarse,9500,1600,0,0,1600,,not in the other run
+holdout,comma-z0-coarse,20000,1600,0,0,1600,,not in the other run
+holdout,comma-z0-coarse,101500,1200,0,0,1200,,not in the other run
+holdout,comma-z0-random,9500,1600,0,0,1600,,not in the other run
+holdout,comma-z0-random,20000,1600,0,0,1600,,not in the other run
+holdout,comma-z0-random,101500,1200,0,0,1200,,not in the other run
+holdout,emcts,9500,1600,1600,1600,0,,
+holdout,emcts,20000,1600,1600,1600,0,,
+holdout,emcts,101500,1200,1200,1200,0,,
+holdout,emcts-comma,9500,1600,0,0,1600,,not in the other run
+holdout,emcts-comma,20000,1600,0,0,1600,,not in the other run
+holdout,emcts-comma,101500,1200,0,0,1200,,not in the other run
+holdout,mcts,9500,1600,1600,1600,0,,
+holdout,mcts,20000,1600,1600,1600,0,,
+holdout,mcts,101500,1200,1200,1200,0,,
+holdout,oep,9500,1600,1600,1600,0,,
+holdout,oep,20000,1600,1600,1600,0,,
+holdout,oep,101500,1200,1200,1200,0,,
+holdout,random,9500,1600,1600,1600,0,,
+holdout,random,20000,1600,1600,1600,0,,
+holdout,random,101500,1200,1200,1200,0,,
+holdout,tbets,9500,1600,1600,1600,0,,
+holdout,tbets,20000,1600,1600,1600,0,,
+holdout,tbets,101500,1200,1200,1200,0,,
