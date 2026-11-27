@@ -154,6 +154,50 @@ public class CalibratorToyTest {
     }
 
     @Test
+    public void aCurrencyGainsALevelOnlyOnPurposeAndOnItsOwnPositions() throws Exception {
+        Portfolio<ToyGame.State> p = portfolio();
+        Path out = Files.createTempDirectory("magat-calib-gain");
+        Calibrator.Options first = toy("emcts");
+        first.turns = "2,2";
+        assertTrue(Calibrator.run(game, registry(), "emcts", p, out, null, first).pass);
+        Path file = out.resolve(Currency.WEIGHTS_FILE);
+        List<String> before = Files.readAllLines(file, StandardCharsets.UTF_8);
+
+        // A level the file does not list is refused unless the session says it means it.
+        Calibrator.Options typo = toy("emcts-alt");
+        typo.levels = new long[]{900};
+        try {
+            Calibrator.run(game, registry(), "emcts", p, out, null, typo);
+            fail("a level the currency lacks extends it only on purpose");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("--gain-levels"));
+        }
+        assertEquals("a refused session writes nothing", before, Files.readAllLines(file, StandardCharsets.UTF_8));
+
+        Calibrator.Options gain = toy("emcts-alt");
+        gain.levels = new long[]{900};
+        gain.gainLevels = true;
+        assertTrue(Calibrator.run(game, registry(), "emcts", p, out, null, gain).pass);
+        Weights w = Weights.load(file);
+        assertEquals("the header lists the gained level", "300,600,900", w.header().get("levels"));
+        assertEquals("on the same positions as the others: the turns of the level below", "2,2,2", w.turnsPerRep());
+        assertTrue(w.has("emcts-alt@900"));
+        assertFalse("only what the session priced", w.has("emcts-alt@300"));
+        List<String> after = Files.readAllLines(file, StandardCharsets.UTF_8);
+        for (String line : before) {
+            String t = line.replace(" ", "");
+            if (t.startsWith("levels=") || t.startsWith("turnsPerRep=") || t.startsWith("operations=")) continue;
+            assertTrue("kept: " + line, after.contains(line));
+        }
+        // From now on the level is the currency's own: no flag needed to price another arm there.
+        Calibrator.Options next = toy("emcts");
+        next.levels = new long[]{900};
+        next.replace = new LinkedHashSet<>(Collections.singletonList("emcts"));
+        assertTrue(Calibrator.run(game, registry(), "emcts", p, out, null, next).pass);
+        assertTrue(Weights.load(file).has("emcts@900"));
+    }
+
+    @Test
     public void everySessionMeasuresTheSameTurnsWhateverTheFilePrices() throws Exception {
         // The stop rule decides which turn is played. Measured under the prices of the file it extends, a
         // merge session's reference cell played a different turn from the session that wrote the file (on

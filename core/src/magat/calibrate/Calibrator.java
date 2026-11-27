@@ -88,6 +88,12 @@ public final class Calibrator {
         public Set<String> replace = new LinkedHashSet<>();
         /** Measure and compare against {@code file}, write nothing. */
         public boolean check;
+        /**
+         * Price levels the file does not list ({@code --gain-levels}), as new levels of its currency: on the same
+         * positions as the file's others, the file's header extended. Without it a level the file lacks is refused,
+         * so a mistyped level cannot extend a currency.
+         */
+        public boolean gainLevels;
         /** Report the sample-size and stability gates without enforcing them; mark the file. */
         public boolean toy;
         /** Time a few turns, print what the session would take, measure and write nothing else. */
@@ -151,6 +157,25 @@ public final class Calibrator {
                     + "would measure different material (the 55% phantom drift). Leave --turns unset.");
         long[] turnLevels = parseLongs(levelsHeader);
         int[] turns = parseInts(turnsSpec);
+        // A level the file lacks: refused, or (--gain-levels) a new level of the currency, measured on the same positions
+        // as the file's others (the turns of the nearest level below it, so the same pool), and the header extended.
+        TreeSet<Long> gained = new TreeSet<>();
+        if (existing != null && existing.header().get("levels") != null)
+            for (long l : levelSet) if (Arrays.stream(turnLevels).noneMatch(x -> x == l)) gained.add(l);
+        String gainedLevelsHeader = levelsHeader, gainedTurnsSpec = turnsSpec;
+        if (!gained.isEmpty() && !o.check) {
+            if (!o.gainLevels)
+                throw new IllegalStateException("level(s) " + join(gained) + " are not among this currency's levels (" + levelsHeader
+                        + ", in " + existingPath + "). To price them as new levels of it, on the same positions as its others, "
+                        + "say so: --gain-levels.");
+            TreeSet<Long> all = new TreeSet<>();
+            for (long l : turnLevels) all.add(l);
+            all.addAll(gained);
+            List<String> t = new ArrayList<>();
+            for (long l : all) t.add(String.valueOf(turnsFor(l, turnLevels, turns)));
+            gainedLevelsHeader = join(all);
+            gainedTurnsSpec = String.join(",", t);
+        }
         int pool = pool(turns);
 
         List<Cell> cells = new ArrayList<>();
@@ -345,8 +370,8 @@ public final class Calibrator {
         Currency.Session s = new Currency.Session();
         s.game = game.id();
         s.machine = MachineProfile.get().describe();
-        s.levels = levelsHeader;
-        s.turnsPerRep = turnsSpec;
+        s.levels = gainedLevelsHeader;
+        s.turnsPerRep = gainedTurnsSpec;
         s.portfolioIdentity = portfolio.identity();
         s.reps = o.reps;
         s.toy = o.toy;

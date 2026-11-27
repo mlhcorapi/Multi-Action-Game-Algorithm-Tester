@@ -139,6 +139,16 @@ public final class Currency {
             boolean drop = false;
             for (String p : replacing) if (t.startsWith(p)) { drop = true; break; }
             if (drop) continue;
+            // A gained level (Calibrator.Options.gainLevels) extends the header's levels and their turns; nothing else changes.
+            if (s.levels != null && t.replace(" ", "").startsWith("levels=") && !t.substring(t.indexOf('=') + 1).trim().equals(s.levels)) {
+                sb.append("levels = ").append(s.levels).append('\n');
+                continue;
+            }
+            if (s.turnsPerRep != null && t.replace(" ", "").startsWith("turnsPerRep=")
+                    && !t.substring(t.indexOf('=') + 1).trim().equals(s.turnsPerRep)) {
+                sb.append("turnsPerRep = ").append(s.turnsPerRep).append('\n');
+                continue;
+            }
             if (t.startsWith("operations") && t.replace(" ", "").startsWith("operations=")) {
                 List<String> had = new ArrayList<>();
                 for (String op : t.substring(t.indexOf('=') + 1).split(",")) if (!op.trim().isEmpty()) had.add(op.trim());
