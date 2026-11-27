@@ -350,9 +350,9 @@ def main(argv) -> int:
         # The in-turn learning night (docs/plans/in-turn-learning-run.md): its two specs, and its seven sittings, in the
         # order the notebook runs them, into one copy of the published AB-EMCTS currency. Measured on the R7615; here,
         # their structure and what each would measure.
-        for spec in (screen, long_):
-            check(f"the in-turn night's {spec.stem} spec reads: its arms registered, its levels and positions sound",
-                  [PY, ROOT / "magat.py", "experiment", "validate", "--experiment", spec, "--no-weights"], "VALIDATION: PASS")
+        for night_spec in (screen, long_):
+            check(f"the in-turn night's {night_spec.stem} spec reads: its arms registered, its levels and positions sound",
+                  [PY, ROOT / "magat.py", "experiment", "validate", "--experiment", night_spec, "--no-weights"], "VALIDATION: PASS")
         night = data / "shakedown" / f"config-in-turn-{game}"
         shutil.rmtree(night, ignore_errors=True)
         sittings = ROOT / "calibrations" / game / "in-turn"
