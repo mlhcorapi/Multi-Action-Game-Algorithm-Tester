@@ -14,7 +14,7 @@ class Reproduction(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tmp = pathlib.Path(tempfile.mkdtemp(prefix="magat-reproduce-"))
+        cls.tmp = pathlib.Path(tempfile.mkdtemp(prefix="magat-reproduce-")).resolve()
         cls.published = syn.build(cls.tmp / "published", "all")
         # The same turns on a machine twice as slow, and a run in which one arm plays differently.
         syn.build(cls.tmp / "slower", "holdout", ms_scale=2.0)
