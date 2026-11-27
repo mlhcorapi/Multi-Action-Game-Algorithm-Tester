@@ -128,6 +128,7 @@ def calibration_cells(NB: pathlib.Path) -> int:
             ns = {"magat": magat, "summary": lambda *a, **k: None, "print": lambda *a, **k: printed.append(" ".join(map(str, a))),
                   "CALIBRATING": cal is not None, "CAL": cal or {}, "CAL_CONFIG": pathlib.Path(tmp) / "config.json",
                   "CAL_CONFIGS": [pathlib.Path(tmp) / "config.json"] if cal is not None else [], "CALS": [cal] if cal is not None else [],
+                  "CAL_STAGE": 1 if cal is not None else 0,
                   "CALIBRATION": weights.parent, "WEIGHTS": weights, "CURRENCY_NAME": "selftest", "GAME": "tribes",
                   "PORTFOLIO": weights.parent, "LEVELS": "9500,20000,101500", "LEVELS_DOC": LEVELS_DOC}
             try:
@@ -156,28 +157,35 @@ def calibration_cells(NB: pathlib.Path) -> int:
 
 def calibration_sittings(NB: pathlib.Path) -> int:
     """Two sittings of one currency: one already priced is skipped, the other measured; one that fails does not stop the
-    next, and the cell names it at the end."""
+    next, and the cell names it at the end. Each runs without the checks (--no-checks), which run once, after the last,
+    only when every sitting is written. The launcher is a stub that prices a sitting once its session has run."""
     cells = tagged(NB, {"calibrate"}, {"calibrate", "measure"})
     with tempfile.TemporaryDirectory(prefix="magat-selftest-") as tmp:
         weights = pathlib.Path(tmp) / "compute_weights.properties"
         weights.write_text("# a stub currency\n", encoding="utf-8")
         published, long = {"name": "s", "levels": [9500]}, {"name": "s", "levels": [610000], "gain-levels": True}
+        cfgs = [pathlib.Path(tmp) / "a.json", pathlib.Path(tmp) / "b.json"]
         failures = 0
-        for case, fail_first in (("the first priced, the second measured", False), ("the first fails, the second still runs", True)):
+        for case, first_priced, fail_first in (("the first priced, the second measured, then the checks once", True, False),
+                                              ("the first fails, the second still runs, and no checks", False, True)):
             calls, printed = [], []
+            written = {"9500"} if first_priced else set()
 
             def magat(*args, check=True):
+                args = tuple(str(a) for a in args)
                 calls.append(args)
                 if args[0] == "weights":
-                    return 0 if "9500" in args and not fail_first else 1
-                if args[0] == "calibrate-controlled" and "--preflight" not in args and fail_first and any(str(x).endswith("a.json") for x in args):
-                    return 1
+                    return 0 if args[args.index("--levels") + 1] in written else 1
+                if args[0] == "calibrate-controlled" and "--preflight" not in args and "--checks" not in args:
+                    config = args[args.index("--config") + 1]
+                    if fail_first and config.endswith("a.json"):
+                        return 1
+                    written.add("9500" if config.endswith("a.json") else "610000")
                 return 0
 
-            cfgs = [pathlib.Path(tmp) / "a.json", pathlib.Path(tmp) / "b.json"]
             ns = {"magat": magat, "summary": lambda *a, **k: None, "print": lambda *a, **k: printed.append(" ".join(map(str, a))),
                   "CALIBRATING": True, "CAL": published, "CAL_CONFIG": cfgs[0], "CAL_CONFIGS": cfgs, "CALS": [published, long],
-                  "CALIBRATION": weights.parent, "WEIGHTS": weights, "CURRENCY_NAME": "s", "GAME": "tribes",
+                  "CAL_STAGE": 2, "CALIBRATION": weights.parent, "WEIGHTS": weights, "CURRENCY_NAME": "s", "GAME": "tribes",
                   "PORTFOLIO": weights.parent, "LEVELS": "9500,20000,101500", "LEVELS_DOC": LEVELS_DOC}
             try:
                 for src in cells:
@@ -186,12 +194,14 @@ def calibration_sittings(NB: pathlib.Path) -> int:
                 print(f"  [FAIL] two sittings, {case}: {e!r}")
                 failures += 1
                 continue
-            sessions = [a for a in calls if a[0] == "calibrate-controlled" and "--preflight" not in a]
-            measured = [str(a[a.index("--config") + 1]) for a in sessions]
+            sessions = [a for a in calls if a[0] == "calibrate-controlled" and "--preflight" not in a and "--checks" not in a]
+            checks = [a for a in calls if a[0] == "calibrate-controlled" and "--checks" in a]
+            measured = [a[a.index("--config") + 1] for a in sessions]
+            ok = all("--no-checks" in a for a in sessions)
             if fail_first:
-                ok = len(measured) == 2 and any("not written: sitting 1" in p for p in printed)
+                ok = ok and len(measured) == 2 and any("not written: sitting 1" in p for p in printed) and not checks
             else:
-                ok = measured == [str(cfgs[1])]
+                ok = ok and measured == [str(cfgs[1])] and len(checks) == 1 and calls.index(checks[0]) > calls.index(sessions[-1])
             print(f"  [{'ok' if ok else 'FAIL'}] two sittings: {case}")
             failures += int(not ok)
         return failures
@@ -199,16 +209,19 @@ def calibration_sittings(NB: pathlib.Path) -> int:
 
 def experiments_cell(NB: pathlib.Path) -> int:
     """The experiments cell runs every entry of the parameters cell, in order, through `experiment run`, in the plan's
-    currency and with this machine's thread sweep, and an entry that names a half runs that half."""
+    currency and with this machine's thread sweep, and an entry that names a half runs that half. A sitting between two
+    runs is measured there, the currency's checks run once at the end, and the calibration is bundled again; an entry
+    that fails does not stop the next, and the cell says so at the end."""
     cells = tagged(NB, {"experiment"})
     if len(cells) != 1:
         print(f"  [FAIL] expected one experiments cell, found {len(cells)}")
         return 1
     calls = []
     specs = [pathlib.Path("a.json"), pathlib.Path("b.json")]
-    runs = [(specs[0], None), (specs[1], "holdout")]
-    ns = {"magat": lambda *args, check=True: calls.append(args) or 0, "EXPERIMENT_RUNS": runs,
-          "PORTFOLIO": pathlib.Path("portfolio"), "WEIGHTS": pathlib.Path("w.properties"), "CALIBRATION": pathlib.Path("cal")}
+    base = {"PORTFOLIO": pathlib.Path("portfolio"), "WEIGHTS": pathlib.Path("w.properties"), "CALIBRATION": pathlib.Path("cal"),
+            "LOGS": pathlib.Path("logs")}
+    ns = dict(base, magat=lambda *args, check=True: calls.append(args) or 0,
+              SCHEDULE=[("run", specs[0], None), ("run", specs[1], "holdout")])
     exec(compile(cells[0], "<experiments-cell>", "exec"), ns)
     ok = [a[:3] for a in calls] == [("experiment", "run", s) for s in specs] \
         and all(a[a.index("--weights") + 1] == ns["WEIGHTS"] and a[a.index("--threads-file") + 1] == pathlib.Path("cal") / "threads.json"
@@ -216,13 +229,31 @@ def experiments_cell(NB: pathlib.Path) -> int:
         and "--split" not in calls[0] and calls[1][calls[1].index("--split") + 1] == "holdout"
     print(f"  [{'ok' if ok else 'FAIL'}] two specs: experiment run on each, in order, in the plan's currency and thread sweep;"
           " the one whose entry names a half runs that half")
+    failures = int(not ok)
+    # A sitting between two runs, the first of which fails.
+    steps, raised = [], None
+    ns = dict(base, magat=lambda *args, check=True: steps.append(("run", args[2])) or (1 if args[2] == specs[0] else 0),
+              measure=lambda k: steps.append(("measure", k)) or "written", check_currency=lambda: steps.append(("checks",)),
+              bundle=lambda name, items: steps.append(("bundle", name)), sitting_name=lambda k: f"sitting {k + 1}",
+              SCHEDULE=[("run", specs[0], None), ("calibrate", 3, None), ("run", specs[1], None)],
+              print=lambda *a, **k: None)
+    try:
+        exec(compile(cells[0], "<experiments-cell>", "exec"), ns)
+    except RuntimeError as e:
+        raised = str(e)
+    ok = steps == [("run", specs[0]), ("measure", 3), ("run", specs[1]), ("checks",), ("bundle", "calibration")] \
+        and raised is not None and "a.json" in raised
+    print(f"  [{'ok' if ok else 'FAIL'}] a sitting between two runs is measured there, the checks once at the end and the "
+          "calibration bundled again; the first run failing stops neither, and the cell says so at the end")
+    failures += int(not ok)
     exports = tagged(NB, {"export"})
     calls.clear()
     if len(exports) == 1:
-        exec(compile(exports[0], "<export-cell>", "exec"), dict(ns, EXPERIMENT_NAMES=["a", "b"]))
+        exec(compile(exports[0], "<export-cell>", "exec"), dict(base, magat=lambda *args, check=True: calls.append(args) or 0,
+                                                                EXPERIMENT_NAMES=["a", "b"]))
     shared = len(exports) == 1 and calls == [("export", "a"), ("export", "b")]
     print(f"  [{'ok' if shared else 'FAIL'}] and the export cell packages each experiment by its name")
-    return int(not ok) + int(not shared)
+    return failures + int(not shared)
 
 
 def run_notebooks() -> int:

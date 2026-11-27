@@ -131,7 +131,9 @@ PARAMETERS = r'''
 CALIBRATION_CONFIG = "calibrations/tribes/examples/server.json"
 PUBLISHED_CURRENCY = "r7615-time"
 # The experiments to run, in order: spec files (experiments/<game>/, docs/EXPERIMENTS.md), in the currency above. An
-# entry may name the half it runs, ("experiments/tribes/x.json", "holdout"), in place of the spec's own "split".
+# entry may name the half it runs, ("experiments/tribes/x.json", "holdout"), in place of the spec's own "split". An
+# entry ("calibrate", "calibrations/tribes/x.json") measures a sitting of the same currency at that point, between
+# the runs: a long level after the runs at the published ones, so that a night cut short has those by morning.
 EXPERIMENTS = ["experiments/tribes/reference.json"]
 '''
 
@@ -147,10 +149,32 @@ def _file(path, what):
         raise FileNotFoundError(f"{what} {p} does not exist: fix the parameters cell")
     return p
 
-CALIBRATING = CALIBRATION_CONFIG is not None
-# One config, or a list of them: the sittings of one currency, in order.
-_configs = [] if not CALIBRATING else [CALIBRATION_CONFIG] if isinstance(CALIBRATION_CONFIG, (str, pathlib.PurePath)) else list(CALIBRATION_CONFIG)
+def _entry(x):
+    """An entry of EXPERIMENTS: a spec; (spec, half), to run that half in place of the spec's own "split"; or
+    ("calibrate", config), a sitting of the currency measured at that point of the list."""
+    if not isinstance(x, (str, pathlib.PurePath)) and len(x) == 2 and x[0] == "calibrate":
+        return "calibrate", _file(x[1], "the calibration config"), None
+    spec, half = (x, None) if isinstance(x, (str, pathlib.PurePath)) else tuple(x)
+    if half not in (None, "dev", "holdout", "all"):
+        raise ValueError(f"{x!r}: a half is \"dev\", \"holdout\" or \"all\": fix the parameters cell")
+    return "run", _file(spec, "the experiment spec"), half
+
+# One config, or a list of them: the sittings of one currency, in order. The calibration cells measure these
+# (CAL_STAGE of them); the experiments cell measures the ones EXPERIMENTS names, where it names them.
+_configs = ([] if CALIBRATION_CONFIG is None else [CALIBRATION_CONFIG] if isinstance(CALIBRATION_CONFIG, (str, pathlib.PurePath))
+            else list(CALIBRATION_CONFIG))
 CAL_CONFIGS = [_file(c, "the calibration config") for c in _configs]
+CAL_STAGE = len(CAL_CONFIGS)
+# The experiments cell's steps, in order: ("run", spec, half), or ("calibrate", k, None) for sitting k.
+SCHEDULE = []
+for _x in EXPERIMENTS:
+    _kind, _path, _half = _entry(_x)
+    if _kind == "calibrate":
+        CAL_CONFIGS.append(_path)
+        SCHEDULE.append(("calibrate", len(CAL_CONFIGS) - 1, None))
+    else:
+        SCHEDULE.append((_kind, _path, _half))
+CALIBRATING = bool(CAL_CONFIGS)
 CALS = [json.loads(c.read_text(encoding="utf-8")) for c in CAL_CONFIGS]
 CAL_CONFIG, CAL = (CAL_CONFIGS[0], CALS[0]) if CALIBRATING else (None, {})
 if len({c.get("name") for c in CALS}) > 1:
@@ -168,26 +192,24 @@ WEIGHTS = (CALIBRATION if CALIBRATING else ROOT / "games" / GAME / "calibration"
 if not CALIBRATING and not WEIGHTS.is_file():
     raise FileNotFoundError(f"no published currency {CURRENCY_NAME}; games/{GAME}/calibration/ has "
                             + ", ".join(d.name for d in sorted((ROOT / "games" / GAME / "calibration").iterdir()) if d.is_dir()))
-def _experiment(x):
-    """An entry of EXPERIMENTS: a spec, or (spec, half) to run that half in place of the spec's own "split"."""
-    spec, half = (x, None) if isinstance(x, (str, pathlib.PurePath)) else tuple(x)
-    if half not in (None, "dev", "holdout", "all"):
-        raise ValueError(f"{x!r}: a half is \"dev\", \"holdout\" or \"all\": fix the parameters cell")
-    return _file(spec, "the experiment spec"), half
-
 def _name(spec):
     return json.loads(spec.read_text(encoding="utf-8")).get("name") or spec.stem
 
-EXPERIMENT_RUNS = [_experiment(x) for x in EXPERIMENTS]
+EXPERIMENT_RUNS = [(spec, half) for kind, spec, half in SCHEDULE if kind == "run"]
 # Each experiment once, by its name: two halves of one spec are one experiment, analysed and exported together.
 EXPERIMENT_NAMES = list(dict.fromkeys(_name(spec) for spec, _ in EXPERIMENT_RUNS))
 print("calibration :", f"{CAL_CONFIG} -> the currency {CURRENCY_NAME}, in {CALIBRATION}" if len(CAL_CONFIGS) == 1
       else f"{len(CAL_CONFIGS)} sittings -> the currency {CURRENCY_NAME}, in {CALIBRATION}" if CALIBRATING
       else f"none: the published currency {CURRENCY_NAME} ({WEIGHTS})")
-for _k, _c in enumerate(CAL_CONFIGS if len(CAL_CONFIGS) > 1 else []):
+for _k, _c in enumerate(CAL_CONFIGS[:CAL_STAGE] if len(CAL_CONFIGS) > 1 else []):
     print(f"  sitting {_k + 1}: {_c}")
-for spec, half in EXPERIMENT_RUNS:
-    print("experiment  :", _name(spec), f"({spec})" + (f", the {half} half" if half else ""))
+for kind, what, half in SCHEDULE:
+    if kind == "run":
+        print("experiment  :", _name(what), f"({what})" + (f", the {half} half" if half else ""))
+    else:
+        print(f"  sitting {what + 1}: {CAL_CONFIGS[what]}, measured by the experiments cell, here")
+if len(CAL_CONFIGS) > 1:
+    print("checks      : once, after the last sitting (each sitting runs without them)")
 '''
 
 
@@ -272,16 +294,64 @@ def priced(k=0):
     return WEIGHTS.is_file() and magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", arms,
                                        "--levels", levels, check=False) == 0
 
+def sitting_name(k):
+    return f"sitting {k + 1} ({CAL_CONFIGS[k].name})" if len(SITTINGS) > 1 else "the config"
+
+# With several sittings, each runs without the currency's checks, which then run once, after the last (check_currency).
+NO_CHECKS = ["--no-checks"] if len(SITTINGS) > 1 else []
+
+def measure(k):
+    """Sitting k's session, unless the currency prices it already: "skipped", "written", "suspect" or "not written". A
+    session that did not finish wrote nothing, so measuring it again starts it again."""
+    if priced(k):
+        print(f"[skip] {WEIGHTS} prices every arm {sitting_name(k)} names at every level it names")
+        return "skipped"
+    rc = magat("calibrate-controlled", *SITTINGS[k][0], *NO_CHECKS, check=False)
+    if rc == 5:
+        print(f"\n*** SUSPECT ({sitting_name(k)}): the currency is written, but read the reasons above. To measure it "
+              "again when the machine is quiet, give the config a new \"name\" and run the plan cell and the calibration "
+              "cells again.")
+        return "suspect"
+    if rc != 0:
+        why = ("the machine stayed busy and nothing was started" if rc == 4
+               else f"exit {rc}; the record is {CALIBRATION / 'record' / 'SUMMARY.md'}")
+        if len(SITTINGS) == 1:
+            raise RuntimeError(f"{why}: run this cell again" + (" later" if rc == 4 else ""))
+        print(f"\n*** {sitting_name(k)} wrote nothing ({why})")
+        return "not written"
+    summary(CALIBRATION / "record", until="## ")
+    return "written"
+
+def check_currency():
+    """With several sittings: the currency's checks, once, when every sitting is written. They write nothing."""
+    unpriced = [sitting_name(k) for k in range(len(SITTINGS)) if not priced(k)]
+    if unpriced:
+        print(f"[skip] the currency's checks run once every sitting is written; not yet: {', '.join(unpriced)}")
+        return
+    print("\n=== The currency's checks, once, after its last sitting ===")
+    rc = magat("calibrate-controlled", *SITTINGS[-1][0], "--checks", check=False)
+    if rc != 0:
+        print(f"\n*** the currency's checks: exit {rc} (5: the machine did not hold its speed); read "
+              f"{CALIBRATION / 'record' / 'SUMMARY.md'}")
+    summary(CALIBRATION / "record", until="## ")
+
 if not CALIBRATING:
     print(f"[skip] nothing to calibrate: the experiments spend the published currency {CURRENCY_NAME}")
 else:
-    # The preflight of every sitting still to measure: what each would measure, and anything refused, before the night.
+    # The preflight of every sitting still to measure, the experiments cell's too: what each would measure, and
+    # anything refused, before the night.
     incomplete = WEIGHTS.is_file() and not all(priced(k) for k in range(len(SITTINGS)))
+    refused = []
     for k, (args, _, _) in enumerate(SITTINGS):
         if len(SITTINGS) > 1 and priced(k):
-            print(f"[skip] sitting {k + 1} ({CAL_CONFIGS[k].name}) is already priced")
+            print(f"[skip] {sitting_name(k)} is already priced")
             continue
-        magat("calibrate-controlled", *args, "--preflight")
+        if len(SITTINGS) > 1:
+            print(f"\n=== {sitting_name(k)}" + (", measured by the experiments cell" if k >= CAL_STAGE else "") + " ===")
+        if magat("calibrate-controlled", *args, *NO_CHECKS, "--preflight", check=len(SITTINGS) == 1) != 0:
+            refused.append(sitting_name(k))
+    if refused:
+        raise RuntimeError(f"the preflight refused {', '.join(refused)}: read why above, and fix it before measuring")
     if incomplete:
         print(f"\n*** {WEIGHTS} exists but does not price every arm the config names: the next cell prices the missing "
               "ones in one session and merges them into it by ratio. To measure a whole new currency in one session "
@@ -293,38 +363,27 @@ MEASURE_CELL = r'''
 # its config names at every level it names. Over a currency that lacks one, calibrate-controlled prices what is
 # missing and merges it in by ratio. A session that did not finish wrote nothing, so running the cell again measures
 # it again. With several sittings, one that fails does not stop the others: the cell says at the end which wrote
-# nothing, and running it again measures only those.
-not_written = []
+# nothing, and running it again measures only those. The currency's checks run once, after the last sitting: here,
+# unless the experiments cell measures sittings of its own.
 if not CALIBRATING:
     print(f"[skip] nothing to calibrate: the experiments spend the published currency {CURRENCY_NAME}")
-for k, (args, _, _) in enumerate(SITTINGS):
-    name = f"sitting {k + 1} ({CAL_CONFIGS[k].name})" if len(SITTINGS) > 1 else "the config"
-    if priced(k):
-        print(f"[skip] {WEIGHTS} prices every arm {name} names at every level")
-        continue
-    rc = magat("calibrate-controlled", *args, check=False)
-    if rc == 5:
-        print(f"\n*** SUSPECT ({name}): the currency is written, but read the reasons above. To measure it again when the "
-              "machine is quiet, give the config a new \"name\" and run the plan cell and the calibration cells again.")
-    elif rc != 0:
-        why = ("the machine stayed busy and nothing was started" if rc == 4
-               else f"exit {rc}; the record is {CALIBRATION / 'record' / 'SUMMARY.md'}")
-        if len(SITTINGS) == 1:
-            raise RuntimeError(f"{why}: run this cell again" + (" later" if rc == 4 else ""))
-        print(f"\n*** {name} wrote nothing ({why})")
-        not_written.append(name)
-        continue
-    summary(CALIBRATION / "record", until="## ")
+results = {k: measure(k) for k in range(CAL_STAGE)}
+not_written = [sitting_name(k) for k, r in results.items() if r == "not written"]
 if not_written:
     print(f"\n*** not written: {', '.join(not_written)}. Run this cell again to measure them: written sittings are skipped.")
+if NO_CHECKS and any(r in ("written", "suspect") for r in results.values()):
+    if CAL_STAGE < len(SITTINGS):
+        print("[later] the currency's checks run once, after the sittings the experiments cell measures")
+    else:
+        check_currency()
 '''
 
 CHECKS_CELL = r'''
 # Every arm each config names priced at every level it names, then the bundle: the currency and its whole record.
 # With several sittings, one not priced is reported and the rest go on: an experiment needing its prices is refused
-# by its own validation.
+# by its own validation. The experiments cell's sittings are checked, and bundled again, there.
 if CALIBRATING:
-    for k, (_, arms, levels) in enumerate(SITTINGS):
+    for k, (_, arms, levels) in enumerate(SITTINGS[:CAL_STAGE]):
         rc = magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", arms, "--levels", levels, check=len(SITTINGS) == 1)
         if rc != 0:
             print(f"*** sitting {k + 1} ({CAL_CONFIGS[k].name}) is not fully priced: see above")
@@ -338,21 +397,44 @@ magat("check", "contract", "--game", GAME, "--scenarios", 8)
 assert_in_log("check-contract", "CONTRACT: PASS")
 magat("check", "equivalence", "--game", GAME, "--scenarios", 8, "--visits", 2, "--budgets", "8000,40000")
 assert_in_log("check-equivalence", "EQUIVALENCE: PASS")
-# The audit: each arm's declared operations and forward model account for its turn (fails above 25% unaccounted).
-magat("check", "audit", "--game", GAME, "--portfolio", PORTFOLIO, "--arms", "@reference", "--budget", MID_LEVEL)
+# The audit: each arm's declared operations and forward model account for its turn (fails above 25% unaccounted): the
+# reference arms, and every arm the experiments play.
+import json
+_played = [a if isinstance(a, str) else a.get("id") for spec, _ in EXPERIMENT_RUNS
+           for a in json.loads(spec.read_text(encoding="utf-8")).get("arms", [])]
+magat("check", "audit", "--game", GAME, "--portfolio", PORTFOLIO, "--arms",
+      ",".join(dict.fromkeys(["@reference", *(a for a in _played if a)])), "--budget", MID_LEVEL)
 assert_in_log("check-audit", "AUDIT: PASS")
 bundle("gates", [LOGS / f"{n}.log" for n in ("check-contract", "check-equivalence", "check-audit", "test")])
 '''
 
 
 EXPERIMENTS_CELL = r'''
-# Every experiment of the parameters cell, in order, in the currency of the plan cell (WEIGHTS, which wins over a
-# spec's own "weights") and with this machine's thread sweep; an entry that names a half runs that half. experiment
-# run validates each spec, runs it (running the cell again resumes: finished leaves are skipped, a partial one
-# continues), analyses every half run so far, prints its headline, and bundles it as run-<name>.
-for spec, half in EXPERIMENT_RUNS:
-    magat("experiment", "run", spec, *(("--split", half) if half else ()), "--portfolio", PORTFOLIO, "--weights", WEIGHTS,
-          "--threads-file", CALIBRATION / "threads.json")
+# Every entry of the parameters cell, in order, in the currency of the plan cell (WEIGHTS, which wins over a spec's own
+# "weights") and with this machine's thread sweep; an entry that names a half runs that half. experiment run
+# validates each spec, runs it (running the cell again resumes: finished leaves are skipped, a partial one continues),
+# analyses every half run so far, prints its headline, and bundles it as run-<name>. A ("calibrate", config) entry
+# measures that sitting there, as the calibration cells do; the currency's checks then run once, at the end, and the
+# calibration is bundled again. An entry that fails does not stop the ones after it: the cell names it at the end.
+failed, measured = [], False
+for kind, what, half in SCHEDULE:
+    if kind == "calibrate":
+        status = measure(what)
+        measured |= status in ("written", "suspect")
+        if status == "not written":
+            failed.append(sitting_name(what))
+        continue
+    rc = magat("experiment", "run", what, *(("--split", half) if half else ()), "--portfolio", PORTFOLIO, "--weights", WEIGHTS,
+               "--threads-file", CALIBRATION / "threads.json", check=False)
+    if rc != 0:
+        failed.append(what.name + (f" ({half})" if half else ""))
+        print(f"\n*** {what.name}" + (f" ({half})" if half else "") + f" stopped, exit {rc}: the entries after it still run")
+if measured:
+    check_currency()
+    bundle("calibration", [CALIBRATION, LOGS / "calibrate-controlled.log"])
+if failed:
+    raise RuntimeError(f"not complete: {', '.join(failed)}. Read why above; running this cell again resumes, skipping "
+                       "finished leaves and written sittings")
 '''
 
 
@@ -446,7 +528,7 @@ the journal makes an interrupted build resume where it stopped.
 """),
     code(PORTFOLIO_CELL, tags=("portfolio",)),
     md("""
-## Machine, threads, calibration
+## Machine and threads
 
 The machine banner first: physical cores, the worker ceiling and why. Then the thread sweep, which
 picks the knee of sustained throughput per budget level (results do not depend on it, only wall-clock
@@ -467,7 +549,17 @@ levels mean every currency must be measured again.
     code(LEVELS_CELL, tags=("levels",)),
     code(THREADS_CELL, tags=("threads",)),
     md("""
-### This machine's currency, in one session
+## Gates and probes
+
+The contract laws on published positions; the equivalence gate, where every ported arm must reproduce
+the engine agent it was ported from, field for field; and the audit, where each arm's declared
+operations and forward model must account for its turn: the reference arms and every arm the
+experiments play. Nothing downstream runs otherwise, so they come before the calibration: a gate that
+fails stops the notebook before hours of measuring.
+"""),
+    code(GATES_CELL, tags=("gates",)),
+    md("""
+## This machine's currency, in one session
 
 `calibrate-controlled`, with the calibration config of the parameters cell, prices every arm it names at
 its levels (the published ones above, unless it names others) in one calibration session, which writes all
@@ -483,7 +575,11 @@ Then it checks the new currency against itself (did the machine hold its speed?)
 published currency once there is one. The measuring cell skips itself once the currency prices every arm
 the config names at every level. Over a currency that lacks an arm, measured before that arm was
 registered, it prices just the missing arms and merges them in by ratio; the preflight cell says so first.
-With no calibration config, the three cells skip: the experiments spend the published currency. Keep
+With no calibration config, the three cells skip: the experiments spend the published currency.
+
+A list of configs is the sittings of one currency, each its own session that writes when it completes;
+one that fails does not stop the next. Each runs without the checks, which run once, after the last. A
+sitting the experiments list names (`("calibrate", config)`) is measured there, between the runs. Keep
 this tab open while it runs, and start nothing else in this server. The screen shows the verdict;
 `record/SUMMARY.md` in the currency's folder has the rest, and the last cell bundles it all.
 """),
@@ -491,19 +587,13 @@ this tab open while it runs, and start nothing else in this server. The screen s
     code(MEASURE_CELL, tags=("calibrate", "measure")),
     code(CHECKS_CELL, tags=("calibrate", "checks")),
     md("""
-## Gates and probes
-
-The contract laws on published positions; the equivalence gate, where every ported arm must reproduce
-the engine agent it was ported from, field for field; and the audit, where each arm's declared
-operations and forward model must account for its turn. Nothing downstream runs otherwise.
-"""),
-    code(GATES_CELL, tags=("gates",)),
-    md("""
 ## Experiments
 
 Every spec the parameters cell names, in order, in this machine's currency. `experiment run` validates
-each, runs it, analyses it, prints its headline and bundles the run and its report. Running the cell
-again resumes: finished leaves are skipped, a partial leaf continues where it stopped.
+each, runs it, analyses it, prints its headline and bundles the run and its report. A `("calibrate",
+config)` entry measures that sitting of the currency there, between the runs. An entry that fails does
+not stop the ones after it, and the cell names it at the end. Running the cell again resumes: finished
+leaves are skipped, a partial leaf continues where it stopped, and written sittings are skipped.
 """),
     code(EXPERIMENTS_CELL, tags=("experiment",)),
     md("""
