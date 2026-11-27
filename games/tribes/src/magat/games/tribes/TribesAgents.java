@@ -40,12 +40,24 @@ public final class TribesAgents {
     public static final List<String> IN_TURN = Collections.unmodifiableList(Arrays.asList(
             "comma-z0-coarse", "comma-z0-mid", "comma-z0-fine", "comma-z0-hier", "comma-z0-linear", "comma-z0-mlp"));
 
+    /** The plan's sixteen mutation rules (section 3), written {@code @mutation}. */
+    public static final List<String> MUTATION = Collections.unmodifiableList(Arrays.asList(
+            "mut-guard", "mut-eps90", "mut-eps50", "mut-eps20", "mut-thompson", "mut-thompson50", "mut-thompson-guard",
+            "mut-k3-none", "mut-k3-one", "mut-k3-all", "mut-k5-none", "mut-k5-one", "mut-k5-all",
+            "mut-gen-mixed", "mut-site", "mut-thompson-site"));
+
+    /** The plan's seven ideas of the search learning about itself, written {@code @self-learning}. */
+    public static final List<String> SELF_LEARNING = Collections.unmodifiableList(Arrays.asList(
+            "mut-aos", "mut-k-adapt", "mut-k-adapt-thompson", "mut-subst", "mut-blocks", "mut-tabu", "mut-kick"));
+
     /** The named arm sets, written {@code @<name>}. */
     public static Map<String, List<String>> armSets() {
         Map<String, List<String>> m = new LinkedHashMap<>();
         m.put("reference", REFERENCE);
         m.put("ab-emcts", AB_EMCTS);
         m.put("in-turn", IN_TURN);
+        m.put("mutation", MUTATION);
+        m.put("self-learning", SELF_LEARNING);
         return m;
     }
 
@@ -64,6 +76,7 @@ public final class TribesAgents {
         r.register(QdeltaArms.hierFactory());
         r.register(QdeltaArms.linearFactory());
         r.register(QdeltaArms.mlpFactory());
+        for (magat.agent.AgentFactory<TribesState, Action> f : QdeltaArms.<TribesState, Action>mutationAndRepairFactories()) r.register(f);
         return r;
     }
 
@@ -76,6 +89,10 @@ public final class TribesAgents {
         o.put("comma-z0-random", new EngineQdeltaOracle(QdeltaArms.random()));
         o.put("comma-z0-mid", new EngineQdeltaOracle(QdeltaArms.mid()));
         o.put("comma-z0-fine", new EngineQdeltaOracle(QdeltaArms.fine()));
+        o.put("mut-eps90", new EngineQdeltaOracle(QdeltaArms.eps(0.10)));
+        o.put("mut-eps50", new EngineQdeltaOracle(QdeltaArms.eps(0.50)));
+        o.put("mut-eps20", new EngineQdeltaOracle(QdeltaArms.eps(0.80)));
+        o.put("comma-short3-coarse", new EngineQdeltaOracle(QdeltaArms.shortlist(3)));
         return o;
     }
 }

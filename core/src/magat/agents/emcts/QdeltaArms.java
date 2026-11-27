@@ -52,6 +52,102 @@ public final class QdeltaArms {
         return p;
     }
 
+    // ---- the in-turn learning plan's mutation rules and self-learning ideas (section 3), each on comma-z0-coarse
+
+    /** {@link #coarse()}, the champion, as the base every mutation rule changes one thing of. */
+    private static QdeltaParams onCoarse() {
+        return coarse();
+    }
+
+    /** ε-greedy insertion at coarse keys, the engine's rule: {@code greedy} of the insertions take the best estimate. */
+    public static QdeltaParams eps(double epsilon) {
+        QdeltaParams p = onCoarse();
+        p.insertion = QdeltaParams.Insertion.EPSILON;
+        p.epsilon = epsilon;
+        p.insertKeys = Granularity.COARSE;
+        return p;
+    }
+
+    /** Thompson-sampled insertion at coarse keys: {@code share} of the insertions, the rest uniform. */
+    public static QdeltaParams thompson(double share) {
+        QdeltaParams p = onCoarse();
+        p.insertion = QdeltaParams.Insertion.THOMPSON;
+        p.biasShare = share;
+        p.insertKeys = Granularity.COARSE;
+        return p;
+    }
+
+    /** Children {@code k} mutations from their parent: none, the first, or all of the insertions Thompson-biased. */
+    public static QdeltaParams kMutations(int k, String biased) {
+        QdeltaParams p = "none".equals(biased) ? onCoarse() : thompson(1.0);
+        p.mutationsPerChild = k;
+        p.biasOneOfThem = "one".equals(biased);
+        return p;
+    }
+
+    /** The evaluated shortlist repair: the table's best three candidates evaluated, the best taken. */
+    public static QdeltaParams shortlist(int k) {
+        QdeltaParams p = onCoarse();
+        p.repairMode = QdeltaParams.RepairMode.SHORTLIST;
+        p.shortlistK = k;
+        return p;
+    }
+
+    /** Every arm of the plan's screen beyond the learners, by id, with what it is. */
+    public static <S, A> java.util.List<AgentFactory<S, A>> mutationAndRepairFactories() {
+        java.util.List<AgentFactory<S, A>> out = new java.util.ArrayList<>();
+        out.add(mut("comma-short3-coarse", "the repair evaluates the table's best 3 candidates", shortlist(3)));
+        QdeltaParams guard = onCoarse();
+        guard.duplicateRedraws = 3;
+        out.add(mut("mut-guard", "a duplicate child is discarded and made again, up to 3 times; no learning", guard));
+        out.add(mut("mut-eps90", "epsilon-greedy insertion, 90% greedy (the thesis's setting)", eps(0.10)));
+        out.add(mut("mut-eps50", "epsilon-greedy insertion, 50% greedy", eps(0.50)));
+        out.add(mut("mut-eps20", "epsilon-greedy insertion, 20% greedy", eps(0.80)));
+        out.add(mut("mut-thompson", "Thompson-sampled insertion", thompson(1.0)));
+        out.add(mut("mut-thompson50", "half the insertions Thompson-sampled, the rest uniform", thompson(0.5)));
+        QdeltaParams tg = thompson(1.0);
+        tg.duplicateRedraws = 3;
+        out.add(mut("mut-thompson-guard", "Thompson-sampled insertion, duplicates redrawn", tg));
+        for (int k : new int[]{3, 5})
+            for (String b : new String[]{"none", "one", "all"})
+                out.add(mut("mut-k" + k + "-" + b, k + " mutations per child, " + b + " of them Thompson-biased", kMutations(k, b)));
+        QdeltaParams mixed = onCoarse();
+        mixed.biasedChildrenPerGeneration = 2;
+        out.add(mut("mut-gen-mixed", "two of each generation's children Thompson-biased, three uniform", mixed));
+        QdeltaParams site = onCoarse();
+        site.learnSite = true;
+        out.add(mut("mut-site", "the position chosen by Thompson sampling over positions", site));
+        QdeltaParams ts = thompson(1.0);
+        ts.learnSite = true;
+        out.add(mut("mut-thompson-site", "Thompson-sampled insertion and position", ts));
+        QdeltaParams aos = onCoarse();
+        aos.adaptive = QdeltaParams.Adaptive.OPERATORS;
+        out.add(mut("mut-aos", "adaptive operator selection over four mutation operators", aos));
+        QdeltaParams step = onCoarse();
+        step.adaptive = QdeltaParams.Adaptive.STEP_SIZE;
+        out.add(mut("mut-k-adapt", "mutations per child by the 1/5 success rule, insertions uniform", step));
+        QdeltaParams stepT = thompson(1.0);
+        stepT.adaptive = QdeltaParams.Adaptive.STEP_SIZE;
+        out.add(mut("mut-k-adapt-thompson", "mutations per child by the 1/5 success rule, insertions Thompson-biased", stepT));
+        QdeltaParams sub = thompson(1.0);
+        sub.substitutions = true;
+        out.add(mut("mut-subst", "substitutions learned, read by the insertion and the repair", sub));
+        QdeltaParams blocks = onCoarse();
+        blocks.blockShare = 0.10;
+        out.add(mut("mut-blocks", "a tenth of mutations insert a learned pair of consecutive actions", blocks));
+        QdeltaParams tabu = onCoarse();
+        tabu.tabuGenerations = 20;
+        out.add(mut("mut-tabu", "a failed mutation is not redrawn at its position for 20 generations", tabu));
+        QdeltaParams kick = onCoarse();
+        kick.kickAfterGenerations = 30;
+        out.add(mut("mut-kick", "after 30 generations without improving the best plan, a 5-mutation jump from it", kick));
+        return out;
+    }
+
+    private static <S, A> AgentFactory<S, A> mut(String id, String what, QdeltaParams p) {
+        return QdeltaEmcts.factory(id, "In-turn learning on comma-z0-coarse: " + what, p);
+    }
+
     public static <S, A> AgentFactory<S, A> coarseFactory() {
         return QdeltaEmcts.factory("comma-z0-coarse", "AB-EMCTS: EMCTS whose repair takes a learned table's best action", coarse());
     }

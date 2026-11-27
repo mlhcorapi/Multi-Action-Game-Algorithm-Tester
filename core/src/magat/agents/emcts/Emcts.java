@@ -54,6 +54,7 @@ import java.util.Random;
  *
  * <p><b>Extending it.</b> A subclass changes the search through the hooks below, each called where the thesis
  * tree's subclass had its own: {@link #onTurnStart}, {@link #afterInsertion}, {@link #afterMutation},
+ * {@link #chooseSite}, {@link #chooseInsertion}, {@link #mutate}, {@link #duplicateRedraws}, {@link #parentFor},
  * {@link #onEvaluated}, {@link #repair} and {@link #moreTelemetry}. Plain EMCTS's hooks do nothing, take no
  * random draw and touch no forward model, so its search is unchanged by them: its gate says so.
  */
@@ -154,7 +155,8 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
                     Node<S, A> parent = incumbent, bestOfGeneration = null;
                     for (int childIdx = 0; childIdx < k; childIdx++) {
                         if (childIdx > 0) numIters++;
-                        Node<S, A> born = expandOnce(parent, state);
+                        onChildStart(childIdx);
+                        Node<S, A> born = expandOnce(parentFor(parent, childIdx), state);
                         if (born == null) {                      // the budget ran out in it: the generation ends here
                             abandoned = true;
                             break;
@@ -225,6 +227,39 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
     protected void afterInsertion(S prefixState, Node<S, A> parent, A inserted, A removed, int position, int length) {
     }
 
+    /** The position a mutation changes: uniform in plain EMCTS (its one draw). */
+    protected int chooseSite(ArrayList<A> seq) {
+        return seq.isEmpty() ? 0 : rnd.nextInt(seq.size());
+    }
+
+    /** The action a mutation inserts, among the legal ones at its position: uniform in plain EMCTS (its one draw). */
+    protected A chooseInsertion(S state, List<A> available, int position, int length) {
+        return available.get(rnd.nextInt(available.size()));
+    }
+
+    /** How many times a child identical to a plan already scored is made again: none in plain EMCTS. */
+    protected int duplicateRedraws() {
+        return 0;
+    }
+
+    /** A duplicate child was discarded, to be made again. */
+    protected void onDuplicateDiscarded() {
+    }
+
+    /** A generation's child number {@code childIdx} is about to be made. */
+    protected void onChildStart(int childIdx) {
+    }
+
+    /** The node a generation's child is made from: the incumbent in plain EMCTS. */
+    protected Node<S, A> parentFor(Node<S, A> incumbent, int childIdx) {
+        return incumbent;
+    }
+
+    /** The best plan scored so far this turn. */
+    protected Node<S, A> bestPlan() {
+        return bestNode;
+    }
+
     /** A mutation's child exists, repaired, and is about to be scored. */
     protected void afterMutation(Node<S, A> parent, Node<S, A> child) {
     }
@@ -253,6 +288,19 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
     private Node<S, A> expandOnce(Node<S, A> toMutate, S state) {
         Node<S, A> child = mutate(toMutate, game.copy(state));
         if (child == null) return null;
+        // A subclass's duplicate guard: a child identical to a plan already scored is discarded and made again. None in
+        // plain EMCTS, which then takes no extra key and makes no extra draw.
+        for (int redraw = 0; redraw < duplicateRedraws(); redraw++) {
+            boolean duplicate;
+            try (Meter.Span key = SEQKEY.span()) {
+                duplicate = uniqueSeqKeys.contains(seqKey(child.sequence()));
+            }
+            if (!duplicate) break;
+            toMutate.children().remove(child);
+            onDuplicateDiscarded();
+            child = mutate(toMutate, game.copy(state));
+            if (child == null) return null;
+        }
         mutEvents++;
         mutRepairKept += lastRepairKept;
         mutRepairReplaced += lastRepairReplaced;
@@ -444,11 +492,15 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
         return out;
     }
 
-    /** Mutation: replace one action of the plan by a uniformly random legal one, then repair. */
-    private Node<S, A> mutate(Node<S, A> node, S state) {
+    /**
+     * Mutation: replace one action of the plan by a legal one, then repair. Plain EMCTS draws the position and the
+     * action uniformly ({@link #chooseSite}, {@link #chooseInsertion}); a subclass may override either, or the whole
+     * mutation (several actions at once), making its child with {@link #adopt}.
+     */
+    protected Node<S, A> mutate(Node<S, A> node, S state) {
         S clone = game.copy(state);
         ArrayList<A> seq = node.sequence();
-        int moveToMutate = seq.isEmpty() ? 0 : rnd.nextInt(seq.size());
+        int moveToMutate = chooseSite(seq);
         ArrayList<A> newSeq = new ArrayList<>();
         for (int i = 0; i < moveToMutate; i++) {
             if (spent()) return null;
@@ -458,7 +510,7 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
         List<A> available = legalActions(state);
         A inserted = null;
         if (!available.isEmpty()) {
-            inserted = available.get(rnd.nextInt(available.size()));
+            inserted = chooseInsertion(state, available, moveToMutate, seq.size());
             newSeq.add(inserted);
         }
         afterInsertion(state, node, inserted, moveToMutate < seq.size() ? seq.get(moveToMutate) : null, moveToMutate, seq.size());
@@ -466,11 +518,16 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
 
         newSeq = truncateAtEndTurn(repair(newSeq, clone));
         if (spent()) return null;                       // the budget ran out: the child is never scored or kept
-        Node<S, A> newNode = new Node<>(newSeq, node);
-        node.addChild(newNode);
-        int nChildren = node.children().size();
+        return adopt(node, newSeq);
+    }
+
+    /** A mutation's child, made and recorded: the node, its place among its parent's children, the hook. */
+    protected Node<S, A> adopt(Node<S, A> parent, ArrayList<A> sequence) {
+        Node<S, A> newNode = new Node<>(sequence, parent);
+        parent.addChild(newNode);
+        int nChildren = parent.children().size();
         if (nChildren > maxChildrenOnANode) maxChildrenOnANode = nChildren;
-        afterMutation(node, newNode);
+        afterMutation(parent, newNode);
         return newNode;
     }
 

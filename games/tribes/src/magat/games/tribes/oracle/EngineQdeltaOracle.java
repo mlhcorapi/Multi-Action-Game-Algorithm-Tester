@@ -61,15 +61,19 @@ public final class EngineQdeltaOracle implements Oracle<TribesState> {
         p.computeProfile = null;
         p.selectionMode = ExperimentalEMCTSParams.SelectionMode.valueOf(q.selection.name());
         p.childrenPerGeneration = q.childrenPerGeneration;
-        p.epsilon = 1.0;
-        p.insertKeys = Stage1Params.Granularity.MID;
+        p.epsilon = q.insertion == QdeltaParams.Insertion.EPSILON ? q.epsilon : 1.0;
+        p.insertKeys = Stage1Params.Granularity.valueOf(q.insertKeys.name());
         p.repairKeys = Stage1Params.Granularity.valueOf(q.repairKeys.name());
         p.removalCredit = q.removalCredit;
         p.perBurnUpdates = false;
-        p.repairMode = Stage1Params.RepairMode.valueOf(q.repairMode.name());
-        p.shortlistK = 0;
+        p.repairMode = q.repairMode == QdeltaParams.RepairMode.SHORTLIST ? Stage1Params.RepairMode.SHORTLIST_K
+                : Stage1Params.RepairMode.valueOf(q.repairMode.name());
+        p.shortlistK = q.repairMode == QdeltaParams.RepairMode.SHORTLIST ? q.shortlistK : 0;
         p.shrinkageM = q.shrinkageM;
-        if (q.nodeSize != 20 || q.learner != QdeltaParams.Learner.TABLE)
+        boolean engineMutation = q.mutationsPerChild == 1 && q.duplicateRedraws == 0 && q.biasedChildrenPerGeneration == 0
+                && !q.learnSite && q.adaptive == QdeltaParams.Adaptive.NONE && !q.substitutions && q.blockShare == 0
+                && q.tabuGenerations == 0 && q.kickAfterGenerations == 0 && q.insertion != QdeltaParams.Insertion.THOMPSON;
+        if (q.nodeSize != 20 || q.learner != QdeltaParams.Learner.TABLE || !engineMutation)
             throw new IllegalArgumentException("the engine's agent has no equivalent of " + q.describe());
         return p;
     }
