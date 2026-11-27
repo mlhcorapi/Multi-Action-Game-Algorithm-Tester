@@ -1,0 +1,226 @@
+{
+  "name": "in-turn-30s",
+  "game": "tribes",
+  "description": "The in-turn learning screen at 30 s (docs/plans/in-turn-learning.md, sections 5 and 6): 13 arms chosen beforehand for the questions about long thinking, and emcts, the baseline, whose price at the level the calibration measures anyway. 610,000 units: 30 s at the 20.3 units per millisecond of the published 5000 ms level; its own time on the R7615 is what the calibration's emcts cell and this run's emcts turns measure. 2 repetitions on 100 positions of the development half, its own half by the split's rule (Split.deal of the development half, its first half: 50 single-player and 50 dual, branching like the whole portfolio's), every arm played in this run. emcts also runs at the published levels on these positions, taken from the published reference run, so its ladder reaches 30 s and every arm's budget multiplier there is measured. What the screen chooses for the confirmation, written before it runs (docs/plans/in-turn-learning.md, section 6): the best learner (comma-z0-mid, -fine, -hier, -linear, -mlp) and the best mutation or self-learning rule (the sixteen mut- mutation rules and the seven mut- self-learning ideas), each judged by the mean, over every level it ran at (the three published levels here, and 30 s in in-turn-30s), of its mean paired difference with comma-z0-coarse, among the arms whose interval against comma-z0-coarse lies above zero at one level or more; where no arm of a group has one, the confirmation keeps comma-z0-coarse's own (the table at coarse keys, or uniform mutation). At most two other arms the screen singles out may join it, each named with the reason. The intervals are read as screening, not as findings.",
+  "portfolio": "tribes/v1",
+  "split": "dev",
+  "ids": [
+    2,
+    6,
+    10,
+    14,
+    18,
+    19,
+    26,
+    35,
+    45,
+    49,
+    50,
+    51,
+    52,
+    54,
+    60,
+    68,
+    71,
+    77,
+    85,
+    93,
+    94,
+    95,
+    97,
+    98,
+    101,
+    103,
+    109,
+    112,
+    119,
+    121,
+    123,
+    136,
+    137,
+    154,
+    158,
+    159,
+    163,
+    168,
+    171,
+    172,
+    174,
+    179,
+    185,
+    187,
+    189,
+    192,
+    193,
+    197,
+    198,
+    199,
+    205,
+    208,
+    210,
+    213,
+    214,
+    215,
+    216,
+    219,
+    221,
+    222,
+    224,
+    226,
+    229,
+    232,
+    236,
+    237,
+    244,
+    245,
+    247,
+    255,
+    261,
+    266,
+    270,
+    282,
+    285,
+    286,
+    287,
+    288,
+    291,
+    292,
+    294,
+    297,
+    301,
+    306,
+    316,
+    333,
+    338,
+    343,
+    345,
+    348,
+    355,
+    370,
+    375,
+    376,
+    377,
+    380,
+    382,
+    390,
+    395,
+    397
+  ],
+  "baseline": "emcts",
+  "levels": [
+    {
+      "budget": 610000,
+      "repetitions": 2
+    },
+    {
+      "budget": "500ms",
+      "repetitions": 8,
+      "arms": [
+        "emcts"
+      ]
+    },
+    {
+      "budget": "1000ms",
+      "repetitions": 8,
+      "arms": [
+        "emcts"
+      ]
+    },
+    {
+      "budget": "5000ms",
+      "repetitions": 6,
+      "arms": [
+        "emcts"
+      ]
+    }
+  ],
+  "arms": [
+    "comma-z0-coarse",
+    "emcts",
+    "oep",
+    "comma-z0-random",
+    "emcts-comma",
+    "comma-z0-mid",
+    "comma-z0-fine",
+    "comma-z0-hier",
+    "comma-z0-mlp",
+    "comma-short3-coarse",
+    "mut-thompson",
+    "mut-k3-one",
+    "mut-aos",
+    "mut-kick"
+  ],
+  "weights": "r7615-in-turn",
+  "contrasts": [
+    {
+      "a": "emcts",
+      "b": "comma-z0-coarse",
+      "label": "plain EMCTS, against comma-z0-coarse"
+    },
+    {
+      "a": "oep",
+      "b": "comma-z0-coarse",
+      "label": "RQ9: OEP, against comma-z0-coarse"
+    },
+    {
+      "a": "comma-z0-random",
+      "b": "comma-z0-coarse",
+      "label": "the arbitrary repair, against comma-z0-coarse"
+    },
+    {
+      "a": "emcts-comma",
+      "b": "comma-z0-coarse",
+      "label": "the exhaustive repair, against comma-z0-coarse"
+    },
+    {
+      "a": "comma-z0-mid",
+      "b": "comma-z0-coarse",
+      "label": "RQ1: the table at mid keys, against comma-z0-coarse"
+    },
+    {
+      "a": "comma-z0-fine",
+      "b": "comma-z0-coarse",
+      "label": "RQ1: the table at fine keys, against comma-z0-coarse"
+    },
+    {
+      "a": "comma-z0-hier",
+      "b": "comma-z0-coarse",
+      "label": "RQ2: the hierarchical table, against comma-z0-coarse"
+    },
+    {
+      "a": "comma-z0-mlp",
+      "b": "comma-z0-coarse",
+      "label": "RQ3: the network on the classes, against comma-z0-coarse"
+    },
+    {
+      "a": "comma-short3-coarse",
+      "b": "comma-z0-coarse",
+      "label": "RQ4: the repair evaluating the best 3, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-thompson",
+      "b": "comma-z0-coarse",
+      "label": "RQ5: Thompson insertion, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-k3-one",
+      "b": "comma-z0-coarse",
+      "label": "RQ5c: 3 mutations, one Thompson, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-aos",
+      "b": "comma-z0-coarse",
+      "label": "RQ6: adaptive operator selection, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-kick",
+      "b": "comma-z0-coarse",
+      "label": "RQ8: a learned kick after a stall, against comma-z0-coarse"
+    },
+    {
+      "a": "comma-z0-hier",
+      "b": "comma-z0-fine",
+      "label": "RQ2: backing off, against the fine table alone"
+    }
+  ]
+}

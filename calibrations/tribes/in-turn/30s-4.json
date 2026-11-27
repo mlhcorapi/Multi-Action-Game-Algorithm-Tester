@@ -1,0 +1,18 @@
+{
+  "name": "r7615-in-turn",
+  "game": "tribes",
+  "description": "The in-turn learning night's sitting 7 of 7 (docs/plans/in-turn-learning-run.md): 3 of the 14 arms at 30 s priced at 610,000 units, a level the currency gains (gain-levels), measured on the same 16 positions as its others, in one session that writes when it completes. Server settings as in examples/server.json.",
+  "from": "r7615-ab-emcts",
+  "arms": [
+    "mut-k3-one",
+    "mut-aos",
+    "mut-kick"
+  ],
+  "levels": [
+    610000
+  ],
+  "gain-levels": true,
+  "soak-minutes": 0,
+  "wait-quiet": 30,
+  "other-cpus": 4
+}
