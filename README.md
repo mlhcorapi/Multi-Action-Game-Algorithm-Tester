@@ -47,7 +47,7 @@ Every table and figure of the paper is rebuilt from the published runs by one co
 
 ## Install
 
-You need JDK 11 or newer (CI tests 11, 17 and 21), Python 3 (CI tests 3.12) with the packages in
+You need JDK 11 or newer (CI tests 11, 17 and 21, on Linux and Windows), Python 3 (CI tests 3.12) with the packages in
 [`requirements.txt`](requirements.txt), and git.
 
 ```bash

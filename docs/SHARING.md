@@ -126,4 +126,4 @@ A package's folders are the repository's: `calibration/<currency>/` becomes
 `games/<game>/results/reference/<machine>/<split>/`, and its `report/` becomes `.../<machine>/report/`.
 Add an `ORIGIN.md` to the currency, saying how it was measured
 ([publishing a currency](CALIBRATING_A_MACHINE.md#publishing-it)), and a `README.md` to the run, and open
-a pull request. CI re-plays the published turns of every published run on every pull request.
+a pull request. CI re-plays published turns of every published run, at two levels, on every pull request.
