@@ -168,6 +168,12 @@ again, when the run is priced in that machine's unit:
 [reuse] random@20000 is played: the published leaf holds 24 of the 27 turns this run needs
 ```
 
+Every other experiment published with the repository is a source too, after the reference one: its run
+trees, `games/<game>/results/<experiment>/<machine>/<split>/`, such as the AB-EMCTS experiment's
+(`ab-emcts-vs-oep/r7615/dev` and `holdout`), whose AB-EMCTS arms the reference experiment never played.
+Then come the verified imports ([sharing](SHARING.md)). A leaf is taken from the first source that holds
+it whole.
+
 An arm at a level (a leaf) is taken only when all of these hold; otherwise it is played, and the run
 says why:
 - **the same portfolio and game configuration**, engine commit included;
