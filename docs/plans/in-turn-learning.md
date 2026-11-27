@@ -21,13 +21,16 @@ design space, on its own currency:
 | Question | What it found |
 |---|---|
 | Repair keys | coarse beat mid (+99), mid beat fine (+122); a fine table was no better than none on the holdout (+3.8, ns) |
-| Insertion biased by the table | hurt (ε = 0.10: −65 at 400k); the duplicate share rose from 6% to 23%: it collapsed the search's diversity |
+| Insertion biased by the table | ε-greedy, the best-estimated action 90% of the time (ε = 0.10), hurt: −65 at 400k. The duplicate share rose from 6% to 23%, so it collapsed the search's diversity. Among biased arms, coarse insertion keys beat mid (+45) and mid beat fine (+57) |
 | Shortlist repair (evaluate the table's top 15) | good (+200), but below zero-evaluation repair (+244) |
 | Where the gain comes from | mostly from repair becoming nearly free: exhaustive repair took 82% of `emcts-comma`'s units |
 
-Two things were never tested:
+Three things were never tested:
 - **Learners other than a table of independent classes.** Everything was counting with shrinkage toward
   the turn's mean.
+- **Mutation biased without losing diversity.** The thesis tried one rule, ε-greedy insertion. It never
+  tried a rule that keeps exploring what it has not tried, a guard against duplicate children, or a learned
+  choice of which position to mutate.
 - **Long thinking.** Its top level was 400,000 of its own units, about 20 s, and it was read only as an
   extrapolation.
 
@@ -56,12 +59,30 @@ Each comes with the direction expected, written down so it can be wrong.
   tables, beat the best table with its own compute charged? At what thinking time does it start to pay?
   And does it pay more with richer, game-specific inputs (RQ3b)?
   *Expected:* it loses at 500 ms (cold start, and its cost), is level at 5 s, and wins at 30 s.
-- **RQ4. Where to spend what is learned.** With the best learner, does using it beyond evaluation-free
-  repair pay? The candidates are a shortlist the repair evaluates, exploration-aware insertion, and the
-  choice of which action to mutate.
-  *Expected:* a small evaluated shortlist (k = 3) beats evaluation-free repair at 30 s only.
-  Exploration-aware insertion keeps the diversity the thesis's ε-greedy insertion lost, but gains little.
-- **RQ5. The long run.** Does in-turn learning's advantage keep growing to 30 s, level off, or reverse? Does
+- **RQ4. How repair spends it.** Does a repair that evaluates the learner's best few candidates beat one
+  that evaluates none, once the budget is long enough to afford it?
+  *Expected:* a shortlist of 3 beats evaluation-free repair at 30 s only.
+- **RQ5. Learning to mutate.** A mutation chooses a position in the plan and an action to put there, both
+  uniformly in EMCTS. Can what the turn learns improve those choices, without collapsing the search's
+  diversity as the thesis's ε-greedy insertion did?
+  - **RQ5a. The inserted action.** Does a biased insertion that keeps exploring beat uniform insertion?
+    The candidates are Thompson sampling from each class's estimate and uncertainty, and a milder
+    ε-greedy than the thesis's. Is the duplicate share what decides it?
+    *Expected:* ε-greedy loses again, with its duplicate share up. Thompson keeps duplicates near
+    uniform's and beats it at 5 s and 30 s, but not at 500 ms. A guard that redraws duplicate children
+    changes little on its own, since uniform insertion rarely duplicates (6%), but recovers part of
+    ε-greedy's loss.
+  - **RQ5b. The position.** Is where to mutate worth learning, from how often mutating each position
+    improved the plan?
+    *Expected:* a small gain. The positions are not alike: a change early in a plan moves everything
+    after it.
+  - **RQ5c. With repair.** Does a learned mutation add to evaluation-free repair, or do the two overlap?
+    *Expected:* they overlap in part, so the combination gains less than the sum of the two. The thesis
+    found such combinations anti-additive.
+  - **RQ5d. With time.** Does a learned mutation need more data than a learned repair, and so pay only
+    later?
+    *Expected:* yes. Its gain over uniform grows with the thinking time faster than repair's did.
+- **RQ6. The long run.** Does in-turn learning's advantage keep growing to 30 s, level off, or reverse? Does
   OEP, level at 500 and 1000 ms, fall behind, or catch up by 30 s?
   *Expected:* the advantage over `emcts-comma` keeps growing, but more slowly; the best learner beats OEP
   at 30 s.
@@ -86,14 +107,32 @@ negated, to the one removed.
 `T-hier`, `L-classes` and `N-classes` form a ladder over the same information: counting with backoff,
 additive regression, then nonlinear regression. That ladder isolates what each step adds.
 
-**Uses of what is learned** (RQ4), each with the RQ1 to RQ3 winner:
+**Repair** (RQ4):
 
-| Use | What it does |
+| Id | What it does |
 |---|---|
 | `z0` (evaluation-free repair) | each replacement is the candidate with the best estimate; nothing evaluated (AB-EMCTS) |
 | `short3` (shortlist repair) | the best 3 candidates are evaluated, and the best of them taken |
-| `thompson` (insertion) | the inserted action is drawn by Thompson sampling from each class's estimate and uncertainty, so rarely tried classes are still explored |
-| `site` (mutation site) | the position to mutate is chosen in proportion to how often mutating there improved the plan |
+
+**Mutation rules** (RQ5), with `z0` repair:
+
+| Id | The position | The inserted action | Duplicate children |
+|---|---|---|---|
+| `uniform` (control) | uniform | uniform among the legal actions (EMCTS) | kept |
+| `guard` (control) | uniform | uniform | discarded and redrawn, up to 3 times: the guard alone, with no learning |
+| `eps` | uniform | ε-greedy, ε = 0.5: half the insertions take the best-estimated legal action | kept |
+| `thompson` | uniform | Thompson sampling: each legal action's class gets a draw from its estimate's posterior (its shrunk mean, variance shrinking with its count), and the highest draw is inserted | kept |
+| `thompson+guard` | uniform | Thompson | redrawn |
+| `site` | Thompson over positions, from the change mutating each position brought | uniform | kept |
+| `thompson+site` | Thompson over positions | Thompson | kept |
+
+- **The controls separate each ingredient.** `guard` is the duplicate guard without learning, so a gain
+  from `thompson+guard` can be split between the two.
+- **Thompson is the natural rule here.** The tables are already shrunk means with a count, which is a
+  posterior. Its draws keep trying classes it has seen little of, which is the exploration ε-greedy lost.
+- **Costs are charged.** A biased insertion scores every legal candidate, up to about 270 at the start of
+  a Tribes turn. That is one lookup and one draw per candidate per mutation, priced like the table's own
+  lookups. A redrawn child pays for its repair again.
 
 **Controls:**
 - `comma-z0-random`: the same repair with no learning;
@@ -128,6 +167,8 @@ additive regression, then nonlinear regression. That ladder isolates what each s
 - **Its cost is charged.** Its operations are declared and priced like the table's: `nn.features`,
   `nn.forward` (one candidate scored) and `nn.backward` (one update). A network that costs more than it
   earns loses, at equal budget. That is the comparison MAGAT's currency is built for.
+- **For mutation,** Thompson sampling needs an uncertainty the network does not give. Its mutation use
+  (a softmax over its predictions, or a small ensemble) waits for RQ3's answer.
 - **Gate.** No original exists to gate it against. Its correctness rests on:
   - toy tests: it learns a planted signal, and a learning rate of zero leaves it at its prior;
   - determinism: the same visit gives the same turn;
@@ -168,26 +209,38 @@ The portfolio's development half is for exploring; a confirmatory half is read o
 choices. Every spec plays only the arms whose turns do not exist yet, and takes the rest from published
 runs. At 30 s nothing is published, so every arm compared there is played.
 
-| | E1: learners (RQ1-RQ3) | E2: uses (RQ4) | E3: confirmation (RQ1-RQ5) |
+| | E1: learners (RQ1-RQ3) | E2: repair and mutation (RQ4, RQ5) | E3: confirmation (RQ1-RQ6) |
 |---|---|---|---|
 | Half | development | development | the confirmatory half (decision D2) |
-| Arms played | `T-mid`, `T-fine`, `T-hier`, `L-classes`, `N-classes`; `N-features` only if `N-classes` passes E1's gate | the E1 winner with `short3`, `thompson`, `site` | the 2 or 3 frozen winners, plus `comma-z0-coarse`, `comma-z0-random`, `emcts-comma`, `oep`, `tbets` at 30 s |
-| Reused | `T-coarse`, `comma-z0-random`, `emcts-comma` and the reference arms at the published levels (the AB-EMCTS and reference runs) | E1's arms | at the published levels, the published runs |
+| Arms played | `T-mid`, `T-fine`, `T-hier`, `L-classes`, `N-classes`; `N-features` only if `N-classes` passes E1's gate | on `T-coarse`, the current champion's learner: `short3`, and the mutation rules `guard`, `eps`, `thompson`, `thompson+guard`, `site`, `thompson+site` | a 2 × 2 of {`T-coarse`, E1's winner} × {uniform mutation, E2's winning rule}, `short3` if it won, plus `comma-z0-random`, `emcts-comma`, `oep` and `tbets` |
+| Reused | `T-coarse`, `comma-z0-random`, `emcts-comma` and the reference arms at the published levels (the AB-EMCTS and reference runs) | the same | at the published levels, the published runs; on a fresh portfolio (D2), nothing: every arm is played |
 | Levels | 500 ms ×4, 1000 ms ×4, 5000 ms ×3, 30 s ×2 | the same | 500 ms ×8, 1000 ms ×8, 5000 ms ×6, 30 s ×2 |
-| Decides | which learners go to E2 and E3 (on dev: exploratory) | which use goes to E3 | the hypotheses, by the AB-EMCTS rule: CI excluding zero at ≥2 of 4 levels, no-terminal stratum, wall-clock agreeing in sign (for arms played in the same run) |
+| Decides | which learners go to E3 (on dev: exploratory) | which repair and mutation rule go to E3 | the hypotheses, by the AB-EMCTS rule: CI excluding zero at ≥2 of 4 levels, no-terminal stratum, wall-clock agreeing in sign (for arms played in the same run) |
+
+- **E1 and E2 share one R7615 session.** E2 builds on `T-coarse`, so it does not wait for E1's winner, and
+  E3 then tests the combination. The thesis found coarse keys best for insertion as well as repair, so
+  `T-coarse` is a fair base.
+- **E3's 2 × 2 answers RQ5c directly.** Its four cells are the champion, the better learner alone, the
+  better mutation alone, and both together. Their interaction is the additivity question, measured on
+  turns no choice was made on.
+- **Each arm's mechanism is reported beside its result.** That covers the duplicate share (duplicates over
+  nodes), unique plans, the share of mutations that improve on their parent, how the mutated positions
+  spread, and how varied the inserted classes are. A rule that wins with its diversity collapsed, or loses
+  with it intact, is read with that in view.
 
 - **E1's gate for `N-features`.** It is built only if `N-classes` is at least level with `T-hier` at 5000
   ms or 30 s on dev. Otherwise richer inputs to a model that cannot yet learn its classes are premature.
 - **R7615 time:**
-  - **E1:** about 4 h of calibration (five new arms at four levels, about 33 minutes each, and three
-    controls at 30 s, 27 minutes each), then under 1 h of runs.
-  - **E2:** about 2 h of calibration and 30 min of runs.
-  - **E3:** prices exist by then; about 1 h of runs per half.
+  - **E1 and E2, one session:** about 8 h of calibration. That is twelve new arms at four levels, about 33
+    minutes each, and three controls at 30 s, 27 minutes each. It can be split into two sittings: the
+    published levels first (about 1.2 h), then 30 s (about 6.8 h). Then about 1.5 h of runs.
+  - **E3:** every arm is priced by then except the 2 × 2's combined cell, which needs about 33 minutes of
+    calibration. Then about 1.5 h of runs per half.
 
 ## 7. What MAGAT needs first
 
 Each is a PR of its own, before E1:
-1. **The learners:**
+1. **The learners** (E1):
    - `T-fine`, restored from the archive;
    - `T-hier`;
    - `L-classes` and `N-classes`, with their priced operations;
@@ -199,7 +252,15 @@ Each is a PR of its own, before E1:
    with E1's calibration, in the same session sheet.
 4. **E1's spec, calibration config and run sheet**, as #45 did for AB-EMCTS.
 
-E2's uses (`short3`, `thompson`, `site`) and `N-features` come after E1, if E1 calls for them.
+5. **The mutation rules and the shortlist repair:**
+   - EMCTS gains hooks for the choice of position and of inserted action, and a duplicate guard. With no
+     rule set they draw exactly plain EMCTS's random numbers, and its gate shows it.
+   - `eps` and `short3` are gated against the engine's `Stage1BiasedAgent`, which implements both
+     (`epsilon` with `insertKeys`, and `shortlistK`).
+   - `guard`, `thompson` and `site` have no original, so they rest on toy tests, determinism and the audit.
+   - New telemetry: how varied the inserted classes are, and the spread of mutated positions.
+
+`N-features` comes after E1, and only if E1 calls for it.
 
 ## 8. Decisions for review
 
@@ -213,4 +274,8 @@ E2's uses (`short3`, `thompson`, `site`) and `N-features` come after E1, if E1 c
   positions, and prices are the machine's, not the positions'.
   This plan recommends it.
 - **D3. The level.** 30 s with 2 repetitions, at about 610,000 units measured on the R7615, as above?
-- **D4. E2's uses.** Are `short3`, `thompson` and `site` the right three, or are some not worth an arm?
+- **D4. E2's arms.** Are `short3` and the six mutation rules the right set? In particular, `eps` at
+  ε = 0.5 is milder than the thesis's 0.10, which collapsed. Is one ε enough?
+- **D5. One session for E1 and E2,** with E2 built on `T-coarse` rather than on E1's winner, and E3's 2 × 2
+  joining them? The alternative waits for E1, then runs E2 on its winner, which costs a second R7615
+  session and about a week.
