@@ -34,6 +34,7 @@ there, by what you want to do.
 | Read | For |
 |---|---|
 | [`results/cross-machine.md`](results/cross-machine.md) | the reference experiment on two machines, compared position by position |
+| [`results/ab-emcts.md`](results/ab-emcts.md) | the pre-registered AB-EMCTS experiment: AB-EMCTS against OEP, TBETS and its own baseline and control, decided on the holdout half |
 | [`../paper/README.md`](../paper/README.md) | the paper's tables and figures, and how they are rebuilt from the published runs |
 
 ## Plans
