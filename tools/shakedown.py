@@ -218,6 +218,13 @@ def main(argv) -> int:
           then=lambda: (copied / "compute_weights.properties").read_bytes() == published.read_bytes())
     check("--from again: the currency there is that copy, kept", cf, "kept: it is that currency, extended")
     changed = copied / "compute_weights.properties"
+    if changed.is_file():                                   # as a gained level leaves it: header extended, a profile added
+        text = changed.read_text(encoding="utf-8")
+        text = text.replace("levels = 9500,20000,101500", "levels = 9500,20000,101500,610000")
+        text = text.replace("turnsPerRep = 16,16,16", "turnsPerRep = 16,16,16,16")
+        changed.write_text(text + "profile.emcts@610000.w.advance = 0.900000\n", encoding="utf-8")
+    check("--from again: a copy that has gained a level is still the published currency, extended", cf,
+          "kept: it is that currency, extended")
     if changed.is_file():                                   # one published price changed
         changed.write_text(changed.read_text(encoding="utf-8").replace("w.copy = ", "w.copy = 1", 1), encoding="utf-8")
     check("--from refuses a currency whose published prices changed, naming the line", cf,
@@ -232,6 +239,29 @@ def main(argv) -> int:
     kept = {}
     check("--checks checks it again and writes nothing", [*cc, "--checks"], "check    self:",
           then=lambda: priced.read_text(encoding="utf-8") == kept.setdefault("w", priced.read_text(encoding="utf-8")))
+    # A level the currency does not list: refused unless asked for, then priced on the same positions as its others, the
+    # header extended and every other line kept.
+    gain = [*cc[:cc.index("--levels") + 1], "2000,4000,8000", *cc[cc.index("--levels") + 2:]]
+    check("a level the currency does not list is refused, naming --gain-levels; nothing measured", [*gain, "--preflight"],
+          "say so with --gain-levels", codes=(2,), then=lambda: priced.read_text(encoding="utf-8") == kept["w"])
+
+    def gained_level():
+        text = priced.read_text(encoding="utf-8")
+        growing = ("levels", "turnsPerRep", "operations")
+        lost = [line for line in kept["w"].splitlines()
+                if line.strip() and not line.replace(" ", "").startswith(tuple(g + "=" for g in growing)) and line not in text]
+        return ("levels = 2000,4000,8000" in text and "turnsPerRep = 2,2,2" in text
+                and "profile.emcts@8000.w.advance" in text and not lost)
+    check("--gain-levels: the new level priced on the currency's own positions, its header extended, every other line kept",
+          [*gain, "--gain-levels"], "CONTROLLED CALIBRATION: COMPLETE", then=gained_level)
+    check("... and once it is the currency's own level, nothing to measure and no flag needed", gain, "nothing to measure")
+    uneven = data / "shakedown" / f"controlled-{game}-uneven"
+    shutil.rmtree(uneven, ignore_errors=True)
+    uneven.mkdir(parents=True)
+    (uneven / "compute_weights.properties").write_text(kept["w"], encoding="utf-8")
+    check("a new arm lacking every level beside one lacking only the gained level is refused: two sittings",
+          [*gain[:gain.index("--out") + 1], uneven, *gain[gain.index("--out") + 2:gain.index("--arms") + 1], "emcts,oep",
+           *gain[gain.index("--arms") + 2:], "--gain-levels", "--preflight"], "the arms lack different levels", codes=(2,))
 
     step("7. Runner: the shakedown spec on the toy portfolio and the toy currency")
     spec = ROOT / "experiments" / game / "shakedown.json"

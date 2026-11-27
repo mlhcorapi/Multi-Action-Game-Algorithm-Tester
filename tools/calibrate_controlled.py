@@ -1586,6 +1586,13 @@ def level_units(v, game: str) -> int:
 
 
 OPERATIONS_LINE = re.compile(r"^\s*operations\s*=")
+GROWING_LINE = re.compile(r"^\s*(levels|turnsPerRep)\s*=")
+
+
+def header_list(text: str, key: str) -> list:
+    """A comma-separated header value of a currency file, as a list of its items."""
+    m = re.search(rf"^\s*{key}\s*=\s*(\S+)", text, re.M)
+    return [x.strip() for x in m.group(1).split(",")] if m else []
 
 
 def start_from(game: str, name: str, weights: pathlib.Path, record: pathlib.Path):
@@ -1604,9 +1611,19 @@ def start_from(game: str, name: str, weights: pathlib.Path, record: pathlib.Path
         shutil.copyfile(published, weights)
         how = "copied: the currency starts as it"
     else:
-        have = {line.rstrip("\r") for line in weights.read_text(encoding="utf-8", errors="replace").splitlines()}
-        missing = [line for line in published.read_text(encoding="utf-8").splitlines()
-                   if line.strip() and not OPERATIONS_LINE.match(line) and line not in have]
+        text = weights.read_text(encoding="utf-8", errors="replace")
+        have = {line.rstrip("\r") for line in text.splitlines()}
+        pub = published.read_text(encoding="utf-8")
+        # A merge extends the operations line, and a gained level the levels and turnsPerRep lines: those may grow, as
+        # long as every published level keeps its turns; every other line must be there as published.
+        missing = [line for line in pub.splitlines()
+                   if line.strip() and not OPERATIONS_LINE.match(line) and not GROWING_LINE.match(line) and line not in have]
+        if not missing:
+            pairs = lambda t: dict(zip(header_list(t, "levels"), header_list(t, "turnsPerRep")))
+            kept = pairs(text)
+            lost = [f"{lv} ({n} turns)" for lv, n in pairs(pub).items() if kept.get(lv) != n]
+            if lost:
+                missing = ["levels: " + ", ".join(lost)]
         if missing:
             return (f"--from {name}: the currency at {weights} is not the published {name} extended: "
                     f"{len(missing)} of its line(s) changed or gone, the first {missing[0][:100]!r}. Calibrate under another --name, or "
@@ -1635,6 +1652,8 @@ def main(argv) -> int:
                          "every published price and prices only the arms it lacks; a currency already there must be that "
                          "copy, extended")
     ap.add_argument("--levels"), ap.add_argument("--turns"), ap.add_argument("--reps"), ap.add_argument("--warmup")
+    ap.add_argument("--gain-levels", action="store_true",
+                    help="price levels the currency does not list yet, as new levels of it, on the same positions as its others")
     ap.add_argument("--checks", action="store_true", help="only the checks, against the currency as it is")
     ap.add_argument("--no-checks", action="store_true", help="the session only")
     ap.add_argument("--soak-minutes", type=float, default=SOAK_MINUTES, help="at least this long before measuring")
@@ -1728,23 +1747,44 @@ def main(argv) -> int:
     if ref_arm is None:
         ref_arm = arms[0] if arms else CHECK_ARMS[0]
 
+    def file_levels():
+        m = re.search(r"^levels\s*=\s*(\S+)", weights.read_text(encoding="utf-8", errors="replace"), re.M) if weights.is_file() else None
+        return [int(x) for x in m.group(1).split(",") if x.strip()] if m else []
+
     def coverage(runner):
-        """The arms the currency prices at every level, and what it lacks: a probe of progress (exit 0), not a gate."""
+        """The arms the currency prices at every level this invocation is for (its --levels, else the currency's own),
+        and what it lacks: a probe of progress (exit 0), not a gate."""
         if not weights.is_file():
             return set(), list(arms)
-        levels = re.search(r"^levels\s*=\s*(\S+)", weights.read_text(encoding="utf-8", errors="replace"), re.M)
+        levels = a.levels or ",".join(map(str, file_levels()))
         rc, lines = runner.launch(["weights", "--weights", weights, "--game", a.game, "--arms", ",".join([ref_arm, *arms]),
-                                   *(["--levels", levels.group(1)] if levels else []), "--progress"], "coverage", "coverage",
+                                   *(["--levels", levels] if levels else []), "--progress"], "coverage", "coverage",
                                   measure=False)
         missing = [m.group(1) for line in lines for m in [TO_PRICE.match(line)] if m]
         gone = {x.split("@")[0] for x in missing}
         return {x for x in [ref_arm, *arms] if x not in gone}, missing
 
-    covered, _ = coverage(quiet_runner)
+    covered, lacking_cells = coverage(quiet_runner)
     # The session prices what the currency does not: every arm of a new currency, and for one that exists the
     # arms registered since, merged by ratio. The calibrator measures the reference cell in every session itself.
     fresh = not weights.is_file()
-    new_arms = [x for x in arms if x != ref_arm and x not in covered]
+    # The reference arm too, where it lacks a level asked for: a level the currency gains (--gain-levels) has none yet.
+    new_arms = [x for x in arms if x not in covered and (x != ref_arm or not fresh)]
+    # The levels the session prices: those its arms lack, so an arm already priced at the others is not priced again
+    # (the calibrator refuses that). A session prices every arm it names at every level it names, so its arms must
+    # lack the same levels: an arm new at every level and one lacking only a gained level are two sittings.
+    lacks = {}
+    for cell in lacking_cells:
+        arm, _, level = cell.partition("@")
+        if level.isdigit():
+            lacks.setdefault(arm, set()).add(int(level))
+    asked = [int(v) for v in a.levels.split(",") if v.strip()] if a.levels else file_levels()
+    shapes = {}
+    for x in new_arms:
+        shapes.setdefault(frozenset(lacks.get(x, asked)), []).append(x)
+    session_levels = sorted(next(iter(shapes))) if len(shapes) == 1 and not fresh else None
+    if session_levels is not None and set(session_levels) == set(asked):
+        session_levels = None                                 # every level asked for: the session's --levels as given
     session_arms = new_arms or [ref_arm]                      # what --arms names
     priced_arms = ([ref_arm] if fresh else []) + new_arms     # what the session writes into the currency
     measure = not a.checks and bool(priced_arms)
@@ -1756,6 +1796,7 @@ def main(argv) -> int:
         what = []
         if measure:
             what.append(f"one session pricing {len(priced_arms)} arm(s): {', '.join(priced_arms)}"
+                        + (f" at {', '.join(map(str, session_levels))}" if session_levels else "")
                         + ("" if fresh else ", merged into the currency by ratio"))
         if checks and (measure or a.checks):
             what.append("the check" + ("s " if len(checks) > 1 else " ") + " and ".join(
@@ -1778,6 +1819,21 @@ def main(argv) -> int:
                       f"the clock policy differs from the session that wrote this currency ({changed}). A currency measured "
                       "under two clock policies is two currencies, and a check under another policy reports the change as "
                       "drift: restore the policy, or calibrate under another --name"))
+    # A level the currency does not list: a new level of it only on purpose (--gain-levels), on its own positions.
+    if weights.is_file() and a.levels:
+        lacking = [x for x in (int(v) for v in a.levels.split(",") if v.strip()) if x not in file_levels()]
+        if lacking and not a.gain_levels:
+            items.append(("refuse", f"level(s) {', '.join(map(str, lacking))} are not among this currency's levels "
+                          f"({', '.join(map(str, file_levels()))}): to price them as new levels of it, on the same positions as "
+                          "its others, say so with --gain-levels (\"gain-levels\": true in a config)"))
+        elif lacking:
+            items.append(("info", f"the currency gains level(s) {', '.join(map(str, lacking))}, priced on the same positions "
+                          "as its others; its header is extended and every other line kept"))
+    if len(shapes) > 1 and not fresh and not a.checks:
+        items.append(("refuse", "the arms lack different levels, and a session prices every arm it names at every level "
+                      "it names: " + "; ".join(f"{', '.join(xs)} lack(s) {', '.join(map(str, sorted(lv)))}"
+                                              for lv, xs in sorted(shapes.items(), key=lambda kv: sorted(kv[0]))) +
+                      ". Price them in two sittings, one --arms/--levels each (in the notebook, a list of configs)"))
     # A currency that prices arms this MAGAT does not register was written by an older one: extending it would mix two
     # codes' measurements in one file.
     if weights.is_file():
@@ -1843,12 +1899,14 @@ def main(argv) -> int:
            + (f"JVMs on CPUs {_ranges(cpus)} ({facts.get('measuring_cpus_why')})" if confined else "JVMs placed by the OS")
            + (", kept awake" if awake else "") + (f", priority {a.priority}" if WINDOWS else ""))
 
-    passthrough = []
+    passthrough = ["--levels", ",".join(map(str, session_levels))] if session_levels else []
     for flag in ("levels", "turns", "reps", "warmup"):
-        if getattr(a, flag):
+        if getattr(a, flag) and not (flag == "levels" and session_levels):
             passthrough += [f"--{flag}", getattr(a, flag)]
     if a.portfolio:
         passthrough += ["--portfolio", portfolio]
+    if a.gain_levels:
+        passthrough.append("--gain-levels")
     toy = ["--toy"] if a.toy else []
     t_start = time.time()
     code, why = 0, None

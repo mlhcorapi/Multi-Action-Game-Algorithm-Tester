@@ -126,7 +126,8 @@ PARAMETERS = r'''
 # This machine's calibration: a calibration config (calibrations/<game>/, docs/CALIBRATING_A_MACHINE.md), relative
 # to the repository or absolute. Its "name" names the currency (MAGAT_CURRENCY overrides it); give it a new name to
 # measure a new currency. None calibrates nothing and spends PUBLISHED_CURRENCY instead: this machine then plays the
-# reference machine's turns, a replay rather than a measurement of this machine.
+# reference machine's turns, a replay rather than a measurement of this machine. A list of configs of one currency
+# (the same "name") runs them in order, each its own sitting that writes when it completes.
 CALIBRATION_CONFIG = "calibrations/tribes/examples/server.json"
 PUBLISHED_CURRENCY = "r7615-time"
 # The experiments to run, in order: spec files (experiments/<game>/, docs/EXPERIMENTS.md), in the currency above. An
@@ -147,8 +148,14 @@ def _file(path, what):
     return p
 
 CALIBRATING = CALIBRATION_CONFIG is not None
-CAL_CONFIG = _file(CALIBRATION_CONFIG, "the calibration config") if CALIBRATING else None
-CAL = json.loads(CAL_CONFIG.read_text(encoding="utf-8")) if CALIBRATING else {}
+# One config, or a list of them: the sittings of one currency, in order.
+_configs = [] if not CALIBRATING else [CALIBRATION_CONFIG] if isinstance(CALIBRATION_CONFIG, (str, pathlib.PurePath)) else list(CALIBRATION_CONFIG)
+CAL_CONFIGS = [_file(c, "the calibration config") for c in _configs]
+CALS = [json.loads(c.read_text(encoding="utf-8")) for c in CAL_CONFIGS]
+CAL_CONFIG, CAL = (CAL_CONFIGS[0], CALS[0]) if CALIBRATING else (None, {})
+if len({c.get("name") for c in CALS}) > 1:
+    raise ValueError("the calibration configs are the sittings of one currency, so they share its \"name\": "
+                     + ", ".join(f"{c.name} names {d.get('name')!r}" for c, d in zip(CAL_CONFIGS, CALS)))
 # The currency: this machine's own, <data>/calibration/<game>-<name>, or a published one in the repository. A
 # currency keeps the levels it was first measured at, and a new calibration of the reference machine is published
 # beside its old one under a new name, never over it.
@@ -174,8 +181,11 @@ def _name(spec):
 EXPERIMENT_RUNS = [_experiment(x) for x in EXPERIMENTS]
 # Each experiment once, by its name: two halves of one spec are one experiment, analysed and exported together.
 EXPERIMENT_NAMES = list(dict.fromkeys(_name(spec) for spec, _ in EXPERIMENT_RUNS))
-print("calibration :", f"{CAL_CONFIG} -> the currency {CURRENCY_NAME}, in {CALIBRATION}" if CALIBRATING
+print("calibration :", f"{CAL_CONFIG} -> the currency {CURRENCY_NAME}, in {CALIBRATION}" if len(CAL_CONFIGS) == 1
+      else f"{len(CAL_CONFIGS)} sittings -> the currency {CURRENCY_NAME}, in {CALIBRATION}" if CALIBRATING
       else f"none: the published currency {CURRENCY_NAME} ({WEIGHTS})")
+for _k, _c in enumerate(CAL_CONFIGS if len(CAL_CONFIGS) > 1 else []):
+    print(f"  sitting {_k + 1}: {_c}")
 for spec, half in EXPERIMENT_RUNS:
     print("experiment  :", _name(spec), f"({spec})" + (f", the {half} half" if half else ""))
 '''
@@ -241,24 +251,37 @@ CALIBRATE_CELL = r'''
 # calibration config of the parameters cell (docs/CALIBRATING_A_MACHINE.md, "On a shared server"). Idle and
 # single-threaded: nothing else of yours may run while it measures. The currency prices every operation an arm
 # declares, its own work included. The config's levels, else the published ones.
-CAL_ARGS = ["--config", CAL_CONFIG, "--name", CURRENCY_NAME, "--game", GAME, "--portfolio", PORTFOLIO,
-            *([] if "levels" in CAL else ["--levels", LEVELS])]
-# What the currency must price: the config's arms (else every reference arm) at its levels (else the published ones).
 _named = {f"{lv['time_ms']}ms": int(lv["units"]) for lv in LEVELS_DOC["levels"]}
-_arms, _levels = CAL.get("arms"), CAL.get("levels")
-CAL_ARMS = "@reference" if _arms is None else _arms if isinstance(_arms, str) else ",".join(_arms)
-CAL_LEVELS = LEVELS if _levels is None else ",".join(str(_named.get(str(v).replace(" ", "").lower(), v)) for v in _levels)
 
-def priced():
-    """Whether the currency prices every arm the config names at every level: the check of the last calibration cell."""
-    return WEIGHTS.is_file() and magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", CAL_ARMS,
-                                       "--levels", CAL_LEVELS, check=False) == 0
+def _sitting(config, cal):
+    """A sitting's arguments, and what it must price: its config's arms (else every reference arm) at its levels (else
+    the published ones)."""
+    args = ["--config", config, "--name", CURRENCY_NAME, "--game", GAME, "--portfolio", PORTFOLIO,
+            *([] if "levels" in cal else ["--levels", LEVELS])]
+    arms, levels = cal.get("arms"), cal.get("levels")
+    arms = "@reference" if arms is None else arms if isinstance(arms, str) else ",".join(arms)
+    levels = LEVELS if levels is None else ",".join(str(_named.get(str(v).replace(" ", "").lower(), v)) for v in levels)
+    return args, arms, levels
+
+SITTINGS = [_sitting(c, d) for c, d in zip(CAL_CONFIGS, CALS)]
+CAL_ARGS, CAL_ARMS, CAL_LEVELS = SITTINGS[0] if SITTINGS else ([], "", "")
+
+def priced(k=0):
+    """Whether the currency prices every arm sitting k names at every level it names."""
+    _, arms, levels = SITTINGS[k]
+    return WEIGHTS.is_file() and magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", arms,
+                                       "--levels", levels, check=False) == 0
 
 if not CALIBRATING:
     print(f"[skip] nothing to calibrate: the experiments spend the published currency {CURRENCY_NAME}")
 else:
-    incomplete = WEIGHTS.is_file() and not priced()
-    magat("calibrate-controlled", *CAL_ARGS, "--preflight")
+    # The preflight of every sitting still to measure: what each would measure, and anything refused, before the night.
+    incomplete = WEIGHTS.is_file() and not all(priced(k) for k in range(len(SITTINGS)))
+    for k, (args, _, _) in enumerate(SITTINGS):
+        if len(SITTINGS) > 1 and priced(k):
+            print(f"[skip] sitting {k + 1} ({CAL_CONFIGS[k].name}) is already priced")
+            continue
+        magat("calibrate-controlled", *args, "--preflight")
     if incomplete:
         print(f"\n*** {WEIGHTS} exists but does not price every arm the config names: the next cell prices the missing "
               "ones in one session and merges them into it by ratio. To measure a whole new currency in one session "
@@ -266,29 +289,45 @@ else:
 '''
 
 MEASURE_CELL = r'''
-# The session, then the checks. Skips itself once the currency prices every arm the config names at every level.
-# Over a currency that lacks one, calibrate-controlled prices what is missing and merges it in by ratio. A session
-# that did not finish wrote nothing, so running the cell again measures it again.
+# The sessions, then the checks, one sitting after another. A sitting skips itself once the currency prices every arm
+# its config names at every level it names. Over a currency that lacks one, calibrate-controlled prices what is
+# missing and merges it in by ratio. A session that did not finish wrote nothing, so running the cell again measures
+# it again. With several sittings, one that fails does not stop the others: the cell says at the end which wrote
+# nothing, and running it again measures only those.
+not_written = []
 if not CALIBRATING:
     print(f"[skip] nothing to calibrate: the experiments spend the published currency {CURRENCY_NAME}")
-elif priced():
-    print(f"[skip] {WEIGHTS} prices every arm the config names at every level")
-else:
-    rc = magat("calibrate-controlled", *CAL_ARGS, check=False)
+for k, (args, _, _) in enumerate(SITTINGS):
+    name = f"sitting {k + 1} ({CAL_CONFIGS[k].name})" if len(SITTINGS) > 1 else "the config"
+    if priced(k):
+        print(f"[skip] {WEIGHTS} prices every arm {name} names at every level")
+        continue
+    rc = magat("calibrate-controlled", *args, check=False)
     if rc == 5:
-        print("\n*** SUSPECT: the currency is written, but read the reasons above. To measure it again when the machine "
-              "is quiet, give the config a new \"name\" and run the plan cell and the calibration cells again.")
-    elif rc == 4:
-        raise RuntimeError("the machine stayed busy and nothing was started: run this cell again later")
+        print(f"\n*** SUSPECT ({name}): the currency is written, but read the reasons above. To measure it again when the "
+              "machine is quiet, give the config a new \"name\" and run the plan cell and the calibration cells again.")
     elif rc != 0:
-        raise RuntimeError(f"exit {rc}: run this cell again; the record is {CALIBRATION / 'record' / 'SUMMARY.md'}")
+        why = ("the machine stayed busy and nothing was started" if rc == 4
+               else f"exit {rc}; the record is {CALIBRATION / 'record' / 'SUMMARY.md'}")
+        if len(SITTINGS) == 1:
+            raise RuntimeError(f"{why}: run this cell again" + (" later" if rc == 4 else ""))
+        print(f"\n*** {name} wrote nothing ({why})")
+        not_written.append(name)
+        continue
     summary(CALIBRATION / "record", until="## ")
+if not_written:
+    print(f"\n*** not written: {', '.join(not_written)}. Run this cell again to measure them: written sittings are skipped.")
 '''
 
 CHECKS_CELL = r'''
-# Every arm the config names priced at every level, then the bundle: the currency and its whole record.
+# Every arm each config names priced at every level it names, then the bundle: the currency and its whole record.
+# With several sittings, one not priced is reported and the rest go on: an experiment needing its prices is refused
+# by its own validation.
 if CALIBRATING:
-    magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", CAL_ARMS, "--levels", CAL_LEVELS)
+    for k, (_, arms, levels) in enumerate(SITTINGS):
+        rc = magat("weights", "--game", GAME, "--weights", WEIGHTS, "--arms", arms, "--levels", levels, check=len(SITTINGS) == 1)
+        if rc != 0:
+            print(f"*** sitting {k + 1} ({CAL_CONFIGS[k].name}) is not fully priced: see above")
     bundle("calibration", [CALIBRATION, LOGS / "calibrate-controlled.log"])
 else:
     print(f"[skip] nothing calibrated: the experiments spend the published currency {CURRENCY_NAME}")

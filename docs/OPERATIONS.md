@@ -30,7 +30,7 @@ wrap it). It:
 | `export <experiment \| run dir> [--name N] [--no-curves]`, `export --currency NAME` | a result, or a currency, as one file to share, with a manifest of hashes ([sharing](SHARING.md)) |
 | `import <file> [--replay N] [--no-check]`, `import --list` | a package checked against its manifest, unpacked under `imports/`, and re-played here |
 | `paper [--check]` | every table and figure of the paper, from the published runs ([paper](../paper/README.md)) |
-| `calibrate-controlled` | a calibration in one session, with reliability checks ([guide](CALIBRATING_A_MACHINE.md)); `--config FILE` reads its options from a JSON file; `--from NAME` starts the currency as a copy of a published one, to price only the arms it lacks ([extending a published currency](CALIBRATING_A_MACHINE.md#extending-a-published-currency)) |
+| `calibrate-controlled` | a calibration in one session, with reliability checks ([guide](CALIBRATING_A_MACHINE.md)); `--config FILE` reads its options from a JSON file; `--from NAME` starts the currency as a copy of a published one, to price only the arms it lacks ([extending a published currency](CALIBRATING_A_MACHINE.md#extending-a-published-currency)); `--gain-levels` prices a level the currency does not list yet, on its own positions ([gaining a level](CALIBRATING_A_MACHINE.md#gaining-a-level)) |
 | `calibrate-time --remeasure [--times 500,1000,5000]` | the levels that are those milliseconds of thinking time on this machine: a maintainer's tool for the reference machine, refused without `--remeasure` once the game's levels are published ([units as time](CURRENCY.md#units-as-time)) |
 | `weights --weights F [--game G --arms ...] [--progress]` | what a weights file prices; exit 1 if anything asked for is missing. With `--progress`, a probe of a calibration under way: what is still to price, and exit 0 |
 | `check contract \| equivalence \| replay \| audit` | the gates (below) |
@@ -92,10 +92,11 @@ edit that, then run `python magat.py notebook build`. The notebook calls the lau
 else, so it cannot drift from the CLI. Its stages:
 
 1. **Parameters.** The only cell to edit. It names this machine's calibration config
-   ([guide](CALIBRATING_A_MACHINE.md#a-config-file)), or `None` and a published currency to spend
-   instead, and the experiment specs to run ([experiments](EXPERIMENTS.md)). An entry may name the half it
-   runs, `("experiments/tribes/x.json", "holdout")`, so one spec can run on each half in turn. Adding a
-   spec needs no new notebook.
+   ([guide](CALIBRATING_A_MACHINE.md#a-config-file)), a list of them (the sittings of one currency, in
+   order), or `None` and a published currency to spend instead, and the experiment specs to run
+   ([experiments](EXPERIMENTS.md)). An entry may name the half it runs,
+   `("experiments/tribes/x.json", "holdout")`, so one spec can run on each half in turn. Adding a spec
+   needs no new notebook.
 2. **Setup and the plan.** Setup finds the repository from whatever directory the kernel started in; a
    Jupyter kernel's working directory is the notebook's own folder. It puts the data root outside the
    clone. The plan reads the files the parameters name, takes the currency's name from the config

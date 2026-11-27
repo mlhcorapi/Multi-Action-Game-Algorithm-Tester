@@ -27,7 +27,7 @@ final class CalibrateCommand {
         System.out.println("  machine");
         System.out.println("  threads           --game <name> --portfolio <dir> --out <calib> [--levels ...] [--ladder 2,4,8] [--segment-seconds 25] [--arm emcts]");
         System.out.println("  calibrate         --game <name> --portfolio <dir> --out <calib> [--levels ...] [--arms a,b|@set] [--reps 3] [--turns 8,4,2]");
-        System.out.println("                    [--warmup 6] [--replace a,b] [--toy] [--audit-warn 0.10]");
+        System.out.println("                    [--warmup 6] [--replace a,b] [--gain-levels] [--toy] [--audit-warn 0.10]");
         System.out.println("  calibrate --estimate ... (the same arguments): times a few turns, prints what the session would take, writes nothing");
         System.out.println("  calibrate --check --game <name> --portfolio <dir> --weights <file> --arms a,b [--levels ...]");
         System.out.println("  weights           --weights <file> [--game <name> --arms a,b|@set --levels ...]   (default: the file's own levels)");
@@ -79,6 +79,7 @@ final class CalibrateCommand {
         o.check = check;
         o.levels = args.getLongs("levels", null);
         o.defaultLevels = args.getLongs("default-levels", null);
+        o.gainLevels = args.flag("gain-levels");
         o.arms = args.has("arms") ? module.expandArms(args.getList("arms", new ArrayList<>())) : module.defaultCalibrationArms();
         o.reps = args.getInt("reps", o.reps);
         o.turns = args.get("turns");

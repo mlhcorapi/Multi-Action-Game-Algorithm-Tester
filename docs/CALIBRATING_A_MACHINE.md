@@ -15,7 +15,9 @@ ratio to one reference advance measured in the same session. A good currency nee
 levels, `games/<game>/levels.json`: for Tribes 9,500 / 20,000 / 101,500 units, which are 500, 1000 and
 5000 ms of a whole turn on the R7615 ([units as time](CURRENCY.md#units-as-time)). `calibrate-controlled`
 and the notebook take them by themselves. A currency keeps the levels it was first measured at, so a
-currency begun at other levels continues under its own name and a new one needs a new `--name`.
+currency begun at other levels continues under its own name and a new one needs a new `--name`. A level
+beyond them, such as a longer thinking time for one experiment, is added only on purpose
+([gaining a level](#gaining-a-level)).
 
 The levels are measured on the reference machine alone, with `magat calibrate-time`. That is a
 maintainer's job, done from `notebooks/maintainers/measure_levels.ipynb` and only after a change to what a
@@ -78,6 +80,14 @@ python magat.py calibrate-controlled --config calibrations/tribes/examples/serve
   published levels; an arm registered beyond them, an experiment's, is priced when named. The reference cell, `emcts` at the lowest level, is always measured, because it defines the unit.
 - **An option on the command line wins** over the file, so one file serves several sessions:
   `--config server.json --name r7615-again`.
+- **The modes are not in the file.** `--preflight`, `--checks` and `--no-checks` say what one invocation
+  does, so they are given on the command line.
+- **Nothing is ignored.** A misspelt key, a mode, a level that is not published, or a value of the wrong
+  kind refuses the whole file and names every problem, before anything is measured.
+- **The file goes into the record** as `config.json`, beside the session's `SUMMARY.md`, which names it.
+
+[`calibrations/tribes/examples/`](../calibrations/tribes/examples/) holds a laptop's config and a shared
+server's. The server's uses the settings the notebook passes.
 
 ### Extending a published currency
 
@@ -101,14 +111,39 @@ python magat.py calibrate-controlled --name r7615-plus-mine --from r7615-time --
 - A run in such a currency can still take the published run's leaves
   ([reusing the published run](EXPERIMENTS.md#reusing-the-published-run)), since every published price
   is unchanged.
-- **The modes are not in the file.** `--preflight`, `--checks` and `--no-checks` say what one invocation
-  does, so they are given on the command line.
-- **Nothing is ignored.** A misspelt key, a mode, a level that is not published, or a value of the wrong
-  kind refuses the whole file and names every problem, before anything is measured.
-- **The file goes into the record** as `config.json`, beside the session's `SUMMARY.md`, which names it.
 
-[`calibrations/tribes/examples/`](../calibrations/tribes/examples/) holds a laptop's config and a shared
-server's. The server's uses the settings the notebook passes.
+### Gaining a level
+
+A currency prices its arms at its own levels, the `levels` line of its header. To price a level beyond
+them, such as 30 seconds for one experiment, say so with `--gain-levels` (`"gain-levels": true` in a
+config file):
+
+```bash
+python magat.py calibrate-controlled --name r7615-plus-mine --from r7615-time --arms emcts,mine --levels 610000 --gain-levels --preflight
+```
+
+- **Without it, a level the currency does not list is refused**, by the preflight and by the calibrator,
+  so a mistyped level cannot extend a currency.
+- **The new level is measured on the currency's own positions.** Turns per repetition select which
+  positions a level measures; the new level takes the turns of the currency's nearest level below it (the
+  lowest's, for a level below them all; in a published currency they are all 16), so it measures the
+  same material as the others.
+- **The header is extended and every other line kept.** `levels` and `turnsPerRep` gain the new level,
+  the `operations` line grows as a merge extends it, and every price already there is unchanged. A copy
+  made with `--from` that has gained a level is still that currency, extended, as long as every
+  published level keeps its turns.
+- **Price the reference arm at the new level too.** A multiplier at a level is measured against the
+  reference arm at that level, so a level priced without it cannot be spent; the preflight lists it among
+  what the session would measure.
+- **Once gained, the level is the currency's own**: a later session at it needs no flag, and one that
+  prices every arm named at it measures nothing.
+- **A session prices only what its arms lack.** Naming every level, `--levels 9500,20000,101500,610000`,
+  prices an arm already priced at the first three at the new one alone. A session prices every arm it
+  names at every level it names, so its arms must lack the same levels: an arm new at every level beside
+  one lacking only the gained level is refused by the preflight, as two sittings.
+- **One sitting per level.** A session writes all or nothing, so a long level measured with the others
+  risks them all. The notebook takes a list of configs of one currency, one sitting each
+  ([on a shared server](#on-a-shared-server-the-r7615-through-jupyterhub)).
 
 **What it does:**
 
@@ -305,6 +340,12 @@ not extended, and the preflight warns about one: move its whole folder
 Move the runs priced in it aside as well, since the runner will not continue a leaf in another currency.
 A session cut short wrote nothing, and running the cell again measures it again. The plan prints the
 expected finishing time after the stability check.
+
+The parameters cell may name a list of configs instead of one, the sittings of one currency (they share its
+`name`), such as the published levels first and a gained level after
+([gaining a level](#gaining-a-level)). Each is its own session and writes when it completes. A sitting
+already priced is skipped; one that fails does not stop the next, and the cell names it at the end, so
+running the cell again measures only what is missing.
 
 ### What you cannot change
 
