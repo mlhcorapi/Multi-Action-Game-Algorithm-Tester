@@ -29,8 +29,9 @@ Every path below is a path on the tag.
 `Granularity`, now an optional capability with a law of its own (L10); `emcts-comma`; and `QdeltaEmcts`
 with `ActionTable` and the two arms the experiment runs, `comma-z0-coarse` and `comma-z0-random`, gated
 against `Stage1BiasedAgent` by `EngineQdeltaOracle` (the archived oracle, brought to the current
-accounting). Its other 29 arms, the fine-grained table, the biased insertion, the shortlist and the rest
-of the table above stay archived.
+accounting). Since then the tables at mid and fine keys have come back too, as `comma-z0-mid` and
+`comma-z0-fine`, gated the same way, for the in-turn learning plan. The thesis's other arms, the biased
+insertion, the shortlist and the rest of the table above stay archived.
 
 ## A finding kept for the paper
 
