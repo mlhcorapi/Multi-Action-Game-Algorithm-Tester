@@ -89,6 +89,9 @@ def main(argv) -> int:
     check("audit: each arm's declared operations and forward model account for its turn (toy size)",
           [PY, ROOT / "magat.py", "check", "audit", "--game", game, "--arms", "@reference",
            "--budget", "4000", "--turns", "2", "--reps", "1", "--warmup", "1"], "AUDIT: PASS")
+    check("audit: the mutation rules and the self-learning ideas account for their turns",
+          [PY, ROOT / "magat.py", "check", "audit", "--game", game, "--arms", "@mutation,@self-learning,comma-short3-coarse",
+           "--budget", "4000", "--turns", "2", "--reps", "1", "--warmup", "1"], "AUDIT: PASS")
     check("audit: the in-turn learners (tables at three granularities, hierarchical, linear, network) account for their turns",
           [PY, ROOT / "magat.py", "check", "audit", "--game", game, "--arms", "@in-turn",
            "--budget", "4000", "--turns", "2", "--reps", "1", "--warmup", "1"], "AUDIT: PASS")

@@ -164,6 +164,44 @@ to gate against. They rest on tests (a planted signal learned, an empty learner 
 determinism, robustness to a game-ending outlier) and on the audit: at most 0.6% of a turn unaccounted for
 at 9,500 units.
 
+**The mutation rules and self-learning ideas** (`@mutation`, `@self-learning`; the plan's section 3), and
+**the shortlist repair**, each on `comma-z0-coarse` with one thing changed:
+
+| Arm | What changes |
+|---|---|
+| `comma-short3-coarse` | the repair evaluates the table's best 3 candidates and takes the best of them (the engine's `SHORTLIST_K`) |
+| `mut-guard` | a child identical to a plan already scored is discarded and made again, up to 3 times; no learning |
+| `mut-eps90`, `mut-eps50`, `mut-eps20` | ε-greedy insertion at coarse keys, 90%, 50% or 20% of insertions greedy (the engine's `epsilon`, 0.10, 0.50, 0.80) |
+| `mut-thompson`, `mut-thompson50` | Thompson-sampled insertion: every one, or half by a coin |
+| `mut-thompson-guard` | Thompson-sampled insertion with the guard |
+| `mut-k3-…`, `mut-k5-…` | children 3 or 5 mutations from their parent, with `none`, `one` (the first) or `all` of the insertions Thompson-biased |
+| `mut-gen-mixed` | two of each generation's five children Thompson-biased, three uniform |
+| `mut-site`, `mut-thompson-site` | the position by Thompson sampling over positions; the second with Thompson insertion too |
+| `mut-aos` | a bandit over four operators (uniform, Thompson, one biased of 3, one biased of 5), credited by how often their children beat their parent |
+| `mut-k-adapt`, `mut-k-adapt-thompson` | mutations per child between 1 and 8 by the 1/5 success rule, over windows of 10 children |
+| `mut-subst` | a table of what replacing a class by another brought, read by the Thompson insertion and by the repair |
+| `mut-blocks` | a tenth of the children insert two adjacent actions, the second by a learned table of class pairs |
+| `mut-tabu` | a mutation (position, mid class) whose child lost is not drawn again there for 20 generations |
+| `mut-kick` | after 30 generations without improving the best plan, one child is 5 Thompson-biased mutations from it |
+
+How the rules work:
+- **Thompson sampling** draws once per candidate class from a normal posterior: its shrunk mean, with a spread
+  of the turn's robust standard deviation of changes over sqrt(n + m). It inserts one action of the class
+  with the highest draw, uniformly.
+- **Several mutations** are made in one pass along the plan with the repair, so a 5-mutation child makes
+  about the forward-model calls a 1-mutation child does. Each extra mutation adds a legal-action query, which
+  is expensive in Tribes and priced like the rest: 22-34% of a 3- or 5-mutation arm's turn at 9,500 units.
+- **Draws are the rule's own.** Each rule draws its own random numbers, so an arm whose settings are all at
+  their defaults makes exactly AB-EMCTS's draws; its published turns replay.
+- **The mechanism** is reported per turn: `biasGreedyPicks` and `biasUniformPicks`, `mutationsPerChild`,
+  `duplicatesRedrawn`, `insertedClassEntropy` and `mutatedPositionEntropy` (in bits), `kicks`,
+  `tabuBlocked`, and the `aos…` operator shares.
+
+The ε-greedy arms and `comma-short3-coarse` are gated against `Stage1BiasedAgent`, which has both rules:
+32 cells each, 0 failed, and 256 on 64 positions. The other rules have no original. They rest on toy tests
+(within the budget, the same search for the same visit, the counters as each rule says, every mechanism
+firing) and on the audit.
+
 ## `oep`: Online Evolutionary Planning
 
 Justesen, Mahlmann, Risi and Togelius's online evolutionary planning (2017): a genetic algorithm whose
