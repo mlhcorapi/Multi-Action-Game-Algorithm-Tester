@@ -1764,12 +1764,27 @@ def main(argv) -> int:
         gone = {x.split("@")[0] for x in missing}
         return {x for x in [ref_arm, *arms] if x not in gone}, missing
 
-    covered, _ = coverage(quiet_runner)
+    covered, lacking_cells = coverage(quiet_runner)
     # The session prices what the currency does not: every arm of a new currency, and for one that exists the
     # arms registered since, merged by ratio. The calibrator measures the reference cell in every session itself.
     fresh = not weights.is_file()
     # The reference arm too, where it lacks a level asked for: a level the currency gains (--gain-levels) has none yet.
     new_arms = [x for x in arms if x not in covered and (x != ref_arm or not fresh)]
+    # The levels the session prices: those its arms lack, so an arm already priced at the others is not priced again
+    # (the calibrator refuses that). A session prices every arm it names at every level it names, so its arms must
+    # lack the same levels: an arm new at every level and one lacking only a gained level are two sittings.
+    lacks = {}
+    for cell in lacking_cells:
+        arm, _, level = cell.partition("@")
+        if level.isdigit():
+            lacks.setdefault(arm, set()).add(int(level))
+    asked = [int(v) for v in a.levels.split(",") if v.strip()] if a.levels else file_levels()
+    shapes = {}
+    for x in new_arms:
+        shapes.setdefault(frozenset(lacks.get(x, asked)), []).append(x)
+    session_levels = sorted(next(iter(shapes))) if len(shapes) == 1 and not fresh else None
+    if session_levels is not None and set(session_levels) == set(asked):
+        session_levels = None                                 # every level asked for: the session's --levels as given
     session_arms = new_arms or [ref_arm]                      # what --arms names
     priced_arms = ([ref_arm] if fresh else []) + new_arms     # what the session writes into the currency
     measure = not a.checks and bool(priced_arms)
@@ -1781,6 +1796,7 @@ def main(argv) -> int:
         what = []
         if measure:
             what.append(f"one session pricing {len(priced_arms)} arm(s): {', '.join(priced_arms)}"
+                        + (f" at {', '.join(map(str, session_levels))}" if session_levels else "")
                         + ("" if fresh else ", merged into the currency by ratio"))
         if checks and (measure or a.checks):
             what.append("the check" + ("s " if len(checks) > 1 else " ") + " and ".join(
@@ -1813,6 +1829,11 @@ def main(argv) -> int:
         elif lacking:
             items.append(("info", f"the currency gains level(s) {', '.join(map(str, lacking))}, priced on the same positions "
                           "as its others; its header is extended and every other line kept"))
+    if len(shapes) > 1 and not fresh and not a.checks:
+        items.append(("refuse", "the arms lack different levels, and a session prices every arm it names at every level "
+                      "it names: " + "; ".join(f"{', '.join(xs)} lack(s) {', '.join(map(str, sorted(lv)))}"
+                                              for lv, xs in sorted(shapes.items(), key=lambda kv: sorted(kv[0]))) +
+                      ". Price them in two sittings, one --arms/--levels each (in the notebook, a list of configs)"))
     # A currency that prices arms this MAGAT does not register was written by an older one: extending it would mix two
     # codes' measurements in one file.
     if weights.is_file():
@@ -1878,9 +1899,9 @@ def main(argv) -> int:
            + (f"JVMs on CPUs {_ranges(cpus)} ({facts.get('measuring_cpus_why')})" if confined else "JVMs placed by the OS")
            + (", kept awake" if awake else "") + (f", priority {a.priority}" if WINDOWS else ""))
 
-    passthrough = []
+    passthrough = ["--levels", ",".join(map(str, session_levels))] if session_levels else []
     for flag in ("levels", "turns", "reps", "warmup"):
-        if getattr(a, flag):
+        if getattr(a, flag) and not (flag == "levels" and session_levels):
             passthrough += [f"--{flag}", getattr(a, flag)]
     if a.portfolio:
         passthrough += ["--portfolio", portfolio]

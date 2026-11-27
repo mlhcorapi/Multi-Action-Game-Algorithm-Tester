@@ -137,6 +137,10 @@ python magat.py calibrate-controlled --name r7615-plus-mine --from r7615-time --
   what the session would measure.
 - **Once gained, the level is the currency's own**: a later session at it needs no flag, and one that
   prices every arm named at it measures nothing.
+- **A session prices only what its arms lack.** Naming every level, `--levels 9500,20000,101500,610000`,
+  prices an arm already priced at the first three at the new one alone. A session prices every arm it
+  names at every level it names, so its arms must lack the same levels: an arm new at every level beside
+  one lacking only the gained level is refused by the preflight, as two sittings.
 - **One sitting per level.** A session writes all or nothing, so a long level measured with the others
   risks them all. The notebook takes a list of configs of one currency, one sitting each
   ([on a shared server](#on-a-shared-server-the-r7615-through-jupyterhub)).

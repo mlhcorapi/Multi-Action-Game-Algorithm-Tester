@@ -255,6 +255,13 @@ def main(argv) -> int:
     check("--gain-levels: the new level priced on the currency's own positions, its header extended, every other line kept",
           [*gain, "--gain-levels"], "CONTROLLED CALIBRATION: COMPLETE", then=gained_level)
     check("... and once it is the currency's own level, nothing to measure and no flag needed", gain, "nothing to measure")
+    uneven = data / "shakedown" / f"controlled-{game}-uneven"
+    shutil.rmtree(uneven, ignore_errors=True)
+    uneven.mkdir(parents=True)
+    (uneven / "compute_weights.properties").write_text(kept["w"], encoding="utf-8")
+    check("a new arm lacking every level beside one lacking only the gained level is refused: two sittings",
+          [*gain[:gain.index("--out") + 1], uneven, *gain[gain.index("--out") + 2:gain.index("--arms") + 1], "emcts,oep",
+           *gain[gain.index("--arms") + 2:], "--gain-levels", "--preflight"], "the arms lack different levels", codes=(2,))
 
     step("7. Runner: the shakedown spec on the toy portfolio and the toy currency")
     spec = ROOT / "experiments" / game / "shakedown.json"
