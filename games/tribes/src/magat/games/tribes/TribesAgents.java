@@ -36,11 +36,16 @@ public final class TribesAgents {
     /** The AB-EMCTS experiment's arms, written {@code @ab-emcts}. */
     public static final List<String> AB_EMCTS = Collections.unmodifiableList(Arrays.asList("emcts-comma", "comma-z0-coarse", "comma-z0-random"));
 
+    /** The in-turn learners (docs/plans/in-turn-learning.md), written {@code @in-turn}: tables at three granularities, a hierarchical one, a linear model and a network. */
+    public static final List<String> IN_TURN = Collections.unmodifiableList(Arrays.asList(
+            "comma-z0-coarse", "comma-z0-mid", "comma-z0-fine", "comma-z0-hier", "comma-z0-linear", "comma-z0-mlp"));
+
     /** The named arm sets, written {@code @<name>}. */
     public static Map<String, List<String>> armSets() {
         Map<String, List<String>> m = new LinkedHashMap<>();
         m.put("reference", REFERENCE);
         m.put("ab-emcts", AB_EMCTS);
+        m.put("in-turn", IN_TURN);
         return m;
     }
 
@@ -54,6 +59,11 @@ public final class TribesAgents {
         r.register(EmctsFactory.comma(5));
         r.register(QdeltaArms.coarseFactory());
         r.register(QdeltaArms.randomFactory());
+        r.register(QdeltaArms.midFactory());
+        r.register(QdeltaArms.fineFactory());
+        r.register(QdeltaArms.hierFactory());
+        r.register(QdeltaArms.linearFactory());
+        r.register(QdeltaArms.mlpFactory());
         return r;
     }
 
@@ -64,6 +74,8 @@ public final class TribesAgents {
         o.put("emcts-comma", new EngineEmctsOracle(ExperimentalEMCTSParams.SelectionMode.COMMA, 5));
         o.put("comma-z0-coarse", new EngineQdeltaOracle(QdeltaArms.coarse()));
         o.put("comma-z0-random", new EngineQdeltaOracle(QdeltaArms.random()));
+        o.put("comma-z0-mid", new EngineQdeltaOracle(QdeltaArms.mid()));
+        o.put("comma-z0-fine", new EngineQdeltaOracle(QdeltaArms.fine()));
         return o;
     }
 }

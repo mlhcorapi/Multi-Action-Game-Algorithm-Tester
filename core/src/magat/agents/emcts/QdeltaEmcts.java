@@ -66,11 +66,17 @@ public final class QdeltaEmcts<S, A> extends Emcts<S, A> {
     }
 
     private final QdeltaParams q;
-    private final ActionTable live = new ActionTable(false);
+    /** Whether the fine class is resolved: a fine table, or any learner other than a table. */
+    private final boolean needFine;
+    private final ActionTable live;
+    /** The learner, when it is not a table of independent classes (then null). */
+    private final InTurnLearner model;
+    private long budgetUnits = 1;
 
-    // The mutation awaiting its child's score, and the classes it credits.
+    // The mutation awaiting its child's score, the classes it credits and where in the plan it was.
     private Node<S, A> pendingChild, pendingParent;
     private String[] pendIns, pendRem;
+    private double pendPosition;
 
     private long biasUniformPicks, statUpdates, zeroEvalPicks, repairCandidateEvals;
     private double repairUnits;
@@ -78,15 +84,27 @@ public final class QdeltaEmcts<S, A> extends Emcts<S, A> {
     public QdeltaEmcts(long seed, QdeltaParams params) {
         super(seed, params);
         this.q = params;
-        if (params.repairKeys == Granularity.FINE)
-            throw new IllegalArgumentException("the experiment's arms read coarse or mid classes; a fine table is archived");
+        this.needFine = params.learner != QdeltaParams.Learner.TABLE || params.repairKeys == Granularity.FINE;
+        this.live = new ActionTable(needFine && params.learner == QdeltaParams.Learner.TABLE);
+        switch (params.learner) {
+            case HIER: model = new HierTable(params.shrinkageM); break;
+            case LINEAR: model = new LinearLearner(); break;
+            case MLP: model = new MlpLearner(seed); break;
+            default: model = null;
+        }
     }
 
     @Override
     public TurnRecord plan(magat.game.Game<S, A> game, S state, int player, TurnBudget budget) {
         if (!game.hasActionClasses())
             throw new IllegalStateException(game.id() + " offers no action classes, which " + getClass().getSimpleName() + " learns over");
+        budgetUnits = Math.max(1, budget.units());
         return super.plan(game, state, player, budget);
+    }
+
+    /** How much of the turn's budget is spent, 0 to 1 (a model's input). */
+    private double progress() {
+        return Math.min(1.0, Meter.units() / budgetUnits);
     }
 
     // ------------------------------------------------------------------ the hooks
@@ -94,6 +112,7 @@ public final class QdeltaEmcts<S, A> extends Emcts<S, A> {
     @Override
     protected void onTurnStart() {
         live.reset();
+        if (model != null) model.reset();
         pendingChild = null;
         pendingParent = null;
         pendIns = null;
@@ -104,7 +123,8 @@ public final class QdeltaEmcts<S, A> extends Emcts<S, A> {
 
     /** The inserted and removed actions' classes, resolved on the prefix state they apply to (read-only). */
     @Override
-    protected void afterInsertion(S prefixState, Node<S, A> parent, A inserted, A removed) {
+    protected void afterInsertion(S prefixState, Node<S, A> parent, A inserted, A removed, int position, int length) {
+        pendPosition = length > 1 ? (double) position / (length - 1) : 0.0;
         if (inserted != null) {
             biasUniformPicks++;
             try (Meter.Span c = CLASSIFY.span()) {
@@ -136,8 +156,9 @@ public final class QdeltaEmcts<S, A> extends Emcts<S, A> {
         int updates = (pendIns != null ? 1 : 0) + (q.removalCredit && pendRem != null ? 1 : 0);
         if (updates > 0) {
             try (Meter.Span u = UPDATE.span(updates)) {
-                if (pendIns != null) add(pendIns, delta);
-                if (q.removalCredit && pendRem != null) add(pendRem, -delta);
+                double progress = model != null ? progress() : 0.0;
+                if (pendIns != null) add(pendIns, delta, progress);
+                if (q.removalCredit && pendRem != null) add(pendRem, -delta, progress);
             }
         }
         pendingChild = null;
@@ -158,16 +179,19 @@ public final class QdeltaEmcts<S, A> extends Emcts<S, A> {
               .telemetry("zeroEvalPicks", zeroEvalPicks)
               .telemetry("repairUnits", repairUnits)
               .telemetry("repairCandidateEvals", repairCandidateEvals);
+        if (model != null) record.telemetry("modelSquaredError", model.meanSquaredError());
     }
 
     // ------------------------------------------------------------------ the table
 
     private String[] classes(A action, S state) {
-        return new String[]{game.actionClass(state, action, Granularity.COARSE), game.actionClass(state, action, Granularity.MID), null};
+        return new String[]{game.actionClass(state, action, Granularity.COARSE), game.actionClass(state, action, Granularity.MID),
+                needFine ? game.actionClass(state, action, Granularity.FINE) : null};
     }
 
-    private void add(String[] k, double delta) {
-        live.add(k[0], k[1], k[2], delta);
+    private void add(String[] k, double delta, double progress) {
+        if (model != null) model.credit(k, pendPosition, progress, delta);
+        else live.add(k[0], k[1], k[2], delta);
         statUpdates++;
     }
 
@@ -223,7 +247,8 @@ public final class QdeltaEmcts<S, A> extends Emcts<S, A> {
                     continue;
                 }
             }
-            A best = zeroEvalReplace(state, q.repairMode == QdeltaParams.RepairMode.ZERO_EVAL);
+            A best = zeroEvalReplace(state, q.repairMode == QdeltaParams.RepairMode.ZERO_EVAL,
+                    child.size() > 1 ? (double) i / (child.size() - 1) : 0.0);
             if (best == null) break;
             advance(state, best);
             repaired.add(best);
@@ -241,7 +266,7 @@ public final class QdeltaEmcts<S, A> extends Emcts<S, A> {
      * control, an arbitrary one. Ties break uniformly, and are common: most candidates are unseen and sit at the
      * prior, which is why the granularity matters.
      */
-    private A zeroEvalReplace(S state, boolean rankByTable) {
+    private A zeroEvalReplace(S state, boolean rankByTable, double position) {
         try (Meter.Span z = ZEROPICK.span()) {
             List<A> cands = legalActions(state);
             if (cands.isEmpty()) return null;
@@ -251,8 +276,9 @@ public final class QdeltaEmcts<S, A> extends Emcts<S, A> {
             double bestQ = Double.NEGATIVE_INFINITY;
             int numTies = 0;
             try (Meter.Span l = LOOKUP.span(cands.size())) {
+                double progress = model != null ? progress() : 0.0;
                 for (A c : cands) {
-                    double v = qhat(q.repairKeys, c, state);
+                    double v = model != null ? model.estimate(classes(c, state), position, progress) : qhat(q.repairKeys, c, state);
                     if (v > bestQ) {
                         bestQ = v;
                         best = c;

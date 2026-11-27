@@ -89,6 +89,9 @@ def main(argv) -> int:
     check("audit: each arm's declared operations and forward model account for its turn (toy size)",
           [PY, ROOT / "magat.py", "check", "audit", "--game", game, "--arms", "@reference",
            "--budget", "4000", "--turns", "2", "--reps", "1", "--warmup", "1"], "AUDIT: PASS")
+    check("audit: the in-turn learners (tables at three granularities, hierarchical, linear, network) account for their turns",
+          [PY, ROOT / "magat.py", "check", "audit", "--game", game, "--arms", "@in-turn",
+           "--budget", "4000", "--turns", "2", "--reps", "1", "--warmup", "1"], "AUDIT: PASS")
     # Each published run: this machine plays its turns field for field, in the currency it was priced in (found by hash),
     # at the two lowest published levels. The reference runs come first; another published run replays only the arms
     # they do not (its reference arms are their turns: its reproduction check says so).

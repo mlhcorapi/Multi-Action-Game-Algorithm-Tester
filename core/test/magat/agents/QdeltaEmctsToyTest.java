@@ -125,20 +125,40 @@ public class QdeltaEmctsToyTest {
     }
 
     @Test
-    public void aGameWithoutActionClassesAndAFineTableAreRefused() {
-        try {
-            Episode.run(new ToyGame(), positions.get(0), 0, QdeltaArms.<ToyGame.State, ToyGame.Move>coarseFactory(), 500);
-            fail("the table learns over action classes");
-        } catch (IllegalStateException expected) {
-            assertTrue(expected.getMessage().contains("offers no action classes"));
+    public void aGameWithoutActionClassesIsRefused() {
+        for (AgentFactory<ToyGame.State, ToyGame.Move> arm : java.util.Arrays.asList(
+                QdeltaArms.<ToyGame.State, ToyGame.Move>coarseFactory(), QdeltaArms.<ToyGame.State, ToyGame.Move>mlpFactory())) {
+            try {
+                Episode.run(new ToyGame(), positions.get(0), 0, arm, 500);
+                fail(arm.id() + ": the learner learns over action classes");
+            } catch (IllegalStateException expected) {
+                assertTrue(expected.getMessage().contains("offers no action classes"));
+            }
         }
-        QdeltaParams fine = QdeltaArms.coarse();
-        fine.repairKeys = Granularity.FINE;
-        try {
-            new QdeltaEmcts<ToyGame.State, ToyGame.Move>(1L, fine);
-            fail("a fine table is archived, not ported");
-        } catch (IllegalArgumentException expected) {
-            assertTrue(expected.getMessage().contains("archived"));
+    }
+
+    @Test
+    public void theInTurnLearnersAreCommaSearchesWhoseRepairEvaluatesNothing() {
+        java.util.List<AgentFactory<ToyGame.State, ToyGame.Move>> learners = java.util.Arrays.asList(
+                QdeltaArms.midFactory(), QdeltaArms.fineFactory(), QdeltaArms.hierFactory(),
+                QdeltaArms.linearFactory(), QdeltaArms.mlpFactory());
+        java.util.Set<String> outcomes = new java.util.HashSet<>();
+        for (AgentFactory<ToyGame.State, ToyGame.Move> arm : learners) {
+            for (Scenario<ToyGame.State> position : positions) {
+                TurnRecord r = Episode.run(game, position, 0, arm, 2_000);
+                double turn = r.units + r.initUnits;
+                assertTrue(arm.id() + ": the turn reaches its budget (" + turn + ")", turn >= 2_000 * 20 / 21);
+                assertTrue(arm.id() + ": and passes it by one child's scoring at most (" + turn + ")", turn < 2_000 + SCORING_COMMA);
+                assertTrue(arm.id() + ": every mutation is credited", tel(r, "statUpdates") > 0);
+                assertEquals(arm.id() + ": the repair evaluates no candidate", 0.0, tel(r, "repairCandidateEvals"), 0.0);
+                boolean model = arm.id().endsWith("-hier") || arm.id().endsWith("-linear") || arm.id().endsWith("-mlp");
+                assertEquals(arm.id() + ": a model reports its error", model, r.telemetry.containsKey("modelSquaredError"));
+                outcomes.add(arm.id() + "/" + position.id + ":" + r.finalValue);
+            }
+            Signature a = Signature.of(Episode.run(game, positions.get(1), 3, arm, 1_500));
+            Signature b = Signature.of(Episode.run(game, positions.get(1), 3, arm, 1_500));
+            assertTrue(arm.id() + ": the same visit is the same search", a.differences(b, 0).isEmpty());
         }
+        assertEquals("every arm and position played", learners.size() * positions.size(), outcomes.size());
     }
 }

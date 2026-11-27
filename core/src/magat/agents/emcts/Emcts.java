@@ -219,9 +219,10 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
 
     /**
      * A mutation has drawn its new action: {@code prefixState} is the state after the plan's prefix, on which
-     * {@code inserted} replaces {@code removed} (either null when there was none). Before the repair.
+     * {@code inserted} replaces {@code removed} (either null when there was none), at {@code position} in a plan
+     * of {@code length} actions. Before the repair.
      */
-    protected void afterInsertion(S prefixState, Node<S, A> parent, A inserted, A removed) {
+    protected void afterInsertion(S prefixState, Node<S, A> parent, A inserted, A removed, int position, int length) {
     }
 
     /** A mutation's child exists, repaired, and is about to be scored. */
@@ -460,7 +461,7 @@ public class Emcts<S, A> implements SearchAgent<S, A> {
             inserted = available.get(rnd.nextInt(available.size()));
             newSeq.add(inserted);
         }
-        afterInsertion(state, node, inserted, moveToMutate < seq.size() ? seq.get(moveToMutate) : null);
+        afterInsertion(state, node, inserted, moveToMutate < seq.size() ? seq.get(moveToMutate) : null, moveToMutate, seq.size());
         for (int i = moveToMutate + 1; i < seq.size(); i++) newSeq.add(seq.get(i));
 
         newSeq = truncateAtEndTurn(repair(newSeq, clone));

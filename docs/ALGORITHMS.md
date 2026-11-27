@@ -140,6 +140,30 @@ failed (and 256 on 64 positions). The gate compares the mechanism's own counters
 signature: the table's updates, the zero-evaluation picks, the repair's units and its candidate
 evaluations. It runs at the fixed measurement weights (`--no-weights`) until a currency prices the arms.
 
+**The in-turn learners** (`@in-turn`, [`plans/in-turn-learning.md`](plans/in-turn-learning.md)): the same
+search and repair, each ranking the repair's candidates by another learner. All are credited as AB-EMCTS's
+table is, and all start empty every turn:
+- `comma-z0-mid` and `comma-z0-fine`: tables at mid keys and at fine keys (the action itself).
+- `comma-z0-hier`: a hierarchical table. A fine class's mean is shrunk toward its mid class's estimate,
+  which is shrunk toward its coarse class's, which is shrunk toward the turn's mean, so a class seen rarely
+  falls back on the coarser one it belongs to.
+- `comma-z0-linear`: a linear model on the three classes' identities (hashed one-hot blocks of 64, 64 and
+  256), the position in the plan and the turn's progress, fitted online by one gradient step per credit.
+- `comma-z0-mlp`: a neural network on the same inputs, with one hidden layer of 16 tanh units, trained
+  online by backpropagation.
+
+The two models learn standardized, clipped changes, so a plan that ends the game (about 2e9) does not
+derail them. Their weights come from a stream of their own, so they make the same search draws as each
+other. Both are deterministic (`StrictMath`), so their turns re-play on any JVM. Their own work is priced
+under the same operation names as the table's: one `qd.update` per credit, one `qd.lookup` per candidate
+scored. Each arm's profile prices its own costs.
+
+`comma-z0-mid` and `comma-z0-fine` are gated against `Stage1BiasedAgent`, as `comma-z0-coarse` is: 32
+cells each, 0 failed, and 256 on 64 positions. The hierarchical table and the two models have no original
+to gate against. They rest on tests (a planted signal learned, an empty learner tying every action,
+determinism, robustness to a game-ending outlier) and on the audit: at most 0.6% of a turn unaccounted for
+at 9,500 units.
+
 ## `oep`: Online Evolutionary Planning
 
 Justesen, Mahlmann, Risi and Togelius's online evolutionary planning (2017): a genetic algorithm whose

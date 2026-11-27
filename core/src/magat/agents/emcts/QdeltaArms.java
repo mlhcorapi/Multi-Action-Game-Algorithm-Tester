@@ -35,8 +35,48 @@ public final class QdeltaArms {
         return arm(QdeltaParams.RepairMode.ZERO_EVAL_RANDOM, Granularity.MID);
     }
 
+    /** {@link #coarse()} read at mid keys: the in-turn learning plan's {@code T-mid}. */
+    public static QdeltaParams mid() {
+        return arm(QdeltaParams.RepairMode.ZERO_EVAL, Granularity.MID);
+    }
+
+    /** {@link #coarse()} read at fine keys, the action itself: {@code T-fine}. */
+    public static QdeltaParams fine() {
+        return arm(QdeltaParams.RepairMode.ZERO_EVAL, Granularity.FINE);
+    }
+
+    /** The repair ranked by another learner than a table of independent classes (docs/plans/in-turn-learning.md). */
+    public static QdeltaParams learned(QdeltaParams.Learner learner) {
+        QdeltaParams p = arm(QdeltaParams.RepairMode.ZERO_EVAL, Granularity.COARSE);
+        p.learner = learner;
+        return p;
+    }
+
     public static <S, A> AgentFactory<S, A> coarseFactory() {
         return QdeltaEmcts.factory("comma-z0-coarse", "AB-EMCTS: EMCTS whose repair takes a learned table's best action", coarse());
+    }
+
+    public static <S, A> AgentFactory<S, A> midFactory() {
+        return QdeltaEmcts.factory("comma-z0-mid", "In-turn learning: the repair ranked by a table at mid keys", mid());
+    }
+
+    public static <S, A> AgentFactory<S, A> fineFactory() {
+        return QdeltaEmcts.factory("comma-z0-fine", "In-turn learning: the repair ranked by a table at fine keys", fine());
+    }
+
+    public static <S, A> AgentFactory<S, A> hierFactory() {
+        return QdeltaEmcts.factory("comma-z0-hier", "In-turn learning: the repair ranked by a hierarchical table (fine, backed off to mid and coarse)",
+                learned(QdeltaParams.Learner.HIER));
+    }
+
+    public static <S, A> AgentFactory<S, A> linearFactory() {
+        return QdeltaEmcts.factory("comma-z0-linear", "In-turn learning: the repair ranked by a linear model on the classes, fitted online",
+                learned(QdeltaParams.Learner.LINEAR));
+    }
+
+    public static <S, A> AgentFactory<S, A> mlpFactory() {
+        return QdeltaEmcts.factory("comma-z0-mlp", "In-turn learning: the repair ranked by a small neural network on the classes, trained online",
+                learned(QdeltaParams.Learner.MLP));
     }
 
     public static <S, A> AgentFactory<S, A> randomFactory() {

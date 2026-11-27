@@ -69,7 +69,7 @@ public final class EngineQdeltaOracle implements Oracle<TribesState> {
         p.repairMode = Stage1Params.RepairMode.valueOf(q.repairMode.name());
         p.shortlistK = 0;
         p.shrinkageM = q.shrinkageM;
-        if (q.nodeSize != 20 || q.repairKeys == Granularity.FINE)
+        if (q.nodeSize != 20 || q.learner != QdeltaParams.Learner.TABLE)
             throw new IllegalArgumentException("the engine's agent has no equivalent of " + q.describe());
         return p;
     }

@@ -20,7 +20,20 @@ public class QdeltaParams extends EmctsParams {
         ZERO_EVAL_RANDOM
     }
 
+    /** What the turn learns with: a table of independent classes at {@link #repairKeys}, or a model (InTurnLearner). */
+    public enum Learner {
+        /** A table of independent classes, read at {@link #repairKeys}: AB-EMCTS's. */
+        TABLE,
+        /** A hierarchical table: fine shrunk toward mid, mid toward coarse, coarse toward the turn's mean. */
+        HIER,
+        /** A linear model on the three classes' identities, the position and the progress, fitted online. */
+        LINEAR,
+        /** A small neural network on the same inputs, trained online. */
+        MLP
+    }
+
     public RepairMode repairMode = RepairMode.ZERO_EVAL;
+    public Learner learner = Learner.TABLE;
     /** The granularity the repair reads. */
     public Granularity repairKeys = Granularity.COARSE;
     /** Credit the removed action's classes with the negated change in value. */
@@ -36,6 +49,7 @@ public class QdeltaParams extends EmctsParams {
         p.selection = selection;
         p.childrenPerGeneration = childrenPerGeneration;
         p.repairMode = repairMode;
+        p.learner = learner;
         p.repairKeys = repairKeys;
         p.removalCredit = removalCredit;
         p.shrinkageM = shrinkageM;
@@ -44,7 +58,8 @@ public class QdeltaParams extends EmctsParams {
 
     /** One line naming every setting, for descriptions and logs. */
     public String describe() {
+        String by = learner == Learner.TABLE ? String.valueOf(repairKeys) : learner + " learner";
         return String.format(java.util.Locale.ROOT, "%s k=%d, insertion uniform, repair %s by %s, removal credit %s, shrinkage m=%.1f",
-                selection, childrenPerGeneration, repairMode, repairKeys, removalCredit ? "on" : "off", shrinkageM);
+                selection, childrenPerGeneration, repairMode, by, removalCredit ? "on" : "off", shrinkageM);
     }
 }
