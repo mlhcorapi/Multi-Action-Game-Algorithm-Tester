@@ -1,0 +1,42 @@
+{
+  "arm": "emcts-comma",
+  "budget": 20000,
+  "profile": "emcts-comma@20000",
+  "weights": [
+    0.977494,
+    0.150571,
+    0.047871
+  ],
+  "currencyVersion": 2,
+  "prices": {
+    "advance": 0.977494,
+    "copy": 0.150571,
+    "eval": 0.047871,
+    "emcts.generation": 1.500033606,
+    "emcts.legal": 1.354855087,
+    "emcts.check": 0.018397856,
+    "emcts.seqkey": 0.027877742,
+    "emcts.burn": 0.041990294
+  },
+  "threads": 54,
+  "host": "4c259b6ae0d5",
+  "commit": "82f991aa0340aff33d9bded34113fa0704427cbd",
+  "notebook": "modified",
+  "started": "2026-11-27T16:50:13.523513Z",
+  "turnsTotal": 1600,
+  "turnsDoneAtStart": 0,
+  "status": "complete",
+  "finished": "2026-11-27T16:50:50.467030Z",
+  "turnsDone": 1600,
+  "failures": 0,
+  "seconds": 36.941,
+  "governor": "concurrency 54/54 (low-water 54, 0 throttle event(s)); oldgen 59% after GC, GC share 0.4%",
+  "audit": {
+    "unpricedShare": 0.09930861709805694,
+    "predictedMs": 1771020.4592862616,
+    "measuredMs": 1966290,
+    "threads": 54,
+    "sameMachine": true,
+    "basis": "(units + initialization units) x referenceAdvanceNanos 55340.764 ns, against the turns' plan milliseconds"
+  }
+}
