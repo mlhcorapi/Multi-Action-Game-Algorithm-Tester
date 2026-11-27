@@ -2,7 +2,8 @@
 """Shakedown: every moving part at toy size, in minutes, exiting non-zero on any failure.
 
 It measures nothing. Every number it prints is too small to mean anything; the only question it
-answers is "does this all work on this machine". Run before every pull request.
+answers is "does this all work on this machine". It is MAGAT's one suite of checks: GitHub runs it on
+every pull request, on Linux and on Windows (.github/workflows/ci.yml), and you run it before pushing.
 
     python tools/shakedown.py [--game tribes]
 """
@@ -88,15 +89,29 @@ def main(argv) -> int:
     check("audit: each arm's declared operations and forward model account for its turn (toy size)",
           [PY, ROOT / "magat.py", "check", "audit", "--game", game, "--arms", "@reference",
            "--budget", "4000", "--turns", "2", "--reps", "1", "--warmup", "1"], "AUDIT: PASS")
-    # Each published run: this machine plays its turns field for field, in the currency it was priced in (found by hash).
+    # Each published run: this machine plays its turns field for field, in the currency it was priced in (found by hash),
+    # at the two lowest published levels. The reference runs come first; another published run replays only the arms
+    # they do not (its reference arms are their turns: its reproduction check says so).
     currencies = {hashlib.sha256(f.read_bytes()).hexdigest(): f
                   for f in (ROOT / "games" / game / "calibration").glob("*/compute_weights.properties")}
-    for published in sorted((ROOT / "games" / game / "results" / "reference").glob("*/all")):
+    results_root = ROOT / "games" / game / "results"
+    trees = sorted(results_root.glob("reference/*/all")) + sorted(
+        t.parent for t in results_root.glob("*/*/holdout/_run.json") if t.parents[2].name != "reference")
+    replayed = set()
+    for published in trees:
         priced_in = currencies.get(json.loads((published / "_run.json").read_text(encoding="utf-8"))["weights"]["sha256"])
-        for leaf in sorted(published.glob("*/9500cu")):
-            check(f"replay: 2 of the published {published.parent.name} turns of {leaf.parent.name}@9500 re-plan here field for field",
-                  [PY, ROOT / "magat.py", "check", "replay", "--game", game, "--leaf", leaf, "--weights", priced_in, "--turns", "2"],
-                  "REPLAY: PASS", then=lambda p=priced_in: p is not None)
+        reference = published.parents[1].name == "reference"
+        arms = sorted(d.name for d in published.iterdir() if d.is_dir() and (reference or d.name not in replayed))
+        for arm in arms:
+            for budget, turns in ((9500, 2), (20000, 1)):
+                leaf = published / arm / f"{budget}cu"
+                check(f"replay: {turns} of the published {published.relative_to(results_root).as_posix()} turns of "
+                      f"{arm}@{budget} re-plan here field for field",
+                      [PY, ROOT / "magat.py", "check", "replay", "--game", game, "--leaf", leaf, "--weights", priced_in,
+                       "--turns", str(turns)], "REPLAY: PASS", then=lambda p=priced_in: p is not None)
+            replayed.add(arm)
+    check("the notebook's own gate cell runs for real (its commands at toy size): contract, equivalence of every ported "
+          "arm, audit", [PY, ROOT / "tools" / "run_cells.py", "gates"], "CELL GATES: COMPLETE")
 
     step("5. Portfolio: toy build, freeze, verify against the published portfolio")
     data = pathlib.Path(os.environ.get("MAGAT_DATA") or (pathlib.Path.home() / "magat_runs")).resolve()
@@ -228,6 +243,12 @@ def main(argv) -> int:
     check("holdout: runs into its own tree", [*run, "--split", "holdout"], "RUN: COMPLETE",
           then=lambda: (run_root / "holdout" / "_run.json").is_file())
     check("a retired leaf is discarded and re-run", [*run, "--split", "dev", "--retire-leaf", "emcts@4000"], "RETIRED emcts@4000")
+    shutil.rmtree(data / game / "runs" / "shakedown", ignore_errors=True)
+    shutil.rmtree(data / game / "results" / "shakedown", ignore_errors=True)
+    check("the notebook's own experiments cell runs for real: an entry that names its half, in the plan's currency and "
+          "thread sweep", [PY, ROOT / "tools" / "run_cells.py", "experiments", "--spec", spec, "--half", "holdout",
+                           "--portfolio", toy_dir, "--weights", weights, "--calibration", calib],
+          "CELL EXPERIMENTS: COMPLETE", then=lambda: (data / game / "runs" / "shakedown" / "holdout" / "_run.json").is_file())
     reused_root = data / "shakedown" / f"run-{game}-reused"
     shutil.rmtree(reused_root, ignore_errors=True)
     check("--reuse: a second run in the same currency takes every leaf of the first, after re-playing two turns of each",
@@ -341,6 +362,12 @@ def main(argv) -> int:
           [PY, ROOT / "magat.py", "analyze", "--run", run_root, "--compare", run_root, "--out", cmp_out], "ANALYZE: OK",
           then=lambda: no_difference(cmp_out) and "## Across machines (dev)" in (cmp_out / "SUMMARY.md").read_text(encoding="utf-8"))
 
+    agreed = results / "cross-machine"
+    check("the two published runs compare as docs/results/cross-machine.md says: the agreement table, byte for byte",
+          [PY, ROOT / "magat.py", "analyze", "--run", results_root / "reference" / "r7615", "--compare",
+           results_root / "reference" / "laptop-i9-14900hx", "--out", agreed], "ANALYZE: OK",
+          then=lambda: (agreed / "tables" / "agreement.csv").read_bytes().replace(b"\r", b"")
+          == (results_root / "reference" / "r7615-vs-laptop-i9-14900hx" / "tables" / "agreement.csv").read_bytes().replace(b"\r", b""))
     check("paper --check: the paper's tables rebuild from the published artefacts byte for byte, and its figures render",
           [PY, ROOT / "magat.py", "paper", "--check"], "PAPER: CURRENT")
 

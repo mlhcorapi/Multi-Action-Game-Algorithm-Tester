@@ -21,7 +21,7 @@ wrap it). It:
 | `build [--clean] [--tests]` | compile the core, the game adapters and the engines |
 | `test [--java \| --python]` | JUnit, then the analysis package's unit tests: one line, and each failure when there is one. Everything the tests print is in `<data>/logs/test.log` |
 | `layering` | the core imports no game and no engine |
-| `shakedown` | every moving part at toy size, about ten minutes; exits non-zero on any failure. Run it before every pull request |
+| `shakedown` | every moving part at toy size, about five minutes on a laptop; exits non-zero on any failure. MAGAT's one suite of checks: CI runs it, and you run it before pushing ([verifying a change](#verifying-a-change)) |
 | `arms --game G [--arms a,b\|@set \| --default]` | the registered arms, their oracles, which arm is the reference and which are not priced; `--default` the arms a calibration prices when it names none (the game's `@reference`) |
 | `machine` | cores, the worker ceiling and why; runs no work |
 | `portfolio build \| freeze \| verify` | [the portfolio](METHODS.md#1-the-portfolio) |
@@ -203,14 +203,34 @@ different portfolios are refused. The output is:
 
 | Command | What it asserts |
 |---|---|
-| `check contract` | the laws L1-L9 on captured positions ([contract](CONTRACT.md#the-laws-magat-check-contract)) |
+| `check contract` | the laws L1-L10 on captured positions ([contract](CONTRACT.md#the-laws-magat-check-contract)) |
 | `check equivalence` | each ported arm reproduces its oracle (the reference implementation it was ported from) field for field, including its counters, on N scenarios × V visits. Without `--weights` both sides are priced with the fixed measurement weights, and so is an arm the currency does not price yet |
 | `check replay` | the turns of a published leaf, re-planned on this machine, agree with its rows field for field |
 | `check audit` | each arm's declared operations and forward model account for its turn: warns above 10% unaccounted, fails above 25% |
 | `check reproduction --run D --against D` | a run's turns are another run's, every turn both hold, field for field but the times ([experiments](EXPERIMENTS.md#reusing-the-published-run)) |
 
-Each prints PASS or FAIL and exits non-zero on FAIL. The shakedown and CI run the contract, equivalence
-and the audit at toy size.
+Each prints PASS or FAIL and exits non-zero on FAIL. The shakedown runs the contract, equivalence
+and the audit at toy size, and the notebook's own gate cell for real.
+
+## Verifying a change
+
+There is one suite of checks, the shakedown (`tools/shakedown.py`), and one place a change is judged, CI
+(`.github/workflows/ci.yml`), on every pull request and every push to main:
+
+| Job | What | About |
+|---|---|---|
+| `suite (ubuntu-latest, JDK 11)`, `suite (windows-latest, JDK 11)` | the shakedown, on the reference machine's Java, on both systems MAGAT runs on | 10 min |
+| `compat (JDK 17)`, `compat (JDK 21)` | build, unit tests, and every ported arm against its original on 2 positions | 3 min |
+| `equivalence (32 cells per arm)` | every ported arm against its original on 32 cells, counters included; only when algorithm, game, meter or engine code changes | 4 min |
+
+- **Before pushing,** run `python magat.py shakedown` once (about five minutes). It is what CI runs, so a
+  green shakedown here is a green suite there, short of the other system's quirks.
+- **Merge when every job is green**, and not before: `main` requires them.
+- **A new check goes into the shakedown**, and so into CI with no edit there. The shakedown also runs the
+  notebook's gate and experiments cells for real (`tools/run_cells.py`), so a change the notebook's own
+  commands trip over fails here, not on the reference machine.
+- **A change to an algorithm** also needs its full gate before the pull request: `python magat.py check
+  equivalence --game tribes --arms <id> --scenarios 64`, 256 cells, as the algorithm's own pull request did.
 
 ## Environment variables
 

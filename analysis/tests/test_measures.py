@@ -20,7 +20,9 @@ class SyntheticTree(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tmp = pathlib.Path(tempfile.mkdtemp(prefix="magat-analysis-"))
+        # Resolved: on Windows the temp folder can be named in its 8.3 short form (RUNNER~1 on GitHub's runners),
+        # and the code resolves the data root, so an unresolved path names the same file another way.
+        cls.tmp = pathlib.Path(tempfile.mkdtemp(prefix="magat-analysis-")).resolve()
         cls.spec = syn.write_spec(cls.tmp / "spec.json")
         syn.build(cls.tmp / "run", "dev", cls.spec)
         syn.build(cls.tmp / "run", "holdout", cls.spec)
@@ -382,7 +384,7 @@ class AcrossMachines(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tmp = pathlib.Path(tempfile.mkdtemp(prefix="magat-across-"))
+        cls.tmp = pathlib.Path(tempfile.mkdtemp(prefix="magat-across-")).resolve()
         spec = syn.write_spec(cls.tmp / "spec.json")
         syn.build(cls.tmp / "a", "dev", spec)
         syn.build(cls.tmp / "b", "dev", spec, shift={"good": 7.0}, ms_scale=2.0)
