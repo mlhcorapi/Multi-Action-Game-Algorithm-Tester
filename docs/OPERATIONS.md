@@ -95,25 +95,30 @@ else, so it cannot drift from the CLI. Its stages:
    ([guide](CALIBRATING_A_MACHINE.md#a-config-file)), a list of them (the sittings of one currency, in
    order), or `None` and a published currency to spend instead, and the experiment specs to run
    ([experiments](EXPERIMENTS.md)). An entry may name the half it runs,
-   `("experiments/tribes/x.json", "holdout")`, so one spec can run on each half in turn. Adding a spec
-   needs no new notebook.
+   `("experiments/tribes/x.json", "holdout")`, so one spec can run on each half in turn. An entry
+   `("calibrate", "calibrations/tribes/x.json")` measures a sitting of the currency at that point, between
+   the runs. Adding a spec needs no new notebook.
 2. **Setup and the plan.** Setup finds the repository from whatever directory the kernel started in; a
    Jupyter kernel's working directory is the notebook's own folder. It puts the data root outside the
    clone. The plan reads the files the parameters name, takes the currency's name from the config
    (`MAGAT_CURRENCY` overrides it), and prints what the notebook will do.
 3. **Build, tests and layering.**
 4. **Portfolio.** It builds this machine's own, freezes it, and verifies it against the published one.
-5. **Machine, threads and calibration.** It reads the published levels, sweeps the thread counts, and
-   measures this machine's currency with the config: a preflight, one cell that measures the currency in
-   one session and checks it, and one that bundles it
-   ([guide](CALIBRATING_A_MACHINE.md#on-a-shared-server-the-r7615-through-jupyterhub)). With no config,
-   the three skip.
-6. **Gates.** The contract, equivalence on every ported arm, and the audit.
-7. **Experiments.** One cell runs every entry of the parameters through `experiment run`, in the plan's
+5. **Machine and threads.** It reads the published levels and sweeps the thread counts.
+6. **Gates.** The contract, equivalence on every ported arm, and the audit of the reference arms and every
+   arm the experiments play. They come before the calibration, so a gate that fails stops the notebook
+   before hours of measuring.
+7. **Calibration.** It measures this machine's currency with the config: a preflight of every sitting,
+   one cell that measures the currency in one session and checks it, and one that bundles it
+   ([guide](CALIBRATING_A_MACHINE.md#on-a-shared-server-the-r7615-through-jupyterhub)). With several
+   sittings, each is its own session, one that fails does not stop the next, and the checks run once,
+   after the last. With no config, the three skip.
+8. **Experiments.** One cell runs every entry of the parameters through `experiment run`, in the plan's
    currency (it wins over a spec's own `weights`), with this machine's thread sweep, and on the half an
-   entry names.
-8. **The shakedown.**
-9. **The inventory.** What to keep, with a tick per file and the bundles to download.
+   entry names. A sitting the list names is measured there, and the currency's checks then run once, at
+   the end. An entry that fails does not stop the ones after it; the cell names it at the end.
+9. **The shakedown.**
+10. **The inventory.** What to keep, with a tick per file and the bundles to download.
 
 ## Experiments and runs
 
@@ -207,7 +212,7 @@ different portfolios are refused. The output is:
 | `check contract` | the laws L1-L10 on captured positions ([contract](CONTRACT.md#the-laws-magat-check-contract)) |
 | `check equivalence` | each ported arm reproduces its oracle (the reference implementation it was ported from) field for field, including its counters, on N scenarios × V visits. Without `--weights` both sides are priced with the fixed measurement weights, and so is an arm the currency does not price yet |
 | `check replay` | the turns of a published leaf, re-planned on this machine, agree with its rows field for field |
-| `check audit` | each arm's declared operations and forward model account for its turn: warns above 10% unaccounted, fails above 25% |
+| `check audit` | each arm's declared operations and forward model account for its turn: warns above 10% unaccounted, fails above 25%. An arm the currency never prices (the random floor) spends no units and is named, not audited |
 | `check reproduction --run D --against D` | a run's turns are another run's, every turn both hold, field for field but the times ([experiments](EXPERIMENTS.md#reusing-the-published-run)) |
 
 Each prints PASS or FAIL and exits non-zero on FAIL. The shakedown runs the contract, equivalence

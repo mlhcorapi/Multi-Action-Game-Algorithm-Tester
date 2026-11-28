@@ -1,0 +1,26 @@
+{
+  "name": "r7615-in-turn",
+  "game": "tribes",
+  "description": "The in-turn learning night's sitting 1 of 7 (docs/plans/in-turn-learning-run.md): 10 of the 29 new arms priced at the published levels, in one session that writes when it completes, into a copy of the published r7615-ab-emcts, which keeps every published price. Server settings as in examples/server.json.",
+  "from": "r7615-ab-emcts",
+  "arms": [
+    "comma-z0-mid",
+    "comma-z0-fine",
+    "comma-z0-hier",
+    "comma-z0-linear",
+    "comma-z0-mlp",
+    "comma-short3-coarse",
+    "mut-guard",
+    "mut-eps90",
+    "mut-eps50",
+    "mut-eps20"
+  ],
+  "levels": [
+    "500ms",
+    "1000ms",
+    "5000ms"
+  ],
+  "soak-minutes": 0,
+  "wait-quiet": 30,
+  "other-cpus": 4
+}

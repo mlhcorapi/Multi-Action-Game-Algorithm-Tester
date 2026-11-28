@@ -78,8 +78,17 @@ final class ProbeCommand {
         GameModule<S, A> module = Games.load(args.require("game"));
         Portfolio<S> p = Portfolio.load(module.game(), Paths.get(args.require("portfolio")));
         List<String> ids = module.expandArms(args.getList("arms", new ArrayList<>(java.util.Collections.singletonList(module.referenceArm()))));
+        // An arm the currency never prices (random, the floor) spends no units, so nothing it does undeclared buys it
+        // more time: it has nothing to audit.
         List<AgentFactory<S, A>> arms = new ArrayList<>();
-        for (String id : ids) arms.add(module.agents().get(id));
+        List<String> unpriced = new ArrayList<>();
+        for (String id : ids) {
+            AgentFactory<S, A> f = module.agents().get(id);
+            if (f.priced()) arms.add(f);
+            else unpriced.add(id);
+        }
+        if (!unpriced.isEmpty())
+            System.out.println("# not audited: " + String.join(", ", unpriced) + " (not priced: it spends no units)");
         long budget = Long.parseLong(args.get("budget", "40000"));
         int turns = args.getInt("turns", 4);
         List<Scenario<S>> positions = new ArrayList<>();

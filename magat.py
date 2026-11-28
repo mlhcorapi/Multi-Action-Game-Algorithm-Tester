@@ -649,10 +649,12 @@ def outside_clone(args: list) -> None:
 
 
 def reuse_sources(game: str, weights: pathlib.Path) -> list:
-    """The split trees whose leaves a run in this currency may take: the runs published with the repository
-    (games/<game>/results/reference/<machine>/all), then the imported ones (<data>/imports/*/results/*/<split>), each
-    priced in this currency's unit (the same reference cell and its nanoseconds, which a currency keeps when an arm is
-    calibrated into it). Which of their leaves were played at this run's prices, the runner checks leaf by leaf."""
+    """The split trees whose leaves a run in this currency may take: the runs published with the repository (the
+    reference experiment's, games/<game>/results/reference/<machine>/all, first, then every other published
+    experiment's, games/<game>/results/<experiment>/<machine>/<split>), then the imported ones
+    (<data>/imports/*/results/*/<split>), each priced in this currency's unit (the same reference cell and its
+    nanoseconds, which a currency keeps when an arm is calibrated into it). Which of their leaves were played at this
+    run's prices, the runner checks leaf by leaf."""
     import json
     if not weights.is_file():
         return []
@@ -667,7 +669,9 @@ def reuse_sources(game: str, weights: pathlib.Path) -> list:
     # An import is a source only once its checks passed: a package whose turns did not re-play, or whose report did
     # not follow from them, stays unpacked for reading, and is never taken from.
     verified = lambda pkg: (pkg / "IMPORT.md").is_file() and "- Verdict: VERIFIED" in (pkg / "IMPORT.md").read_text(encoding="utf-8")
-    trees = [*sorted((GAMES / game / "results" / "reference").glob("*/all")),
+    reference = sorted((GAMES / game / "results" / "reference").glob("*/all"))
+    published = sorted(t.parent for t in (GAMES / game / "results").glob("*/*/*/_run.json") if t.parent not in reference)
+    trees = [*reference, *published,
              *sorted(t.parent for t in (data_root() / "imports").glob("*/results/*/*/_run.json") if verified(t.parents[3]))]
     for tree in trees:
         try:

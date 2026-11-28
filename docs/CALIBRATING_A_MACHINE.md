@@ -346,6 +346,12 @@ The parameters cell may name a list of configs instead of one, the sittings of o
 ([gaining a level](#gaining-a-level)). Each is its own session and writes when it completes. A sitting
 already priced is skipped; one that fails does not stop the next, and the cell names it at the end, so
 running the cell again measures only what is missing.
+- **The checks run once.** Each sitting runs without them (`--no-checks`), and the checks against the
+  published currency and against the new one run once, after the last sitting is written. Run after every
+  sitting, a check of a currency with a long level would play the reference arm at it each time.
+- **A sitting between runs.** An entry `("calibrate", config)` in the notebook's experiments list measures
+  that sitting there: a long level after the runs at the published ones, so that a night cut short has
+  those by morning. The preflight cell preflights it with the others, before anything is measured.
 
 ### What you cannot change
 

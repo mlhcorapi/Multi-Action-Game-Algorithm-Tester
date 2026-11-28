@@ -1,0 +1,264 @@
+{
+  "name": "in-turn-screen",
+  "game": "tribes",
+  "description": "The in-turn learning screen at the published levels (docs/plans/in-turn-learning.md, section 6), on the development half: the 29 new arms, each comma-z0-coarse with one thing changed, played; the reference arms and the AB-EMCTS arms taken from the published runs (reuse), in the R7615's currency extended with the new arms. Exploratory: it chooses what the confirmation tests. What the screen chooses for the confirmation, written before it runs (docs/plans/in-turn-learning.md, section 6): the best learner (comma-z0-mid, -fine, -hier, -linear, -mlp) and the best mutation or self-learning rule (the sixteen mut- mutation rules and the seven mut- self-learning ideas), each judged by the mean, over every level it ran at (the three published levels here, and 30 s in in-turn-30s), of its mean paired difference with comma-z0-coarse, among the arms whose interval against comma-z0-coarse lies above zero at one level or more; where no arm of a group has one, the confirmation keeps comma-z0-coarse's own (the table at coarse keys, or uniform mutation). At most two other arms the screen singles out may join it, each named with the reason. The intervals are read as screening, not as findings.",
+  "portfolio": "tribes/v1",
+  "split": "dev",
+  "baseline": "emcts",
+  "levels": [
+    {
+      "budget": "500ms",
+      "repetitions": 4
+    },
+    {
+      "budget": "1000ms",
+      "repetitions": 4
+    },
+    {
+      "budget": "5000ms",
+      "repetitions": 3
+    }
+  ],
+  "arms": [
+    "random",
+    "mcts",
+    "emcts",
+    "oep",
+    "tbets",
+    "emcts-comma",
+    "comma-z0-coarse",
+    "comma-z0-random",
+    "comma-z0-mid",
+    "comma-z0-fine",
+    "comma-z0-hier",
+    "comma-z0-linear",
+    "comma-z0-mlp",
+    "comma-short3-coarse",
+    "mut-guard",
+    "mut-eps90",
+    "mut-eps50",
+    "mut-eps20",
+    "mut-thompson",
+    "mut-thompson50",
+    "mut-thompson-guard",
+    "mut-k3-none",
+    "mut-k3-one",
+    "mut-k3-all",
+    "mut-k5-none",
+    "mut-k5-one",
+    "mut-k5-all",
+    "mut-gen-mixed",
+    "mut-site",
+    "mut-thompson-site",
+    "mut-aos",
+    "mut-k-adapt",
+    "mut-k-adapt-thompson",
+    "mut-subst",
+    "mut-blocks",
+    "mut-tabu",
+    "mut-kick"
+  ],
+  "weights": "r7615-in-turn",
+  "contrasts": [
+    {
+      "a": "comma-z0-mid",
+      "b": "comma-z0-coarse",
+      "label": "RQ1: the table at mid keys, against comma-z0-coarse"
+    },
+    {
+      "a": "comma-z0-fine",
+      "b": "comma-z0-coarse",
+      "label": "RQ1: the table at fine keys, against comma-z0-coarse"
+    },
+    {
+      "a": "comma-z0-hier",
+      "b": "comma-z0-coarse",
+      "label": "RQ2: the hierarchical table, against comma-z0-coarse"
+    },
+    {
+      "a": "comma-z0-linear",
+      "b": "comma-z0-coarse",
+      "label": "RQ3: the linear model on the classes, against comma-z0-coarse"
+    },
+    {
+      "a": "comma-z0-mlp",
+      "b": "comma-z0-coarse",
+      "label": "RQ3: the network on the classes, against comma-z0-coarse"
+    },
+    {
+      "a": "comma-short3-coarse",
+      "b": "comma-z0-coarse",
+      "label": "RQ4: the repair evaluating the best 3, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-guard",
+      "b": "comma-z0-coarse",
+      "label": "RQ5: the duplicate guard, no learning, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-eps90",
+      "b": "comma-z0-coarse",
+      "label": "RQ5: epsilon-greedy insertion, 90% greedy, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-eps50",
+      "b": "comma-z0-coarse",
+      "label": "RQ5b: epsilon-greedy insertion, 50% greedy, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-eps20",
+      "b": "comma-z0-coarse",
+      "label": "RQ5b: epsilon-greedy insertion, 20% greedy, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-thompson",
+      "b": "comma-z0-coarse",
+      "label": "RQ5: Thompson insertion, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-thompson50",
+      "b": "comma-z0-coarse",
+      "label": "RQ5b: half the insertions Thompson, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-thompson-guard",
+      "b": "comma-z0-coarse",
+      "label": "RQ5: Thompson insertion with the guard, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-k3-none",
+      "b": "comma-z0-coarse",
+      "label": "RQ5c: 3 mutations, none biased, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-k3-one",
+      "b": "comma-z0-coarse",
+      "label": "RQ5c: 3 mutations, one Thompson, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-k3-all",
+      "b": "comma-z0-coarse",
+      "label": "RQ5c: 3 mutations, all Thompson, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-k5-none",
+      "b": "comma-z0-coarse",
+      "label": "RQ5c: 5 mutations, none biased, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-k5-one",
+      "b": "comma-z0-coarse",
+      "label": "RQ5c: 5 mutations, one Thompson, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-k5-all",
+      "b": "comma-z0-coarse",
+      "label": "RQ5c: 5 mutations, all Thompson, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-gen-mixed",
+      "b": "comma-z0-coarse",
+      "label": "RQ5b: two of five children Thompson, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-site",
+      "b": "comma-z0-coarse",
+      "label": "RQ5: Thompson over positions, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-thompson-site",
+      "b": "comma-z0-coarse",
+      "label": "RQ5: Thompson insertion and positions, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-aos",
+      "b": "comma-z0-coarse",
+      "label": "RQ6: adaptive operator selection, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-k-adapt",
+      "b": "comma-z0-coarse",
+      "label": "RQ7: the 1/5 rule for the step size, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-k-adapt-thompson",
+      "b": "comma-z0-coarse",
+      "label": "RQ7: the 1/5 rule with Thompson insertion, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-subst",
+      "b": "comma-z0-coarse",
+      "label": "RQ8: learned substitutions, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-blocks",
+      "b": "comma-z0-coarse",
+      "label": "RQ8: learned pairs, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-tabu",
+      "b": "comma-z0-coarse",
+      "label": "RQ8: a tabu memory, against comma-z0-coarse"
+    },
+    {
+      "a": "mut-kick",
+      "b": "comma-z0-coarse",
+      "label": "RQ8: a learned kick after a stall, against comma-z0-coarse"
+    },
+    {
+      "a": "comma-z0-hier",
+      "b": "comma-z0-fine",
+      "label": "RQ2: backing off, against the fine table alone"
+    },
+    {
+      "a": "comma-z0-linear",
+      "b": "comma-z0-hier",
+      "label": "RQ3, the ladder: regression against counting with backoff"
+    },
+    {
+      "a": "comma-z0-mlp",
+      "b": "comma-z0-linear",
+      "label": "RQ3, the ladder: the network's interactions against the linear model"
+    },
+    {
+      "a": "mut-k3-one",
+      "b": "mut-k3-none",
+      "label": "RQ5c: one learned mutation of 3, against none"
+    },
+    {
+      "a": "mut-k3-all",
+      "b": "mut-k3-none",
+      "label": "RQ5c: all 3 mutations learned, against none"
+    },
+    {
+      "a": "mut-k5-one",
+      "b": "mut-k5-none",
+      "label": "RQ5c: one learned mutation of 5, against none"
+    },
+    {
+      "a": "mut-k5-all",
+      "b": "mut-k5-none",
+      "label": "RQ5c: all 5 mutations learned, against none"
+    },
+    {
+      "a": "mut-thompson-guard",
+      "b": "mut-thompson",
+      "label": "RQ5: the guard, with Thompson insertion"
+    },
+    {
+      "a": "mut-thompson-site",
+      "b": "mut-thompson",
+      "label": "RQ5: learned positions, with Thompson insertion"
+    },
+    {
+      "a": "mut-k-adapt-thompson",
+      "b": "mut-k-adapt",
+      "label": "RQ7: Thompson insertion, with the 1/5 rule"
+    },
+    {
+      "a": "comma-z0-coarse",
+      "b": "oep",
+      "label": "RQ9: the champion against OEP"
+    }
+  ]
+}

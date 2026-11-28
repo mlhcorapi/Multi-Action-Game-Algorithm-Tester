@@ -2,7 +2,7 @@
 """Run a cell of the generated notebook for real, at toy size: the shakedown's check that the notebook's own
 commands work. The notebook self-test replaces the launcher with a stub; this runs it.
 
-    python tools/run_cells.py gates       [--portfolio DIR]
+    python tools/run_cells.py gates       [--portfolio DIR] [--spec FILE]
     python tools/run_cells.py experiments --spec FILE --half dev --portfolio DIR --weights FILE --calibration DIR
 
 The cell's source comes from tools/make_notebook.py, the notebook's own setup cell defines its helpers (magat,
@@ -49,10 +49,11 @@ def main(argv) -> int:
 
     ns["magat"] = magat
     if argv[0] == "gates":
-        ns.update(PORTFOLIO=pathlib.Path(opt("--portfolio", ns["PUBLISHED_PORTFOLIO"])), MID_LEVEL=20000)
+        ns.update(PORTFOLIO=pathlib.Path(opt("--portfolio", ns["PUBLISHED_PORTFOLIO"])), MID_LEVEL=20000,
+                  EXPERIMENT_RUNS=[(pathlib.Path(opt("--spec")), None)] if opt("--spec") else [])
         exec(compile(mk.GATES_CELL, "<gates-cell>", "exec"), ns)
     else:
-        ns.update(EXPERIMENT_RUNS=[(pathlib.Path(opt("--spec")), opt("--half"))], PORTFOLIO=pathlib.Path(opt("--portfolio")),
+        ns.update(SCHEDULE=[("run", pathlib.Path(opt("--spec")), opt("--half"))], PORTFOLIO=pathlib.Path(opt("--portfolio")),
                   WEIGHTS=pathlib.Path(opt("--weights")), CALIBRATION=pathlib.Path(opt("--calibration")))
         exec(compile(mk.EXPERIMENTS_CELL, "<experiments-cell>", "exec"), ns)
     print(f"CELL {argv[0].upper()}: COMPLETE")

@@ -117,7 +117,9 @@ def main(argv) -> int:
                        "--turns", str(turns)], "REPLAY: PASS", then=lambda p=priced_in: p is not None)
             replayed.add(arm)
     check("the notebook's own gate cell runs for real (its commands at toy size): contract, equivalence of every ported "
-          "arm, audit", [PY, ROOT / "tools" / "run_cells.py", "gates"], "CELL GATES: COMPLETE")
+          "arm, the audit of the reference arms and of every arm an experiment plays",
+          [PY, ROOT / "tools" / "run_cells.py", "gates", "--spec", ROOT / "experiments" / game / "shakedown.json"],
+          "CELL GATES: COMPLETE")
 
     step("5. Portfolio: toy build, freeze, verify against the published portfolio")
     data = pathlib.Path(os.environ.get("MAGAT_DATA") or (pathlib.Path.home() / "magat_runs")).resolve()
@@ -343,6 +345,25 @@ def main(argv) -> int:
               [PY, ROOT / "magat.py", "calibrate-controlled", "--config", ROOT / "calibrations" / game / "ab-emcts.json",
                "--out", data / "shakedown" / f"config-ab-emcts-{game}", "--preflight", "--toy"],
               "3 arm(s): emcts-comma, comma-z0-coarse, comma-z0-random, merged")
+    screen, long_ = ROOT / "experiments" / game / "in-turn-screen.json", ROOT / "experiments" / game / "in-turn-30s.json"
+    if screen.is_file():
+        # The in-turn learning night (docs/plans/in-turn-learning-run.md): its two specs, and its seven sittings, in the
+        # order the notebook runs them, into one copy of the published AB-EMCTS currency. Measured on the R7615; here,
+        # their structure and what each would measure.
+        for night_spec in (screen, long_):
+            check(f"the in-turn night's {night_spec.stem} spec reads: its arms registered, its levels and positions sound",
+                  [PY, ROOT / "magat.py", "experiment", "validate", "--experiment", night_spec, "--no-weights"], "VALIDATION: PASS")
+        night = data / "shakedown" / f"config-in-turn-{game}"
+        shutil.rmtree(night, ignore_errors=True)
+        sittings = ROOT / "calibrations" / game / "in-turn"
+        for name, arms in (("published-1", 10), ("published-2", 10), ("published-3", 9),
+                           ("30s-1", 4), ("30s-2", 4), ("30s-3", 3), ("30s-4", 3)):
+            check(f"the in-turn night's sitting {name} would price its {arms} arms into the same copy"
+                  + (", at a level the currency gains" if name.startswith("30s") else ""),
+                  [PY, ROOT / "magat.py", "calibrate-controlled", "--config", sittings / f"{name}.json", "--out", night,
+                   "--no-checks", "--preflight", "--toy"], f"pricing {arms} arm(s)",
+                  then=lambda name=name: not name.startswith("30s") or "gains level(s) 610000" in
+                  (sorted(d for d in (night / "record").iterdir() if d.is_dir())[-1] / "preflight.json").read_text(encoding="utf-8"))
     short = data / "shakedown" / f"short-{game}.json"
     short.write_text(json.dumps(dict(name="short", game=game, baseline="emcts", arms=["emcts", "random"], levels=[2000, 4000],
                                      repetitions=1, split="all", sources=["single"], scenarios=1)), encoding="utf-8")
